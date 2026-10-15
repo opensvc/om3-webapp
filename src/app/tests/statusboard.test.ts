@@ -42,7 +42,7 @@ function toText(board: Board): string {
   let descStart = 2 + nameW + 2 + typW + 2;
   for (const w of nodeW) descStart += w + 2;
   const col = 2 + nameW + 2;
-  const header = [[board.path, ...(board.facts.length > 0 ? [board.facts.join(" · ")] : [])].join("   ")];
+  const header = [[board.path, ...(board.facts.length > 0 ? [board.facts.map((f) => f.value).join(" · ")] : [])].join("   ")];
   for (const f of board.fields) header.push(`  ${f.name}${" ".repeat(Math.max(1, col - 2 - f.name.length))}${plain(f.value)}`);
   const width = Math.max(...header.map((l) => l.length), descStart + 20);
   const pad = (s: string, w: number) => s + " ".repeat(Math.max(0, w - s.length));

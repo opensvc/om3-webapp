@@ -13,6 +13,25 @@ import NamespaceMetrics from "./NamespaceMetrics";
 import LogsViewer from "./LogsViewer";
 import {OrchestrationLogsFilter} from "./OrchestrationLogsFilter";
 import {KEY_KINDS} from "../constants/actions";
+import {CalendarIcon, ClockIcon, FileIcon, HashIcon, KeyIcon, StateIcon} from "../ui/icons";
+
+/**
+ * The icon of each tab of an object panel, as oc3 marks its tabs with the family of
+ * what they hold, in the tint of its domain: the resources the service hashtag, the
+ * logs the clock of the times, the status the state, all neutral but what belongs to
+ * a domain. The classes are written out in full: Tailwind does not see names built
+ * at runtime.
+ */
+const TAB_ICON_CLASS = "h-3.5 w-3.5 shrink-0";
+const OBJECT_TAB_ICONS = {
+    status: <StateIcon className={`${TAB_ICON_CLASS} text-ink-muted`}/>,
+    resources: <HashIcon className={`${TAB_ICON_CLASS} text-icon-service`}/>,
+    schedules: <CalendarIcon className={`${TAB_ICON_CLASS} text-ink-muted`}/>,
+    logs: <ClockIcon className={`${TAB_ICON_CLASS} text-ink-muted`}/>,
+    // The file of the configuration objects (ObjectIcon), in their tint.
+    config: <FileIcon className={`${TAB_ICON_CLASS} text-icon-form`}/>,
+    keys: <KeyIcon className={`${TAB_ICON_CLASS} text-ink-muted`}/>,
+};
 
 /*
  * The record panels, one per kind of record (`peek.ts`), as oc3 gives each object its
@@ -102,16 +121,16 @@ export function ObjectDetailPanel({path, tab, onTabChange, onClose}) {
 
     const tabs = keysOnly
         ? [
-            {key: "keys", label: t("panel.tabs.keys")},
-            {key: "logs", label: t("panel.tabs.logs")},
-            {key: "config", label: t("panel.tabs.config")},
+            {key: "keys", label: t("panel.tabs.keys"), icon: OBJECT_TAB_ICONS.keys},
+            {key: "logs", label: t("panel.tabs.logs"), icon: OBJECT_TAB_ICONS.logs},
+            {key: "config", label: t("panel.tabs.config"), icon: OBJECT_TAB_ICONS.config},
         ]
         : [
-            {key: "status", label: t("panel.tabs.status")},
-            {key: "resources", label: t("panel.tabs.resources")},
-            {key: "schedules", label: t("panel.tabs.schedules")},
-            {key: "logs", label: t("panel.tabs.logs")},
-            {key: "config", label: t("panel.tabs.config")},
+            {key: "status", label: t("panel.tabs.status"), icon: OBJECT_TAB_ICONS.status},
+            {key: "resources", label: t("panel.tabs.resources"), icon: OBJECT_TAB_ICONS.resources},
+            {key: "schedules", label: t("panel.tabs.schedules"), icon: OBJECT_TAB_ICONS.schedules},
+            {key: "logs", label: t("panel.tabs.logs"), icon: OBJECT_TAB_ICONS.logs},
+            {key: "config", label: t("panel.tabs.config"), icon: OBJECT_TAB_ICONS.config},
         ];
 
     return (

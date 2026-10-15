@@ -17,7 +17,7 @@ import ConfigSection from "./ConfigSection";
 import KeysSection from "./KeysSection";
 import InstanceCard from "./InstanceCard.jsx";
 import LogsViewer from "./LogsViewer";
-import {INSTANCE_ACTIONS, OBJECT_ACTIONS, actionLabel} from "../constants/actions";
+import {INSTANCE_ACTIONS, KEY_KINDS, OBJECT_ACTIONS, actionLabel} from "../constants/actions";
 import {parseObjectPath} from "../utils/objectUtils.jsx";
 import {orchestrationOf} from "./OrchestrationBadge";
 import EventLogger from "../components/EventLogger";
@@ -505,7 +505,7 @@ const ObjectDetail = ({path, embedded = false, onOpenLogs, onViewInstance, onOrc
         };
     }, [decodedObjectName, configNode, openSnackbar, t]);
 
-    const showKeys = ["cfg", "sec"].includes(kind);
+    const showKeys = KEY_KINDS.includes(kind);
 
     const feedback = snackbar.open && (
         <Alert
@@ -548,7 +548,8 @@ const ObjectDetail = ({path, embedded = false, onOpenLogs, onViewInstance, onOrc
                 {!embedded && <h1 className="text-title font-semibold">{decodedObjectName}</h1>}
                 {feedback}
                 <p className="py-4 text-center text-ink-muted">{t("objectDetails.noInformation")}</p>
-                {showKeys && <KeysSection decodedObjectName={decodedObjectName} openSnackbar={openSnackbar}/>}
+                {showKeys && <KeysSection decodedObjectName={decodedObjectName} openSnackbar={openSnackbar}
+                                          refreshKey={configRefreshTrigger}/>}
                 {configSection}
             </div>
         );
@@ -614,9 +615,10 @@ const ObjectDetail = ({path, embedded = false, onOpenLogs, onViewInstance, onOrc
                 />
             )}
 
-            {showKeys && <KeysSection decodedObjectName={decodedObjectName} openSnackbar={openSnackbar}/>}
+            {showKeys && <KeysSection decodedObjectName={decodedObjectName} openSnackbar={openSnackbar}
+                                      refreshKey={configRefreshTrigger}/>}
 
-            {!["sec", "cfg", "usr"].includes(kind) && (
+            {!KEY_KINDS.includes(kind) && (
                 <section aria-labelledby="object-instances" className={PANEL}>
                     <div className="flex items-center gap-3 border-b border-line px-3 py-2">
                         <h2 id="object-instances" className="font-semibold">

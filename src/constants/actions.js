@@ -102,7 +102,7 @@ export const INSTANCE_ACTIONS = [
     // Replication
     {name: "prstart", icon: icon(StepForwardIcon), endpoint: "prstart"},
     {name: "prstop", icon: icon(StepBackwardIcon), endpoint: "prstop"},
-    {name: "sync ingest", icon: icon(DownloadIcon), endpoint: "sync/ingest"},
+    {name: "sync ingest", icon: icon(DownloadIcon), endpoint: "ingest"},
 
     // Placement groups
     {name: "pg reset", icon: icon(ResetIcon), endpoint: "pg/reset"},

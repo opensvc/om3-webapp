@@ -23,11 +23,16 @@ import {MenuButton} from "../ui/components/MenuButton";
 import {Button, IconButton} from "../ui/components/Button";
 import {Checkbox, Input} from "../ui/components/Field";
 import {Alert} from "../ui/components/Alert";
-import {Spinner} from "../ui/components/Spinner";
 import {useMediaQuery} from "../ui/lib/media";
 import {TabList} from "../ui/components/Tabs";
+import {PolicyTag} from "../ui/components/PolicyTag";
+import {Pager} from "../ui/components/Pager";
+import {usePaging} from "../app/paging";
+import {ObjectIcon} from "../ui/components/ObjectIcon";
+import {ALL_LIST, GROUP_TABS, OBJECT_LISTS, OBJECTS_TABS, listOfKind} from "../utils/objectLists";
+import Namespaces from "./Namespaces";
 import {tabPanelProps} from "../ui/components/tabs-ids";
-import {AlertTriangleIcon, ChevronDownIcon, CloseIcon, FilterIcon, GearIcon, PlusIcon, SearchIcon} from "../ui/icons";
+import {AlertTriangleIcon, ChevronDownIcon, CloseIcon, FilterIcon, GearIcon, PlusIcon, SearchIcon, ShapesIcon} from "../ui/icons";
 
 // The breakpoints of the MUI theme the view used: below md (900px) the filters fold
 // behind a button, from lg (1200px) the node columns are shown.
@@ -72,24 +77,31 @@ const parseObjectName = (objectName) => {
     };
 };
 
-/**
- * The list is split in tabs: the objects running on the nodes, the ones holding
- * configuration, the cfg, the sec and the cluster object, and the users. The tab
- * is in the URL, `list=configs` or `list=users`; the first one is shown without it.
- */
-const CONFIG_KINDS = ["cfg", "sec", "ccfg"];
-const OBJECT_LISTS = ["services", "configs", "users"];
-const listOf = (objectName) => {
-    const {kind} = parseObjectName(objectName);
-    return kind === "usr" ? "users" : CONFIG_KINDS.includes(kind) ? "configs" : "services";
-};
+/** The tab an object is listed in (objectLists). */
+const listOf = (objectName) => listOfKind(parseObjectName(objectName).kind);
 /** The kind a new object takes by default, from the tab it is created from. */
-const LIST_KIND = {services: "svc", configs: "cfg", users: "usr"};
+const LIST_KIND = {services: "svc", volumes: "vol", configs: "cfg", secrets: "sec", users: "usr", [ALL_LIST]: "svc"};
 /**
  * The lists of objects held on all the nodes, with no status nor placement: their
- * names only, the status, orchestrate, topology and node columns telling nothing.
+ * names only, the status, orchestrate, topology and node columns telling nothing,
+ * and no global state filter.
  */
-const NAMES_ONLY_LISTS = ["configs", "users"];
+const NAMES_ONLY_LISTS = ["configs", "secrets", "users"];
+
+/**
+ * The icon of each tab: the kind it lists, as the menu and the panels draw it
+ * (ObjectIcon). Any lists every kind: the shapes, neutral.
+ */
+const TAB_ICON_CLASS = "h-3.5 w-3.5";
+const LIST_ICONS = {
+    services: <ObjectIcon kind="service" className={TAB_ICON_CLASS}/>,
+    volumes: <ObjectIcon kind="disk" className={TAB_ICON_CLASS}/>,
+    configs: <ObjectIcon kind="config" className={TAB_ICON_CLASS}/>,
+    secrets: <ObjectIcon kind="secret" className={TAB_ICON_CLASS}/>,
+    users: <ObjectIcon kind="user" className={TAB_ICON_CLASS}/>,
+    namespaces: <ObjectIcon kind="namespace" className={TAB_ICON_CLASS}/>,
+    [ALL_LIST]: <ShapesIcon className={`${TAB_ICON_CLASS} shrink-0 text-ink-muted`}/>,
+};
 
 const selectObjectStatus = (state) => state.objectStatus;
 const selectObjectInstanceStatus = (state) => state.objectInstanceStatus;
@@ -175,10 +187,13 @@ const PropertyCells = ({objectName}) => {
 
     return (
         <>
-            <Cell className="whitespace-nowrap">{orchestrate}</Cell>
+            <Cell className="whitespace-nowrap">{orchestrate && <PolicyTag name="orchestrate" value={orchestrate}/>}</Cell>
             <Cell className="whitespace-nowrap">
-                {topology}
-                {isFlex && <> <SideText>{`${flexMin}-${flexMax}`}</SideText></>}
+                {topology && (
+                    <PolicyTag name="topology" value={topology}>
+                        {isFlex && <> <SideText>{`${flexMin}-${flexMax}`}</SideText></>}
+                    </PolicyTag>
+                )}
             </Cell>
         </>
     );
@@ -312,6 +327,13 @@ const FilterPopover = ({label, options, selected, onToggle}) => {
 /** The values on offer, plus those chosen (from the URL) that the data does not hold. */
 const withSelected = (values, selected) => [...values, ...selected.filter((value) => !values.includes(value))];
 
+/**
+ * A filter is worth showing with a choice to make: two values or more. With one,
+ * every object of the tab has it; shown anyway while it holds a value no object of
+ * the tab has, for that filter not to act unseen.
+ */
+const hasChoice = (values, selected) => values.length > 1 || selected.some((value) => !values.includes(value));
+
 const GLOBAL_STATE_MARKS = {
     up: <StatusMark state="up"/>,
     down: <StatusMark state="down"/>,
@@ -342,7 +364,11 @@ const Objects = () => {
     const rawNamespaces = parseMultipleValues("namespace");
     const rawKinds = parseMultipleValues("kind");
     const rawSearchQuery = queryParams.get("name") || "";
-    const list = OBJECT_LISTS.includes(queryParams.get("list")) ? queryParams.get("list") : "services";
+    const list = OBJECTS_TABS.includes(queryParams.get("list")) ? queryParams.get("list") : OBJECT_LISTS[0];
+    const namesOnly = NAMES_ONLY_LISTS.includes(list);
+    // Their objects have no status: no global state to filter on. One the URL holds,
+    // from another tab, is kept for it but filters nothing here.
+    const hasGlobalState = !namesOnly;
 
     const {daemon} = useFetchDaemonStatus();
     const objectStatus = useEventStore(selectObjectStatus);
@@ -359,7 +385,7 @@ const Objects = () => {
     const [sortColumn, setSortColumn] = useState("object");
     // A list of names only is sorted by them: not by a column it does not show.
     useEffect(() => {
-        if (NAMES_ONLY_LISTS.includes(list) && sortColumn !== "object") setSortColumn("object");
+        if (namesOnly && sortColumn !== "object") setSortColumn("object");
     }, [list, sortColumn]);
     const [sortDirection, setSortDirection] = useState("asc");
     const [statusCycleIndex, setStatusCycleIndex] = useState(0);
@@ -387,9 +413,6 @@ const Objects = () => {
     const deferredSortDirection = useDeferredValue(sortDirection);
     const deferredStatusCycleIndex = useDeferredValue(statusCycleIndex);
 
-    const [visibleCount, setVisibleCount] = useState(30);
-    const [loading, setLoading] = useState(false);
-    const tableContainerRef = useRef(null);
 
     const filtersId = React.useId();
     const listTabsId = React.useId();
@@ -411,8 +434,11 @@ const Objects = () => {
         for (const name of allObjectNames) {
             const of = listOf(name);
             counts[of] += 1;
-            if (of === list) names.push(name);
+            if (of === list || list === ALL_LIST) names.push(name);
         }
+        counts[ALL_LIST] = allObjectNames.length;
+        // The group tab counts its groups: the namespaces.
+        counts.namespaces = new Set(allObjectNames.map(extractNamespace)).size;
         return {listObjectNames: names, listCounts: counts};
     }, [allObjectNames, list]);
 
@@ -474,8 +500,8 @@ const Objects = () => {
                 continue;
             }
 
-            // Check global state filter (multiple selection)
-            if (deferredSelectedGlobalStates.length > 0) {
+            // Check global state filter (multiple selection), on the lists that have one
+            if (hasGlobalState && deferredSelectedGlobalStates.length > 0) {
                 const status = objects[name];
                 if (!status) continue;
 
@@ -505,7 +531,7 @@ const Objects = () => {
         }
 
         return result;
-    }, [listObjectNames, deferredSelectedGlobalStates, deferredSelectedNamespaces,
+    }, [listObjectNames, hasGlobalState, deferredSelectedGlobalStates, deferredSelectedNamespaces,
         deferredSelectedKinds, deferredSearchQuery, objects]);
 
     const getStatusOrder = (cycleIndex) => {
@@ -557,9 +583,10 @@ const Objects = () => {
         return filteredObjectNames;
     }, [objects, filteredObjectNames, deferredSortColumn, deferredSortDirection, deferredStatusCycleIndex, objectStatus, objectInstanceStatus, allNodes]);
 
-    const visibleObjectNames = useMemo(() => {
-        return sortedObjectNames.slice(0, visibleCount);
-    }, [sortedObjectNames, visibleCount]);
+    // The rows of the page shown, as oc3 pages its lists.
+    const paging = usePaging("objects", sortedObjectNames.length);
+    const {page: pageOf, setOffset: setPageOffset} = paging;
+    const visibleObjectNames = useMemo(() => pageOf(sortedObjectNames), [pageOf, sortedObjectNames]);
 
     const handleSelectObject = useCallback((event, objectName) => {
         setSelectedObjects((prev) =>
@@ -653,12 +680,15 @@ const Objects = () => {
         [pendingAction, selectedObjects, objectStatus, removeObject, updateFrozenStatusOptimistic, t]
     );
 
-    const handleObjectClick = useCallback(
-        (objectName) => {
-            if (objectInstanceStatus[objectName]) selectObject(objectName);
-        },
-        [objectInstanceStatus, selectObject]
-    );
+    // A row is not rendered again for a new handler (TableRowComponent): one handler,
+    // reading the latest URL, or a row opened after a filter changed would bring the
+    // URL of before back, the filter dropped.
+    const objectClickRef = useRef({objectInstanceStatus, selectObject});
+    objectClickRef.current = {objectInstanceStatus, selectObject};
+    const handleObjectClick = useCallback((objectName) => {
+        const {objectInstanceStatus: instances, selectObject: select} = objectClickRef.current;
+        if (instances[objectName]) select(objectName);
+    }, []);
 
     const handleSort = useCallback((column) => {
         if (column === "status" || allNodes.includes(column)) {
@@ -678,12 +708,12 @@ const Objects = () => {
             }
             setStatusCycleIndex(0);
         }
-        setVisibleCount(30);
-    }, [sortColumn, allNodes]);
+        // Sorted again, the list starts over: from its first page.
+        setPageOffset(0);
+    }, [sortColumn, allNodes, setPageOffset]);
 
     const handleSearchChange = useCallback((e) => {
         setSearchQuery(e.target.value);
-        setVisibleCount(30);
     }, []);
 
     const toggleShowFilters = useCallback(() => {
@@ -720,36 +750,6 @@ const Objects = () => {
         });
     }, []);
 
-    const handleScroll = useCallback(() => {
-        if (loading) return;
-
-        const container = tableContainerRef.current;
-        if (!container) return;
-
-        const {scrollTop, scrollHeight, clientHeight} = container;
-        const scrollPercentage = (scrollTop + clientHeight) / scrollHeight;
-
-        if (scrollPercentage > 0.8 && visibleCount < sortedObjectNames.length) {
-            setLoading(true);
-            setTimeout(() => {
-                setVisibleCount(prev => Math.min(prev + 30, sortedObjectNames.length));
-                setLoading(false);
-            }, 100);
-        }
-    }, [loading, visibleCount, sortedObjectNames.length]);
-
-    useEffect(() => {
-        const container = tableContainerRef.current;
-        if (container) {
-            container.addEventListener('scroll', handleScroll);
-            return () => container.removeEventListener('scroll', handleScroll);
-        }
-    }, [handleScroll]);
-
-    useEffect(() => {
-        setVisibleCount(30);
-    }, [sortedObjectNames]);
-
     useEffect(() => {
         const timer = setTimeout(() => {
             if (!isMounted.current) return;
@@ -773,9 +773,10 @@ const Objects = () => {
                 return;
             }
 
-            // The other parameters, the open panel's, stay as they are.
+            // The other parameters, the open panel's, stay as they are; the page goes,
+            // the list filtered otherwise starting over from its first one.
             const newQueryParams = new URLSearchParams(location.search);
-            ["globalState", "namespace", "kind", "name"].forEach((key) => newQueryParams.delete(key));
+            ["globalState", "namespace", "kind", "name", "offset"].forEach((key) => newQueryParams.delete(key));
             if (selectedGlobalStates.length > 0) newQueryParams.set("globalState", selectedGlobalStates.join(','));
             if (selectedNamespaces.length > 0) newQueryParams.set("namespace", selectedNamespaces.join(','));
             if (selectedKinds.length > 0) newQueryParams.set("kind", selectedKinds.join(','));
@@ -828,11 +829,15 @@ const Objects = () => {
         setSelectedKinds([]);
         const params = new URLSearchParams(location.search);
         params.delete("kind");
+        // Another list: from its first page.
+        params.delete("offset");
+        // The open row of a group tab is a namespace, of a list an object: not the other's.
+        if (GROUP_TABS.includes(next) !== GROUP_TABS.includes(list)) ["sel", "tab"].forEach((key) => params.delete(key));
         if (next === OBJECT_LISTS[0]) params.delete("list");
         else params.set("list", next);
         const queryString = params.toString();
         navigate(`${location.pathname}${queryString ? `?${queryString}` : ""}`, {replace: true});
-    }, [location.pathname, location.search, navigate]);
+    }, [list, location.pathname, location.search, navigate]);
 
     // Created, the object opens in its panel, over the tab it is listed in.
     const handleCreated = useCallback((path, provisioning) => {
@@ -846,7 +851,8 @@ const Objects = () => {
                     ? t("createObject.feedback.createdProvisionFailed", {path})
                     : t("createObject.feedback.created", {path}),
         });
-        const next = listOf(path);
+        // Any lists it too: kept.
+        const next = list === ALL_LIST ? ALL_LIST : listOf(path);
         const params = new URLSearchParams(location.search);
         if (next !== list) {
             setSelectedObjects([]);
@@ -915,22 +921,39 @@ const Objects = () => {
             }));
     }, [selectedObjects, handleActionClick, t]);
 
-    const namesOnly = NAMES_ONLY_LISTS.includes(list);
     const columnCount = namesOnly ? 2 : 3 + PROPERTY_COLUMNS.length + (isWideScreen ? allNodes.length : 0);
+
+    const tabList = (
+        <TabList
+            tabs={OBJECTS_TABS.map((key) => ({
+                key,
+                label: t(`objects.lists.${key}`),
+                icon: LIST_ICONS[key],
+                badge: <span className="text-ink-muted tabular-nums">{listCounts[key]}</span>,
+            }))}
+            active={list}
+            onChange={handleListChange}
+            label={t("objects.lists.label")}
+            idPrefix={listTabsId}
+        />
+    );
+
+    // The objects by namespace, the view the menu had for them.
+    if (GROUP_TABS.includes(list)) {
+        return (
+            <div className="flex h-full flex-col gap-3 p-4">
+                {tabList}
+                {/* Its own panels: the open row (`sel`) is a namespace there, not an object. */}
+                <div className="min-h-0 flex-1" {...tabPanelProps(listTabsId, list)}>
+                    <Namespaces embedded/>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="flex h-full flex-col gap-3 p-4">
-            <TabList
-                tabs={OBJECT_LISTS.map((key) => ({
-                    key,
-                    label: t(`objects.lists.${key}`),
-                    badge: <span className="text-ink-muted tabular-nums">{listCounts[key]}</span>,
-                }))}
-                active={list}
-                onChange={handleListChange}
-                label={t("objects.lists.label")}
-                idPrefix={listTabsId}
-            />
+            {tabList}
             <div className="flex shrink-0 flex-wrap items-center gap-3">
                 {isMobile && (
                     <Button
@@ -948,24 +971,30 @@ const Objects = () => {
                 )}
                 {(!isMobile || showFilters) && (
                     <div id={filtersId} className="flex flex-wrap items-center gap-3">
-                        <FilterPopover
-                            label={t("objects.filters.globalState")}
-                            options={globalStateOptions}
-                            selected={selectedGlobalStates}
-                            onToggle={handleGlobalStateChange}
-                        />
-                        <FilterPopover
-                            label={t("objects.filters.namespace")}
-                            options={namespaceOptions}
-                            selected={selectedNamespaces}
-                            onToggle={handleNamespaceChange}
-                        />
-                        <FilterPopover
-                            label={t("objects.filters.kind")}
-                            options={kindOptions}
-                            selected={selectedKinds}
-                            onToggle={handleKindChange}
-                        />
+                        {hasGlobalState && (
+                            <FilterPopover
+                                label={t("objects.filters.globalState")}
+                                options={globalStateOptions}
+                                selected={selectedGlobalStates}
+                                onToggle={handleGlobalStateChange}
+                            />
+                        )}
+                        {hasChoice(namespaces, selectedNamespaces) && (
+                            <FilterPopover
+                                label={t("objects.filters.namespace")}
+                                options={namespaceOptions}
+                                selected={selectedNamespaces}
+                                onToggle={handleNamespaceChange}
+                            />
+                        )}
+                        {hasChoice(kinds, selectedKinds) && (
+                            <FilterPopover
+                                label={t("objects.filters.kind")}
+                                options={kindOptions}
+                                selected={selectedKinds}
+                                onToggle={handleKindChange}
+                            />
+                        )}
                         <label className="flex items-center gap-1 text-ink-muted">
                             {t("common.name")}
                             <span className="relative flex items-center">
@@ -1017,8 +1046,9 @@ const Objects = () => {
                 </Alert>
             )}
 
+            <Pager paging={paging}/>
+
             <Table
-                ref={tableContainerRef}
                 sticky
                 aria-label={t("objects.tableLabel")}
                 className="min-h-0 flex-1"
@@ -1088,11 +1118,6 @@ const Objects = () => {
                     )}
                 </tbody>
             </Table>
-            {loading && (
-                <div className="flex shrink-0 justify-center">
-                    <Spinner label={t("objects.loadingMore")}/>
-                </div>
-            )}
 
             <ActionDialogManager
                 pendingAction={pendingAction}

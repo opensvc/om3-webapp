@@ -1,17 +1,13 @@
 import React from "react";
 import {Row, Cell} from "../ui/components/Table";
 import {Checkbox} from "../ui/components/Field";
-import {MenuButton} from "../ui/components/MenuButton";
 import {StatusMark} from "../ui/components/StatusMark";
 import {FrozenMark} from "../ui/components/FrozenMark";
 import {UsageBar} from "../ui/components/UsageBar";
-import {RssIcon, MoreIcon} from "../ui/icons";
-import {NODE_ACTIONS, actionLabel} from "../constants/actions";
+import {RssIcon} from "../ui/icons";
 import {useTranslation} from "react-i18next";
 
 const ZERO_DATE = "0001-01-01T00:00:00Z";
-
-const stopPropagation = (event) => event.stopPropagation();
 
 const formatDate = (dateString, t, language) => {
     if (!dateString || dateString === ZERO_DATE) {
@@ -45,10 +41,10 @@ export const monitorMark = (monitor) => {
     return {state: "warn", label: state};
 };
 
-/** Class names of the per-row menu: its trigger made a square ⋮ button, its menu aligned on the right. */
-const ICON = "flex h-4 w-4 items-center justify-center text-ink-muted [&>svg]:h-4! [&>svg]:w-4!";
-const DANGER_ICON = "flex h-4 w-4 items-center justify-center text-state-down [&>svg]:h-4! [&>svg]:w-4!";
-
+/**
+ * A node of the Nodes view. It opens the node's panel, whose title bar holds the
+ * actions on it: the row has no menu of its own.
+ */
 const NodeRow = ({
                      nodename,
                      stats,
@@ -57,7 +53,6 @@ const NodeRow = ({
                      isSelected,
                      daemonNodename,
                      onSelect,
-                     onAction,
                      onOpen,
                      isOpen = false,
                  }) => {
@@ -65,10 +60,6 @@ const NodeRow = ({
     const notAvailable = t("common.notAvailable");
     const isFrozen = !!status?.frozen_at && status.frozen_at !== ZERO_DATE;
     const isDaemonNode = daemonNodename === nodename;
-    const filteredMenuItems = NODE_ACTIONS.filter(({name}) => {
-        if (name === "freeze" && isFrozen) return false;
-        return !(name === "unfreeze" && !isFrozen);
-    });
     const mark = monitorMark(monitor);
 
     const loadState = stats?.load_15m > 4 ? "down" : stats?.load_15m > 2 ? "warn" : "up";
@@ -143,22 +134,6 @@ const NodeRow = ({
                 <span title={updatedValid ? new Date(monitor.updated_at).toLocaleString(i18n.language) : "-"}>
                     {formatDate(monitor?.updated_at, t, i18n.language)}
                 </span>
-            </Cell>
-            {/* Its controls act on their own: the row would open the panel. */}
-            <Cell onClick={stopPropagation}>
-                <MenuButton
-                    label={t("nodes.row.moreActions", {node: nodename})}
-                    icon={<MoreIcon className="h-4 w-4"/>}
-                    compact
-                    align="end"
-                    className="inline-flex align-middle"
-                    items={filteredMenuItems.map(({name, icon, color}) => ({
-                        key: name,
-                        label: actionLabel(name),
-                        icon: <span aria-hidden="true" className={color === "red" ? DANGER_ICON : ICON}>{icon}</span>,
-                        onSelect: () => onAction(nodename, name),
-                    }))}
-                />
             </Cell>
         </Row>
     );

@@ -93,10 +93,16 @@ export interface NoteGroup {
   text: string;
 }
 
+export type FactName = "topology" | "orchestrate" | "placement";
+export interface Fact {
+  name: FactName;
+  value: string;
+}
+
 export interface Board {
   path: string;
-  /** Topology, orchestrate, placement policy. */
-  facts: string[];
+  /** Topology, orchestrate, placement policy: each named, for its tag to tell which. */
+  facts: Fact[];
   /** The fields of the head: avail, overall, and the states worth saying. */
   fields: { name: string; value: Text }[];
   nodes: { name: string; frozen: boolean }[];
@@ -702,7 +708,11 @@ export function buildBoard(digest: Digest): Board {
     });
 
   // The head: the path and the policies, then avail, overall and the states worth saying.
-  const facts = actor ? [obj.topology, obj.orchestrate, obj.placement_policy].filter((f): f is string => !!f) : [];
+  const facts: Fact[] = actor
+    ? ([["topology", obj.topology], ["orchestrate", obj.orchestrate], ["placement", obj.placement_policy]] as const)
+      .filter(([, value]) => !!value)
+      .map(([name, value]) => ({ name, value: value as string }))
+    : [];
   const fields: Board["fields"] = [];
   if (actor) {
     fields.push({ name: "avail", value: [statusSpan(obj.avail)] });

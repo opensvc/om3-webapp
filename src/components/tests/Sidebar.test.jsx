@@ -24,8 +24,6 @@ describe('Sidebar', () => {
 
     test.each([
         ['Heartbeats', 'text-icon-network'],
-        ['Kinds', 'text-icon-tag'],
-        ['Namespaces', 'text-icon-app'],
         ['Networks', 'text-icon-network'],
         ['Nodes', 'text-icon-node'],
         ['Objects', 'text-icon-service'],
@@ -75,8 +73,6 @@ describe('Sidebar', () => {
 
     test.each([
         ['/objects', 'up', 'down', 'n/a'],
-        ['/namespaces', 'up', 'down', 'n/a'],
-        ['/kinds', 'up', 'down', 'n/a'],
         ['/heartbeats', 'beating', 'stale or stopped', 'n/a'],
     ])('numbers the %s by state with coloured pills', (path, upLabel, downLabel, unknownLabel) => {
         mockPills.current = {
@@ -135,19 +131,12 @@ describe('Sidebar', () => {
         expect(screen.queryByRole('link', {name: /^Who Am I/})).toBeNull();
     });
 
-    test('lists the views in alphabetical order, kinds and namespaces under objects', () => {
+    test('lists the views in alphabetical order: kinds and namespaces are tabs of the Objects page', () => {
         renderSidebar();
         const names = screen.getAllByRole('link').map((link) => link.textContent);
         expect(names.map((name) => name.replace(/(all up|warn|down|no status|frozen|a .* is .*)$/, '')))
-            .toEqual(['Heartbeats', 'Networks', 'Nodes', 'Objects', 'Kinds', 'Namespaces', 'Pools']);
-    });
-
-    test('groups kinds and namespaces in a list nested under the objects entry', () => {
-        renderSidebar();
-        const objects = screen.getByRole('link', {name: /^Objects/}).closest('li');
-        const nested = within(objects).getByRole('list');
-        expect(within(nested).getAllByRole('link').map((link) => link.getAttribute('href')))
-            .toEqual(['/kinds', '/namespaces']);
+            .toEqual(['Heartbeats', 'Networks', 'Nodes', 'Objects', 'Pools']);
+        expect(within(screen.getByRole('link', {name: /^Objects/}).closest('li')).queryByRole('list')).not.toBeInTheDocument();
     });
 
     test('lists every view', () => {
@@ -224,7 +213,7 @@ describe('Sidebar in French', () => {
         renderSidebar();
         expect(screen.getByRole('navigation', {name: 'Principal'})).toBeInTheDocument();
         expect(screen.getByRole('link', {name: /^Nœuds/})).toHaveAttribute('href', '/nodes');
-        expect(screen.getByRole('link', {name: /^Namespaces/})).toHaveAttribute('href', '/namespaces');
+        expect(screen.getByRole('link', {name: /^Objets/})).toHaveAttribute('href', '/objects');
     });
 
     test('says what the counts are in French', async () => {

@@ -430,7 +430,6 @@
       "stale": "Périmé"
     },
     "empty": "Aucun heartbeat ne correspond aux filtres actuels.",
-    "loadingMore": "Chargement d'autres heartbeats",
     "eventsLogger": "Journal des événements heartbeat",
     "events": "Événements heartbeat"
   },
@@ -499,11 +498,11 @@
     },
     "feedback": {
       "authTokenNotFound": "Jeton d'authentification introuvable.",
-      "executingOnResource": "Exécution de {{action}} sur la ressource {{rid}}…",
-      "executingOnInstance": "Exécution de {{action}} sur l'instance…",
-      "failed": "Échec : HTTP {{status}}",
-      "failedWithDetail": "Échec : HTTP {{status}} - {{detail}}",
-      "succeeded": "L'action « {{action}} » a réussi",
+      "executingOnResource": "Demande de {{action}} sur la ressource {{rid}}…",
+      "executingOnInstance": "Demande de {{action}} sur l'instance…",
+      "failed": "Non demandé : HTTP {{status}}",
+      "failedWithDetail": "Non demandé : HTTP {{status}} - {{detail}}",
+      "succeeded": "« {{action}} » demandé",
       "error": "Erreur : {{message}}"
     },
     "dialogs": {
@@ -553,7 +552,7 @@
       "maskedAgain_other": "Masqué à nouveau dans {{count}} secondes.",
       "hide": "Masquer le secret",
       "reveal": "Afficher le secret",
-      "hidden": "Le contenu de ce secret est masqué par défaut.",
+      "hidden": "Le contenu de ce secret est masqué.",
       "revealHint": "Utilisez le bouton Afficher le secret pour le voir.",
       "contentAria": "Contenu de la clé"
     },
@@ -597,25 +596,6 @@
       "update": "Échec de la mise à jour de la clé : {{status}}",
       "generic": "Erreur : {{message}}"
     }
-  },
-  "kinds": {
-    "filterBy": "Filtrer par kind",
-    "allOption": "tous",
-    "columns": {
-      "kind": "Kind",
-      "up": "Up",
-      "down": "Down",
-      "warn": "Warn",
-      "unprovisioned": "Non provisionné",
-      "total": "Total"
-    },
-    "showObjects_one": "Afficher {{count}} objet {{status}} de kind {{kind}}",
-    "showObjects_other": "Afficher les {{count}} objets {{status}} de kind {{kind}}",
-    "emptyFiltered": "Aucun kind ne correspond au filtre sélectionné",
-    "empty": "Aucun kind disponible",
-    "loadingMore": "Chargement d'autres kinds",
-    "eventsLogger": "Journal des événements des kinds",
-    "events": "Événements des kinds"
   },
   "logs": {
     "subtitle": "{{instance}} sur {{node}}",
@@ -683,7 +663,6 @@
     "viewMetrics": "Voir les métriques du namespace {{namespace}}",
     "emptyFiltered": "Aucun namespace ne correspond au filtre sélectionné",
     "empty": "Aucun namespace disponible",
-    "loadingMore": "Chargement d'autres namespaces",
     "metricsTitle": "Métriques",
     "metricsOf": "Métriques de {{namespace}}",
     "resizeDrawer": "Redimensionner le panneau",
@@ -759,7 +738,7 @@
       "bootedAt": "Démarré",
       "updatedAt": "Mis à jour"
     },
-    "bulkActions": "Actions sur les nœuds sélectionnés",
+    "bulkActions": "Actions",
     "selectAll": "Sélectionner tous les nœuds",
     "loading": "Chargement des nœuds",
     "eventsLogger": "Journal des événements des nœuds",
@@ -771,25 +750,25 @@
     },
     "feedback": {
       "noToken": "Jeton d'authentification introuvable",
-      "executing": "Exécution de « {{action}} »…",
-      "succeeded_one": "✅ « {{action}} » réussi sur {{count}} nœud.",
-      "succeeded_other": "✅ « {{action}} » réussi sur {{count}} nœuds.",
-      "partial": "⚠️ « {{action}} » partiellement réussi : {{ok}} ok, {{errors}} en erreur.",
-      "failed_one": "❌ « {{action}} » a échoué sur {{count}} nœud.",
-      "failed_other": "❌ « {{action}} » a échoué sur les {{count}} nœuds."
+      "executing": "Demande de « {{action}} »…",
+      "succeeded_one": "« {{action}} » demandé sur {{count}} nœud.",
+      "succeeded_other": "« {{action}} » demandé sur {{count}} nœuds.",
+      "partial": "« {{action}} » demandé sur {{ok}} nœud(s), pas sur {{errors}}.",
+      "failed_one": "« {{action}} » n'a pas pu être demandé sur le nœud.",
+      "failed_other": "« {{action}} » n'a pu être demandé sur aucun des {{count}} nœuds."
     },
     "row": {
       "label": "Ligne du nœud {{node}}",
       "select": "Sélectionner le nœud {{node}}",
-      "connected": "Connecté à ce nœud",
-      "moreActions": "Plus d'actions pour le nœud {{node}}"
+      "connected": "Connecté à ce nœud"
     },
     "time": {
       "justNow": "À l'instant",
       "minutesAgo": "il y a {{count}} min",
       "hoursAgo": "il y a {{count}} h",
       "daysAgo": "il y a {{count}} j"
-    }
+    },
+    "selectHint": "Sélectionnez des nœuds pour agir dessus, ou ouvrez-en un"
   },
   "objectTabs": {
     "schedules": {
@@ -815,7 +794,8 @@
       "config": "Configuration",
       "schedules": "Planifications",
       "drivers": "Pilotes",
-      "logs": "Journaux"
+      "logs": "Journaux",
+      "daemon": "Démon"
     },
     "status": {
       "title": "État du nœud",
@@ -899,12 +879,12 @@
     "dialogTarget": "l'objet {{name}}",
     "feedback": {
       "authTokenNotFound": "Jeton d'authentification introuvable.",
-      "executingOnObject": "Exécution de {{action}} sur l'objet…",
-      "executingOnNode": "Exécution de {{action}} sur le nœud {{node}}…",
-      "failed": "Échec de {{action}} : erreur HTTP, statut {{status}}",
-      "failedWithDetail": "Échec de {{action}} : erreur HTTP, statut {{status}} - {{detail}}",
-      "succeededOnObject": "« {{action}} » a réussi sur l'objet",
-      "succeededOnNode": "« {{action}} » a réussi sur le nœud « {{node}} »",
+      "executingOnObject": "Demande de {{action}} sur l'objet…",
+      "executingOnNode": "Demande de {{action}} sur le nœud {{node}}…",
+      "failed": "{{action}} n'a pas pu être demandé : HTTP {{status}}",
+      "failedWithDetail": "{{action}} n'a pas pu être demandé : HTTP {{status}} - {{detail}}",
+      "succeededOnObject": "« {{action}} » demandé sur l'objet",
+      "succeededOnNode": "« {{action}} » demandé sur le nœud « {{node}} »",
       "error": "Erreur : {{message}}",
       "configUpdated": "Configuration de l'instance mise à jour"
     },
@@ -967,13 +947,16 @@
     "selectAll": "Sélectionner tous les objets",
     "selectObject": "Sélectionner l'objet {{name}}",
     "empty": "Aucun objet ne correspond aux filtres actuels.",
-    "loadingMore": "Chargement d'autres objets",
     "actionsMenu": "Actions",
     "lists": {
       "label": "Listes d'objets",
       "services": "Services",
+      "volumes": "Volumes",
       "configs": "Configurations",
-      "users": "Utilisateurs"
+      "secrets": "Secrets",
+      "users": "Utilisateurs",
+      "namespaces": "Namespaces",
+      "any": "Tous"
     },
     "columns": {
       "object": "Objet",
@@ -990,12 +973,12 @@
     },
     "feedback": {
       "authTokenNotFound": "Jeton d'authentification introuvable",
-      "executing": "Exécution de « {{action}} »…",
-      "succeeded_one": "« {{action}} » a réussi sur {{count}} objet.",
-      "succeeded_other": "« {{action}} » a réussi sur {{count}} objets.",
-      "partial": "« {{action}} » a partiellement réussi : {{ok}} réussite(s), {{errors}} erreur(s).",
-      "failed_one": "« {{action}} » a échoué sur l'objet.",
-      "failed_other": "« {{action}} » a échoué sur les {{count}} objets."
+      "executing": "Demande de « {{action}} »…",
+      "succeeded_one": "« {{action}} » demandé sur {{count}} objet.",
+      "succeeded_other": "« {{action}} » demandé sur {{count}} objets.",
+      "partial": "« {{action}} » demandé sur {{ok}} objet(s), pas sur {{errors}}.",
+      "failed_one": "« {{action}} » n'a pas pu être demandé sur l'objet.",
+      "failed_other": "« {{action}} » n'a pu être demandé sur aucun des {{count}} objets."
     },
     "dialogTarget": {
       "object": "l'objet {{name}}",
@@ -1028,6 +1011,11 @@
     "empty": "Aucun pool disponible."
   },
   "ui": {
+    "policies": {
+      "topology": "Topologie",
+      "orchestrate": "Orchestration",
+      "placement": "Placement"
+    },
     "productTag": {
       "name": "Cluster",
       "title": "Application web du cluster OpenSVC om3"
@@ -1210,9 +1198,9 @@
       "cluster": "le cluster, sur tous ses nœuds"
     },
     "feedback": {
-      "running": "{{action}} en cours sur {{subject}}…",
-      "accepted": "{{action}} sur {{subject}} : accepté",
-      "failed": "{{action}} sur {{subject}} a échoué : {{detail}}"
+      "running": "Demande de {{action}} sur {{subject}}…",
+      "accepted": "{{action}} sur {{subject}} : demandé",
+      "failed": "{{action}} sur {{subject}} n'a pas pu être demandé : {{detail}}"
     },
     "selectInstance": "Sélectionner l'instance sur {{node}}",
     "selectResource": "Sélectionner {{rid}} sur tous ses nœuds",
@@ -1265,5 +1253,95 @@
     "abort": "Interrompre",
     "logsOf": "Journaux de l'orchestration",
     "allLogs": "Afficher tous les journaux"
+  },
+  "pager": {
+    "label": "Pagination",
+    "perPage": "Par page",
+    "rangeOf": "{{from}}–{{to}} sur {{total}}",
+    "first": "Première",
+    "previous": "Précédent",
+    "next": "Suivant",
+    "last": "Dernière",
+    "page": "Page {{page}} sur {{pages}}"
+  },
+  "nodeDaemon": {
+    "refresh": "Actualiser",
+    "pid": "PID {{pid}}",
+    "startedAt": "démarré",
+    "confirmTitle": "Confirmer : {{action}}",
+    "feedback": {
+      "requesting": "Demande de {{action}}…",
+      "requested": "{{action}} demandé.",
+      "failed": "{{action}} n'a pas pu être demandé : {{message}}"
+    },
+    "actions": {
+      "label": "Actions",
+      "start": "Démarrer",
+      "stop": "Arrêter",
+      "restart": "Redémarrer",
+      "sign": "Signer",
+      "wipe": "Effacer"
+    },
+    "columns": {
+      "component": "Composant",
+      "detail": "Détail",
+      "updated": "Mis à jour",
+      "stream": "Flux",
+      "peers": "Pairs",
+      "object": "Objet",
+      "expect": "État attendu",
+      "started": "Démarré",
+      "ended": "Terminé",
+      "id": "ID",
+      "command": "Commande",
+      "origin": "Origine",
+      "ttl": "TTL",
+      "content": "Contenu"
+    },
+    "components": {
+      "title": "Composants",
+      "listener": "Listener de l'API",
+      "dns": "DNS",
+      "scheduler": "Ordonnanceur",
+      "runner_imon": "Exécuteur du moniteur d'instances",
+      "collector": "Collecteur",
+      "daemondata": "Données du démon"
+    },
+    "listener": {
+      "title": "Listener",
+      "confirm": {
+        "start": "Démarrer le listener {{listener}} de {{node}} ?",
+        "stop": "Arrêter le listener {{listener}} de {{node}} ? Son API ne répond plus par le réseau, cette page comprise si elle passe par {{node}}.",
+        "restart": "Redémarrer le listener {{listener}} de {{node}} ? Son API ne répond plus un instant."
+      }
+    },
+    "heartbeats": {
+      "title": "Heartbeats",
+      "actionsOf": "Actions sur {{id}}",
+      "target": "le flux de heartbeat {{id}} de {{node}}",
+      "diskTarget": "le heartbeat disque hb#{{hb}} de {{node}}",
+      "confirm": {
+        "start": "Démarrer {{target}} ?",
+        "stop": "Arrêter {{target}} ? Le nœud cesse d'y émettre ou d'y recevoir.",
+        "restart": "Redémarrer {{target}} ?",
+        "sign": "Signer {{target}} ?",
+        "wipe": "Effacer {{target}} ? Sa signature et les emplacements de ses pairs sont effacés."
+      }
+    },
+    "orchestrations": {
+      "title": "Orchestrations",
+      "node": "(le nœud)"
+    },
+    "execs": {
+      "title": "Exécutions",
+      "filter": "Filtrer les exécutions",
+      "shown": "Les {{shown}} dernières sur {{count}} affichées.",
+      "terminate": "Terminer",
+      "confirm": "Envoyer TERM à « {{command}} » sur {{node}} ?"
+    },
+    "dns": {
+      "title": "Zone DNS",
+      "filter": "Filtrer les enregistrements"
+    }
   }
 }

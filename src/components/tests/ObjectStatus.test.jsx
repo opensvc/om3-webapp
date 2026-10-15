@@ -86,7 +86,17 @@ describe('ObjectStatus', () => {
         expect(screen.getByText('Avail').nextSibling).toHaveTextContent('down');
         expect(screen.getByRole('list', {name: 'Issues'})).toHaveTextContent('not provisioned');
         // Out of a panel, the policies and the actions stand over the summary.
-        expect(screen.getByLabelText('Policies')).toHaveTextContent('flexhanodes order');
+        const policies = screen.getByLabelText('Policies');
+        expect(policies).toHaveTextContent('Topology: flexOrchestrate: haPlacement: nodes order');
+        // Each policy a tag with its own icon, named in its tooltip.
+        expect([...policies.querySelectorAll('[data-policy]')].map((tag) => [tag.dataset.policy, tag.title]))
+            .toEqual([['topology', 'Topology: flex'], ['orchestrate', 'Orchestrate: ha'], ['placement', 'Placement: nodes order']]);
+        const icons = [...policies.querySelectorAll('[data-policy] svg')].map((svg) => svg.innerHTML);
+        expect(icons).toHaveLength(3);
+        expect(new Set(icons).size).toBe(3);
+        // Tinted by family, as oc3 does: what the object does in the service tint, where it runs in the node one.
+        expect([...policies.querySelectorAll('[data-policy]')].map((tag) => tag.querySelector('[aria-hidden="true"]').className))
+            .toEqual([expect.stringContaining('text-icon-service'), expect.stringContaining('text-icon-service'), expect.stringContaining('text-icon-node')]);
         expect(screen.getByRole('button', {name: 'Actions'})).toBeInTheDocument();
     });
 
@@ -172,7 +182,34 @@ describe('ObjectStatus', () => {
             expect(posted).toEqual([]);
             confirm('start');
             await waitFor(() => expect(posted).toEqual(['POST /api/object/path/system/svc/dns/action/start']));
-            expect(await screen.findByText('start on system/svc/dns: accepted')).toBeInTheDocument();
+            expect(await screen.findByText('start on system/svc/dns: requested')).toBeInTheDocument();
+        });
+
+        test('no abort in the menu: the orchestration in progress offers it, with its logs, by its global expect', async () => {
+            const onLogs = vi.fn();
+            act(() => useEventStore.setState({instanceMonitor: {
+                'dev3n1:system/svc/dns': {global_expect: 'none'},
+                'dev3n2:system/svc/dns': {global_expect: 'stopped', orchestration_id: 'o-42'},
+            }}));
+            answer(dns);
+            render(<ObjectStatus path="system/svc/dns" onOrchestrationLogs={onLogs}/>);
+            await screen.findByRole('table');
+            fireEvent.click(screen.getByRole('button', {name: 'Actions'}));
+            expect(screen.queryByRole('menuitem', {name: 'Abort'})).not.toBeInTheDocument();
+            fireEvent.click(screen.getByRole('button', {name: 'Actions'}));
+
+            const badge = screen.getByRole('button', {name: 'Orchestration in progress: stopped'});
+            fireEvent.click(badge);
+            pick('Logs');
+            expect(onLogs).toHaveBeenCalledWith('o-42');
+            fireEvent.click(badge);
+            pick('Abort');
+            confirm('abort');
+            await waitFor(() => expect(posted).toEqual(['POST /api/object/path/system/svc/dns/action/abort']));
+
+            // Done, the badge goes.
+            act(() => useEventStore.setState({instanceMonitor: {}}));
+            expect(screen.queryByRole('button', {name: /Orchestration in progress/})).not.toBeInTheDocument();
         });
 
         test('no abort in the menu: the orchestration in progress offers it, with its logs, by its global expect', async () => {
@@ -443,7 +480,7 @@ describe('ObjectStatus', () => {
                 fireEvent.click(within(dialog).getByRole('checkbox'));
                 fireEvent.click(within(dialog).getByRole('button', {name: 'Confirm freeze action'}));
                 await waitFor(() => expect(posted).toEqual(['POST /api/cluster/action/freeze']));
-                expect(await screen.findByText('freeze on the cluster, on all its nodes: accepted')).toBeInTheDocument();
+                expect(await screen.findByText('freeze on the cluster, on all its nodes: requested')).toBeInTheDocument();
             });
 
             test('a node picked is frozen as a node, not as an instance of the cluster object', async () => {
@@ -460,7 +497,7 @@ describe('ObjectStatus', () => {
                 fireEvent.click(within(dialog).getByRole('checkbox'));
                 fireEvent.click(within(dialog).getByRole('button', {name: 'Confirm freeze action'}));
                 await waitFor(() => expect(posted).toEqual(['POST /api/node/name/dev3n2/action/freeze']));
-                expect(await screen.findByText('freeze on dev3n2: accepted')).toBeInTheDocument();
+                expect(await screen.findByText('freeze on dev3n2: requested')).toBeInTheDocument();
             });
 
             test('the board follows the freeze of the nodes', async () => {
@@ -494,7 +531,7 @@ describe('ObjectStatus', () => {
             pick('Start');
             confirm('start');
             expect(await screen.findByText(
-                'start on container#janitor of system/svc/dns on all nodes failed: dev3n2: HTTP 403 forbidden',
+                'start on container#janitor of system/svc/dns on all nodes could not be requested: dev3n2: HTTP 403 forbidden',
             )).toBeInTheDocument();
         });
     });

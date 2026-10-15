@@ -9,19 +9,13 @@ import useSidebarAlerts from "../hooks/useSidebarAlerts";
 // disks, objects as services, and the om3 kinds drawn from the same set.
 // The cluster overview and the user page are reached from the top bar: the logo
 // and the user button. Entries in alphabetical order.
-// Kinds and namespaces group the objects: they sit under the Objects entry.
 // `labelKey` is the catalog key of the entry name, translated at render.
 export const NAV_ROUTES = [
     {path: "/heartbeats", labelKey: "nav.routes.heartbeats", kind: "heartbeat"},
     {path: "/network", labelKey: "nav.routes.networks", kind: "network"},
     {path: "/nodes", labelKey: "nav.routes.nodes", kind: "node"},
-    {
-        path: "/objects", labelKey: "nav.routes.objects", kind: "service",
-        children: [
-            {path: "/kinds", labelKey: "nav.routes.kinds", kind: "kind"},
-            {path: "/namespaces", labelKey: "nav.routes.namespaces", kind: "namespace"},
-        ],
-    },
+    // Its tabs list the objects by namespace and by kind too.
+    {path: "/objects", labelKey: "nav.routes.objects", kind: "service"},
     {path: "/pools", labelKey: "nav.routes.pools", kind: "pool"},
 ];
 

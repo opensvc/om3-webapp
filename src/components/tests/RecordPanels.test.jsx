@@ -99,6 +99,20 @@ describe('record panels', () => {
         expect(within(panel).getByTestId('object-status')).not.toBeVisible();
     });
 
+    test.each([['ns1/svc/web', 5], ['ns1/sec/key', 3]])('each tab of %s marked by an icon of its own, as oc3 marks its tabs', (path, count) => {
+        renderPeek(`/nodes?peek=object:${path}`);
+        const panel = screen.getByRole('dialog', {name: path});
+        const icons = within(panel).getAllByRole('tab').map((tab) => tab.querySelector('svg[aria-hidden="true"]'));
+        expect(icons.filter(Boolean)).toHaveLength(count);
+        expect(new Set(icons.map((svg) => svg.innerHTML)).size).toBe(count);
+    });
+
+    test('the resources tab marked by the hashtag of the resources, in the service tint', () => {
+        renderPeek('/nodes?peek=object:ns1/svc/web');
+        const panel = screen.getByRole('dialog', {name: 'ns1/svc/web'});
+        expect(within(panel).getByRole('tab', {name: 'Resources'}).querySelector('svg')).toHaveClass('text-icon-service');
+    });
+
     test('the resources and the schedules of the object, a tab each', () => {
         renderPeek('/nodes?peek=object:ns1/svc/web');
         const panel = screen.getByRole('dialog', {name: 'ns1/svc/web'});

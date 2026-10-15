@@ -62,6 +62,8 @@ vi.mock('../../eventSourceManager', () => ({
 }));
 
 // The panel of an object, on its own tested elsewhere: here, which object it is given.
+// The views of the group tabs are tested on their own: here, which one the tab shows.
+vi.mock('../Namespaces', () => ({default: ({embedded}) => <div data-testid="namespaces-view">{String(embedded)}</div>}));
 vi.mock('../RecordPanels', () => ({
     ObjectDetailPanel: ({path}) => (path ? <div data-testid="object-panel">{path}</div> : null),
 }));
@@ -117,6 +119,21 @@ const defaultState = {
     },
     removeObject: mockRemoveObject,
     setObjectStatuses: mockSetObjectStatuses,
+};
+
+/**
+ * Two kinds on the Services tab, svc and nscfg: the Kind filter, hidden with a
+ * single kind to choose, then shows.
+ */
+const TWO_KINDS = {
+    objectStatus: {
+        ...defaultState.objectStatus,
+        'test-ns/nscfg/ns1': {avail: 'n/a', frozen: 'unfrozen', provisioned: 'true'},
+    },
+    objectInstanceStatus: {
+        ...defaultState.objectInstanceStatus,
+        'test-ns/nscfg/ns1': {},
+    },
 };
 
 const setup = (customState = {}, locationSearch = '', mediaQuery = true, {daemon} = {}) => {
@@ -177,7 +194,7 @@ const filterOption = (label, optionText) =>
 const optionText = (checkbox) => checkbox.closest('label').lastChild.lastChild.textContent;
 
 const waitForLoad = () =>
-    waitFor(() => expect(filterGroup('Global State')).toBeInTheDocument());
+    waitFor(() => expect(screen.getByRole('table', {name: 'Objects'})).toBeInTheDocument());
 
 const selectFilter = async (label, optionText) => {
     const summary = filterSummary(label);
@@ -245,15 +262,6 @@ const makeMany = (n) => {
     return {objectStatus, objectInstanceStatus};
 };
 
-const setScroll = (container, scrollTop) => {
-    Object.defineProperty(container, 'scrollHeight', {value: 1000, configurable: true});
-    Object.defineProperty(container, 'clientHeight', {value: 500, configurable: true});
-    Object.defineProperty(container, 'scrollTop', {value: scrollTop, configurable: true});
-};
-
-/** The scrolling wrapper of the sticky table. */
-const getScrollContainer = () => screen.getByRole('table', {name: 'Objects'}).parentElement;
-const loadingMore = () => screen.queryByRole('status', {name: 'Loading more objects'});
 
 beforeEach(() => {
     originalConsoleError = console.error;
@@ -372,11 +380,15 @@ describe('Objects Component', () => {
             );
 
             const failover = objectRow('test-ns/svc/fo');
-            expect(propertyCell(failover, 'Orchestrate')).toHaveTextContent(/^ha$/);
-            expect(propertyCell(failover, 'Topology')).toHaveTextContent(/^failover$/);
+            // Tags: the icon of the policy, the policy named in the tooltip and for screen readers.
+            expect(propertyCell(failover, 'Orchestrate')).toHaveTextContent(/^Orchestrate: ha$/);
+            expect(propertyCell(failover, 'Topology')).toHaveTextContent(/^Topology: failover$/);
+            const orchestrate = propertyCell(failover, 'Orchestrate').querySelector('[data-policy="orchestrate"]');
+            expect(orchestrate).toHaveAttribute('title', 'Orchestrate: ha');
+            expect(orchestrate.querySelector('svg')).toBeInTheDocument();
 
             const flex = objectRow('test-ns/svc/fx');
-            expect(propertyCell(flex, 'Topology')).toHaveTextContent('flex 1-3');
+            expect(propertyCell(flex, 'Topology')).toHaveTextContent('Topology: flex 1-3');
         });
 
         test('are empty for an object with no instances to place', async () => {
@@ -498,23 +510,41 @@ describe('Objects Component', () => {
                 'test-ns/sec/sec1': {avail: 'n/a', frozen: 'unfrozen', provisioned: 'true'},
                 'cluster': {avail: 'n/a', frozen: 'unfrozen', provisioned: 'true'},
                 'test-ns/usr/usr1': {avail: 'n/a', frozen: 'unfrozen', provisioned: 'true'},
+                'test-ns/vol/data': {avail: 'up', frozen: 'unfrozen', provisioned: 'true'},
             },
         };
-        const configs = ['test-ns/cfg/conf1', 'test-ns/sec/sec1', 'cluster'];
+        const configs = ['test-ns/cfg/conf1', 'cluster'];
 
-        test('the services first, the cfg, sec and cluster objects, then the users, in tabs of their own', async () => {
+        test('the services, volumes, configurations, secrets and users in tabs of their own, then the namespaces, then all of them', async () => {
             setup(mixed);
             await waitForLoad();
+            expect(screen.getAllByRole('tab').map((tab) => tab.textContent.replace(/\d+$/, '')))
+                .toEqual(['Services', 'Volumes', 'Configurations', 'Secrets', 'Users', 'Namespaces', 'Any']);
             expect(screen.getByRole('tab', {name: /^Services/})).toHaveAttribute('aria-selected', 'true');
             expect(screen.getByRole('tab', {name: /^Services/})).toHaveTextContent('6');
-            expect(screen.getByRole('tab', {name: /^Configurations/})).toHaveTextContent('3');
+            expect(screen.getByRole('tab', {name: /^Volumes/})).toHaveTextContent('1');
+            expect(screen.getByRole('tab', {name: /^Configurations/})).toHaveTextContent('2');
+            expect(screen.getByRole('tab', {name: /^Secrets/})).toHaveTextContent('1');
             expect(screen.getByRole('tab', {name: /^Users/})).toHaveTextContent('1');
+            expect(screen.getByRole('tab', {name: /^Any/})).toHaveTextContent('11');
+            // The group tab counts its groups.
+            expect(screen.getByRole('tab', {name: /^Namespaces/})).toHaveTextContent(/\d+$/);
             expect(screen.getByRole('tabpanel')).toContainElement(screen.getByRole('table', {name: 'Objects'}));
             expect(objectNamesInOrder()).not.toEqual(expect.arrayContaining([configs[0]]));
             expect(objectNamesInOrder()).not.toContain('test-ns/usr/usr1');
         });
 
-        test.each(['configs', 'users'])('list=%s, held on all the nodes, shows their names only: no status, placement nor node column', async (tab) => {
+        test('each tab marked by the icon of the kind it lists, Any by the shapes', async () => {
+            setup(mixed);
+            await waitForLoad();
+            const icons = screen.getAllByRole('tab').map((tab) => tab.querySelector('svg[aria-hidden="true"]'));
+            expect(icons.every(Boolean)).toBe(true);
+            expect(new Set(icons.map((svg) => svg.innerHTML)).size).toBe(icons.length);
+            expect(screen.getByRole('tab', {name: /^Services/}).querySelector('svg')).toHaveClass('text-icon-service');
+            expect(screen.getByRole('tab', {name: /^Secrets/}).querySelector('svg')).toHaveClass('text-icon-compliance');
+        });
+
+        test.each(['configs', 'secrets', 'users'])('list=%s, held on all the nodes, shows their names only: no status, placement nor node column', async (tab) => {
             setup({...mixed, objectInstanceStatus: {'test-ns/usr/usr1': {node1: {}}, 'test-ns/cfg/conf1': {node1: {}}}},
                 `?list=${tab}`, {isWideScreen: true, isMobile: false});
             await waitForLoad();
@@ -523,6 +553,19 @@ describe('Objects Component', () => {
             for (const row of within(table).getAllByRole('row').slice(1)) {
                 expect(within(row).getAllByRole('cell')).toHaveLength(2);
             }
+        });
+
+        test.each(['configs', 'secrets', 'users'])('list=%s has no global state filter, one in the URL filtering nothing', async (tab) => {
+            setup(mixed, `?list=${tab}&globalState=up`);
+            await waitForLoad();
+            expect(queryFilterGroup('Global State')).not.toBeInTheDocument();
+            expect(objectNamesInOrder().length).toBeGreaterThan(0);
+        });
+
+        test.each(['services', 'volumes', 'any'])('list=%s keeps the global state filter', async (tab) => {
+            setup(mixed, `?list=${tab}`);
+            await waitForLoad();
+            expect(filterGroup('Global State')).toBeInTheDocument();
         });
 
         test('the services keep their status, placement and node columns', async () => {
@@ -545,7 +588,42 @@ describe('Objects Component', () => {
             expect(screen.getByRole('tab', {name: /^Configurations/})).toHaveAttribute('aria-selected', 'true');
             expect([...objectNamesInOrder()].sort()).toEqual([...configs].sort());
             const kinds = within(filterGroup('Kind')).getAllByRole('checkbox').map(optionText);
-            expect(kinds).toEqual(['ccfg', 'cfg', 'sec']);
+            expect(kinds).toEqual(['ccfg', 'cfg']);
+        });
+
+        test.each([
+            ['secrets', ['test-ns/sec/sec1']],
+            ['volumes', ['test-ns/vol/data']],
+        ])('list=%s shows them alone', async (tab, names) => {
+            setup(mixed, `?list=${tab}`);
+            await waitForLoad();
+            expect(objectNamesInOrder()).toEqual(names);
+        });
+
+        test('list=any shows the objects of all the tabs, with their status, placement and node columns', async () => {
+            setup(mixed, '?list=any', {isWideScreen: true, isMobile: false});
+            await waitForLoad();
+            expect(screen.getByRole('tab', {name: /^Any/})).toHaveAttribute('aria-selected', 'true');
+            expect([...objectNamesInOrder()].sort()).toEqual(Object.keys(mixed.objectStatus).sort());
+            const headers = within(screen.getByRole('table', {name: 'Objects'})).getAllByRole('columnheader').map((h) => h.textContent.replace(/[▲▼]/g, '').trim());
+            expect(headers.slice(1, 5)).toEqual(['Status', 'Object', 'Orchestrate', 'Topology']);
+            const kinds = within(filterGroup('Kind')).getAllByRole('checkbox').map(optionText);
+            expect(kinds).toEqual(expect.arrayContaining(['ccfg', 'cfg', 'sec', 'svc', 'usr', 'vol']));
+        });
+
+        test('list=namespaces shows the namespaces view in the tab, no object table', async () => {
+            setup(mixed, '?list=namespaces');
+            expect(await screen.findByTestId('namespaces-view')).toBeInTheDocument();
+            expect(screen.getByRole('tabpanel')).toContainElement(screen.getByTestId('namespaces-view'));
+            expect(screen.queryByRole('table', {name: 'Objects'})).not.toBeInTheDocument();
+            expect(screen.queryByRole('button', {name: 'New object'})).not.toBeInTheDocument();
+        });
+
+        test('a group tab drops the open object: its open row is a namespace', async () => {
+            setup(mixed, '?sel=test-ns%2Fsvc%2Ftest1');
+            await waitForLoad();
+            fireEvent.click(screen.getByRole('tab', {name: /^Namespaces/}));
+            expect(mockNavigate).toHaveBeenCalledWith('/objects?list=namespaces', {replace: true});
         });
 
         test('another tab drops the selection and the kinds picked, the panel kept', async () => {
@@ -583,10 +661,23 @@ describe('Objects Component', () => {
             fireEvent.change(within(dialog).getByLabelText('Namespace'), {target: {value: 'test-ns'}});
             fireEvent.change(within(dialog).getByLabelText('Name'), {target: {value: 'tls'}});
             fireEvent.click(within(dialog).getByRole('button', {name: 'Create'}));
-            await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/objects?name=t&list=configs&sel=test-ns%2Fsec%2Ftls'));
+            await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/objects?name=t&list=secrets&sel=test-ns%2Fsec%2Ftls'));
             expect(global.fetch).toHaveBeenCalledWith('/api/object/path/test-ns/sec/tls/config/file', expect.objectContaining({method: 'POST'}));
             expect(screen.queryByRole('dialog', {name: 'New object'})).not.toBeInTheDocument();
             expect(screen.getByText('test-ns/sec/tls created.')).toBeInTheDocument();
+        });
+
+        test('created from Any, the object opens over Any, which lists it too', async () => {
+            setup({}, '?list=any');
+            await waitForLoad();
+            fireEvent.click(screen.getByRole('button', {name: 'New object'}));
+            const dialog = screen.getByRole('dialog', {name: 'New object'});
+            expect(within(dialog).getByLabelText('Kind')).toHaveValue('svc');
+            fireEvent.change(within(dialog).getByLabelText('Kind'), {target: {value: 'sec'}});
+            fireEvent.change(within(dialog).getByLabelText('Namespace'), {target: {value: 'test-ns'}});
+            fireEvent.change(within(dialog).getByLabelText('Name'), {target: {value: 'tls'}});
+            fireEvent.click(within(dialog).getByRole('button', {name: 'Create'}));
+            await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/objects?list=any&sel=test-ns%2Fsec%2Ftls'));
         });
     });
 
@@ -612,7 +703,7 @@ describe('Objects Component', () => {
         test.each(filterTests)(
             '$label filter',
             async ({label, option, visible, hidden, isSearch}) => {
-                setup();
+                setup(label === 'Kind' ? TWO_KINDS : {});
                 await waitForLoad();
                 if (isSearch) {
                     fireEvent.change(screen.getByLabelText('Name'), {target: {value: option}});
@@ -690,14 +781,14 @@ describe('Objects Component', () => {
         });
 
         test('filter popovers list the global states, namespaces and kinds on offer', async () => {
-            setup();
+            setup(TWO_KINDS);
             await waitForLoad();
             expect(within(filterGroup('Global State')).getAllByRole('checkbox').map(optionText))
                 .toEqual(['Up', 'Down', 'Warn', 'N/a', 'Unprovisioned']);
             expect(within(filterGroup('Namespace')).getAllByRole('checkbox').map(optionText))
                 .toEqual(['root', 'test-ns']);
             expect(within(filterGroup('Kind')).getAllByRole('checkbox').map(optionText))
-                .toEqual(['svc']);
+                .toEqual(['nscfg', 'svc']);
             // Each global state carries its mark.
             expect(filterOption('Global State', 'Up').closest('label').querySelector('[data-state="up"]')).not.toBeNull();
             expect(filterOption('Global State', 'N/a').closest('label').querySelector('[data-state="na"]')).not.toBeNull();
@@ -732,22 +823,37 @@ describe('Objects Component', () => {
         });
 
         test('Kind filter excludes objects whose kind does not match the selection', async () => {
-            setup({
-                objectStatus: {
-                    ...defaultState.objectStatus,
-                    'test-ns/vol/test5': {avail: 'up', frozen: 'unfrozen', provisioned: 'true'},
-                },
-                objectInstanceStatus: {
-                    ...defaultState.objectInstanceStatus,
-                    'test-ns/vol/test5': {},
-                },
-            });
+            setup(TWO_KINDS);
             await waitForLoad();
             await selectFilter('Kind', 'svc');
             await waitFor(() => {
                 expect(screen.getByRole('row', {name: /test-ns\/svc\/test1/})).toBeInTheDocument();
-                expect(screen.queryByRole('row', {name: /test-ns\/vol\/test5/})).not.toBeInTheDocument();
+                expect(screen.queryByRole('row', {name: /test-ns\/nscfg\/ns1/})).not.toBeInTheDocument();
             });
+        });
+
+        test('no Kind nor Namespace filter with a single one to choose: every object of the tab has it', async () => {
+            setup({
+                objectStatus: {
+                    'test-ns/svc/a': {avail: 'up', frozen: 'unfrozen', provisioned: 'true'},
+                    'test-ns/svc/b': {avail: 'up', frozen: 'unfrozen', provisioned: 'true'},
+                },
+                objectInstanceStatus: {},
+            });
+            await waitForLoad();
+            expect(queryFilterGroup('Kind')).not.toBeInTheDocument();
+            expect(queryFilterGroup('Namespace')).not.toBeInTheDocument();
+            expect(filterGroup('Global State')).toBeInTheDocument();
+        });
+
+        test('a filter on a value no object of the tab has stays shown, not to act unseen', async () => {
+            setup({
+                objectStatus: {'test-ns/svc/a': {avail: 'up', frozen: 'unfrozen', provisioned: 'true'}},
+                objectInstanceStatus: {},
+            }, '?namespace=other');
+            await waitForLoad();
+            expect(filterOption('Namespace', 'other')).toBeChecked();
+            expect(queryFilterGroup('Kind')).not.toBeInTheDocument();
         });
     });
 
@@ -789,7 +895,7 @@ describe('Objects Component', () => {
     });
 
     test('unchecking a Kind option keeps the other filters', async () => {
-        setup();
+        setup(TWO_KINDS);
         await waitForLoad();
         await selectFilter('Kind', 'svc');
         await selectFilter('Namespace', 'test-ns');
@@ -827,7 +933,7 @@ describe('Objects Component', () => {
                 )
             );
             await waitFor(() =>
-                expect(screen.getByRole('status')).toHaveTextContent(/'restart' succeeded on 1 object\(s\)\./i)
+                expect(screen.getByRole('status')).toHaveTextContent(/'restart' requested on 1 object\./i)
             );
             expect(getFeedback()).toHaveClass('text-state-up');
             expect(mockForceFlush).toHaveBeenCalled();
@@ -885,7 +991,7 @@ describe('Objects Component', () => {
             expect(global.fetch).toHaveBeenCalledTimes(1);
             await waitFor(() =>
                 expect(screen.getByRole('alert')).toHaveTextContent(
-                    /partially succeeded: 1 ok, 1 errors/i
+                    /requested on 1 object\(s\), not on 1/i
                 )
             );
             expect(mockSetObjectStatuses).toHaveBeenCalled();
@@ -921,7 +1027,7 @@ describe('Objects Component', () => {
             await clickMenuItem('Restart');
             await confirmDialog();
             await waitFor(() =>
-                expect(screen.getByRole('alert')).toHaveTextContent(/failed/i)
+                expect(screen.getByRole('alert')).toHaveTextContent(/could not be requested/i)
             );
         });
 
@@ -938,7 +1044,7 @@ describe('Objects Component', () => {
             await confirmDialog();
             await waitFor(() =>
                 expect(screen.getByRole('alert')).toHaveTextContent(
-                    /partially succeeded: 1 ok, 1 errors/i
+                    /requested on 1 object\(s\), not on 1/i
                 )
             );
         });
@@ -953,7 +1059,7 @@ describe('Objects Component', () => {
             await confirmDialog();
             await waitFor(() =>
                 expect(screen.getByRole('alert')).toHaveTextContent(
-                    /failed on all 1 object\(s\)/i
+                    /could not be requested on the object/i
                 )
             );
         });
@@ -1013,7 +1119,7 @@ describe('Objects Component', () => {
             await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(1));
             await waitFor(() =>
                 expect(screen.getByRole('alert')).toHaveTextContent(
-                    /partially succeeded: 1 ok, 1 errors/i
+                    /requested on 1 object\(s\), not on 1/i
                 )
             );
         });
@@ -1087,16 +1193,16 @@ describe('Objects Component', () => {
             setup({
                 objectStatus: {
                     ...defaultState.objectStatus,
-                    'test-ns/vol/vol1': {avail: 'up', frozen: 'unfrozen', provisioned: 'true'},
+                    'test-ns/nscfg/ns1': {avail: 'up', frozen: 'unfrozen', provisioned: 'true'},
                 },
                 objectInstanceStatus: {
                     ...defaultState.objectInstanceStatus,
-                    'test-ns/vol/vol1': {node1: {avail: 'up'}},
+                    'test-ns/nscfg/ns1': {node1: {avail: 'up'}},
                 },
             });
             await waitForLoad();
             selectRow('test-ns/svc/test1');
-            selectRow('test-ns/vol/vol1');
+            selectRow('test-ns/nscfg/ns1');
             openActionsMenu();
             const menu = await screen.findByRole('menu');
             expect(within(menu).queryByRole('menuitem', {name: /^Enable$/})).not.toBeInTheDocument();
@@ -1296,8 +1402,8 @@ describe('Objects Component', () => {
         expect(screen.getByText('Select objects to act on them')).toBeInTheDocument();
     });
 
-    test('filters are always visible', async () => {
-        setup();
+    test('the filters with a choice to make are visible', async () => {
+        setup(TWO_KINDS);
         await waitForLoad();
         expect(filterGroup('Namespace')).toBeInTheDocument();
         expect(filterGroup('Global State')).toBeInTheDocument();
@@ -1376,62 +1482,53 @@ describe('Objects Component', () => {
         });
     });
 
-    describe('infinite scroll', () => {
-        test('loads more items when scrolled past 80%', async () => {
-            setup(makeMany(50), '', {isWideScreen: true, isMobile: false});
+    describe('pages', () => {
+        const dataRows = () => screen.getAllByRole('row').slice(1);
+
+        test('pages the objects, 50 a page, as oc3 does: the next page, another size', async () => {
+            setup(makeMany(60), '', {isWideScreen: true, isMobile: false});
             await waitForLoad();
-            expect(screen.getAllByRole('row').slice(1)).toHaveLength(30);
-            const container = getScrollContainer();
-            setScroll(container, 500);
-            fireEvent.scroll(container);
-            await waitFor(() =>
-                expect(screen.getAllByRole('row').slice(1).length).toBeGreaterThan(30)
-            );
+            expect(dataRows()).toHaveLength(50);
+            expect(screen.getByText('1–50 of 60')).toBeInTheDocument();
+
+            fireEvent.click(screen.getByRole('button', {name: 'Next'}));
+            expect(dataRows()).toHaveLength(10);
+            expect(screen.getByText('Page 2 of 2')).toBeInTheDocument();
+            expect(screen.getByRole('button', {name: 'Next'})).toBeDisabled();
+
+            fireEvent.change(screen.getByLabelText('Per page'), {target: {value: '25'}});
+            expect(dataRows()).toHaveLength(25);
+            expect(screen.getByText('Page 1 of 3')).toBeInTheDocument();
         });
 
-        test('shows loading indicator while fetching the next page', async () => {
-            setup(makeMany(50), '', {isWideScreen: true, isMobile: false});
+        test('sorted again, the list starts over from its first page', async () => {
+            setup(makeMany(60), '', {isWideScreen: true, isMobile: false});
             await waitForLoad();
-            const container = getScrollContainer();
-            setScroll(container, 500);
-            fireEvent.scroll(container);
-            await waitFor(() => expect(loadingMore()).toBeInTheDocument());
-            await waitFor(() => expect(loadingMore()).not.toBeInTheDocument());
+            fireEvent.click(screen.getByRole('button', {name: 'Last'}));
+            expect(screen.getByText('51–60 of 60')).toBeInTheDocument();
+            clickHeader('Object');
+            expect(screen.getByText('1–50 of 60')).toBeInTheDocument();
         });
 
-        test('scroll does nothing when no more items', async () => {
-            setup({objectStatus: {'a/b': {avail: 'up'}}, objectInstanceStatus: {}}, '', {
-                isWideScreen: true,
-                isMobile: false
-            });
+        test('another tab starts from its first page', async () => {
+            setup(makeMany(60), '?offset=50');
             await waitForLoad();
-            const container = getScrollContainer();
-            fireEvent.scroll(container);
-            expect(loadingMore()).not.toBeInTheDocument();
+            fireEvent.click(screen.getByRole('tab', {name: /^Volumes/}));
+            expect(mockNavigate).toHaveBeenCalledWith('/objects?list=volumes', {replace: true});
         });
 
-        test('scroll is ignored while a load is already in progress', async () => {
-            setup(makeMany(80), '', {isWideScreen: true, isMobile: false});
-            await waitForLoad();
-            const container = getScrollContainer();
-            setScroll(container, 500);
-            fireEvent.scroll(container);
-            fireEvent.scroll(container);
-            await waitFor(() =>
-                expect(screen.getAllByRole('row').slice(1).length).toBeGreaterThan(30)
-            );
-        });
-
-        test('scroll below threshold does not load more', async () => {
-            setup(makeMany(50), '', {isWideScreen: true, isMobile: false});
-            await waitForLoad();
-            const container = getScrollContainer();
-            setScroll(container, 100);
-            fireEvent.scroll(container);
-            const rowsBefore = screen.getAllByRole('row').slice(1).length;
-            await waitFor(() =>
-                expect(screen.getAllByRole('row').slice(1).length).toBe(rowsBefore)
-            );
+        test('a filter changed starts the list over from its first page', async () => {
+            vi.useFakeTimers();
+            try {
+                setup(makeMany(60), '?offset=50&limit=25');
+                fireEvent.change(screen.getByLabelText('Name'), {target: {value: 'obj1'}});
+                act(() => {
+                    vi.advanceTimersByTime(350);
+                });
+                expect(mockNavigate).toHaveBeenCalledWith('/objects?limit=25&name=obj1', {replace: true});
+            } finally {
+                vi.useRealTimers();
+            }
         });
     });
 
@@ -1455,7 +1552,7 @@ describe('Objects Component', () => {
     });
 
     test('URL filters update state on location change', async () => {
-        const {rerender} = setup();
+        const {rerender} = setup(TWO_KINDS);
         await waitForLoad();
         vi.mocked(useLocation).mockReturnValue({
             search: '?namespace=test-ns&kind=svc&name=test1',
@@ -1511,7 +1608,7 @@ describe('Objects Component', () => {
     test('URL sync writes every filter, comma-joined', async () => {
         vi.useFakeTimers();
         try {
-            setup();
+            setup(TWO_KINDS);
             fireEvent.click(filterOption('Global State', 'Up'));
             fireEvent.click(filterOption('Global State', 'Unprovisioned'));
             fireEvent.click(filterOption('Namespace', 'test-ns'));
@@ -1536,9 +1633,9 @@ describe('Objects Component', () => {
         openActionsMenu();
         await clickMenuItem('Restart');
         await confirmDialog();
-        await waitFor(() => expect(getFeedback()).toHaveTextContent(/succeeded/i));
+        await waitFor(() => expect(getFeedback()).toHaveTextContent(/requested/i));
         fireEvent.click(screen.getByRole('button', {name: 'Close'}));
-        await waitFor(() => expect(screen.queryByText(/succeeded/i)).not.toBeInTheDocument());
+        await waitFor(() => expect(screen.queryByText(/requested/i)).not.toBeInTheDocument());
     });
 
     test('feedback hides itself after 4 seconds', async () => {
@@ -1553,15 +1650,15 @@ describe('Objects Component', () => {
             await act(async () => {
                 await vi.advanceTimersByTimeAsync(0);
             });
-            expect(getFeedback()).toHaveTextContent(/succeeded/i);
+            expect(getFeedback()).toHaveTextContent(/requested/i);
             await act(async () => {
                 await vi.advanceTimersByTimeAsync(3900);
             });
-            expect(screen.getByText(/succeeded/i)).toBeInTheDocument();
+            expect(screen.getByText(/requested/i)).toBeInTheDocument();
             await act(async () => {
                 await vi.advanceTimersByTimeAsync(200);
             });
-            expect(screen.queryByText(/succeeded/i)).not.toBeInTheDocument();
+            expect(screen.queryByText(/requested/i)).not.toBeInTheDocument();
         } finally {
             vi.useRealTimers();
         }
@@ -1682,31 +1779,13 @@ describe('Objects Component', () => {
         expect(screen.getByText('Object Events')).toBeInTheDocument();
     });
 
-    test('handles scroll when container ref is null gracefully', () => {
-        const {container} = setup();
-        expect(container).toBeTruthy();
-    });
-
-    test('resets visibleCount when sortedObjectNames changes', async () => {
-        setup(makeMany(50), '', {isWideScreen: true, isMobile: false});
-        await waitForLoad();
-        const container = getScrollContainer();
-        setScroll(container, 500);
-        fireEvent.scroll(container);
-        await waitFor(() => expect(screen.getAllByRole('row').slice(1).length).toBeGreaterThan(30));
-        fireEvent.change(screen.getByLabelText('Name'), {target: {value: 'nonexistent'}});
-        await waitFor(() => expect(screen.getByText(/No objects found/)).toBeInTheDocument());
-        fireEvent.change(screen.getByLabelText('Name'), {target: {value: ''}});
-        await waitFor(() => expect(screen.getAllByRole('row').slice(1).length).toBe(30));
-    });
-
     describe('filter option toggle handlers (add branch coverage)', () => {
         test.each([
             ['Global State', 'Up'],
             ['Namespace', 'test-ns'],
             ['Kind', 'svc'],
         ])('rapidly toggling a %s option twice re-adds it', async (label, option) => {
-            setup({}, '', {isWideScreen: true, isMobile: false});
+            setup(TWO_KINDS, '', {isWideScreen: true, isMobile: false});
             await waitForLoad();
             await selectFilter(label, option);
             const checkbox = filterOption(label, option);

@@ -11,6 +11,7 @@ import {URL_OBJECT} from "../config/apiPath.js";
 import {getResponseErrorMessage} from "../services/api.jsx";
 import logger from '../utils/logger.js';
 import {parseObjectPath} from '../utils/objectUtils';
+import {KEY_KINDS} from "../constants/actions";
 import {Trans, useTranslation} from "react-i18next";
 
 const getAuthToken = () => {
@@ -255,11 +256,17 @@ const KeyFormDialog = ({
     );
 };
 
-const KeysSection = ({decodedObjectName, openSnackbar}) => {
+/**
+ * The keys of a cfg, sec or usr object. `refreshKey` changes with its configuration
+ * (InstanceConfigUpdated): the keys are read again, a key added in the file, or by
+ * om, listed without reopening the panel, kept mounted under its other tabs.
+ */
+const KeysSection = ({decodedObjectName, openSnackbar, refreshKey}) => {
     const {t} = useTranslation();
     const {kind} = parseObjectPath(decodedObjectName);
-    const isSecret = kind === "sec";
-    const showKeys = ["cfg", "sec"].includes(kind);
+    // A usr key, a password or a private key, is masked as a sec one.
+    const isSecret = kind === "sec" || kind === "usr";
+    const showKeys = KEY_KINDS.includes(kind);
 
     const [keys, setKeys] = useState([]);
     const [keysLoading, setKeysLoading] = useState(false);
@@ -286,7 +293,7 @@ const KeysSection = ({decodedObjectName, openSnackbar}) => {
 
     const fetchKeys = useCallback(async () => {
         const {kind} = parseObjectPath(decodedObjectName);
-        if (!["cfg", "sec"].includes(kind)) {
+        if (!KEY_KINDS.includes(kind)) {
             setKeys([]);
             return;
         }
@@ -471,10 +478,18 @@ const KeysSection = ({decodedObjectName, openSnackbar}) => {
         const result = await fetchKeyContent(keyName);
         if (result.type !== 'error') {
             setKeyViewContent(result);
+            // Asked for, the value shows at once; the timer masks it again.
+            setRevealSecret(true);
         } else {
             setViewDialogOpen(false);
         }
         setKeyViewLoading(false);
+    };
+
+    // Closed, a revealed value is masked: it is not shown again on reopening before it is read.
+    const closeViewDialog = () => {
+        setViewDialogOpen(false);
+        setRevealSecret(false);
     };
 
     const openUpdateDialog = async (keyName) => {
@@ -510,7 +525,7 @@ const KeysSection = ({decodedObjectName, openSnackbar}) => {
                 logger.error("Error in fetchKeys:", error);
             });
         }
-    }, [decodedObjectName, fetchKeys]);
+    }, [decodedObjectName, fetchKeys, refreshKey]);
 
     if (!showKeys) return null;
 
@@ -600,10 +615,10 @@ const KeysSection = ({decodedObjectName, openSnackbar}) => {
 
             <Dialog
                 open={viewDialogOpen}
-                onClose={() => setViewDialogOpen(false)}
+                onClose={closeViewDialog}
                 title={t("keys.view.title", {key: keyToView ?? ""})}
                 size="lg"
-                footer={<Button onClick={() => setViewDialogOpen(false)}>{t("common.close")}</Button>}
+                footer={<Button onClick={closeViewDialog}>{t("common.close")}</Button>}
             >
                 {keyViewLoading && (
                     <div className="flex justify-center p-6">

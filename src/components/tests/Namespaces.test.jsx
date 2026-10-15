@@ -274,7 +274,7 @@ describe('Namespaces', () => {
     test('filters by namespace via the select', () => {
         renderComponent();
         fireEvent.change(getFilter(), {target: {value: 'prod'}});
-        expect(mockNavigate).toHaveBeenCalledWith('/namespaces?namespace=prod');
+        expect(mockNavigate).toHaveBeenCalledWith('/objects?list=namespaces&namespace=prod');
         expect(getBodyRows()).toHaveLength(1);
         expect(screen.getByRole('row', {name: /prod/i})).toBeInTheDocument();
     });
@@ -283,7 +283,7 @@ describe('Namespaces', () => {
         setup({search: '?namespace=prod'});
         renderComponent();
         fireEvent.change(getFilter(), {target: {value: 'all'}});
-        expect(mockNavigate).toHaveBeenCalledWith('/namespaces');
+        expect(mockNavigate).toHaveBeenCalledWith('/objects?list=namespaces');
     });
 
     test('reads initial namespace from URL', () => {
@@ -367,7 +367,7 @@ describe('Namespaces', () => {
         });
     });
 
-    describe('infinite scroll', () => {
+    describe('pages', () => {
         function generateLargeData(count) {
             const obj = {};
             for (let i = 0; i < count; i++) obj[`ns${i}/svc/svc`] = {avail: 'up'};
@@ -375,86 +375,27 @@ describe('Namespaces', () => {
             return {statusByNamespace: status, namespaces: Object.keys(status)};
         }
 
-        test('loads more namespaces on scroll near bottom', async () => {
-            vi.useFakeTimers();
+        test('pages the namespaces, 50 a page, as oc3 does: the next page, another size', () => {
             setup({data: generateLargeData(60)});
             renderComponent();
-            await screen.findAllByRole('rowgroup');
-            let rows = getBodyRows();
-            expect(rows).toHaveLength(50);
+            expect(getBodyRows()).toHaveLength(50);
+            expect(screen.getByText('1–50 of 60')).toBeInTheDocument();
 
-            const container = screen.getByTestId('table-container');
-            Object.defineProperties(container, {
-                scrollTop: {value: 800, writable: true},
-                scrollHeight: {value: 1000},
-                clientHeight: {value: 200},
-            });
-            fireEvent.scroll(container);
-            act(() => {
-                vi.advanceTimersByTime(0);
-            });
-            expect(screen.getByText(/Loading more/i)).toBeInTheDocument();
+            fireEvent.click(screen.getByRole('button', {name: 'Next'}));
+            expect(getBodyRows()).toHaveLength(10);
 
-            act(() => {
-                vi.advanceTimersByTime(100);
-            });
-            await waitFor(() => {
-                rows = getBodyRows();
-                expect(rows).toHaveLength(60);
-            });
-            vi.useRealTimers();
+            fireEvent.change(screen.getByLabelText('Per page'), {target: {value: '25'}});
+            expect(getBodyRows()).toHaveLength(25);
+            expect(screen.getByText('Page 1 of 3')).toBeInTheDocument();
         });
 
-        test('does not load more while already loading', () => {
-            vi.useFakeTimers();
+        test('sorted again, the list starts over from its first page', () => {
             setup({data: generateLargeData(60)});
             renderComponent();
-            const container = screen.getByTestId('table-container');
-            Object.defineProperties(container, {
-                scrollTop: {value: 800, writable: true},
-                scrollHeight: {value: 1000},
-                clientHeight: {value: 200},
-            });
-            fireEvent.scroll(container);
-            act(() => {
-                vi.advanceTimersByTime(0);
-            });
-            expect(screen.getByText(/Loading more/i)).toBeInTheDocument();
-
-            fireEvent.scroll(container);
-            act(() => {
-                vi.advanceTimersByTime(100);
-            });
-            expect(getBodyRows()).toHaveLength(60);
-            vi.useRealTimers();
-        });
-
-        test('does not load more if all visible', () => {
-            vi.useFakeTimers();
-            setup({data: generateLargeData(40)});
-            renderComponent();
-            const container = screen.getByTestId('table-container');
-            Object.defineProperties(container, {
-                scrollTop: {value: 800, writable: true},
-                scrollHeight: {value: 1000},
-                clientHeight: {value: 200},
-            });
-            fireEvent.scroll(container);
-            act(() => {
-                vi.advanceTimersByTime(0);
-            });
-            expect(screen.queryByText(/Loading more/i)).not.toBeInTheDocument();
-            vi.useRealTimers();
-        });
-
-        test('removes scroll listener on unmount', () => {
-            setup({data: generateLargeData(60)});
-            const {unmount} = renderComponent();
-            const container = screen.getByTestId('table-container');
-            const removeSpy = vi.spyOn(container, 'removeEventListener');
-            unmount();
-            expect(removeSpy).toHaveBeenCalledWith('scroll', expect.any(Function));
-            removeSpy.mockRestore();
+            fireEvent.click(screen.getByRole('button', {name: 'Next'}));
+            expect(screen.getByText('51–60 of 60')).toBeInTheDocument();
+            fireEvent.click(screen.getByRole('button', {name: /Total/}));
+            expect(screen.getByText('1–50 of 60')).toBeInTheDocument();
         });
     });
 

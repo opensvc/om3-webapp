@@ -812,7 +812,7 @@ describe('ObjectDetail Component', () => {
             await userEvent.click(getMenuItemByLabel('Start'));
             await confirmDialog(await findActionDialog());
             await waitFor(() =>
-                expect(screen.getAllByRole('alert').some((a) => a.textContent.includes(`HTTP error! status: ${status}`))).toBe(true)
+                expect(screen.getAllByRole('alert').some((a) => a.textContent.includes(`could not be requested: HTTP ${status}`))).toBe(true)
             );
         });
 
@@ -915,9 +915,9 @@ describe('ObjectDetail Component', () => {
         await screen.findByRole('menu');
         await userEvent.click(getMenuItemByLabel('Start'));
         await confirmDialog(await findActionDialog());
-        await waitFor(() => expect(feedbackWith("'start' succeeded on object")).toBeInTheDocument());
-        await user.click(within(feedbackWith("'start' succeeded on object")).getByRole('button', {name: 'Close'}));
-        await waitFor(() => expect(feedbackWith("'start' succeeded on object")).toBeUndefined());
+        await waitFor(() => expect(feedbackWith("'start' requested on the object")).toBeInTheDocument());
+        await user.click(within(feedbackWith("'start' requested on the object")).getByRole('button', {name: 'Close'}));
+        await waitFor(() => expect(feedbackWith("'start' requested on the object")).toBeUndefined());
     });
 
     // ── Logs drawer ──────────────────────────────────────────────────────

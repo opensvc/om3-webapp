@@ -17,7 +17,8 @@ import {Table, HeaderRow, SortHeaderCell, Row, Cell, EmptyRow} from "../ui/compo
 import {StatusMark} from "../ui/components/StatusMark";
 import {Select} from "../ui/components/Field";
 import {Button} from "../ui/components/Button";
-import {Spinner} from "../ui/components/Spinner";
+import {Pager} from "../ui/components/Pager";
+import {usePaging} from "../app/paging";
 import {ChevronDownIcon, FilterIcon} from "../ui/icons";
 
 // The breakpoints of the MUI theme the view used: below md (900px) the filters fold
@@ -96,7 +97,6 @@ const Heartbeats = () => {
     const location = useLocation();
     const navigate = useNavigate();
     const eventStarted = useRef(false);
-    const tableContainerRef = useRef(null);
     const isMobile = useMediaQuery(MOBILE_QUERY);
     const isWideScreen = useMediaQuery(WIDE_QUERY);
 
@@ -104,8 +104,6 @@ const Heartbeats = () => {
     const [stoppedStreamsCache, setStoppedStreamsCache] = useState({});
     const [sortColumn, setSortColumn] = useState("node");
     const [sortDirection, setSortDirection] = useState("asc");
-    const [visibleCount, setVisibleCount] = useState(30);
-    const [loading, setLoading] = useState(false);
 
     const [showFilters, setShowFilters] = useState(() => isWideScreen ? true : !isMobile);
 
@@ -161,7 +159,10 @@ const Heartbeats = () => {
                 return;
             }
 
-            const newQueryParams = new URLSearchParams();
+            // The other parameters, the page size and the open panel's, stay as they
+            // are; the page goes, the list filtered otherwise starting over from its first.
+            const newQueryParams = new URLSearchParams(location.search);
+            ["status", "node", "state", "id", "offset"].forEach((key) => newQueryParams.delete(key));
             if (filterBeating !== "all") newQueryParams.set("status", filterBeating);
             if (filterNode !== "all") newQueryParams.set("node", filterNode);
             if (filterState !== "all") newQueryParams.set("state", filterState);
@@ -368,9 +369,10 @@ const Heartbeats = () => {
         });
     }, [sortedRows, deferredFilterBeating, deferredFilterNode, deferredFilterState, deferredFilterId]);
 
-    const visibleRows = useMemo(() => {
-        return filteredRows.slice(0, visibleCount);
-    }, [filteredRows, visibleCount]);
+    // The rows of the page shown, as oc3 pages its lists.
+    const paging = usePaging("heartbeats", filteredRows.length);
+    const {page: pageOf, setOffset: setPageOffset} = paging;
+    const visibleRows = useMemo(() => pageOf(filteredRows), [pageOf, filteredRows]);
 
     const handleSort = useCallback((column) => {
         setSortColumn(prev => {
@@ -381,8 +383,9 @@ const Heartbeats = () => {
             setSortDirection("asc");
             return column;
         });
-        setVisibleCount(30);
-    }, []);
+        // Sorted again, the list starts over: from its first page.
+        setPageOffset(0);
+    }, [setPageOffset]);
 
     const toggleShowFilters = useCallback(() => {
         setShowFilters(prev => !prev);
@@ -390,36 +393,7 @@ const Heartbeats = () => {
 
     const handleFilterChange = useCallback((setter) => (event) => {
         setter(event.target.value);
-        setVisibleCount(30);
     }, []);
-
-    const handleScroll = useCallback(() => {
-        if (loading) return;
-
-        const container = tableContainerRef.current;
-        const {scrollTop, scrollHeight, clientHeight} = container;
-        const scrollPercentage = (scrollTop + clientHeight) / scrollHeight;
-
-        if (scrollPercentage > 0.8 && visibleCount < filteredRows.length) {
-            setLoading(true);
-            setTimeout(() => {
-                setVisibleCount(prev => Math.min(prev + 30, filteredRows.length));
-                setLoading(false);
-            }, 100);
-        }
-    }, [loading, visibleCount, filteredRows.length]);
-
-    useEffect(() => {
-        const container = tableContainerRef.current;
-        if (container) {
-            container.addEventListener('scroll', handleScroll);
-            return () => container.removeEventListener('scroll', handleScroll);
-        }
-    }, [handleScroll]);
-
-    useEffect(() => {
-        setVisibleCount(30);
-    }, [filteredRows]);
 
     const filterSelect = (label, value, setter, options) => (
         <label className="flex items-center gap-1 text-ink-muted">
@@ -467,7 +441,9 @@ const Heartbeats = () => {
                 </div>
             </div>
 
-            <Table sticky ref={tableContainerRef} className="min-h-0 overflow-auto">
+            <Pager paging={paging}/>
+
+            <Table sticky className="min-h-0 overflow-auto">
                 <thead>
                     <HeaderRow>
                         {COLUMNS.map(({labelKey, key}) => (
@@ -496,11 +472,6 @@ const Heartbeats = () => {
                     )}
                 </tbody>
             </Table>
-            {loading && (
-                <div className="flex shrink-0 justify-center">
-                    <Spinner label={t("heartbeats.loadingMore")}/>
-                </div>
-            )}
 
             <EventLogger eventTypes={heartbeatEventTypes} title={t("heartbeats.eventsLogger")}
                          buttonLabel={t("heartbeats.events")}/>

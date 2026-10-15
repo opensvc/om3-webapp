@@ -72,8 +72,8 @@ const NodesTable = () => {
         "CONNECTION_CLOSED"
     ], []);
 
-    const handleAction = (action, nodename = null) => {
-        setPendingAction({action, node: nodename});
+    const handleAction = (action) => {
+        setPendingAction({action, node: null});
     };
 
     // A row opens its node's panel; its logs are on a tab of it.
@@ -248,22 +248,29 @@ const NodesTable = () => {
 
     return (
         <div className="p-4 space-y-3">
-            <div className="flex flex-wrap items-center gap-3">
-                <MenuButton
-                    // The actions, as in oc3: a pill tinted with the accent, the gear of the actions.
-                    prominent
-                    icon={<GearIcon className="h-3.5 w-3.5"/>}
-                    label={t("nodes.bulkActions")}
-                    disabled={selectedNodes.length === 0}
-                    className="ml-auto"
-                    align="end"
-                    items={filteredMenuItems.map(({name, icon, color}) => ({
-                        key: name,
-                        label: actionLabel(name),
-                        icon: <span aria-hidden="true" className={color === "red" ? DANGER_ICON : ICON}>{icon}</span>,
-                        onSelect: () => handleAction(name),
-                    }))}
-                />
+            {/* The actions on the nodes selected; on one node, its panel's. Nothing selected,
+                how to select, in the place of the actions. */}
+            <div className="flex min-h-7 flex-wrap items-center justify-end gap-3">
+                {selectedNodes.length > 0 ? (
+                    <>
+                        <span className="whitespace-nowrap text-ink-muted">{t("common.selected", {count: selectedNodes.length})}</span>
+                        <MenuButton
+                            // The actions, as in oc3: a pill tinted with the accent, the gear of the actions.
+                            prominent
+                            icon={<GearIcon className="h-3.5 w-3.5"/>}
+                            label={t("nodes.bulkActions")}
+                            align="end"
+                            items={filteredMenuItems.map(({name, icon, color}) => ({
+                                key: name,
+                                label: actionLabel(name),
+                                icon: <span aria-hidden="true" className={color === "red" ? DANGER_ICON : ICON}>{icon}</span>,
+                                onSelect: () => handleAction(name),
+                            }))}
+                        />
+                    </>
+                ) : (
+                    <span className="text-ink-muted">{t("nodes.selectHint")}</span>
+                )}
             </div>
 
             {snackbar.open && (
@@ -307,7 +314,6 @@ const NodesTable = () => {
                                 onSort={() => handleSort(key)}
                             />
                         ))}
-                        <HeaderCell>{t("common.actions")}</HeaderCell>
                     </HeaderRow>
                     </thead>
                     <tbody>
@@ -321,7 +327,6 @@ const NodesTable = () => {
                             isSelected={selectedNodes.includes(nodename)}
                             daemonNodename={daemon.nodename}
                             onSelect={handleSelectNode}
-                            onAction={(nodename, action) => handleAction(action, nodename)}
                             onOpen={handleOpenNode}
                             isOpen={panel.sel === nodename}
                         />

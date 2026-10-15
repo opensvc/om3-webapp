@@ -35,3 +35,23 @@ describe('actionLabel', () => {
         expect(actionLabel(undefined)).toBe('');
     });
 });
+
+describe('INSTANCE_ACTIONS', () => {
+    // The instance actions om3 serves, .../instance/path/{namespace}/{kind}/{name}/action/<this>,
+    // as daemon/api/api.yaml on om3 main names them.
+    const OM3_INSTANCE_ACTIONS = [
+        'boot', 'delete', 'freeze', 'info', 'provision', 'install', 'prstart', 'prstop', 'restart',
+        'run', 'shutdown', 'start', 'startstandby', 'status', 'stop', 'pg/reset', 'pg/update',
+        'ingest', 'full', 'resync', 'split', 'update', 'unfreeze', 'unprovision',
+    ];
+
+    test('each posts to a path om3 serves', () => {
+        for (const {name, endpoint} of INSTANCE_ACTIONS) {
+            expect([name, OM3_INSTANCE_ACTIONS.includes(endpoint)]).toEqual([name, true]);
+        }
+    });
+
+    test('sync ingest posts to action/ingest, its path since om3 named the paths after the actions', () => {
+        expect(INSTANCE_ACTIONS.find((a) => a.name === 'sync ingest').endpoint).toBe('ingest');
+    });
+});

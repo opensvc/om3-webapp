@@ -11,6 +11,7 @@ import {URL_OBJECT} from "../config/apiPath.js";
 import {getResponseErrorMessage} from "../services/api.jsx";
 import logger from '../utils/logger.js';
 import {parseObjectPath} from '../utils/objectUtils';
+import {KEY_KINDS} from "../constants/actions";
 import {Trans, useTranslation} from "react-i18next";
 
 const getAuthToken = () => {
@@ -258,8 +259,9 @@ const KeyFormDialog = ({
 const KeysSection = ({decodedObjectName, openSnackbar}) => {
     const {t} = useTranslation();
     const {kind} = parseObjectPath(decodedObjectName);
-    const isSecret = kind === "sec";
-    const showKeys = ["cfg", "sec"].includes(kind);
+    // A usr key, a password or a private key, is masked as a sec one.
+    const isSecret = kind === "sec" || kind === "usr";
+    const showKeys = KEY_KINDS.includes(kind);
 
     const [keys, setKeys] = useState([]);
     const [keysLoading, setKeysLoading] = useState(false);
@@ -286,7 +288,7 @@ const KeysSection = ({decodedObjectName, openSnackbar}) => {
 
     const fetchKeys = useCallback(async () => {
         const {kind} = parseObjectPath(decodedObjectName);
-        if (!["cfg", "sec"].includes(kind)) {
+        if (!KEY_KINDS.includes(kind)) {
             setKeys([]);
             return;
         }

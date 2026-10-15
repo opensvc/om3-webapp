@@ -572,6 +572,32 @@ describe('KeysSection', () => {
         await waitFor(() => expect(capturedBody instanceof File).toBe(true));
     });
 
+    // ── User-specific tests ───────────────────────────────────────────────
+
+    test('the keys of a user are listed, read from its data keys', async () => {
+        mockFetch({keys: [{name: 'password', node: 'n', size: 16}, {name: 'private_key', node: 'n', size: 1704}]});
+        await renderAndWait('root/usr/usr1', 2);
+        expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining('/root/usr/usr1/data/keys'), expect.any(Object));
+        expect(screen.getByRole('rowheader', {name: 'password'})).toBeInTheDocument();
+        expect(screen.getByRole('rowheader', {name: 'private_key'})).toBeInTheDocument();
+    });
+
+    test('a user key, a password or a private key, is masked as a secret', async () => {
+        mockFetch({
+            keys: [{name: 'password', node: 'n', size: 11}],
+            keyBlob: makeMockBlob(encodeText('supersecret')),
+        });
+        await renderAndWait('root/usr/usr1', 1);
+        await openDialog('view', 'password');
+        const dialog = screen.getByRole('dialog');
+        await waitFor(() => expect(queryLoading(within(dialog))).not.toBeInTheDocument());
+        expect(within(dialog).getByText(/Masked again in 10 seconds/)).toBeInTheDocument();
+        await act(async () => {
+            await user.click(within(dialog).getByRole('button', {name: /hide secret/i}));
+        });
+        expect(within(dialog).queryByDisplayValue('supersecret')).not.toBeInTheDocument();
+    });
+
     // ── Secret-specific tests ─────────────────────────────────────────────
 
     test('a secret decoded shows at once, a countdown before it is masked again', async () => {

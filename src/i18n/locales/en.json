@@ -598,26 +598,6 @@
       "generic": "Error: {{message}}"
     }
   },
-  "kinds": {
-    "filterBy": "Filter by kind",
-    "allOption": "all",
-    "columns": {
-      "kind": "Kind",
-      "up": "Up",
-      "down": "Down",
-      "warn": "Warn",
-      "na": "N/A",
-      "unprovisioned": "Unprovisioned",
-      "total": "Total"
-    },
-    "showObjects_one": "Show the {{count}} {{status}} object of {{kind}}",
-    "showObjects_other": "Show the {{count}} {{status}} objects of {{kind}}",
-    "emptyFiltered": "No kinds match the selected filter",
-    "empty": "No kinds available",
-    "loadingMore": "Loading more kinds",
-    "eventsLogger": "Kinds Events Logger",
-    "events": "Kind Events"
-  },
   "logs": {
     "subtitle": "{{instance}} on {{node}}",
     "connected": "Connected",
@@ -978,7 +958,7 @@
       "secrets": "Secrets",
       "users": "Users",
       "namespaces": "Namespaces",
-      "kinds": "Any"
+      "any": "Any"
     },
     "columns": {
       "object": "Object",

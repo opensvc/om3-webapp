@@ -63,7 +63,6 @@ vi.mock('../../eventSourceManager', () => ({
 
 // The panel of an object, on its own tested elsewhere: here, which object it is given.
 // The views of the group tabs are tested on their own: here, which one the tab shows.
-vi.mock('../Kinds', () => ({default: ({embedded}) => <div data-testid="kinds-view">{String(embedded)}</div>}));
 vi.mock('../Namespaces', () => ({default: ({embedded}) => <div data-testid="namespaces-view">{String(embedded)}</div>}));
 vi.mock('../RecordPanels', () => ({
     ObjectDetailPanel: ({path}) => (path ? <div data-testid="object-panel">{path}</div> : null),
@@ -521,20 +520,20 @@ describe('Objects Component', () => {
         };
         const configs = ['test-ns/cfg/conf1', 'cluster'];
 
-        test('the services, volumes, configurations, secrets and users in tabs of their own, then the namespaces and kinds', async () => {
+        test('the services, volumes, configurations, secrets and users in tabs of their own, then the namespaces, then all of them', async () => {
             setup(mixed);
             await waitForLoad();
             expect(screen.getAllByRole('tab').map((tab) => tab.textContent.replace(/\d+$/, '')))
-                .toEqual(['Services', 'Volumes', 'Configurations', 'Secrets', 'Users', 'Any', 'Namespaces']);
+                .toEqual(['Services', 'Volumes', 'Configurations', 'Secrets', 'Users', 'Namespaces', 'Any']);
             expect(screen.getByRole('tab', {name: /^Services/})).toHaveAttribute('aria-selected', 'true');
             expect(screen.getByRole('tab', {name: /^Services/})).toHaveTextContent('6');
             expect(screen.getByRole('tab', {name: /^Volumes/})).toHaveTextContent('1');
             expect(screen.getByRole('tab', {name: /^Configurations/})).toHaveTextContent('2');
             expect(screen.getByRole('tab', {name: /^Secrets/})).toHaveTextContent('1');
             expect(screen.getByRole('tab', {name: /^Users/})).toHaveTextContent('1');
-            // The group tabs count their groups.
+            expect(screen.getByRole('tab', {name: /^Any/})).toHaveTextContent('11');
+            // The group tab counts its groups.
             expect(screen.getByRole('tab', {name: /^Namespaces/})).toHaveTextContent(/\d+$/);
-            expect(screen.getByRole('tab', {name: /^Any/})).toHaveTextContent('6');
             expect(screen.getByRole('tabpanel')).toContainElement(screen.getByRole('table', {name: 'Objects'}));
             expect(objectNamesInOrder()).not.toEqual(expect.arrayContaining([configs[0]]));
             expect(objectNamesInOrder()).not.toContain('test-ns/usr/usr1');
@@ -583,13 +582,21 @@ describe('Objects Component', () => {
             expect(objectNamesInOrder()).toEqual(names);
         });
 
-        test.each([
-            ['kinds', 'kinds-view'],
-            ['namespaces', 'namespaces-view'],
-        ])('list=%s shows the %s view in the tab, no object table', async (tab, testId) => {
-            setup(mixed, `?list=${tab}`);
-            expect(await screen.findByTestId(testId)).toBeInTheDocument();
-            expect(screen.getByRole('tabpanel')).toContainElement(screen.getByTestId(testId));
+        test('list=any shows the objects of all the tabs, with their status, placement and node columns', async () => {
+            setup(mixed, '?list=any', {isWideScreen: true, isMobile: false});
+            await waitForLoad();
+            expect(screen.getByRole('tab', {name: /^Any/})).toHaveAttribute('aria-selected', 'true');
+            expect([...objectNamesInOrder()].sort()).toEqual(Object.keys(mixed.objectStatus).sort());
+            const headers = within(screen.getByRole('table', {name: 'Objects'})).getAllByRole('columnheader').map((h) => h.textContent.replace(/[▲▼]/g, '').trim());
+            expect(headers.slice(1, 5)).toEqual(['Status', 'Object', 'Orchestrate', 'Topology']);
+            const kinds = within(filterGroup('Kind')).getAllByRole('checkbox').map(optionText);
+            expect(kinds).toEqual(expect.arrayContaining(['ccfg', 'cfg', 'sec', 'svc', 'usr', 'vol']));
+        });
+
+        test('list=namespaces shows the namespaces view in the tab, no object table', async () => {
+            setup(mixed, '?list=namespaces');
+            expect(await screen.findByTestId('namespaces-view')).toBeInTheDocument();
+            expect(screen.getByRole('tabpanel')).toContainElement(screen.getByTestId('namespaces-view'));
             expect(screen.queryByRole('table', {name: 'Objects'})).not.toBeInTheDocument();
             expect(screen.queryByRole('button', {name: 'New object'})).not.toBeInTheDocument();
         });
@@ -640,6 +647,19 @@ describe('Objects Component', () => {
             expect(global.fetch).toHaveBeenCalledWith('/api/object/path/test-ns/sec/tls/config/file', expect.objectContaining({method: 'POST'}));
             expect(screen.queryByRole('dialog', {name: 'New object'})).not.toBeInTheDocument();
             expect(screen.getByText('test-ns/sec/tls created.')).toBeInTheDocument();
+        });
+
+        test('created from Any, the object opens over Any, which lists it too', async () => {
+            setup({}, '?list=any');
+            await waitForLoad();
+            fireEvent.click(screen.getByRole('button', {name: 'New object'}));
+            const dialog = screen.getByRole('dialog', {name: 'New object'});
+            expect(within(dialog).getByLabelText('Kind')).toHaveValue('svc');
+            fireEvent.change(within(dialog).getByLabelText('Kind'), {target: {value: 'sec'}});
+            fireEvent.change(within(dialog).getByLabelText('Namespace'), {target: {value: 'test-ns'}});
+            fireEvent.change(within(dialog).getByLabelText('Name'), {target: {value: 'tls'}});
+            fireEvent.click(within(dialog).getByRole('button', {name: 'Create'}));
+            await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/objects?list=any&sel=test-ns%2Fsec%2Ftls'));
         });
     });
 

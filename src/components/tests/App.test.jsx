@@ -240,7 +240,7 @@ describe('App Component', () => {
         ['/network/test-network', 'network', '?sel=test-network'],
         ['/nodes/node1/objects/ns1%2Fsvc%2Fweb', 'objects', '?sel=ns1%2Fsvc%2Fweb'],
         // The kinds and namespaces pages are tabs of the Objects page, their filter kept.
-        ['/kinds?kind=sec', 'objects', '?kind=sec&list=kinds'],
+        ['/kinds?kind=sec', 'objects', '?kind=sec&list=any'],
         ['/namespaces', 'objects', '?list=namespaces'],
     ])('old record address %s opens the panel over %s', async (path, testId, search) => {
         setupBasicAuth();
@@ -456,13 +456,23 @@ describe('App Component', () => {
         await waitFor(() => expect(mockAuthDispatch).toHaveBeenCalledWith({type: 'Login', data: 'refreshed-user'}));
     });
 
-    test('expired user silent renew failure logs error', async () => {
+    test('expired user, its renewal failing for a network blip: the session is kept, for a retry', async () => {
         mockUserManager.getUser.mockResolvedValue({profile: {preferred_username: 'x'}, expired: true});
-        mockUserManager.signinSilent.mockRejectedValue(new Error('Renew failed'));
+        mockUserManager.signinSilent.mockRejectedValue(new TypeError('Failed to fetch'));
         setupOidcAuth();
         renderApp(['/objects']);
-        await waitFor(() => expect(mockUserManager.signinSilent).toHaveBeenCalled());
-        expect(logger.error).toHaveBeenCalledWith('Silent renew failed:', expect.any(Error));
+        await waitFor(() => expect(logger.warn).toHaveBeenCalledWith('Session renewal failed, kept for a retry:', 'Failed to fetch'));
+        expect(mockNavigate).not.toHaveBeenCalledWith('/auth-choice', {replace: true});
+        expect(mockLocalStorage.removeItem).not.toHaveBeenCalledWith('authToken');
+    });
+
+    test('expired user, the provider refusing its renewal: sign in again', async () => {
+        mockUserManager.getUser.mockResolvedValue({profile: {preferred_username: 'x'}, expired: true});
+        mockUserManager.signinSilent.mockRejectedValue(Object.assign(new Error('login_required'), {error: 'login_required'}));
+        setupOidcAuth();
+        renderApp(['/objects']);
+        await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/auth-choice', {replace: true}));
+        expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('authToken');
     });
 
     test('getUser rejection logs error', async () => {
@@ -472,48 +482,56 @@ describe('App Component', () => {
         await waitFor(() => expect(logger.error).toHaveBeenCalledWith('Error getting user:', expect.any(Error)));
     });
 
-    test('silent renew returns null user logs warning', async () => {
+    test('a renewal giving no user, or an expired one, is a failure kept for a retry', async () => {
         mockUserManager.getUser.mockResolvedValue({profile: {preferred_username: 'x'}, expired: true});
-        mockUserManager.signinSilent.mockResolvedValue(null);
+        mockUserManager.signinSilent.mockResolvedValue({expired: true, profile: {preferred_username: 'x'}});
         setupOidcAuth();
         renderApp(['/objects']);
-        await waitFor(() => expect(mockUserManager.signinSilent).toHaveBeenCalled());
-        expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Silent renew failed or user still expired'));
+        await waitFor(() => expect(logger.warn).toHaveBeenCalledWith(
+            'Session renewal failed, kept for a retry:', expect.stringMatching(/missing or expired/)));
+        expect(mockNavigate).not.toHaveBeenCalledWith('/auth-choice', {replace: true});
     });
 
-    test('addAccessTokenExpired handler clears storage and navigates', async () => {
+    test('a token expired, the tab in the background, is renewed: no sign out', async () => {
+        const renewed = {
+            profile: {preferred_username: 'u'}, access_token: 'renewed-token',
+            expires_at: Math.floor(Date.now() / 1000) + 300, expired: false,
+        };
+        mockUserManager.signinSilent.mockResolvedValue(renewed);
         setupOidcAuth();
         renderApp(['/objects']);
         await waitFor(() => expect(mockUserManager.events.addAccessTokenExpired).toHaveBeenCalled());
-        act(() => mockUserManager.events.addAccessTokenExpired.mock.calls[0][0]());
-        await waitFor(() => expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('authToken'));
-        await waitFor(() => expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('tokenExpiration'));
-        await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/auth-choice', {replace: true}));
+        await act(async () => mockUserManager.events.addAccessTokenExpired.mock.calls.at(-1)[0]());
+        await waitFor(() => expect(mockAuthDispatch).toHaveBeenCalledWith({type: 'SetAccessToken', data: 'renewed-token'}));
+        expect(mockNavigate).not.toHaveBeenCalledWith('/auth-choice', {replace: true});
+        expect(mockLocalStorage.removeItem).not.toHaveBeenCalledWith('authToken');
     });
 
-    test('addSilentRenewError handler clears storage and navigates', async () => {
+    test('a renewal failing for a transient reason keeps the session', async () => {
         setupOidcAuth();
         renderApp(['/objects']);
         await waitFor(() => expect(mockUserManager.events.addSilentRenewError).toHaveBeenCalled());
-        act(() => mockUserManager.events.addSilentRenewError.mock.calls[0][0](new Error('renew failed')));
+        act(() => mockUserManager.events.addSilentRenewError.mock.calls.at(-1)[0](new Error('IFrame timed out without a response')));
+        expect(mockNavigate).not.toHaveBeenCalledWith('/auth-choice', {replace: true});
+        expect(mockLocalStorage.removeItem).not.toHaveBeenCalledWith('authToken');
+    });
+
+    test('a renewal the provider refused ends the session: sign in again', async () => {
+        setupOidcAuth();
+        renderApp(['/objects']);
+        await waitFor(() => expect(mockUserManager.events.addSilentRenewError).toHaveBeenCalled());
+        act(() => mockUserManager.events.addSilentRenewError.mock.calls.at(-1)[0](Object.assign(new Error('login_required'), {error: 'login_required'})));
         await waitFor(() => expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('authToken'));
         await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/auth-choice', {replace: true}));
     });
 
-    test('addAccessTokenExpiring listener logs debug', async () => {
+    test('the session is attached once, and detached with the app', async () => {
         setupOidcAuth();
-        renderApp(['/objects']);
-        await waitFor(() => expect(mockUserManager.events.addAccessTokenExpiring).toHaveBeenCalled());
-        act(() => mockUserManager.events.addAccessTokenExpiring.mock.calls[0][0]());
-        expect(logger.debug).toHaveBeenCalled();
-    });
-
-    test('removes old event listeners before adding new ones', async () => {
-        setupOidcAuth();
-        renderApp(['/objects']);
-        await waitFor(() => expect(mockUserManager.events.removeUserLoaded).toHaveBeenCalled());
-        await waitFor(() => expect(mockUserManager.events.removeAccessTokenExpired).toHaveBeenCalled());
-        await waitFor(() => expect(mockUserManager.events.removeSilentRenewError).toHaveBeenCalled());
+        const {unmount} = renderApp(['/objects']);
+        await waitFor(() => expect(mockUserManager.events.addAccessTokenExpired).toHaveBeenCalled());
+        const handler = mockUserManager.events.addAccessTokenExpired.mock.calls.at(-1)[0];
+        unmount();
+        expect(mockUserManager.events.removeAccessTokenExpired).toHaveBeenCalledWith(handler);
     });
 
     test('onUserRefreshed: user without profile does not dispatch Login', async () => {
@@ -635,7 +653,7 @@ describe('App Component', () => {
         expect(mockNavigate).toHaveBeenCalledWith('/auth-choice', {replace: true});
     });
 
-    test('handleCheckAuthOnResume: OIDC expired token without userManager redirects', async () => {
+    test('handleCheckAuthOnResume: OIDC expired token, the user manager still starting: no redirect, its start renews', async () => {
         __setMockIsInitialized(false);
         const expiredToken = makeTokenWithExp(-3600);
         setupOidcAuth(expiredToken);
@@ -651,12 +669,12 @@ describe('App Component', () => {
         await act(async () => {
             await new Promise(r => setTimeout(r, 600));
         });
-        expect(mockNavigate).toHaveBeenCalledWith('/auth-choice', {replace: true});
+        expect(mockNavigate).not.toHaveBeenCalledWith('/auth-choice', {replace: true});
         vi.restoreAllMocks();
         __setMockIsInitialized(true);
     });
 
-    test('handleCheckAuthOnResume: OIDC silent renew returns expired user redirects', async () => {
+    test('handleCheckAuthOnResume: OIDC renewal giving an expired user keeps the session, for a retry', async () => {
         const expiredToken = makeTokenWithExp(-3600);
         setupOidcAuth(expiredToken);
         decodeToken.mockReturnValue({exp: Math.floor(Date.now() / 1000) - 3600});
@@ -667,24 +685,38 @@ describe('App Component', () => {
             await new Promise(r => setTimeout(r, 600));
         });
         await waitFor(() => expect(mockUserManager.signinSilent).toHaveBeenCalled());
-        expect(mockNavigate).toHaveBeenCalledWith('/auth-choice', {replace: true});
+        expect(mockNavigate).not.toHaveBeenCalledWith('/auth-choice', {replace: true});
     });
 
-    test('handleCheckAuthOnResume: OIDC silent renew error redirects and logs', async () => {
+    test('handleCheckAuthOnResume: OIDC renewal refused by the provider redirects', async () => {
         const expiredToken = makeTokenWithExp(-3600);
         setupOidcAuth(expiredToken);
         decodeToken.mockReturnValue({exp: Math.floor(Date.now() / 1000) - 3600});
-        mockUserManager.signinSilent.mockRejectedValue(new Error('Renew failed on resume'));
+        mockUserManager.signinSilent.mockRejectedValue(Object.assign(new Error('login_required'), {error: 'login_required'}));
         renderApp(['/objects']);
         await screen.findByTestId('objects');
         mockNavigate.mockClear();
-        logger.error.mockClear();
         act(() => window.dispatchEvent(new Event('focus')));
         await act(async () => {
             await new Promise(r => setTimeout(r, 600));
         });
-        expect(logger.error).toHaveBeenCalledWith('Silent renew error on resume:', expect.any(Error));
         expect(mockNavigate).toHaveBeenCalledWith('/auth-choice', {replace: true});
+    });
+
+    test('handleCheckAuthOnResume: OIDC renewal failing for a network blip keeps the session', async () => {
+        const expiredToken = makeTokenWithExp(-3600);
+        setupOidcAuth(expiredToken);
+        decodeToken.mockReturnValue({exp: Math.floor(Date.now() / 1000) - 3600});
+        mockUserManager.signinSilent.mockRejectedValue(new TypeError('Failed to fetch'));
+        renderApp(['/objects']);
+        await screen.findByTestId('objects');
+        mockNavigate.mockClear();
+        act(() => window.dispatchEvent(new Event('focus')));
+        await act(async () => {
+            await new Promise(r => setTimeout(r, 600));
+        });
+        expect(logger.warn).toHaveBeenCalledWith('Session renewal failed on resume, kept for a retry:', 'Failed to fetch');
+        expect(mockNavigate).not.toHaveBeenCalledWith('/auth-choice', {replace: true});
     });
 
     test('resume check with expired basic token (after initial valid) clears storage and redirects', async () => {
@@ -741,15 +773,6 @@ describe('App Component', () => {
         });
         expect(mockNavigate).not.toHaveBeenCalled();
         vi.useRealTimers();
-    });
-
-    test('expired user silent renew returns still-expired user logs warning', async () => {
-        mockUserManager.getUser.mockResolvedValue({profile: {preferred_username: 'x'}, expired: true});
-        mockUserManager.signinSilent.mockResolvedValue({expired: true, profile: {preferred_username: 'x'}});
-        setupOidcAuth();
-        renderApp(['/objects']);
-        await waitFor(() => expect(mockUserManager.signinSilent).toHaveBeenCalled());
-        expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Silent renew failed or user still expired'));
     });
 
     test('handleCheckAuthOnResume handles storage errors gracefully', async () => {

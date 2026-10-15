@@ -26,8 +26,7 @@ import {Alert} from "../ui/components/Alert";
 import {Spinner} from "../ui/components/Spinner";
 import {useMediaQuery} from "../ui/lib/media";
 import {TabList} from "../ui/components/Tabs";
-import {GROUP_TABS, OBJECT_LISTS, OBJECTS_TABS, listOfKind} from "../utils/objectLists";
-import Kinds from "./Kinds";
+import {ALL_LIST, GROUP_TABS, OBJECT_LISTS, OBJECTS_TABS, listOfKind} from "../utils/objectLists";
 import Namespaces from "./Namespaces";
 import {tabPanelProps} from "../ui/components/tabs-ids";
 import {AlertTriangleIcon, ChevronDownIcon, CloseIcon, FilterIcon, GearIcon, PlusIcon, SearchIcon} from "../ui/icons";
@@ -78,7 +77,7 @@ const parseObjectName = (objectName) => {
 /** The tab an object is listed in (objectLists). */
 const listOf = (objectName) => listOfKind(parseObjectName(objectName).kind);
 /** The kind a new object takes by default, from the tab it is created from. */
-const LIST_KIND = {services: "svc", volumes: "vol", configs: "cfg", secrets: "sec", users: "usr"};
+const LIST_KIND = {services: "svc", volumes: "vol", configs: "cfg", secrets: "sec", users: "usr", [ALL_LIST]: "svc"};
 /**
  * The lists of objects held on all the nodes, with no status nor placement: their
  * names only, the status, orchestrate, topology and node columns telling nothing.
@@ -412,11 +411,11 @@ const Objects = () => {
         for (const name of allObjectNames) {
             const of = listOf(name);
             counts[of] += 1;
-            if (of === list) names.push(name);
+            if (of === list || list === ALL_LIST) names.push(name);
         }
-        // The group tabs count their groups: the namespaces, the kinds.
+        counts[ALL_LIST] = allObjectNames.length;
+        // The group tab counts its groups: the namespaces.
         counts.namespaces = new Set(allObjectNames.map(extractNamespace)).size;
-        counts.kinds = new Set(allObjectNames.map((name) => parseObjectName(name).kind)).size;
         return {listObjectNames: names, listCounts: counts};
     }, [allObjectNames, list]);
 
@@ -852,7 +851,8 @@ const Objects = () => {
                     ? t("createObject.feedback.createdProvisionFailed", {path})
                     : t("createObject.feedback.created", {path}),
         });
-        const next = listOf(path);
+        // Any lists it too: kept.
+        const next = list === ALL_LIST ? ALL_LIST : listOf(path);
         const params = new URLSearchParams(location.search);
         if (next !== list) {
             setSelectedObjects([]);
@@ -938,14 +938,14 @@ const Objects = () => {
         />
     );
 
-    // The objects by namespace or by kind, the views the menu had for them.
+    // The objects by namespace, the view the menu had for them.
     if (GROUP_TABS.includes(list)) {
         return (
             <div className="flex h-full flex-col gap-3 p-4">
                 {tabList}
                 {/* Its own panels: the open row (`sel`) is a namespace there, not an object. */}
                 <div className="min-h-0 flex-1" {...tabPanelProps(listTabsId, list)}>
-                    {list === "kinds" ? <Kinds embedded/> : <Namespaces embedded/>}
+                    <Namespaces embedded/>
                 </div>
             </div>
         );

@@ -6,6 +6,7 @@ import {PeekPanel} from '../PeekPanel';
 import useEventStore from '../../hooks/useEventStore.js';
 import {reloadRecordHistory} from '../../app/record-history';
 import node from './fixtures/node-dev3n1.json';
+import daemon from './fixtures/daemon-dev3n1.json';
 
 const {mockRetain, mockRelease} = vi.hoisted(() => ({mockRetain: vi.fn(), mockRelease: vi.fn()}));
 
@@ -58,16 +59,16 @@ describe('NodeDetailPanel', () => {
         reloadRecordHistory();
         requests = [];
         config = CONFIG;
-        api = structuredClone(node);
+        api = structuredClone({...node, ...daemon});
         global.fetch = vi.fn(async (url, options = {}) => {
             const method = options.method ?? 'GET';
             requests.push({method, url, body: options.body});
-            const path = url.replace('/api/node/name/dev3n1/', '');
+            const path = url.replace('/api/node/name/dev3n1/', '').replace(/^\/api\//, '');
             if (path === 'config/file') {
                 if (method === 'PUT') config = options.body;
                 return new Response(method === 'PUT' ? null : config, {status: method === 'PUT' ? 204 : 200});
             }
-            if (method === 'POST') return new Response(null, {status: 200});
+            if (method === 'POST' || method === 'DELETE') return new Response(null, {status: 200});
             const body = api[path];
             return body === undefined
                 ? new Response(JSON.stringify({detail: 'not found'}), {status: 404})
@@ -77,6 +78,8 @@ describe('NodeDetailPanel', () => {
             nodeStatus: {dev3n1: {agent: 'v3.0.0-rc46', frozen_at: '0001-01-01T00:00:00Z', booted_at: '2026-10-10T14:08:50+02:00', is_leader: true}},
             nodeMonitor: {dev3n1: {state: 'idle'}},
             nodeStats: {dev3n1: {score: 63, load_15m: 0.39, mem_avail: 42, mem_total: 5920, swap_avail: 0, swap_total: 0}},
+            // No heartbeat event yet: the daemon tab reads the heartbeats of the cluster status.
+            heartbeatStatus: {},
         });
     });
 
@@ -90,7 +93,7 @@ describe('NodeDetailPanel', () => {
     test('opens on its state, kept current by the node events, and its properties', async () => {
         renderPanel();
         expect(within(panel()).getAllByRole('tab').map((tab) => tab.textContent))
-            .toEqual(['Status', 'Inventory', 'Configuration', 'Schedules', 'Drivers', 'Logs']);
+            .toEqual(['Status', 'Inventory', 'Configuration', 'Schedules', 'Drivers', 'Daemon', 'Logs']);
         const facts = within(panel()).getByLabelText('Node state');
         expect(facts).toHaveTextContent('Stateidle');
         expect(facts).toHaveTextContent('Agentv3.0.0-rc46');
@@ -259,5 +262,120 @@ describe('NodeDetailPanel', () => {
         expect(field).toHaveAttribute('placeholder', label);
         expect(field.style.width).toBe(`calc(${label.length}ch + 3.5rem)`);
         expect(field).toHaveClass('min-w-56', 'max-w-full');
+    });
+
+    describe('daemon tab', () => {
+        const section = (name) => within(panel()).getByRole('region', {name: new RegExp(`^${name}`)});
+        const confirmDialog = () => screen.getByRole('dialog', {name: /^Confirm: /});
+        const confirm = () => fireEvent.click(within(confirmDialog()).getByRole('button', {name: 'Confirm'}));
+        const openDaemon = async () => {
+            renderPanel('?peek=node:dev3n1&peektab=daemon');
+            await within(panel()).findByRole('table', {name: 'Components'});
+        };
+
+        test('the daemon as om daemon shows it: its components, listener, heartbeats, orchestrations, executions and DNS zone', async () => {
+            await openDaemon();
+            expect(within(panel()).getByText(`PID ${daemon['cluster/status'].cluster.node.dev3n1.daemon.pid}`, {exact: false})).toBeInTheDocument();
+            const components = within(panel()).getByRole('table', {name: 'Components'});
+            expect(within(components).getByRole('row', {name: /API listener.*running.*:::1215/})).toBeInTheDocument();
+            expect(within(components).getByRole('row', {name: /Collector.*speaker/})).toBeInTheDocument();
+            expect(within(panel()).queryByRole('region', {name: /^Log level/})).not.toBeInTheDocument();
+            expect(requests.some((req) => req.url.includes('daemon/log/control'))).toBe(false);
+            expect(within(section('Listener')).getByText('api.inet')).toBeInTheDocument();
+            const heartbeats = await within(panel()).findByRole('table', {name: 'Heartbeats'});
+            expect(within(heartbeats).getAllByRole('row').slice(1)).toHaveLength(8);
+            expect(within(panel()).getByRole('table', {name: 'Orchestrations'})).toHaveTextContent('foo002');
+            expect(await within(panel()).findByRole('table', {name: 'Executions'})).toHaveTextContent('instance status');
+            const zone = await within(panel()).findByRole('table', {name: 'DNS zone'});
+            expect(within(zone).getAllByRole('row').slice(1)).toHaveLength(8);
+            fireEvent.change(within(panel()).getByLabelText('Filter records'), {target: {value: 'ns1.dev3'}});
+            expect(within(zone).getAllByRole('row').slice(1).every((row) => row.textContent.includes('ns1.dev3'))).toBe(true);
+        });
+
+        test('the heartbeats kept current by their events, without a reload', async () => {
+            await openDaemon();
+            expect(mockRetain).toHaveBeenCalledWith('tok', ['DaemonHeartbeatUpdated']);
+            const heartbeats = await within(panel()).findByRole('table', {name: 'Heartbeats'});
+            const row = () => within(heartbeats).getByRole('row', {name: /hb#1\.rx/});
+            expect(within(row()).getByTitle('Beating')).toBeInTheDocument();
+            const statusReads = requests.filter((r) => r.url === '/api/cluster/status').length;
+
+            // A DaemonHeartbeatUpdated: the peer of hb#1.rx stops beating.
+            const heartbeat = structuredClone(daemon['cluster/status'].cluster.node.dev3n1.daemon.heartbeat);
+            heartbeat.streams[0].peers.dev3n2.is_beating = false;
+            act(() => useEventStore.setState({heartbeatStatus: {dev3n1: heartbeat}}));
+            expect(within(row()).getByTitle('Stale')).toBeInTheDocument();
+            expect(requests.filter((r) => r.url === '/api/cluster/status')).toHaveLength(statusReads);
+        });
+
+        test('a heartbeat stream restarted, confirmed first, by its name without hb#', async () => {
+            await openDaemon();
+            fireEvent.click(within(panel()).getByRole('button', {name: 'Actions on hb#1.rx'}));
+            fireEvent.click(within(screen.getByRole('menu', {name: 'Actions on hb#1.rx'})).getByRole('menuitem', {name: 'Restart'}));
+            expect(confirmDialog()).toHaveTextContent('Restart the hb#1.rx heartbeat stream of dev3n1?');
+            expect(requests.some((r) => r.method === 'POST')).toBe(false);
+            confirm();
+            await waitFor(() => expect(requests).toContainEqual(expect.objectContaining({
+                method: 'POST', url: '/api/node/name/dev3n1/daemon/hb/name/1.rx/action/restart',
+            })));
+            // Said in the heartbeats section, where the action was asked: the top of the tab is out of sight.
+            expect(await within(section('Heartbeats')).findByText('Restart hb#1.rx requested.')).toBeInTheDocument();
+            expect(within(section('Components')).queryByText('Restart hb#1.rx requested.')).not.toBeInTheDocument();
+        });
+
+        test('a disk heartbeat is signed and wiped as a whole; the others offer neither', async () => {
+            api['cluster/status'].cluster.node.dev3n1.daemon.heartbeat.streams.push(
+                {id: 'hb#3.rx', type: 'disk', state: 'running', peers: {dev3n2: {is_beating: true}}});
+            await openDaemon();
+            fireEvent.click(within(panel()).getByRole('button', {name: 'Actions on hb#1.rx'}));
+            expect(within(screen.getByRole('menu')).queryByRole('menuitem', {name: 'Wipe'})).not.toBeInTheDocument();
+            fireEvent.keyDown(screen.getByRole('menu'), {key: 'Escape'});
+            fireEvent.click(within(panel()).getByRole('button', {name: 'Actions on hb#3.rx'}));
+            fireEvent.click(within(screen.getByRole('menu', {name: 'Actions on hb#3.rx'})).getByRole('menuitem', {name: 'Wipe'}));
+            expect(confirmDialog()).toHaveTextContent('Wipe the hb#3 disk heartbeat of dev3n1?');
+            confirm();
+            await waitFor(() => expect(requests).toContainEqual(expect.objectContaining({
+                method: 'POST', url: '/api/node/name/dev3n1/daemon/hb/name/3/action/wipe',
+            })));
+        });
+
+        test('the listener stopped, warned that the API stops answering', async () => {
+            await openDaemon();
+            fireEvent.click(within(section('Listener')).getByRole('button', {name: 'Actions'}));
+            fireEvent.click(within(screen.getByRole('menu')).getByRole('menuitem', {name: 'Stop'}));
+            expect(confirmDialog()).toHaveTextContent('Its API stops answering over the network');
+            confirm();
+            await waitFor(() => expect(requests).toContainEqual(expect.objectContaining({
+                method: 'POST', url: '/api/node/name/dev3n1/daemon/listener/name/api.inet/action/stop',
+            })));
+        });
+
+        test('a running execution, listed first, terminated by a TERM signal', async () => {
+            api['daemon/exec'].items.push({
+                exec_id: 'e1', path: 'ns1/svc/web', command: '/usr/bin/om ns1/svc/web instance start', origin: 'api',
+                state: 'running', node: 'dev3n1', started_at: '2026-10-15T10:00:00+02:00',
+            });
+            await openDaemon();
+            const execs = await within(panel()).findByRole('table', {name: 'Executions'});
+            const first = within(execs).getAllByRole('row')[1];
+            expect(first).toHaveTextContent('ns1/svc/web');
+            fireEvent.click(within(first).getByRole('button', {name: 'Terminate'}));
+            expect(confirmDialog()).toHaveTextContent('Send TERM to "/usr/bin/om ns1/svc/web instance start" on dev3n1?');
+            confirm();
+            await waitFor(() => expect(requests).toContainEqual(expect.objectContaining({
+                method: 'DELETE', url: '/api/node/name/dev3n1/daemon/exec?exec_id=e1&signal=TERM',
+            })));
+            // Only the running ones can be signaled.
+            expect(within(execs).getAllByRole('button', {name: 'Terminate'})).toHaveLength(1);
+        });
+
+        test('a request refused says why, in the section it was asked from', async () => {
+            await openDaemon();
+            global.fetch.mockImplementationOnce(async () => new Response(JSON.stringify({detail: 'listener busy'}), {status: 409}));
+            fireEvent.click(within(section('Listener')).getByRole('button', {name: 'Actions'}));
+            fireEvent.click(within(screen.getByRole('menu')).getByRole('menuitem', {name: 'Restart'}));
+            confirm();
+            expect(await within(section('Listener')).findByText(/Restart api.inet could not be requested: .*listener busy/)).toBeInTheDocument();
+        });
     });
 });

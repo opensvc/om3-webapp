@@ -794,7 +794,8 @@
       "config": "Configuration",
       "schedules": "Planifications",
       "drivers": "Pilotes",
-      "logs": "Journaux"
+      "logs": "Journaux",
+      "daemon": "Démon"
     },
     "status": {
       "title": "État du nœud",
@@ -1262,5 +1263,85 @@
     "next": "Suivant",
     "last": "Dernière",
     "page": "Page {{page}} sur {{pages}}"
+  },
+  "nodeDaemon": {
+    "refresh": "Actualiser",
+    "pid": "PID {{pid}}",
+    "startedAt": "démarré",
+    "confirmTitle": "Confirmer : {{action}}",
+    "feedback": {
+      "requesting": "Demande de {{action}}…",
+      "requested": "{{action}} demandé.",
+      "failed": "{{action}} n'a pas pu être demandé : {{message}}"
+    },
+    "actions": {
+      "label": "Actions",
+      "start": "Démarrer",
+      "stop": "Arrêter",
+      "restart": "Redémarrer",
+      "sign": "Signer",
+      "wipe": "Effacer"
+    },
+    "columns": {
+      "component": "Composant",
+      "detail": "Détail",
+      "updated": "Mis à jour",
+      "stream": "Flux",
+      "peers": "Pairs",
+      "object": "Objet",
+      "expect": "État attendu",
+      "started": "Démarré",
+      "ended": "Terminé",
+      "id": "ID",
+      "command": "Commande",
+      "origin": "Origine",
+      "ttl": "TTL",
+      "content": "Contenu"
+    },
+    "components": {
+      "title": "Composants",
+      "listener": "Listener de l'API",
+      "dns": "DNS",
+      "scheduler": "Ordonnanceur",
+      "runner_imon": "Exécuteur du moniteur d'instances",
+      "collector": "Collecteur",
+      "daemondata": "Données du démon"
+    },
+    "listener": {
+      "title": "Listener",
+      "confirm": {
+        "start": "Démarrer le listener {{listener}} de {{node}} ?",
+        "stop": "Arrêter le listener {{listener}} de {{node}} ? Son API ne répond plus par le réseau, cette page comprise si elle passe par {{node}}.",
+        "restart": "Redémarrer le listener {{listener}} de {{node}} ? Son API ne répond plus un instant."
+      }
+    },
+    "heartbeats": {
+      "title": "Heartbeats",
+      "actionsOf": "Actions sur {{id}}",
+      "target": "le flux de heartbeat {{id}} de {{node}}",
+      "diskTarget": "le heartbeat disque hb#{{hb}} de {{node}}",
+      "confirm": {
+        "start": "Démarrer {{target}} ?",
+        "stop": "Arrêter {{target}} ? Le nœud cesse d'y émettre ou d'y recevoir.",
+        "restart": "Redémarrer {{target}} ?",
+        "sign": "Signer {{target}} ?",
+        "wipe": "Effacer {{target}} ? Sa signature et les emplacements de ses pairs sont effacés."
+      }
+    },
+    "orchestrations": {
+      "title": "Orchestrations",
+      "node": "(le nœud)"
+    },
+    "execs": {
+      "title": "Exécutions",
+      "filter": "Filtrer les exécutions",
+      "shown": "Les {{shown}} dernières sur {{count}} affichées.",
+      "terminate": "Terminer",
+      "confirm": "Envoyer TERM à « {{command}} » sur {{node}} ?"
+    },
+    "dns": {
+      "title": "Zone DNS",
+      "filter": "Filtrer les enregistrements"
+    }
   }
 }

@@ -794,7 +794,8 @@
       "config": "Configuration",
       "schedules": "Schedules",
       "drivers": "Drivers",
-      "logs": "Logs"
+      "logs": "Logs",
+      "daemon": "Daemon"
     },
     "status": {
       "title": "Node state",
@@ -1262,5 +1263,85 @@
     "next": "Next",
     "last": "Last",
     "page": "Page {{page}} of {{pages}}"
+  },
+  "nodeDaemon": {
+    "refresh": "Refresh",
+    "pid": "PID {{pid}}",
+    "startedAt": "started",
+    "confirmTitle": "Confirm: {{action}}",
+    "feedback": {
+      "requesting": "Requesting {{action}}…",
+      "requested": "{{action}} requested.",
+      "failed": "{{action}} could not be requested: {{message}}"
+    },
+    "actions": {
+      "label": "Actions",
+      "start": "Start",
+      "stop": "Stop",
+      "restart": "Restart",
+      "sign": "Sign",
+      "wipe": "Wipe"
+    },
+    "columns": {
+      "component": "Component",
+      "detail": "Detail",
+      "updated": "Updated",
+      "stream": "Stream",
+      "peers": "Peers",
+      "object": "Object",
+      "expect": "Expected state",
+      "started": "Started",
+      "ended": "Ended",
+      "id": "ID",
+      "command": "Command",
+      "origin": "Origin",
+      "ttl": "TTL",
+      "content": "Content"
+    },
+    "components": {
+      "title": "Components",
+      "listener": "API listener",
+      "dns": "DNS",
+      "scheduler": "Scheduler",
+      "runner_imon": "Instance monitor runner",
+      "collector": "Collector",
+      "daemondata": "Daemon data"
+    },
+    "listener": {
+      "title": "Listener",
+      "confirm": {
+        "start": "Start the {{listener}} listener of {{node}}?",
+        "stop": "Stop the {{listener}} listener of {{node}}? Its API stops answering over the network, this page included if it goes through {{node}}.",
+        "restart": "Restart the {{listener}} listener of {{node}}? Its API stops answering for a moment."
+      }
+    },
+    "heartbeats": {
+      "title": "Heartbeats",
+      "actionsOf": "Actions on {{id}}",
+      "target": "the {{id}} heartbeat stream of {{node}}",
+      "diskTarget": "the hb#{{hb}} disk heartbeat of {{node}}",
+      "confirm": {
+        "start": "Start {{target}}?",
+        "stop": "Stop {{target}}? The node stops sending or receiving on it.",
+        "restart": "Restart {{target}}?",
+        "sign": "Sign {{target}}?",
+        "wipe": "Wipe {{target}}? Its signature and the slots of its peers are erased."
+      }
+    },
+    "orchestrations": {
+      "title": "Orchestrations",
+      "node": "(the node)"
+    },
+    "execs": {
+      "title": "Executions",
+      "filter": "Filter executions",
+      "shown": "The latest {{shown}} of {{count}} shown.",
+      "terminate": "Terminate",
+      "confirm": "Send TERM to \"{{command}}\" on {{node}}?"
+    },
+    "dns": {
+      "title": "DNS zone",
+      "filter": "Filter records"
+    }
   }
 }

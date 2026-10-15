@@ -25,6 +25,7 @@ import {FrozenMark} from "../ui/components/FrozenMark";
 import {RelativeTime} from "../ui/components/RelativeTime";
 import {CloseIcon, CodeIcon, GearIcon, SearchIcon} from "../ui/icons";
 import {formatBytes, formatSizeMiB} from "../ui/lib/format";
+import {NodeDaemon} from "./NodeDaemon";
 
 /*
  * The record panel of a cluster node, as oc3 gives its nodes one: its state and
@@ -41,8 +42,8 @@ const NODE_EVENTS = ["NodeStatusUpdated", "NodeMonitorUpdated", "NodeStatsUpdate
 /** Packages shown at once: a node holds a thousand or more, the filter finds the rest. */
 const PACKAGES_SHOWN = 200;
 
-const nodeUrl = (node, path) => `${URL_NODE}/${encodeURIComponent(node)}/${path}`;
-const authHeaders = () => ({Authorization: `Bearer ${localStorage.getItem("authToken") || ""}`});
+export const nodeUrl = (node, path) => `${URL_NODE}/${encodeURIComponent(node)}/${path}`;
+export const authHeaders = () => ({Authorization: `Bearer ${localStorage.getItem("authToken") || ""}`});
 
 /*
  * The helpers of the tabs below are shared with the tabs of the object panel
@@ -623,7 +624,7 @@ function NodeDrivers({node}) {
 
 /**
  * A node: its state, properties and actions, then its inventory, configuration,
- * schedules, drivers and logs, a tab each, as oc3 gives a node its tabs. The state
+ * schedules, drivers, daemon and logs, a tab each, as oc3 gives a node its tabs. The state
  * tab stays mounted under the others: its event stream and its actions hold.
  */
 export function NodeDetailPanel({node, tab, onTabChange, onClose}) {
@@ -636,7 +637,7 @@ export function NodeDetailPanel({node, tab, onTabChange, onClose}) {
         setLogsOrchestration(id);
         onTabChange("logs");
     };
-    const tabs = ["status", "inventory", "config", "schedules", "drivers", "logs"]
+    const tabs = ["status", "inventory", "config", "schedules", "drivers", "daemon", "logs"]
         .map((key) => ({key, label: t(`nodePanel.tabs.${key}`)}));
     return (
         <RecordPanel
@@ -659,6 +660,7 @@ export function NodeDetailPanel({node, tab, onTabChange, onClose}) {
                     {active === "config" && <NodeConfig key={node} node={node}/>}
                     {active === "schedules" && <NodeSchedules key={node} node={node}/>}
                     {active === "drivers" && <NodeDrivers key={node} node={node}/>}
+                    {active === "daemon" && <NodeDaemon key={node} node={node}/>}
                     {active === "logs" && (
                         <div className="flex h-[calc(100dvh-10rem)] flex-col gap-2">
                             <OrchestrationLogsFilter id={logsOrchestration} onClear={() => setLogsOrchestration(null)}/>

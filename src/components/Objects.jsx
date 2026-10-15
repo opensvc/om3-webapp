@@ -24,7 +24,7 @@ import {Button, IconButton} from "../ui/components/Button";
 import {Checkbox, Input} from "../ui/components/Field";
 import {Alert} from "../ui/components/Alert";
 import {useMediaQuery} from "../ui/lib/media";
-import {TabList} from "../ui/components/Tabs";
+import {TabCount, TabList} from "../ui/components/Tabs";
 import {PolicyTag} from "../ui/components/PolicyTag";
 import {Pager} from "../ui/components/Pager";
 import {usePaging} from "../app/paging";
@@ -929,7 +929,7 @@ const Objects = () => {
                 key,
                 label: t(`objects.lists.${key}`),
                 icon: LIST_ICONS[key],
-                badge: <span className="text-ink-muted tabular-nums">{listCounts[key]}</span>,
+                badge: <TabCount count={listCounts[key]}/>,
             }))}
             active={list}
             onChange={handleListChange}

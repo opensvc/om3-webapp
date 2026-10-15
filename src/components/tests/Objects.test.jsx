@@ -515,12 +515,16 @@ describe('Objects Component', () => {
         };
         const configs = ['test-ns/cfg/conf1', 'cluster'];
 
-        test('the services, volumes, configurations, secrets and users in tabs of their own, then the namespaces, then all of them', async () => {
+        test('all of them first, then the services, volumes, configurations, secrets and users in tabs of their own, then the namespaces', async () => {
             setup(mixed);
             await waitForLoad();
             expect(screen.getAllByRole('tab').map((tab) => tab.textContent.replace(/\d+$/, '')))
-                .toEqual(['Services', 'Volumes', 'Configurations', 'Secrets', 'Users', 'Namespaces', 'Any']);
+                .toEqual(['Any', 'Services', 'Volumes', 'Configurations', 'Secrets', 'Users', 'Namespaces']);
+            // Services stays the tab shown by default, Any at its left.
             expect(screen.getByRole('tab', {name: /^Services/})).toHaveAttribute('aria-selected', 'true');
+            // Each count a badge in the name of its tab.
+            const badge = within(screen.getByRole('tab', {name: /^Volumes/})).getByText('1');
+            expect(badge).toHaveClass('rounded-full', 'bg-surface-sunken');
             expect(screen.getByRole('tab', {name: /^Services/})).toHaveTextContent('6');
             expect(screen.getByRole('tab', {name: /^Volumes/})).toHaveTextContent('1');
             expect(screen.getByRole('tab', {name: /^Configurations/})).toHaveTextContent('2');

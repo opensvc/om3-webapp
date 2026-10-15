@@ -262,15 +262,6 @@ const makeMany = (n) => {
     return {objectStatus, objectInstanceStatus};
 };
 
-const setScroll = (container, scrollTop) => {
-    Object.defineProperty(container, 'scrollHeight', {value: 1000, configurable: true});
-    Object.defineProperty(container, 'clientHeight', {value: 500, configurable: true});
-    Object.defineProperty(container, 'scrollTop', {value: scrollTop, configurable: true});
-};
-
-/** The scrolling wrapper of the sticky table. */
-const getScrollContainer = () => screen.getByRole('table', {name: 'Objects'}).parentElement;
-const loadingMore = () => screen.queryByRole('status', {name: 'Loading more objects'});
 
 beforeEach(() => {
     originalConsoleError = console.error;
@@ -389,11 +380,15 @@ describe('Objects Component', () => {
             );
 
             const failover = objectRow('test-ns/svc/fo');
-            expect(propertyCell(failover, 'Orchestrate')).toHaveTextContent(/^ha$/);
-            expect(propertyCell(failover, 'Topology')).toHaveTextContent(/^failover$/);
+            // Tags: the icon of the policy, the policy named in the tooltip and for screen readers.
+            expect(propertyCell(failover, 'Orchestrate')).toHaveTextContent(/^Orchestrate: ha$/);
+            expect(propertyCell(failover, 'Topology')).toHaveTextContent(/^Topology: failover$/);
+            const orchestrate = propertyCell(failover, 'Orchestrate').querySelector('[data-policy="orchestrate"]');
+            expect(orchestrate).toHaveAttribute('title', 'Orchestrate: ha');
+            expect(orchestrate.querySelector('svg')).toBeInTheDocument();
 
             const flex = objectRow('test-ns/svc/fx');
-            expect(propertyCell(flex, 'Topology')).toHaveTextContent('flex 1-3');
+            expect(propertyCell(flex, 'Topology')).toHaveTextContent('Topology: flex 1-3');
         });
 
         test('are empty for an object with no instances to place', async () => {
@@ -537,6 +532,16 @@ describe('Objects Component', () => {
             expect(screen.getByRole('tabpanel')).toContainElement(screen.getByRole('table', {name: 'Objects'}));
             expect(objectNamesInOrder()).not.toEqual(expect.arrayContaining([configs[0]]));
             expect(objectNamesInOrder()).not.toContain('test-ns/usr/usr1');
+        });
+
+        test('each tab marked by the icon of the kind it lists, Any by the shapes', async () => {
+            setup(mixed);
+            await waitForLoad();
+            const icons = screen.getAllByRole('tab').map((tab) => tab.querySelector('svg[aria-hidden="true"]'));
+            expect(icons.every(Boolean)).toBe(true);
+            expect(new Set(icons.map((svg) => svg.innerHTML)).size).toBe(icons.length);
+            expect(screen.getByRole('tab', {name: /^Services/}).querySelector('svg')).toHaveClass('text-icon-service');
+            expect(screen.getByRole('tab', {name: /^Secrets/}).querySelector('svg')).toHaveClass('text-icon-compliance');
         });
 
         test.each(['configs', 'secrets', 'users'])('list=%s, held on all the nodes, shows their names only: no status, placement nor node column', async (tab) => {
@@ -1477,62 +1482,53 @@ describe('Objects Component', () => {
         });
     });
 
-    describe('infinite scroll', () => {
-        test('loads more items when scrolled past 80%', async () => {
-            setup(makeMany(50), '', {isWideScreen: true, isMobile: false});
+    describe('pages', () => {
+        const dataRows = () => screen.getAllByRole('row').slice(1);
+
+        test('pages the objects, 50 a page, as oc3 does: the next page, another size', async () => {
+            setup(makeMany(60), '', {isWideScreen: true, isMobile: false});
             await waitForLoad();
-            expect(screen.getAllByRole('row').slice(1)).toHaveLength(30);
-            const container = getScrollContainer();
-            setScroll(container, 500);
-            fireEvent.scroll(container);
-            await waitFor(() =>
-                expect(screen.getAllByRole('row').slice(1).length).toBeGreaterThan(30)
-            );
+            expect(dataRows()).toHaveLength(50);
+            expect(screen.getByText('1–50 of 60')).toBeInTheDocument();
+
+            fireEvent.click(screen.getByRole('button', {name: 'Next'}));
+            expect(dataRows()).toHaveLength(10);
+            expect(screen.getByText('Page 2 of 2')).toBeInTheDocument();
+            expect(screen.getByRole('button', {name: 'Next'})).toBeDisabled();
+
+            fireEvent.change(screen.getByLabelText('Per page'), {target: {value: '25'}});
+            expect(dataRows()).toHaveLength(25);
+            expect(screen.getByText('Page 1 of 3')).toBeInTheDocument();
         });
 
-        test('shows loading indicator while fetching the next page', async () => {
-            setup(makeMany(50), '', {isWideScreen: true, isMobile: false});
+        test('sorted again, the list starts over from its first page', async () => {
+            setup(makeMany(60), '', {isWideScreen: true, isMobile: false});
             await waitForLoad();
-            const container = getScrollContainer();
-            setScroll(container, 500);
-            fireEvent.scroll(container);
-            await waitFor(() => expect(loadingMore()).toBeInTheDocument());
-            await waitFor(() => expect(loadingMore()).not.toBeInTheDocument());
+            fireEvent.click(screen.getByRole('button', {name: 'Last'}));
+            expect(screen.getByText('51–60 of 60')).toBeInTheDocument();
+            clickHeader('Object');
+            expect(screen.getByText('1–50 of 60')).toBeInTheDocument();
         });
 
-        test('scroll does nothing when no more items', async () => {
-            setup({objectStatus: {'a/b': {avail: 'up'}}, objectInstanceStatus: {}}, '', {
-                isWideScreen: true,
-                isMobile: false
-            });
+        test('another tab starts from its first page', async () => {
+            setup(makeMany(60), '?offset=50');
             await waitForLoad();
-            const container = getScrollContainer();
-            fireEvent.scroll(container);
-            expect(loadingMore()).not.toBeInTheDocument();
+            fireEvent.click(screen.getByRole('tab', {name: /^Volumes/}));
+            expect(mockNavigate).toHaveBeenCalledWith('/objects?list=volumes', {replace: true});
         });
 
-        test('scroll is ignored while a load is already in progress', async () => {
-            setup(makeMany(80), '', {isWideScreen: true, isMobile: false});
-            await waitForLoad();
-            const container = getScrollContainer();
-            setScroll(container, 500);
-            fireEvent.scroll(container);
-            fireEvent.scroll(container);
-            await waitFor(() =>
-                expect(screen.getAllByRole('row').slice(1).length).toBeGreaterThan(30)
-            );
-        });
-
-        test('scroll below threshold does not load more', async () => {
-            setup(makeMany(50), '', {isWideScreen: true, isMobile: false});
-            await waitForLoad();
-            const container = getScrollContainer();
-            setScroll(container, 100);
-            fireEvent.scroll(container);
-            const rowsBefore = screen.getAllByRole('row').slice(1).length;
-            await waitFor(() =>
-                expect(screen.getAllByRole('row').slice(1).length).toBe(rowsBefore)
-            );
+        test('a filter changed starts the list over from its first page', async () => {
+            vi.useFakeTimers();
+            try {
+                setup(makeMany(60), '?offset=50&limit=25');
+                fireEvent.change(screen.getByLabelText('Name'), {target: {value: 'obj1'}});
+                act(() => {
+                    vi.advanceTimersByTime(350);
+                });
+                expect(mockNavigate).toHaveBeenCalledWith('/objects?limit=25&name=obj1', {replace: true});
+            } finally {
+                vi.useRealTimers();
+            }
         });
     });
 
@@ -1781,24 +1777,6 @@ describe('Objects Component', () => {
         setup();
         await waitForLoad();
         expect(screen.getByText('Object Events')).toBeInTheDocument();
-    });
-
-    test('handles scroll when container ref is null gracefully', () => {
-        const {container} = setup();
-        expect(container).toBeTruthy();
-    });
-
-    test('resets visibleCount when sortedObjectNames changes', async () => {
-        setup(makeMany(50), '', {isWideScreen: true, isMobile: false});
-        await waitForLoad();
-        const container = getScrollContainer();
-        setScroll(container, 500);
-        fireEvent.scroll(container);
-        await waitFor(() => expect(screen.getAllByRole('row').slice(1).length).toBeGreaterThan(30));
-        fireEvent.change(screen.getByLabelText('Name'), {target: {value: 'nonexistent'}});
-        await waitFor(() => expect(screen.getByText(/No objects found/)).toBeInTheDocument());
-        fireEvent.change(screen.getByLabelText('Name'), {target: {value: ''}});
-        await waitFor(() => expect(screen.getAllByRole('row').slice(1).length).toBe(30));
     });
 
     describe('filter option toggle handlers (add branch coverage)', () => {

@@ -7,11 +7,12 @@ import {useNamespaceData} from "../hooks/useNamespaceData";
 import {Table, HeaderRow, HeaderCell, SortHeaderCell, Row, Cell, EmptyRow} from "../ui/components/Table";
 import {StatusCount} from "../ui/components/StatusCount";
 import {Select} from "../ui/components/Field";
-import {Spinner} from "../ui/components/Spinner";
 import {IconButton} from "../ui/components/Button";
 import {CodeIcon} from "../ui/icons";
 import {usePanelSearch} from "../app/panel-search";
 import {NamespaceDetailPanel} from "./RecordPanels";
+import {Pager} from "../ui/components/Pager";
+import {usePaging} from "../app/paging";
 
 const STATUSES = ["up", "down", "warn", "n/a"];
 
@@ -105,7 +106,6 @@ const Namespaces = ({embedded = false}) => {
     const navigate = useNavigate();
     const location = useLocation();
     const isMounted = useRef(true);
-    const tableContainerRef = useRef(null);
 
     const queryParams = new URLSearchParams(location.search);
     const urlNamespace = queryParams.get("namespace");
@@ -113,8 +113,6 @@ const Namespaces = ({embedded = false}) => {
     const [sortColumn, setSortColumn] = useState("namespace");
     const [sortDirection, setSortDirection] = useState("asc");
     const [selectedNamespace, setSelectedNamespace] = useState(urlNamespace || "all");
-    const [visibleCount, setVisibleCount] = useState(50);
-    const [loading, setLoading] = useState(false);
     // The namespace whose usage panel is open, in the URL.
     const {sel: metricsNamespace, select: selectNamespace} = usePanelSearch();
 
@@ -175,10 +173,10 @@ const Namespaces = ({embedded = false}) => {
         });
     }, [statusByNamespace, deferredSelectedNamespace, deferredSortColumn, deferredSortDirection]);
 
-    const visibleNamespaces = useMemo(() =>
-            sortedNamespaces.slice(0, visibleCount),
-        [sortedNamespaces, visibleCount]
-    );
+    // The rows of the page shown, as oc3 pages its lists.
+    const paging = usePaging("namespaces", sortedNamespaces.length);
+    const {page: pageOf, setOffset: setPageOffset} = paging;
+    const visibleNamespaces = useMemo(() => pageOf(sortedNamespaces), [pageOf, sortedNamespaces]);
 
     const handleSort = useCallback((column) => {
         setSortColumn(prev => {
@@ -189,13 +187,13 @@ const Namespaces = ({embedded = false}) => {
             setSortDirection("asc");
             return column;
         });
-        setVisibleCount(50);
-    }, []);
+        // Sorted again, the list starts over: from its first page.
+        setPageOffset(0);
+    }, [setPageOffset]);
 
     const handleNamespaceChange = useCallback((e) => {
         const newNamespace = e.target.value || "all";
         setSelectedNamespace(newNamespace);
-        setVisibleCount(50);
 
         if (newNamespace === "all") {
             navigate("/objects?list=namespaces");
@@ -220,36 +218,6 @@ const Namespaces = ({embedded = false}) => {
     const handleCloseMetrics = useCallback(() => {
         selectNamespace(undefined);
     }, [selectNamespace]);
-
-    const handleScroll = useCallback(() => {
-        if (loading) return;
-
-        const container = tableContainerRef.current;
-        if (!container) return;
-
-        const {scrollTop, scrollHeight, clientHeight} = container;
-        const scrollPercentage = (scrollTop + clientHeight) / scrollHeight;
-
-        if (scrollPercentage > 0.8 && visibleCount < sortedNamespaces.length) {
-            setLoading(true);
-            setTimeout(() => {
-                setVisibleCount(prev => Math.min(prev + 50, sortedNamespaces.length));
-                setLoading(false);
-            }, 100);
-        }
-    }, [loading, visibleCount, sortedNamespaces.length]);
-
-    useEffect(() => {
-        const container = tableContainerRef.current;
-        if (container) {
-            container.addEventListener('scroll', handleScroll);
-            return () => container.removeEventListener('scroll', handleScroll);
-        }
-    }, [handleScroll]);
-
-    useEffect(() => {
-        setVisibleCount(50);
-    }, [sortedNamespaces]);
 
     useEffect(() => {
         return () => {
@@ -279,8 +247,9 @@ const Namespaces = ({embedded = false}) => {
                 </label>
             </div>
 
+            <Pager paging={paging}/>
+
             <Table
-                ref={tableContainerRef}
                 sticky
                 data-testid="table-container"
                 className="min-h-0 flex-1 overflow-auto"
@@ -334,11 +303,6 @@ const Namespaces = ({embedded = false}) => {
                     )}
                 </tbody>
             </Table>
-            {loading && (
-                <div className="flex justify-center">
-                    <Spinner label={t("namespaces.loadingMore")}/>
-                </div>
-            )}
 
             <NamespaceDetailPanel name={metricsNamespace ?? undefined} onClose={handleCloseMetrics}/>
 

@@ -86,7 +86,17 @@ describe('ObjectStatus', () => {
         expect(screen.getByText('Avail').nextSibling).toHaveTextContent('down');
         expect(screen.getByRole('list', {name: 'Issues'})).toHaveTextContent('not provisioned');
         // Out of a panel, the policies and the actions stand over the summary.
-        expect(screen.getByLabelText('Policies')).toHaveTextContent('flexhanodes order');
+        const policies = screen.getByLabelText('Policies');
+        expect(policies).toHaveTextContent('Topology: flexOrchestrate: haPlacement: nodes order');
+        // Each policy a tag with its own icon, named in its tooltip.
+        expect([...policies.querySelectorAll('[data-policy]')].map((tag) => [tag.dataset.policy, tag.title]))
+            .toEqual([['topology', 'Topology: flex'], ['orchestrate', 'Orchestrate: ha'], ['placement', 'Placement: nodes order']]);
+        const icons = [...policies.querySelectorAll('[data-policy] svg')].map((svg) => svg.innerHTML);
+        expect(icons).toHaveLength(3);
+        expect(new Set(icons).size).toBe(3);
+        // Tinted by family, as oc3 does: what the object does in the service tint, where it runs in the node one.
+        expect([...policies.querySelectorAll('[data-policy]')].map((tag) => tag.querySelector('[aria-hidden="true"]').className))
+            .toEqual([expect.stringContaining('text-icon-service'), expect.stringContaining('text-icon-service'), expect.stringContaining('text-icon-node')]);
         expect(screen.getByRole('button', {name: 'Actions'})).toBeInTheDocument();
     });
 

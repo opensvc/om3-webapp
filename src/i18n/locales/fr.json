@@ -430,7 +430,6 @@
       "stale": "Périmé"
     },
     "empty": "Aucun heartbeat ne correspond aux filtres actuels.",
-    "loadingMore": "Chargement d'autres heartbeats",
     "eventsLogger": "Journal des événements heartbeat",
     "events": "Événements heartbeat"
   },
@@ -664,7 +663,6 @@
     "viewMetrics": "Voir les métriques du namespace {{namespace}}",
     "emptyFiltered": "Aucun namespace ne correspond au filtre sélectionné",
     "empty": "Aucun namespace disponible",
-    "loadingMore": "Chargement d'autres namespaces",
     "metricsTitle": "Métriques",
     "metricsOf": "Métriques de {{namespace}}",
     "resizeDrawer": "Redimensionner le panneau",
@@ -948,7 +946,6 @@
     "selectAll": "Sélectionner tous les objets",
     "selectObject": "Sélectionner l'objet {{name}}",
     "empty": "Aucun objet ne correspond aux filtres actuels.",
-    "loadingMore": "Chargement d'autres objets",
     "actionsMenu": "Actions",
     "lists": {
       "label": "Listes d'objets",
@@ -1013,6 +1010,11 @@
     "empty": "Aucun pool disponible."
   },
   "ui": {
+    "policies": {
+      "topology": "Topologie",
+      "orchestrate": "Orchestration",
+      "placement": "Placement"
+    },
     "productTag": {
       "name": "Cluster",
       "title": "Application web du cluster OpenSVC om3"
@@ -1250,5 +1252,15 @@
     "abort": "Interrompre",
     "logsOf": "Journaux de l'orchestration",
     "allLogs": "Afficher tous les journaux"
+  },
+  "pager": {
+    "label": "Pagination",
+    "perPage": "Par page",
+    "rangeOf": "{{from}}–{{to}} sur {{total}}",
+    "first": "Première",
+    "previous": "Précédent",
+    "next": "Suivant",
+    "last": "Dernière",
+    "page": "Page {{page}} sur {{pages}}"
   }
 }

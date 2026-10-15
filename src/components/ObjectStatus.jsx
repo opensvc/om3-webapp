@@ -16,6 +16,7 @@ import {Spinner} from "../ui/components/Spinner";
 import {CloseIcon, GearIcon} from "../ui/icons";
 import {INSTANCE_ACTIONS, OBJECT_ACTIONS, RESOURCE_ACTIONS, actionLabel, objectActionsFor} from "../constants/actions";
 import {OrchestrationBadge, orchestrationOf} from "./OrchestrationBadge";
+import {PolicyTag} from "../ui/components/PolicyTag";
 import ActionDialogManager from "./ActionDialogManager";
 import ConsoleTerminal from "./ConsoleTerminal.jsx";
 import {CLEAR_ACTION, postAction, resourceActions} from "./objectActions";
@@ -352,9 +353,7 @@ const ObjectStatus = ({path, onOrchestrationLogs}) => {
     // The policies of the object by its name, its actions at the right of the title of its panel.
     const policies = board.facts.length > 0 ? (
         <span className="flex flex-wrap gap-1" aria-label={t("statusBoard.policies")}>
-            {board.facts.map((f) => (
-                <span key={f} className="rounded-full border border-line px-2 text-data text-ink-muted">{f}</span>
-            ))}
+            {board.facts.map((f) => <PolicyTag key={f.name} name={f.name} value={f.value}/>)}
         </span>
     ) : null;
 

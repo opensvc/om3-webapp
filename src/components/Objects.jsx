@@ -23,13 +23,16 @@ import {MenuButton} from "../ui/components/MenuButton";
 import {Button, IconButton} from "../ui/components/Button";
 import {Checkbox, Input} from "../ui/components/Field";
 import {Alert} from "../ui/components/Alert";
-import {Spinner} from "../ui/components/Spinner";
 import {useMediaQuery} from "../ui/lib/media";
 import {TabList} from "../ui/components/Tabs";
+import {PolicyTag} from "../ui/components/PolicyTag";
+import {Pager} from "../ui/components/Pager";
+import {usePaging} from "../app/paging";
+import {ObjectIcon} from "../ui/components/ObjectIcon";
 import {ALL_LIST, GROUP_TABS, OBJECT_LISTS, OBJECTS_TABS, listOfKind} from "../utils/objectLists";
 import Namespaces from "./Namespaces";
 import {tabPanelProps} from "../ui/components/tabs-ids";
-import {AlertTriangleIcon, ChevronDownIcon, CloseIcon, FilterIcon, GearIcon, PlusIcon, SearchIcon} from "../ui/icons";
+import {AlertTriangleIcon, ChevronDownIcon, CloseIcon, FilterIcon, GearIcon, PlusIcon, SearchIcon, ShapesIcon} from "../ui/icons";
 
 // The breakpoints of the MUI theme the view used: below md (900px) the filters fold
 // behind a button, from lg (1200px) the node columns are shown.
@@ -84,6 +87,21 @@ const LIST_KIND = {services: "svc", volumes: "vol", configs: "cfg", secrets: "se
  * and no global state filter.
  */
 const NAMES_ONLY_LISTS = ["configs", "secrets", "users"];
+
+/**
+ * The icon of each tab: the kind it lists, as the menu and the panels draw it
+ * (ObjectIcon). Any lists every kind: the shapes, neutral.
+ */
+const TAB_ICON_CLASS = "h-3.5 w-3.5";
+const LIST_ICONS = {
+    services: <ObjectIcon kind="service" className={TAB_ICON_CLASS}/>,
+    volumes: <ObjectIcon kind="disk" className={TAB_ICON_CLASS}/>,
+    configs: <ObjectIcon kind="config" className={TAB_ICON_CLASS}/>,
+    secrets: <ObjectIcon kind="secret" className={TAB_ICON_CLASS}/>,
+    users: <ObjectIcon kind="user" className={TAB_ICON_CLASS}/>,
+    namespaces: <ObjectIcon kind="namespace" className={TAB_ICON_CLASS}/>,
+    [ALL_LIST]: <ShapesIcon className={`${TAB_ICON_CLASS} shrink-0 text-ink-muted`}/>,
+};
 
 const selectObjectStatus = (state) => state.objectStatus;
 const selectObjectInstanceStatus = (state) => state.objectInstanceStatus;
@@ -169,10 +187,13 @@ const PropertyCells = ({objectName}) => {
 
     return (
         <>
-            <Cell className="whitespace-nowrap">{orchestrate}</Cell>
+            <Cell className="whitespace-nowrap">{orchestrate && <PolicyTag name="orchestrate" value={orchestrate}/>}</Cell>
             <Cell className="whitespace-nowrap">
-                {topology}
-                {isFlex && <> <SideText>{`${flexMin}-${flexMax}`}</SideText></>}
+                {topology && (
+                    <PolicyTag name="topology" value={topology}>
+                        {isFlex && <> <SideText>{`${flexMin}-${flexMax}`}</SideText></>}
+                    </PolicyTag>
+                )}
             </Cell>
         </>
     );
@@ -392,9 +413,6 @@ const Objects = () => {
     const deferredSortDirection = useDeferredValue(sortDirection);
     const deferredStatusCycleIndex = useDeferredValue(statusCycleIndex);
 
-    const [visibleCount, setVisibleCount] = useState(30);
-    const [loading, setLoading] = useState(false);
-    const tableContainerRef = useRef(null);
 
     const filtersId = React.useId();
     const listTabsId = React.useId();
@@ -565,9 +583,10 @@ const Objects = () => {
         return filteredObjectNames;
     }, [objects, filteredObjectNames, deferredSortColumn, deferredSortDirection, deferredStatusCycleIndex, objectStatus, objectInstanceStatus, allNodes]);
 
-    const visibleObjectNames = useMemo(() => {
-        return sortedObjectNames.slice(0, visibleCount);
-    }, [sortedObjectNames, visibleCount]);
+    // The rows of the page shown, as oc3 pages its lists.
+    const paging = usePaging("objects", sortedObjectNames.length);
+    const {page: pageOf, setOffset: setPageOffset} = paging;
+    const visibleObjectNames = useMemo(() => pageOf(sortedObjectNames), [pageOf, sortedObjectNames]);
 
     const handleSelectObject = useCallback((event, objectName) => {
         setSelectedObjects((prev) =>
@@ -689,12 +708,12 @@ const Objects = () => {
             }
             setStatusCycleIndex(0);
         }
-        setVisibleCount(30);
-    }, [sortColumn, allNodes]);
+        // Sorted again, the list starts over: from its first page.
+        setPageOffset(0);
+    }, [sortColumn, allNodes, setPageOffset]);
 
     const handleSearchChange = useCallback((e) => {
         setSearchQuery(e.target.value);
-        setVisibleCount(30);
     }, []);
 
     const toggleShowFilters = useCallback(() => {
@@ -731,36 +750,6 @@ const Objects = () => {
         });
     }, []);
 
-    const handleScroll = useCallback(() => {
-        if (loading) return;
-
-        const container = tableContainerRef.current;
-        if (!container) return;
-
-        const {scrollTop, scrollHeight, clientHeight} = container;
-        const scrollPercentage = (scrollTop + clientHeight) / scrollHeight;
-
-        if (scrollPercentage > 0.8 && visibleCount < sortedObjectNames.length) {
-            setLoading(true);
-            setTimeout(() => {
-                setVisibleCount(prev => Math.min(prev + 30, sortedObjectNames.length));
-                setLoading(false);
-            }, 100);
-        }
-    }, [loading, visibleCount, sortedObjectNames.length]);
-
-    useEffect(() => {
-        const container = tableContainerRef.current;
-        if (container) {
-            container.addEventListener('scroll', handleScroll);
-            return () => container.removeEventListener('scroll', handleScroll);
-        }
-    }, [handleScroll]);
-
-    useEffect(() => {
-        setVisibleCount(30);
-    }, [sortedObjectNames]);
-
     useEffect(() => {
         const timer = setTimeout(() => {
             if (!isMounted.current) return;
@@ -784,9 +773,10 @@ const Objects = () => {
                 return;
             }
 
-            // The other parameters, the open panel's, stay as they are.
+            // The other parameters, the open panel's, stay as they are; the page goes,
+            // the list filtered otherwise starting over from its first one.
             const newQueryParams = new URLSearchParams(location.search);
-            ["globalState", "namespace", "kind", "name"].forEach((key) => newQueryParams.delete(key));
+            ["globalState", "namespace", "kind", "name", "offset"].forEach((key) => newQueryParams.delete(key));
             if (selectedGlobalStates.length > 0) newQueryParams.set("globalState", selectedGlobalStates.join(','));
             if (selectedNamespaces.length > 0) newQueryParams.set("namespace", selectedNamespaces.join(','));
             if (selectedKinds.length > 0) newQueryParams.set("kind", selectedKinds.join(','));
@@ -839,6 +829,8 @@ const Objects = () => {
         setSelectedKinds([]);
         const params = new URLSearchParams(location.search);
         params.delete("kind");
+        // Another list: from its first page.
+        params.delete("offset");
         // The open row of a group tab is a namespace, of a list an object: not the other's.
         if (GROUP_TABS.includes(next) !== GROUP_TABS.includes(list)) ["sel", "tab"].forEach((key) => params.delete(key));
         if (next === OBJECT_LISTS[0]) params.delete("list");
@@ -936,6 +928,7 @@ const Objects = () => {
             tabs={OBJECTS_TABS.map((key) => ({
                 key,
                 label: t(`objects.lists.${key}`),
+                icon: LIST_ICONS[key],
                 badge: <span className="text-ink-muted tabular-nums">{listCounts[key]}</span>,
             }))}
             active={list}
@@ -1053,8 +1046,9 @@ const Objects = () => {
                 </Alert>
             )}
 
+            <Pager paging={paging}/>
+
             <Table
-                ref={tableContainerRef}
                 sticky
                 aria-label={t("objects.tableLabel")}
                 className="min-h-0 flex-1"
@@ -1124,11 +1118,6 @@ const Objects = () => {
                     )}
                 </tbody>
             </Table>
-            {loading && (
-                <div className="flex shrink-0 justify-center">
-                    <Spinner label={t("objects.loadingMore")}/>
-                </div>
-            )}
 
             <ActionDialogManager
                 pendingAction={pendingAction}

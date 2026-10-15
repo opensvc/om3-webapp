@@ -430,7 +430,6 @@
       "stale": "Stale"
     },
     "empty": "No heartbeats found matching the current filters.",
-    "loadingMore": "Loading more heartbeats",
     "eventsLogger": "Heartbeat Events Logger",
     "events": "Heartbeat Events"
   },
@@ -664,7 +663,6 @@
     "viewMetrics": "View metrics for namespace {{namespace}}",
     "emptyFiltered": "No namespaces match the selected filter",
     "empty": "No namespaces available",
-    "loadingMore": "Loading more namespaces",
     "metricsTitle": "Metrics",
     "metricsOf": "Metrics of {{namespace}}",
     "resizeDrawer": "Resize drawer",
@@ -948,7 +946,6 @@
     "selectAll": "Select all objects",
     "selectObject": "Select object {{name}}",
     "empty": "No objects found matching the current filters.",
-    "loadingMore": "Loading more objects",
     "actionsMenu": "Actions",
     "lists": {
       "label": "Object lists",
@@ -1013,6 +1010,11 @@
     "empty": "No pools available."
   },
   "ui": {
+    "policies": {
+      "topology": "Topology",
+      "orchestrate": "Orchestrate",
+      "placement": "Placement"
+    },
     "productTag": {
       "name": "Cluster",
       "title": "OpenSVC om3 cluster webapp"
@@ -1250,5 +1252,15 @@
     "abort": "Abort",
     "logsOf": "Logs of orchestration",
     "allLogs": "Show all the logs"
+  },
+  "pager": {
+    "label": "Pagination",
+    "perPage": "Per page",
+    "rangeOf": "{{from}}–{{to}} of {{total}}",
+    "first": "First",
+    "previous": "Previous",
+    "next": "Next",
+    "last": "Last",
+    "page": "Page {{page}} of {{pages}}"
   }
 }

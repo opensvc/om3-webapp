@@ -627,7 +627,8 @@ describe("Heartbeats Component", () => {
             ]
         }]));
         renderWithRouter(<Heartbeats/>);
-        expect(screen.getAllByRole("combobox")).toHaveLength(4);
+        // The four filters, and the page size.
+        expect(screen.getAllByRole("combobox")).toHaveLength(5);
         const ids = within(getFilter("id")).getAllByRole("option").map(o => o.value);
         expect(ids).toEqual(["all", "1"]);
     });
@@ -904,7 +905,7 @@ describe("Heartbeats Component", () => {
         expect(mockRetainEventReception).not.toHaveBeenCalled();
     });
 
-    // ==================== LAZY LOADING (SCROLL) ====================
+    // ==================== PAGES ====================
     const makeManyStreams = (n = 50) => {
         const many = {};
         for (let i = 1; i <= n; i++) {
@@ -924,76 +925,27 @@ describe("Heartbeats Component", () => {
         return many;
     };
 
-    const attachScrollMetrics = (container, {scrollHeight = 1000, clientHeight = 200} = {}) => {
-        Object.defineProperty(container, "scrollHeight", {value: scrollHeight, configurable: true});
-        Object.defineProperty(container, "clientHeight", {value: clientHeight, configurable: true});
-    };
-
-    test("loads more rows when scrolling near bottom", async () => {
-        mockHeartbeatStore(makeManyStreams(50));
+    test("pages the rows, 50 a page, as oc3 does: the next page, another size", () => {
+        mockHeartbeatStore(makeManyStreams(60));
         renderWithRouter(<Heartbeats/>);
+        expect(getDataRows()).toHaveLength(50);
+        expect(screen.getByText("1–50 of 60")).toBeInTheDocument();
 
-        expect(getDataRows()).toHaveLength(30);
+        fireEvent.click(screen.getByRole("button", {name: "Next"}));
+        expect(getDataRows()).toHaveLength(10);
+        expect(screen.getByText("51–60 of 60")).toBeInTheDocument();
 
-        const container = getScrollContainer();
-        attachScrollMetrics(container);
-
-        act(() => {
-            container.scrollTop = 850;
-        });
-        fireEvent.scroll(container);
-        expect(screen.getByText("Loading more heartbeats")).toBeInTheDocument();
-
-        await waitFor(() => {
-            expect(getDataRows().length).toBeGreaterThan(30);
-        }, {timeout: 2000});
-        expect(screen.queryByText("Loading more heartbeats")).not.toBeInTheDocument();
+        fireEvent.change(screen.getByLabelText("Per page"), {target: {value: "25"}});
+        expect(getDataRows()).toHaveLength(25);
+        expect(screen.getByText("Page 1 of 3")).toBeInTheDocument();
     });
 
-    test("scroll while loading is ignored", async () => {
-        mockHeartbeatStore(makeManyStreams(50));
-        renderWithRouter(<Heartbeats/>);
-
-        expect(getDataRows()).toHaveLength(30);
-
-        const container = getScrollContainer();
-        attachScrollMetrics(container);
-
-        act(() => {
-            container.scrollTop = 850;
-        });
-        fireEvent.scroll(container);
-        fireEvent.scroll(container);
-
-        await waitFor(() => {
-            expect(getDataRows().length).toBeGreaterThan(30);
-        }, {timeout: 2000});
-    });
-
-    test("scroll at bottom when all rows visible does not change count", async () => {
-        mockHeartbeatStore(buildStatus([{
-            node: "node1",
-            streams: [{
-                id: "hb#1.rx", state: "running", type: "unicast",
-                peers: {peer1: {is_beating: true, desc: "desc1"}}
-            }]
-        }]));
-        renderWithRouter(<Heartbeats/>);
-
-        expect(getDataRows()).toHaveLength(1);
-
-        const container = getScrollContainer();
-        attachScrollMetrics(container);
-
-        act(() => {
-            container.scrollTop = 850;
-        });
-        fireEvent.scroll(container);
-
-        await waitFor(() => {
-            expect(getDataRows()).toHaveLength(1);
-        });
-        expect(screen.queryByText("Loading more heartbeats")).not.toBeInTheDocument();
+    test("a filter changed starts the list over from its first page, the page size kept", async () => {
+        mockHeartbeatStore(makeManyStreams(60));
+        renderWithRouter(<Heartbeats/>, {route: "/heartbeats?limit=25&offset=50"});
+        expect(screen.getByText("51–60 of 60")).toBeInTheDocument();
+        fireEvent.change(getFilter("running"), {target: {value: "running"}});
+        await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith("/heartbeats?limit=25&state=running", {replace: true}));
     });
 
     // ==================== RESPONSIVE FILTERS ====================

@@ -848,3 +848,12 @@ export function EyeOffIcon(props: IconProps) {
     </Svg>
   );
 }
+
+/** A resource of a service (`resource`, fa-hashtag): its id reads "fs#1". */
+export function HashIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M10.2 3.1a1.2 1.2 0 0 1 1 1.4L10.8 8h3.6l.5-3.9a1.2 1.2 0 1 1 2.4.3L16.8 8h2.7a1.2 1.2 0 1 1 0 2.4h-3L16 13.6h2.5a1.2 1.2 0 1 1 0 2.4h-2.8l-.5 3.9a1.2 1.2 0 1 1-2.4-.3l.5-3.6H9.7l-.5 3.9a1.2 1.2 0 1 1-2.4-.3l.5-3.6H4.5a1.2 1.2 0 1 1 0-2.4h3.1l.4-3.2H5.5a1.2 1.2 0 1 1 0-2.4h2.8l.5-3.9a1.2 1.2 0 0 1 1.4-1Zm.3 7.3-.4 3.2h3.6l.4-3.2h-3.6Z" />
+    </Svg>
+  );
+}

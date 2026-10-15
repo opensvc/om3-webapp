@@ -256,7 +256,12 @@ const KeyFormDialog = ({
     );
 };
 
-const KeysSection = ({decodedObjectName, openSnackbar}) => {
+/**
+ * The keys of a cfg, sec or usr object. `refreshKey` changes with its configuration
+ * (InstanceConfigUpdated): the keys are read again, a key added in the file, or by
+ * om, listed without reopening the panel, kept mounted under its other tabs.
+ */
+const KeysSection = ({decodedObjectName, openSnackbar, refreshKey}) => {
     const {t} = useTranslation();
     const {kind} = parseObjectPath(decodedObjectName);
     // A usr key, a password or a private key, is masked as a sec one.
@@ -520,7 +525,7 @@ const KeysSection = ({decodedObjectName, openSnackbar}) => {
                 logger.error("Error in fetchKeys:", error);
             });
         }
-    }, [decodedObjectName, fetchKeys]);
+    }, [decodedObjectName, fetchKeys, refreshKey]);
 
     if (!showKeys) return null;
 

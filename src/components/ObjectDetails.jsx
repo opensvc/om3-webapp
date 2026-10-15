@@ -548,7 +548,8 @@ const ObjectDetail = ({path, embedded = false, onOpenLogs, onViewInstance, onOrc
                 {!embedded && <h1 className="text-title font-semibold">{decodedObjectName}</h1>}
                 {feedback}
                 <p className="py-4 text-center text-ink-muted">{t("objectDetails.noInformation")}</p>
-                {showKeys && <KeysSection decodedObjectName={decodedObjectName} openSnackbar={openSnackbar}/>}
+                {showKeys && <KeysSection decodedObjectName={decodedObjectName} openSnackbar={openSnackbar}
+                                          refreshKey={configRefreshTrigger}/>}
                 {configSection}
             </div>
         );
@@ -614,7 +615,8 @@ const ObjectDetail = ({path, embedded = false, onOpenLogs, onViewInstance, onOrc
                 />
             )}
 
-            {showKeys && <KeysSection decodedObjectName={decodedObjectName} openSnackbar={openSnackbar}/>}
+            {showKeys && <KeysSection decodedObjectName={decodedObjectName} openSnackbar={openSnackbar}
+                                      refreshKey={configRefreshTrigger}/>}
 
             {!KEY_KINDS.includes(kind) && (
                 <section aria-labelledby="object-instances" className={PANEL}>

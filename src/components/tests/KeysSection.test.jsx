@@ -572,6 +572,17 @@ describe('KeysSection', () => {
         await waitFor(() => expect(capturedBody instanceof File).toBe(true));
     });
 
+    test('a key added in the configuration file is listed once the configuration changes', async () => {
+        mockFetch({keys: [{name: 'existing', node: 'n', size: 9}]});
+        const {rerender} = render(<KeysSection decodedObjectName="root/cfg/cfg1" openSnackbar={openSnackbar} refreshKey={0}/>);
+        expect(await screen.findByRole('rowheader', {name: 'existing'})).toBeInTheDocument();
+
+        mockFetch({keys: [{name: 'existing', node: 'n', size: 9}, {name: 'babar', node: 'n', size: 14}]});
+        rerender(<KeysSection decodedObjectName="root/cfg/cfg1" openSnackbar={openSnackbar} refreshKey={1}/>);
+        expect(await screen.findByRole('rowheader', {name: 'babar'})).toBeInTheDocument();
+        expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining('/root/cfg/cfg1/data/keys'), expect.any(Object));
+    });
+
     // ── User-specific tests ───────────────────────────────────────────────
 
     test('the keys of a user are listed, read from its data keys', async () => {

@@ -5,11 +5,10 @@ import {retainEventReception} from "../eventSourceManager.jsx";
 import EventLogger from "../components/EventLogger";
 import useEventStore from "../hooks/useEventStore";
 import {useNamespaceClaims, useNamespacePg} from "../hooks/useNamespaceUsage";
-import {computeLimit, kindCounts, networkUsage, poolUsage} from "../app/namespace-usage";
+import {computeLimit, formatCpu, kindCounts, networkUsage, poolUsage} from "../app/namespace-usage";
 import {Table, HeaderRow, SortHeaderCell, Row, Cell, EmptyRow} from "../ui/components/Table";
 import {CountPill} from "../ui/components/CountPill";
 import {SegmentedBar} from "../ui/components/SegmentedBar";
-import {Sparkline} from "../ui/components/Sparkline";
 import {HoverCard} from "../ui/components/HoverCard";
 import {formatBytes} from "../ui/lib/format";
 import {usePanelSearch} from "../app/panel-search";
@@ -103,9 +102,9 @@ function KindPill({namespace, kind, count, onShow}) {
 }
 
 /**
- * What a namespace holds of the pools or networks, out of what it may hold: the
- * share of the total, the total, and a bar with a segment for each pool or network.
- * Free, used and total, and each pool or network, in the hover card.
+ * What a namespace holds of the pools or networks, out of what it may hold: a bar
+ * with a segment for each pool or network, alone in the cell. The figures, the
+ * share, and each pool or network, in its hover card.
  */
 function UsageCell({usage, format, title, locale}) {
     const {t} = useTranslation();
@@ -120,6 +119,7 @@ function UsageCell({usage, format, title, locale}) {
                 <Figures
                     title={title}
                     lines={[
+                        [t("namespaces.usage.share"), percentOf(usage.used, usage.total, locale)],
                         [t("namespaces.usage.free"), format(usage.free)],
                         [t("namespaces.usage.used"), format(usage.used)],
                         [t("namespaces.usage.total"), format(usage.total)],
@@ -128,40 +128,29 @@ function UsageCell({usage, format, title, locale}) {
                 />
             }
         >
-            <span className="inline-flex flex-col gap-1">
-                <span className="whitespace-nowrap tabular-nums">
-                    {t("namespaces.usage.percentOf", {percent: percentOf(usage.used, usage.total, locale), total: format(usage.total)})}
-                </span>
+            {/* The bar alone, its own line high: the figures are in the card. */}
+            <span className="inline-flex h-5 items-center">
                 <SegmentedBar
                     segments={usage.segments.map((s) => ({name: s.name, value: s.used}))}
                     total={usage.total}
-                    label={`${title}: ${parts.join(", ")}`}
+                    label={t("namespaces.usage.barLabel", {title, parts: parts.join(", ")})}
+                    width="w-28"
                 />
             </span>
         </HoverCard>
     );
 }
 
-const NamespaceRow = React.memo(({namespace, counts, pools, networks, cpu, memory, locale, onShow, onOpenMetrics}) => {
+const NamespaceRow = React.memo(({namespace, counts, pools, networks, cpu, memory, locale, isOpen, onShow, onOpen}) => {
     const {t} = useTranslation();
     const cpuUsed = last(cpu.series);
     const memoryUsed = last(memory.series);
-    const cpus = (n) => t("namespaces.cpu.count", {count: Number(n.toFixed(2)), value: n.toLocaleString(locale, {maximumFractionDigits: 2})});
-    const metricsButton = (content) => (
-        <button
-            type="button"
-            className="inline-flex items-center gap-2 rounded-(--radius-control) text-left hover:underline"
-            aria-label={t("namespaces.viewMetrics", {namespace})}
-            onClick={(event) => {
-                event.stopPropagation();
-                onOpenMetrics(namespace);
-            }}
-        >
-            {content}
-        </button>
-    );
+    // In cpu, mcpu or µcpu, three significant digits at most.
+    const cpus = (n) => formatCpu(n, locale);
     return (
-        <Row onActivate={() => onShow(objectsUrl(namespace))}>
+        // The row opens the panel of the namespace; its counts, the objects they count.
+        // One height for every line, whatever its cells hold: pills, bars or a dash.
+        <Row onActivate={() => onOpen(namespace)} selected={isOpen} className="h-9" data-namespace={namespace}>
             <Cell className="font-medium">{namespace}</Cell>
             <Cell><AvailPills namespace={namespace} kind="svc" counts={counts.svc} onShow={onShow}/></Cell>
             <Cell><AvailPills namespace={namespace} kind="vol" counts={counts.vol} onShow={onShow}/></Cell>
@@ -174,17 +163,14 @@ const NamespaceRow = React.memo(({namespace, counts, pools, networks, cpu, memor
                     [t("namespaces.usage.used"), cpuUsed === undefined ? "–" : cpus(cpuUsed)],
                     [t("namespaces.usage.cap"), cpu.cap === undefined ? t("namespaces.usage.noClaim") : cpus(cpu.cap)],
                     ...(cpu.cap === undefined ? [] : [[t("namespaces.usage.free"), cpus(Math.max(0, cpu.cap - (cpuUsed ?? 0)))]]),
-                ]}/>}>
-                    {metricsButton(
-                        <>
-                            <span className="whitespace-nowrap tabular-nums">
-                                {cpu.cap === undefined
-                                    ? cpuUsed === undefined ? "–" : cpus(cpuUsed)
-                                    : t("namespaces.usage.percentOf", {percent: cpuUsed === undefined ? "–" : percentOf(cpuUsed, cpu.cap, locale), total: cpus(cpu.cap)})}
-                            </span>
-                            <Sparkline values={cpu.series} max={cpu.cap} label={t("namespaces.cpu.trend", {namespace})}/>
-                        </>
-                    )}
+                ]}/>} focusable>
+                    <span className="inline-flex items-center gap-2">
+                        <span className="whitespace-nowrap tabular-nums">
+                            {cpu.cap === undefined
+                                ? cpuUsed === undefined ? "–" : cpus(cpuUsed)
+                                : t("namespaces.usage.percentOf", {percent: cpuUsed === undefined ? "–" : cpus(cpuUsed), total: cpus(cpu.cap)})}
+                        </span>
+                    </span>
                 </HoverCard>
             </Cell>
             <Cell>
@@ -192,17 +178,14 @@ const NamespaceRow = React.memo(({namespace, counts, pools, networks, cpu, memor
                     [t("namespaces.usage.used"), memoryUsed === undefined ? "–" : size(memoryUsed, locale)],
                     [t("namespaces.usage.cap"), memory.cap === undefined ? t("namespaces.usage.noClaim") : size(memory.cap, locale)],
                     ...(memory.cap === undefined ? [] : [[t("namespaces.usage.free"), size(Math.max(0, memory.cap - (memoryUsed ?? 0)), locale)]]),
-                ]}/>}>
-                    {metricsButton(
-                        <>
-                            <span className="whitespace-nowrap tabular-nums">
-                                {memory.cap === undefined
-                                    ? t("namespaces.memory.used", {used: memoryUsed === undefined ? "–" : size(memoryUsed, locale)})
-                                    : t("namespaces.usage.percentOf", {percent: memoryUsed === undefined ? "–" : percentOf(memoryUsed, memory.cap, locale), total: size(memory.cap, locale)})}
-                            </span>
-                            <Sparkline values={memory.series} max={memory.cap} label={t("namespaces.memory.trend", {namespace})}/>
-                        </>
-                    )}
+                ]}/>} focusable>
+                    <span className="inline-flex items-center gap-2">
+                        <span className="whitespace-nowrap tabular-nums">
+                            {memory.cap === undefined
+                                ? t("namespaces.memory.used", {used: memoryUsed === undefined ? "–" : size(memoryUsed, locale)})
+                                : t("namespaces.usage.percentOf", {percent: memoryUsed === undefined ? "–" : percentOf(memoryUsed, memory.cap, locale), total: size(memory.cap, locale)})}
+                        </span>
+                    </span>
                 </HoverCard>
             </Cell>
         </Row>
@@ -237,8 +220,8 @@ const Namespaces = ({embedded = false}) => {
 
     const [sortColumn, setSortColumn] = useState("namespace");
     const [sortDirection, setSortDirection] = useState("asc");
-    // The namespace whose usage panel is open, in the URL.
-    const {sel: metricsNamespace, select: selectNamespace} = usePanelSearch();
+    // The namespace whose panel is open, and its tab, in the URL.
+    const {sel: openNamespace, tab: panelTab, select: selectNamespace, setTab: setPanelTab} = usePanelSearch();
 
     const objectStatus = useEventStore(selectObjectStatus);
     const counts = useMemo(() => kindCounts(objectStatus ?? {}), [objectStatus]);
@@ -306,8 +289,8 @@ const Namespaces = ({embedded = false}) => {
     }, [setPageOffset]);
 
     const handleShow = useCallback((url) => navigate(url), [navigate]);
-    const handleOpenMetrics = useCallback((namespace) => selectNamespace(namespace), [selectNamespace]);
-    const handleCloseMetrics = useCallback(() => selectNamespace(undefined), [selectNamespace]);
+    const handleOpen = useCallback((namespace) => selectNamespace(namespace), [selectNamespace]);
+    const handleClose = useCallback(() => selectNamespace(undefined), [selectNamespace]);
 
     return (
         <div className={embedded ? "flex h-full flex-col gap-3" : "flex h-full flex-col gap-3 p-4"}>
@@ -338,8 +321,9 @@ const Namespaces = ({embedded = false}) => {
                             key={row.namespace}
                             {...row}
                             locale={locale}
+                            isOpen={openNamespace === row.namespace}
                             onShow={handleShow}
-                            onOpenMetrics={handleOpenMetrics}
+                            onOpen={handleOpen}
                         />
                     ))}
                     {visibleRows.length === 0 && (
@@ -351,7 +335,12 @@ const Namespaces = ({embedded = false}) => {
             </Table>
             {claims.error && <p className="text-ink-muted">{t("namespaces.usage.error", {message: claims.error})}</p>}
 
-            <NamespaceDetailPanel name={metricsNamespace ?? undefined} onClose={handleCloseMetrics}/>
+            <NamespaceDetailPanel
+                name={openNamespace ?? undefined}
+                tab={panelTab}
+                onTabChange={setPanelTab}
+                onClose={handleClose}
+            />
 
             <EventLogger
                 eventTypes={namespaceEventTypes}

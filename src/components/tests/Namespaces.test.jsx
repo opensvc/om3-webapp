@@ -26,8 +26,9 @@ vi.mock('../../eventSourceManager.jsx', () => ({
     closeLoggerEventSource: vi.fn(),
 }));
 
-vi.mock('../NamespaceMetrics', () => ({
-    default: ({namespace}) => <div data-testid="namespace-metrics">{namespace}</div>,
+vi.mock('../NamespacePanel', () => ({
+    NamespaceUsage: ({namespace}) => <div data-testid="namespace-usage">{namespace}</div>,
+    NamespaceConfig: ({namespace}) => <div data-testid="namespace-config">{namespace}</div>,
 }));
 
 const GiB = 1024 ** 3;
@@ -74,6 +75,8 @@ limit@dev3n1 = 1g
 const pg = (usec) => [
     '# HELP opensvc_pg_cgroup_cpu_usage_usec cpu',
     `opensvc_pg_cgroup_cpu_usage_usec{namespace="prod",path="prod/svc/web"} ${usec}`,
+    // dev, which caps no cpu, barely uses any: a hundredth of what prod uses.
+    `opensvc_pg_cgroup_cpu_usage_usec{namespace="dev",path="dev/svc/x"} ${usec / 100}`,
     `opensvc_pg_cgroup_memory_current_bytes{namespace="prod",path="prod/svc/web"} ${GiB / 2}`,
     `opensvc_pg_cgroup_memory_current_bytes{namespace="prod",path="prod/svc/db"} ${GiB / 2}`,
 ].join('\n');
@@ -129,7 +132,7 @@ const cell = (name, column) => {
     const headers = within(table()).getAllByRole('columnheader').map((h) => h.textContent.replace(/[▲▼]/g, '').trim());
     return within(row(name)).getAllByRole('cell')[headers.indexOf(column)];
 };
-const loaded = () => waitFor(() => expect(cell('prod', 'Pools')).toHaveTextContent(' of '));
+const loaded = () => waitFor(() => expect(within(cell('prod', 'Pools')).getByRole('img')).toBeInTheDocument());
 /**
  * The hover card of a cell, opened from the keyboard: its figures, label then value,
  * and its notes; closed again once read, unless `keepOpen`.
@@ -173,7 +176,7 @@ describe('Namespaces', () => {
         await loaded();
     });
 
-    test('a pill opens the objects it counts, on their tab; the row, every object of the namespace', async () => {
+    test('a count opens the tab of its kind, filtered by the namespace', async () => {
         renderNamespaces();
         fireEvent.click(within(cell('prod', 'Services')).getByRole('button', {name: /down/}));
         expect(mockNavigate).toHaveBeenLastCalledWith('/objects?namespace=prod&globalState=down');
@@ -183,8 +186,6 @@ describe('Namespaces', () => {
         expect(mockNavigate).toHaveBeenLastCalledWith('/objects?namespace=prod&list=secrets');
         fireEvent.click(within(cell('prod', 'Configs')).getByRole('button'));
         expect(mockNavigate).toHaveBeenLastCalledWith('/objects?namespace=prod&list=configs');
-        fireEvent.click(cell('prod', 'Name'));
-        expect(mockNavigate).toHaveBeenLastCalledWith('/objects?namespace=prod');
         await loaded();
     });
 
@@ -192,13 +193,14 @@ describe('Namespaces', () => {
         renderNamespaces();
         await loaded();
         // default: 10 GiB of a 20 GiB claim; shm, claimed of by nothing: 1 GiB of its 4 GiB.
-        expect(cell('prod', 'Pools')).toHaveTextContent('46% of 24 GiB');
+        // The bar alone in the cell, its figures in the card.
+        expect(cell('prod', 'Pools').textContent).toBe('');
         const bar = within(cell('prod', 'Pools')).getByRole('img');
         expect(bar).toHaveAccessibleName('Pools: default: 10 GiB of 20 GiB claimed (50%), shm: 1 GiB of 4 GiB, no claim (25%)');
         // The figures behind it in its hover card, reached from the keyboard too.
         const target = cell('prod', 'Pools').querySelector('[tabindex="0"]');
         const {card, figures, notes} = cardOf(target, {keepOpen: true});
-        expect(figures).toEqual({Free: '13 GiB', Used: '11 GiB', Total: '24 GiB'});
+        expect(figures).toEqual({Share: '46%', Free: '13 GiB', Used: '11 GiB', Total: '24 GiB'});
         expect(notes).toEqual(['default: 10 GiB of 20 GiB claimed (50%)', 'shm: 1 GiB of 4 GiB, no claim (25%)']);
         expect(target).toHaveAttribute('aria-describedby', card.id);
         fireEvent.blur(target);
@@ -208,42 +210,62 @@ describe('Namespaces', () => {
         expect(cell('dev', 'Pools')).toHaveTextContent('–');
     });
 
+    test('every line one height, the bars beside their share rather than under it', async () => {
+        renderNamespaces();
+        await loaded();
+        expect(bodyRows().every((r) => r.classList.contains('h-9'))).toBe(true);
+        const bar = within(cell('prod', 'Pools')).getByRole('img');
+        expect(bar.parentElement).toHaveClass('items-center');
+        expect(bar.parentElement).not.toHaveClass('flex-col');
+    });
+
     test('the networks: the addresses held, each once, out of the claim', async () => {
         renderNamespaces();
         await loaded();
-        expect(cell('prod', 'Networks')).toHaveTextContent('20% of 10');
+        expect(cell('prod', 'Networks').textContent).toBe('');
         expect(within(cell('prod', 'Networks')).getByRole('img')).toHaveAccessibleName('Networks: default: 2 of 10 claimed (20%)');
-        expect(cardOf(cell('prod', 'Networks').querySelector('[tabindex="0"]')).figures).toEqual({Free: '8', Used: '2', Total: '10'});
+        expect(cardOf(cell('prod', 'Networks').querySelector('[tabindex="0"]')).figures).toEqual({Share: '20%', Free: '8', Used: '2', Total: '10'});
         expect(cell('dev', 'Networks')).toHaveTextContent('–');
     });
 
-    test('the cpu used of the claimed cap and the memory free, used and capped, a sparkline each', async () => {
+    test('the cpu used of the claimed cap and the memory free, used and capped, no sparkline in the list', async () => {
         vi.useFakeTimers({shouldAdvanceTime: true});
         renderNamespaces();
         await loaded();
         // The memory on the first reading; a cpu rate needs a second one.
         await waitFor(() => expect(cell('prod', 'Memory')).toHaveTextContent('25% of 4 GiB'));
-        expect(cardOf(within(cell('prod', 'Memory')).getByRole('button')).figures).toEqual({Used: '1 GiB', Cap: '4 GiB', Free: '3 GiB'});
-        expect(cell('prod', 'CPU')).toHaveTextContent('– of 8 cpus');
+        expect(cardOf(cell('prod', 'Memory').querySelector('[tabindex="0"]')).figures).toEqual({Used: '1 GiB', Cap: '4 GiB', Free: '3 GiB'});
+        expect(cell('prod', 'CPU')).toHaveTextContent('– of 8 cpu');
+        // The rate shows on the second reading, a couple of seconds after the first.
         await act(async () => {
-            await vi.advanceTimersByTimeAsync(10000);
+            await vi.advanceTimersByTimeAsync(2000);
         });
         // About half a cpu of 8.
-        await waitFor(() => expect(cell('prod', 'CPU')).toHaveTextContent(/^\d+% of 8 cpus/));
-        const sparkline = within(cell('prod', 'Memory')).getByRole('img', {name: 'Memory of prod, last 5 minutes'});
-        expect(sparkline.querySelector('polyline')).not.toBeNull();
-        // No claim: the memory used alone, no cap.
-        expect(cell('dev', 'Memory')).toHaveTextContent('– used');
-        expect(cell('dev', 'CPU')).toHaveTextContent(/^–/);
-        expect(cardOf(within(cell('dev', 'CPU')).getByRole('button')).figures).toEqual({Used: '–', Cap: 'no claim'});
+        // In cpu, mcpu or µcpu, three significant digits at most (formatCpu), of the 8 cpu cap.
+        await waitFor(() => expect(cell('prod', 'CPU')).toHaveTextContent(/^\d+(\.\d+)? [mµ]?cpu of 8 cpu$/));
+        // The trends are in the panel of the namespace, not in its line.
+        expect(within(cell('prod', 'Memory')).queryByRole('img')).not.toBeInTheDocument();
+        expect(within(cell('prod', 'CPU')).queryByRole('img')).not.toBeInTheDocument();
+        // No claim: the memory used alone, no cap (none reported for dev here).
+        expect(cell('dev', 'Memory')).toHaveTextContent('0 used');
+        // No cpu cap: the cpu it uses now, however little, not a share of nothing.
+        expect(cell('dev', 'CPU')).toHaveTextContent(/^\d+(\.\d+)? [mµ]?cpu$/);
+        expect(cardOf(cell('dev', 'CPU').querySelector('[tabindex="0"]')).figures).toEqual({
+            Used: cell('dev', 'CPU').textContent, Cap: 'no claim',
+        });
     });
 
-    test('the cpu or memory opens the usage of the namespace by object, not its objects', async () => {
+    test('a row opens the panel of its namespace, on its usage, without leaving the list', async () => {
         renderNamespaces();
         await loaded();
-        fireEvent.click(within(cell('prod', 'CPU')).getByRole('button', {name: 'View metrics for namespace prod'}));
-        expect(screen.getByTestId('namespace-metrics')).toHaveTextContent('prod');
+        fireEvent.click(cell('prod', 'Name'));
+        const panel = screen.getByRole('dialog', {name: 'prod'});
+        expect(within(panel).getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Usage', 'Configuration']);
+        expect(within(panel).getByTestId('namespace-usage')).toHaveTextContent('prod');
+        expect(row('prod')).toHaveAttribute('aria-current', 'true');
         expect(mockNavigate).not.toHaveBeenCalled();
+        fireEvent.click(within(panel).getByRole('tab', {name: 'Configuration'}));
+        expect(within(panel).getByTestId('namespace-config')).toHaveTextContent('prod');
     });
 
     test('sorted by a column, ties in the order of the names', async () => {
@@ -291,7 +313,7 @@ describe('Namespaces', () => {
             expect(screen.getByRole('button', {name: 'Réseaux'})).toBeInTheDocument();
             expect(screen.getByRole('button', {name: 'Mémoire'})).toBeInTheDocument();
             expect(screen.getByLabelText('Par page')).toBeInTheDocument();
-            await waitFor(() => expect(cell('prod', 'Réseaux')).toHaveTextContent(/^20\s%\sde 10/));
+            await waitFor(() => expect(within(cell('prod', 'Réseaux')).getByRole('img')).toHaveAccessibleName(/^Réseaux : default/));
         } finally {
             await i18n.changeLanguage('en');
         }

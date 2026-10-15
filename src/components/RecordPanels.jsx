@@ -9,7 +9,7 @@ import ObjectStatus from "./ObjectStatus";
 import ObjectConfig from "./ObjectConfig";
 import {ObjectResources, ObjectSchedules} from "./ObjectTabs";
 import NetworkDetails from "./NetworkDetails";
-import NamespaceMetrics from "./NamespaceMetrics";
+import {NamespaceConfig, NamespaceUsage} from "./NamespacePanel";
 import LogsViewer from "./LogsViewer";
 import {OrchestrationLogsFilter} from "./OrchestrationLogsFilter";
 import {KEY_KINDS} from "../constants/actions";
@@ -175,19 +175,32 @@ export function NetworkDetailPanel({name, onClose}) {
     );
 }
 
-/** A namespace: the resources its objects use. */
-export function NamespaceDetailPanel({name, onClose}) {
+/**
+ * A namespace: what it claims and its objects use, then its configuration object,
+ * a tab each. The tab in the URL, as for the other records.
+ */
+export function NamespaceDetailPanel({name, tab, onTabChange, onClose}) {
     const {t} = useTranslation();
+    const tabs = [
+        {key: "usage", label: t("namespaces.panel.tabs.usage")},
+        {key: "config", label: t("namespaces.panel.tabs.config")},
+    ];
     return (
         <RecordPanel
             open={name !== undefined}
             kind="namespace"
             recordId={name}
-            title={name === undefined ? "" : t("namespaces.metricsOf", {namespace: name})}
+            title={name ?? ""}
             onClose={onClose}
+            tabs={tabs}
+            tab={tab}
+            onTabChange={onTabChange}
             size="wide"
+            closeOnOutsideClick={false}
         >
-            {() => <NamespaceMetrics key={name} namespace={name}/>}
+            {(active) => (active === "config"
+                ? <NamespaceConfig key={name} namespace={name}/>
+                : <NamespaceUsage key={name} namespace={name}/>)}
         </RecordPanel>
     );
 }

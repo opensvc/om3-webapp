@@ -83,11 +83,24 @@ export function parseClaims(ini: string | undefined): Claim[] {
   return claims;
 }
 
-/** The namespace of an object path: "root" for a path of two parts or one. */
+/**
+ * The namespace of an object path: "root" for a path of two parts or one. A
+ * namespace configuration is written "<namespace>/", "/" for the root one.
+ */
 export const namespaceOf = (path: string) => {
+  if (path.endsWith("/")) return path === "/" ? "root" : path.slice(0, -1);
   const parts = path.split("/");
   return parts.length === 3 ? parts[0] : "root";
 };
+
+/**
+ * The configuration object of a namespace: its path for the API, and the key the
+ * cluster status lists it under ("<namespace>/", "/" for the root one).
+ */
+export const nscfgOf = (namespace: string) => ({
+  path: `${namespace}/nscfg/namespace`,
+  key: namespace === "root" ? "/" : `${namespace}/`,
+});
 
 /** What a namespace holds of one pool or network, and what it may hold. */
 export interface UsageSegment {
@@ -223,7 +236,8 @@ export function kindCounts(objectStatus: Record<string, { avail?: string } | und
     if (!path || !status || typeof status !== "object") continue;
     const parts = path.split("/");
     const ns = namespaceOf(path);
-    const kind = parts.length >= 2 ? parts[parts.length - 2] : path === "cluster" ? "ccfg" : "svc";
+    // A namespace configuration makes a namespace, counted in none of the kinds.
+    const kind = path.endsWith("/") ? "nscfg" : parts.length >= 2 ? parts[parts.length - 2] : path === "cluster" ? "ccfg" : "svc";
     const counts = out.get(ns) ?? { svc: {}, vol: {}, sec: 0, cfg: 0 };
     if (kind === "svc" || kind === "vol") {
       const avail = AVAILS.includes(status.avail ?? "") ? (status.avail as string) : "n/a";
@@ -234,4 +248,27 @@ export function kindCounts(objectStatus: Record<string, { avail?: string } | und
     out.set(ns, counts);
   }
   return out;
+}
+
+/**
+ * A cpu usage as a percentage of one cpu, the notation of the om3 cpu limits (800%
+ * is eight cpus), to one decimal: 0.002 cpu reads 0.2 %. A usage not known yet
+ * (no rate before a second reading) reads "-".
+ */
+export function formatCpuPercent(percent: number | null | undefined): string {
+  return percent === null || percent === undefined ? "-" : `${percent.toFixed(1)} %`;
+}
+
+/**
+ * A number of cpus for a human: in cpu from one, in mcpu from a thousandth, in µcpu
+ * below, three significant digits at most: 1.26 cpu, 2 mcpu, 630 µcpu. Zero is
+ * 0 cpu.
+ */
+export function formatCpu(cpus: number, locale: string): string {
+  const digits = (n: number) => n.toLocaleString(locale, { maximumSignificantDigits: 3 });
+  const size = Math.abs(cpus);
+  if (size === 0) return `${digits(0)} cpu`;
+  if (size >= 1) return `${digits(cpus)} cpu`;
+  if (size >= 1e-3) return `${digits(cpus * 1e3)} mcpu`;
+  return `${digits(cpus * 1e6)} µcpu`;
 }

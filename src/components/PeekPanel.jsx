@@ -21,7 +21,7 @@ export function PeekPanel() {
             <NodeDetailPanel node={id("node")} tab={peektab} onTabChange={setPeekTab} onClose={closePeek}/>
             <ObjectDetailPanel path={id("object")} tab={peektab} onTabChange={setPeekTab} onClose={closePeek}/>
             <NetworkDetailPanel name={id("network")} onClose={closePeek}/>
-            <NamespaceDetailPanel name={id("namespace")} onClose={closePeek}/>
+            <NamespaceDetailPanel name={id("namespace")} tab={peektab} onTabChange={setPeekTab} onClose={closePeek}/>
         </>
     );
 }

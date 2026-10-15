@@ -1,9 +1,12 @@
 import { describe, expect, test } from "vitest";
 import {
   computeLimit,
+  formatCpu,
+  formatCpuPercent,
   kindCounts,
   networkHoldings,
   networkUsage,
+  nscfgOf,
   parseClaims,
   parseCpuLimit,
   parseSize,
@@ -138,6 +141,38 @@ describe("usage", () => {
   });
 });
 
+describe("formatCpuPercent", () => {
+  test.each([
+    [0, "0.0 %"],
+    [0.2, "0.2 %"],
+    [0.06, "0.1 %"],
+    [50, "50.0 %"],
+    [400, "400.0 %"],
+  ])("%d %% of a cpu reads %s, as in the namespace panel", (percent, text) => {
+    expect(formatCpuPercent(percent)).toBe(text);
+  });
+
+  test("a usage not known yet reads -", () => {
+    expect(formatCpuPercent(null)).toBe("-");
+    expect(formatCpuPercent(undefined)).toBe("-");
+  });
+});
+
+describe("formatCpu", () => {
+  test.each([
+    [0, "0 cpu"],
+    [8, "8 cpu"],
+    [1.256, "1.26 cpu"],
+    [0.5, "500 mcpu"],
+    [0.002, "2 mcpu"],
+    [0.0123, "12.3 mcpu"],
+    [0.00063, "630 µcpu"],
+    [0.0000012345, "1.23 µcpu"],
+  ])("%d cpus read %s: in cpu, mcpu or µcpu, three significant digits at most", (cpus, text) => {
+    expect(formatCpu(cpus, "en")).toBe(text);
+  });
+});
+
 describe("kindCounts", () => {
   test("the services and volumes by availability, the secrets and configurations counted; the rest is a namespace only", () => {
     const counts = kindCounts({
@@ -149,8 +184,18 @@ describe("kindCounts", () => {
       "ns1/usr/f": { avail: "n/a" },
       foo: { avail: "warn" },
       cluster: { avail: "n/a" },
+      // The configurations of the ns2 and root namespaces, as om3 writes their paths.
+      "ns2/": { avail: "n/a" },
+      "/": { avail: "n/a" },
     });
     expect(counts.get("ns1")).toEqual({ svc: { up: 1, "n/a": 1 }, vol: { down: 1 }, sec: 1, cfg: 1 });
     expect(counts.get("root")).toEqual({ svc: { warn: 1 }, vol: {}, sec: 0, cfg: 0 });
+    expect(counts.get("ns2")).toEqual({ svc: {}, vol: {}, sec: 0, cfg: 0 });
+    expect(counts.has("ns2/")).toBe(false);
+  });
+
+  test("a namespace configuration: its API path and its key in the cluster status", () => {
+    expect(nscfgOf("ns1")).toEqual({ path: "ns1/nscfg/namespace", key: "ns1/" });
+    expect(nscfgOf("root")).toEqual({ path: "root/nscfg/namespace", key: "/" });
   });
 });

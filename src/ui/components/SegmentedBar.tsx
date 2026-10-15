@@ -24,13 +24,24 @@ export interface Segment {
  * screen readers (`label`), the tint telling them apart only: the cell holding the
  * bar shows them in its hover card. A total of zero draws an empty bar.
  */
-export function SegmentedBar({ segments, total, label }: { segments: Segment[]; total: number; label: string }) {
+export function SegmentedBar({
+  segments,
+  total,
+  label,
+  width = "w-20",
+}: {
+  segments: Segment[];
+  total: number;
+  label: string;
+  /** The width class of the bar: narrow beside a figure, wider alone in a cell. */
+  width?: string;
+}) {
   const shown = segments.filter((segment) => segment.value > 0);
   return (
     <span
       role="img"
       aria-label={label}
-      className="flex h-1.5 w-28 shrink-0 overflow-hidden rounded-full bg-surface-sunken"
+      className={`flex h-1.5 shrink-0 overflow-hidden rounded-full bg-surface-sunken ${width}`}
     >
       {total > 0 &&
         shown.map((segment, index) => (

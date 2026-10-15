@@ -8,6 +8,8 @@ import logger from "../utils/logger.js";
 export const USAGE_REFRESH_MS = 60000;
 /** How often the cgroup metrics are read: a point of the sparklines each time. */
 export const PG_REFRESH_MS = 10000;
+/** How soon the second reading follows the first: a cpu rate needs two. */
+export const PG_FIRST_RATE_MS = 2000;
 /** The points a sparkline keeps: five minutes at one every ten seconds. */
 export const PG_POINTS = 30;
 
@@ -130,9 +132,12 @@ export function useNamespacePg() {
             }
         };
         void read();
+        // The cpu shows a couple of seconds after the page, not after a whole period.
+        const first = setTimeout(read, PG_FIRST_RATE_MS);
         const timer = setInterval(read, PG_REFRESH_MS);
         return () => {
             cancelled = true;
+            clearTimeout(first);
             clearInterval(timer);
         };
     }, []);

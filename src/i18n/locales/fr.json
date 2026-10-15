@@ -658,11 +658,7 @@
       "cpu": "CPU",
       "memory": "Mémoire"
     },
-    "viewMetrics": "Voir les métriques du namespace {{namespace}}",
     "empty": "Aucun namespace disponible",
-    "metricsTitle": "Métriques",
-    "metricsOf": "Métriques de {{namespace}}",
-    "resizeDrawer": "Redimensionner le panneau",
     "eventsLogger": "Journal des événements des namespaces",
     "events": "Événements des namespaces",
     "tableLabel": "Namespaces",
@@ -685,16 +681,47 @@
       "used": "Utilisé",
       "total": "Total",
       "cap": "Plafond",
-      "noClaim": "aucune réclamation"
+      "noClaim": "aucune réclamation",
+      "share": "Part",
+      "barLabel": "{{title}} : {{parts}}"
     },
     "cpu": {
-      "trend": "CPU de {{namespace}}, 5 dernières minutes",
-      "count_one": "{{value}} cpu",
-      "count_other": "{{value}} cpus"
+      "trend": "CPU de {{namespace}}, 5 dernières minutes"
     },
     "memory": {
       "used": "{{used}} utilisé",
       "trend": "Mémoire de {{namespace}}, 5 dernières minutes"
+    },
+    "panel": {
+      "tabs": {
+        "usage": "Usage",
+        "config": "Configuration"
+      },
+      "claims": "Réclamations et usage",
+      "resource": "Ressource",
+      "limit": "Limite",
+      "share": "Part",
+      "trend": "5 dernières minutes",
+      "shareOf": "Part de {{name}} utilisée",
+      "types": {
+        "pool": "Pool",
+        "network": "Réseau",
+        "cpu": "CPU",
+        "memory": "Mémoire"
+      },
+      "sizeOf": "{{size}} ({{of}})",
+      "sizeOfType": {
+        "pool": "taille du pool, sans réclamation",
+        "network": "taille du réseau, sans réclamation"
+      },
+      "noClaim": "Ce namespace ne réclame rien : il n'est limité que par les pools et les réseaux eux-mêmes.",
+      "nothing": "Aucun pool, réseau, cpu ni mémoire utilisé.",
+      "pgNode": "Le CPU et la mémoire sont ceux des objets du nœud qui sert cette page.",
+      "byObject": "CPU et mémoire par objet",
+      "noConfig": "Le namespace {{namespace}} n'a pas encore d'objet de configuration : ses réclamations et ses réglages pg s'y écrivent.",
+      "create": "Créer sa configuration",
+      "creating": "Création…",
+      "createFailed": "La configuration n'a pas pu être créée : {{message}}"
     }
   },
   "nav": {

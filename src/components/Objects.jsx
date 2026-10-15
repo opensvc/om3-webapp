@@ -64,6 +64,10 @@ const actionIcon = ({icon, color}) => (
 );
 
 const parseObjectName = (objectName) => {
+    // A namespace configuration, as om3 writes it: "<namespace>/", "/" for the root one.
+    if (objectName.endsWith("/")) {
+        return {namespace: objectName === "/" ? "root" : objectName.slice(0, -1), kind: "nscfg", name: "namespace"};
+    }
     const parts = objectName.split("/");
     if (parts.length === 3) {
         return {namespace: parts[0], kind: parts[1], name: parts[2]};
@@ -683,11 +687,14 @@ const Objects = () => {
     // A row is not rendered again for a new handler (TableRowComponent): one handler,
     // reading the latest URL, or a row opened after a filter changed would bring the
     // URL of before back, the filter dropped.
-    const objectClickRef = useRef({objectInstanceStatus, selectObject});
-    objectClickRef.current = {objectInstanceStatus, selectObject};
+    const objectClickRef = useRef({objectInstanceStatus, selectObject, openPeek: panel.openPeek});
+    objectClickRef.current = {objectInstanceStatus, selectObject, openPeek: panel.openPeek};
     const handleObjectClick = useCallback((objectName) => {
-        const {objectInstanceStatus: instances, selectObject: select} = objectClickRef.current;
-        if (instances[objectName]) select(objectName);
+        const {objectInstanceStatus: instances, selectObject: select, openPeek} = objectClickRef.current;
+        // A namespace configuration is edited in the panel of its namespace.
+        const {kind, namespace} = parseObjectName(objectName);
+        if (kind === "nscfg") openPeek({kind: "namespace", id: namespace}, "config");
+        else if (instances[objectName]) select(objectName);
     }, []);
 
     const handleSort = useCallback((column) => {

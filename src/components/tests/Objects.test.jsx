@@ -194,7 +194,7 @@ const filterOption = (label, optionText) =>
 const optionText = (checkbox) => checkbox.closest('label').lastChild.lastChild.textContent;
 
 const waitForLoad = () =>
-    waitFor(() => expect(filterGroup('Global State')).toBeInTheDocument());
+    waitFor(() => expect(screen.getByRole('table', {name: 'Objects'})).toBeInTheDocument());
 
 const selectFilter = async (label, optionText) => {
     const summary = filterSummary(label);
@@ -548,6 +548,19 @@ describe('Objects Component', () => {
             for (const row of within(table).getAllByRole('row').slice(1)) {
                 expect(within(row).getAllByRole('cell')).toHaveLength(2);
             }
+        });
+
+        test.each(['configs', 'secrets', 'users'])('list=%s has no global state filter, one in the URL filtering nothing', async (tab) => {
+            setup(mixed, `?list=${tab}&globalState=up`);
+            await waitForLoad();
+            expect(queryFilterGroup('Global State')).not.toBeInTheDocument();
+            expect(objectNamesInOrder().length).toBeGreaterThan(0);
+        });
+
+        test.each(['services', 'volumes', 'any'])('list=%s keeps the global state filter', async (tab) => {
+            setup(mixed, `?list=${tab}`);
+            await waitForLoad();
+            expect(filterGroup('Global State')).toBeInTheDocument();
         });
 
         test('the services keep their status, placement and node columns', async () => {

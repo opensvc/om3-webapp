@@ -80,7 +80,8 @@ const listOf = (objectName) => listOfKind(parseObjectName(objectName).kind);
 const LIST_KIND = {services: "svc", volumes: "vol", configs: "cfg", secrets: "sec", users: "usr", [ALL_LIST]: "svc"};
 /**
  * The lists of objects held on all the nodes, with no status nor placement: their
- * names only, the status, orchestrate, topology and node columns telling nothing.
+ * names only, the status, orchestrate, topology and node columns telling nothing,
+ * and no global state filter.
  */
 const NAMES_ONLY_LISTS = ["configs", "secrets", "users"];
 
@@ -343,6 +344,10 @@ const Objects = () => {
     const rawKinds = parseMultipleValues("kind");
     const rawSearchQuery = queryParams.get("name") || "";
     const list = OBJECTS_TABS.includes(queryParams.get("list")) ? queryParams.get("list") : OBJECT_LISTS[0];
+    const namesOnly = NAMES_ONLY_LISTS.includes(list);
+    // Their objects have no status: no global state to filter on. One the URL holds,
+    // from another tab, is kept for it but filters nothing here.
+    const hasGlobalState = !namesOnly;
 
     const {daemon} = useFetchDaemonStatus();
     const objectStatus = useEventStore(selectObjectStatus);
@@ -359,7 +364,7 @@ const Objects = () => {
     const [sortColumn, setSortColumn] = useState("object");
     // A list of names only is sorted by them: not by a column it does not show.
     useEffect(() => {
-        if (NAMES_ONLY_LISTS.includes(list) && sortColumn !== "object") setSortColumn("object");
+        if (namesOnly && sortColumn !== "object") setSortColumn("object");
     }, [list, sortColumn]);
     const [sortDirection, setSortDirection] = useState("asc");
     const [statusCycleIndex, setStatusCycleIndex] = useState(0);
@@ -477,8 +482,8 @@ const Objects = () => {
                 continue;
             }
 
-            // Check global state filter (multiple selection)
-            if (deferredSelectedGlobalStates.length > 0) {
+            // Check global state filter (multiple selection), on the lists that have one
+            if (hasGlobalState && deferredSelectedGlobalStates.length > 0) {
                 const status = objects[name];
                 if (!status) continue;
 
@@ -508,7 +513,7 @@ const Objects = () => {
         }
 
         return result;
-    }, [listObjectNames, deferredSelectedGlobalStates, deferredSelectedNamespaces,
+    }, [listObjectNames, hasGlobalState, deferredSelectedGlobalStates, deferredSelectedNamespaces,
         deferredSelectedKinds, deferredSearchQuery, objects]);
 
     const getStatusOrder = (cycleIndex) => {
@@ -656,12 +661,15 @@ const Objects = () => {
         [pendingAction, selectedObjects, objectStatus, removeObject, updateFrozenStatusOptimistic, t]
     );
 
-    const handleObjectClick = useCallback(
-        (objectName) => {
-            if (objectInstanceStatus[objectName]) selectObject(objectName);
-        },
-        [objectInstanceStatus, selectObject]
-    );
+    // A row is not rendered again for a new handler (TableRowComponent): one handler,
+    // reading the latest URL, or a row opened after a filter changed would bring the
+    // URL of before back, the filter dropped.
+    const objectClickRef = useRef({objectInstanceStatus, selectObject});
+    objectClickRef.current = {objectInstanceStatus, selectObject};
+    const handleObjectClick = useCallback((objectName) => {
+        const {objectInstanceStatus: instances, selectObject: select} = objectClickRef.current;
+        if (instances[objectName]) select(objectName);
+    }, []);
 
     const handleSort = useCallback((column) => {
         if (column === "status" || allNodes.includes(column)) {
@@ -921,7 +929,6 @@ const Objects = () => {
             }));
     }, [selectedObjects, handleActionClick, t]);
 
-    const namesOnly = NAMES_ONLY_LISTS.includes(list);
     const columnCount = namesOnly ? 2 : 3 + PROPERTY_COLUMNS.length + (isWideScreen ? allNodes.length : 0);
 
     const tabList = (
@@ -971,12 +978,14 @@ const Objects = () => {
                 )}
                 {(!isMobile || showFilters) && (
                     <div id={filtersId} className="flex flex-wrap items-center gap-3">
-                        <FilterPopover
-                            label={t("objects.filters.globalState")}
-                            options={globalStateOptions}
-                            selected={selectedGlobalStates}
-                            onToggle={handleGlobalStateChange}
-                        />
+                        {hasGlobalState && (
+                            <FilterPopover
+                                label={t("objects.filters.globalState")}
+                                options={globalStateOptions}
+                                selected={selectedGlobalStates}
+                                onToggle={handleGlobalStateChange}
+                            />
+                        )}
                         {hasChoice(namespaces, selectedNamespaces) && (
                             <FilterPopover
                                 label={t("objects.filters.namespace")}

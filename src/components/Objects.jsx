@@ -395,6 +395,9 @@ const Objects = () => {
     // Their objects have no status: no global state to filter on. One the URL holds,
     // from another tab, is kept for it but filters nothing here.
     const hasGlobalState = !namesOnly;
+    // A tab of a kind lists that kind: the kind filter is Any's only. One the URL
+    // holds, from Any, is kept for it but filters nothing here.
+    const hasKindFilter = list === ALL_LIST;
 
     const {daemon} = useFetchDaemonStatus();
     const objectStatus = useEventStore(selectObjectStatus);
@@ -521,8 +524,8 @@ const Objects = () => {
                 continue;
             }
 
-            // Check kind filter (multiple selection)
-            if (deferredSelectedKinds.length > 0 && !deferredSelectedKinds.includes(parseObjectName(name).kind)) {
+            // Check kind filter (multiple selection), on Any only
+            if (hasKindFilter && deferredSelectedKinds.length > 0 && !deferredSelectedKinds.includes(parseObjectName(name).kind)) {
                 continue;
             }
 
@@ -558,7 +561,7 @@ const Objects = () => {
 
         return result;
     }, [listObjectNames, hasGlobalState, deferredSelectedGlobalStates, deferredSelectedNamespaces,
-        deferredSelectedKinds, deferredSearchQuery, objects]);
+        deferredSelectedKinds, hasKindFilter, deferredSearchQuery, objects]);
 
     const getStatusOrder = (cycleIndex) => {
         const statuses = ["n/a", "up", "warn", "down"];
@@ -1016,7 +1019,7 @@ const Objects = () => {
                                 onToggle={handleNamespaceChange}
                             />
                         )}
-                        {hasChoice(kinds, selectedKinds) && (
+                        {hasKindFilter && hasChoice(kinds, selectedKinds) && (
                             <FilterPopover
                                 label={t("objects.filters.kind")}
                                 options={kindOptions}

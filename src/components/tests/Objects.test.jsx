@@ -620,13 +620,12 @@ describe('Objects Component', () => {
             expect(objectNamesInOrder()).toEqual(['test-ns/usr/usr1']);
         });
 
-        test('list=configs shows the configurations alone, their kinds alone in the filter', async () => {
+        test('list=configs shows the configurations alone, no Kind filter: the kind filter is Any\'s', async () => {
             setup(mixed, '?list=configs');
             await waitForLoad();
             expect(screen.getByRole('tab', {name: /^Configurations/})).toHaveAttribute('aria-selected', 'true');
             expect([...objectNamesInOrder()].sort()).toEqual([...configs].sort());
-            const kinds = within(filterGroup('Kind')).getAllByRole('checkbox').map(optionText);
-            expect(kinds).toEqual(['ccfg', 'cfg']);
+            expect(queryFilterGroup('Kind')).not.toBeInTheDocument();
         });
 
         test.each([
@@ -741,7 +740,7 @@ describe('Objects Component', () => {
         test.each(filterTests)(
             '$label filter',
             async ({label, option, visible, hidden, isSearch}) => {
-                setup(label === 'Kind' ? TWO_KINDS : {});
+                setup(label === 'Kind' ? TWO_KINDS : {}, label === 'Kind' ? '?list=any' : '');
                 await waitForLoad();
                 if (isSearch) {
                     fireEvent.change(screen.getByLabelText('Name'), {target: {value: option}});
@@ -819,7 +818,7 @@ describe('Objects Component', () => {
         });
 
         test('filter popovers list the global states, namespaces and kinds on offer', async () => {
-            setup(TWO_KINDS);
+            setup(TWO_KINDS, '?list=any');
             await waitForLoad();
             expect(within(filterGroup('Global State')).getAllByRole('checkbox').map(optionText))
                 .toEqual(['Up', 'Down', 'Warn', 'N/a', 'Unprovisioned']);
@@ -860,8 +859,15 @@ describe('Objects Component', () => {
             expect(filterSummary('Namespace')).toHaveTextContent('Namespacetest-ns, root');
         });
 
+        test('no Kind filter on a tab of a kind; a kind in the URL, from Any, filters nothing there', async () => {
+            setup(TWO_KINDS, '?kind=nscfg');
+            await waitForLoad();
+            expect(queryFilterGroup('Kind')).not.toBeInTheDocument();
+            expect(objectNamesInOrder()).toEqual(expect.arrayContaining(['test-ns/svc/test1', 'test-ns/nscfg/ns1']));
+        });
+
         test('Kind filter excludes objects whose kind does not match the selection', async () => {
-            setup(TWO_KINDS);
+            setup(TWO_KINDS, '?list=any');
             await waitForLoad();
             await selectFilter('Kind', 'svc');
             await waitFor(() => {
@@ -933,7 +939,7 @@ describe('Objects Component', () => {
     });
 
     test('unchecking a Kind option keeps the other filters', async () => {
-        setup(TWO_KINDS);
+        setup(TWO_KINDS, '?list=any');
         await waitForLoad();
         await selectFilter('Kind', 'svc');
         await selectFilter('Namespace', 'test-ns');
@@ -1441,7 +1447,7 @@ describe('Objects Component', () => {
     });
 
     test('the filters with a choice to make are visible', async () => {
-        setup(TWO_KINDS);
+        setup(TWO_KINDS, '?list=any');
         await waitForLoad();
         expect(filterGroup('Namespace')).toBeInTheDocument();
         expect(filterGroup('Global State')).toBeInTheDocument();
@@ -1590,10 +1596,10 @@ describe('Objects Component', () => {
     });
 
     test('URL filters update state on location change', async () => {
-        const {rerender} = setup(TWO_KINDS);
+        const {rerender} = setup(TWO_KINDS, '?list=any');
         await waitForLoad();
         vi.mocked(useLocation).mockReturnValue({
-            search: '?namespace=test-ns&kind=svc&name=test1',
+            search: '?list=any&namespace=test-ns&kind=svc&name=test1',
             pathname: '/objects',
         });
         rerender(
@@ -1646,7 +1652,7 @@ describe('Objects Component', () => {
     test('URL sync writes every filter, comma-joined', async () => {
         vi.useFakeTimers();
         try {
-            setup(TWO_KINDS);
+            setup(TWO_KINDS, '?list=any');
             fireEvent.click(filterOption('Global State', 'Up'));
             fireEvent.click(filterOption('Global State', 'Unprovisioned'));
             fireEvent.click(filterOption('Namespace', 'test-ns'));
@@ -1656,7 +1662,7 @@ describe('Objects Component', () => {
                 vi.advanceTimersByTime(300);
             });
             expect(mockNavigate).toHaveBeenCalledWith(
-                '/objects?globalState=up%2Cunprovisioned&namespace=test-ns&kind=svc&name=te',
+                '/objects?list=any&globalState=up%2Cunprovisioned&namespace=test-ns&kind=svc&name=te',
                 {replace: true}
             );
         } finally {
@@ -1823,7 +1829,7 @@ describe('Objects Component', () => {
             ['Namespace', 'test-ns'],
             ['Kind', 'svc'],
         ])('rapidly toggling a %s option twice re-adds it', async (label, option) => {
-            setup(TWO_KINDS, '', {isWideScreen: true, isMobile: false});
+            setup(TWO_KINDS, label === 'Kind' ? '?list=any' : '', {isWideScreen: true, isMobile: false});
             await waitForLoad();
             await selectFilter(label, option);
             const checkbox = filterOption(label, option);

@@ -2,7 +2,8 @@ import React from "react";
 import {render, screen, waitFor, within, fireEvent, act} from "@testing-library/react";
 import {MemoryRouter} from "react-router-dom";
 import userEvent from "@testing-library/user-event";
-import Heartbeats from "../Heartbeats";
+import Heartbeats, {linkMatches} from "../Heartbeats";
+import {clearGrants} from "../../hooks/useGrants";
 import i18n from "../../i18n";
 import useEventStore from "../../hooks/useEventStore.js";
 import {vi} from "vitest";
@@ -42,13 +43,20 @@ const mockLocalStorage = {
 };
 Object.defineProperty(window, "localStorage", {value: mockLocalStorage});
 
-const renderWithRouter = (ui, {route = "/"} = {}) => {
+/**
+ * Renders the page, its streams table unfolded (folded by default under the mesh):
+ * the tests are about the table. `folded` leaves it as the page opens.
+ */
+const renderWithRouter = (ui, {route = "/", folded = false} = {}) => {
     const Wrapper = ({children}) => (
         <MemoryRouter initialEntries={[route]}>
             {children}
         </MemoryRouter>
     );
-    return render(ui, {wrapper: Wrapper});
+    const result = render(ui, {wrapper: Wrapper});
+    const toggle = screen.queryByRole("button", {name: /^(Streams|Flux)/});
+    if (!folded && toggle?.getAttribute("aria-expanded") === "false") fireEvent.click(toggle);
+    return result;
 };
 
 const buildStatus = (streamDefs) => {
@@ -75,7 +83,7 @@ const setMedia = ({mobile = false, wide = false} = {}) => {
     }));
 };
 
-const SELECT_LABEL = {running: "Running", beating: "Beating", node: "Node", id: "ID"};
+const SELECT_LABEL = {running: "Routine", beating: "Beating", node: "Node", id: "ID"};
 
 const getFilter = (selectKey, options) =>
     screen.getByRole("combobox", {name: SELECT_LABEL[selectKey], ...options});
@@ -92,6 +100,15 @@ const getDataRows = () =>
     screen.getAllByRole("row").slice(1).filter(row => !row.textContent.includes(EMPTY_MESSAGE));
 
 const getScrollContainer = () => screen.getByRole("table").parentElement;
+
+/** The side of a row from its direction: the node sends on a tx, receives on an rx. */
+const sideOf = (cells) => ({"sends to": "tx", "receives from": "rx"})[cells[3]] ?? "";
+
+/** The stream of a row as its id says it, "1.rx": its heartbeat, hb# dropped, and its side. */
+const streamOf = (row) => {
+    const cells = within(row).getAllByRole("cell").map((c) => c.textContent);
+    return `${cells[0].replace(/^hb#/, "")}.${sideOf(cells)}`;
+};
 
 const stoppedStreamWithCacheScenario = ({
                                             cachedPeer = {
@@ -157,22 +174,22 @@ describe("Heartbeats Component", () => {
 
         const table = screen.getByRole("table");
         expect(table).toBeInTheDocument();
-        const headerRow = within(table).getByRole("row", {name: /RUNNING BEATING ID NODE PEER TYPE DESC CHANGED_AT LAST_BEATING_AT/i});
-        ["RUNNING", "BEATING", "ID", "NODE", "PEER", "TYPE", "DESC", "CHANGED_AT", "LAST_BEATING_AT"].forEach(text =>
+        const headerRow = within(table).getByRole("row", {name: /Heartbeat Type Node Direction Peer Desc Routine Beating Since Last Beat/i});
+        ["Heartbeat", "Type", "Node", "Direction", "Peer", "Desc", "Routine", "Beating", "Since", "Last Beat"].forEach(text =>
             expect(within(headerRow).getByText(text)).toBeInTheDocument()
         );
 
-        ["RUNNING", "BEATING", "ID", "NODE", "PEER", "TYPE", "DESC", "CHANGED_AT", "LAST_BEATING_AT"].forEach(name =>
+        ["Heartbeat", "Type", "Node", "Direction", "Peer", "Desc", "Routine", "Beating", "Since", "Last Beat"].forEach(name =>
             expect(within(headerRow).getByRole("button", {name})).toBeInTheDocument()
         );
         // Sorted by node, ascending, at first.
-        expect(within(headerRow).getByRole("columnheader", {name: "NODE"})).toHaveAttribute("aria-sort", "ascending");
-        expect(within(headerRow).getByRole("columnheader", {name: "ID"})).toHaveAttribute("aria-sort", "none");
+        expect(within(headerRow).getByRole("columnheader", {name: "Node"})).toHaveAttribute("aria-sort", "ascending");
+        expect(within(headerRow).getByRole("columnheader", {name: "Heartbeat"})).toHaveAttribute("aria-sort", "none");
 
         const dataRows = getDataRows();
         expect(dataRows).toHaveLength(2);
-        expect(within(dataRows[0]).getByText("1.rx")).toBeInTheDocument();
-        expect(within(dataRows[1]).getByText("2.rx")).toBeInTheDocument();
+        expect(streamOf(dataRows[0])).toBe("1.rx");
+        expect(streamOf(dataRows[1])).toBe("2.rx");
         expect(screen.queryByText(EMPTY_MESSAGE)).not.toBeInTheDocument();
     });
 
@@ -184,7 +201,7 @@ describe("Heartbeats Component", () => {
         await i18n.changeLanguage("fr");
         try {
             renderWithRouter(<Heartbeats/>);
-            expect(screen.getByRole("columnheader", {name: "DERNIER BATTEMENT"})).toBeInTheDocument();
+            expect(screen.getByRole("columnheader", {name: "Dernier battement"})).toBeInTheDocument();
             expect(screen.getByText("Aucun heartbeat ne correspond aux filtres actuels.")).toBeInTheDocument();
         } finally {
             await i18n.changeLanguage("en");
@@ -193,22 +210,21 @@ describe("Heartbeats Component", () => {
 
     // ==================== STATE ICONS ====================
     test.each([
-        ["running", "up", "text-state-up"],
-        ["warning", "warn", "text-state-warn"],
-        ["stopped", "down", "text-state-down"],
-        ["failed", "down", "text-state-down"],
-        ["unknown", "unknown", "text-state-unknown"],
-        ["invalid-state", "unknown", "text-state-unknown"],
-    ])("renders the %s state as the %s status mark of the objects", async (state, status, ink) => {
+        ["running", "started", "up", "text-ink"],
+        ["warning", "warning", "warn", "text-state-warn"],
+        ["stopped", "stopped", "down", "text-state-down"],
+        ["failed", "failed", "down", "text-state-down"],
+        ["unknown", "unknown", "unknown", "text-state-unknown"],
+        ["invalid-state", "invalid-state", "unknown", "text-state-unknown"],
+    ])("renders the %s routine as %s in the %s tint", async (state, word, status, ink) => {
         mockHeartbeatStore(buildStatus([{
             node: "node1",
             streams: [{id: "hb#1.rx", state, type: "unicast", peers: {p: {is_beating: true, desc: "d"}}}],
         }]));
         renderWithRouter(<Heartbeats/>);
-        const stateCell = within(screen.getAllByRole("row")[1]).getAllByRole("cell")[0];
-        const mark = within(stateCell).getByTitle(`State ${state}`);
+        const stateCell = within(screen.getAllByRole("row")[1]).getAllByRole("cell")[6];
+        const mark = within(stateCell).getByText(word);
         expect(mark).toHaveAttribute("data-state", status);
-        expect(within(mark).getByText(`State ${state}`)).toBeInTheDocument();
         expect(mark).toHaveClass(ink);
     });
 
@@ -221,8 +237,9 @@ describe("Heartbeats Component", () => {
             }],
         }]));
         renderWithRouter(<Heartbeats/>);
-        expect(screen.getByRole("cell", {name: "2025-06-03T04:25:31+00:00"})).toHaveClass("whitespace-nowrap");
-        expect(screen.getByRole("cell", {name: "2025-06-03T04:25:32+00:00"})).toHaveClass("whitespace-nowrap");
+        const cells = within(screen.getAllByRole("row")[1]).getAllByRole("cell");
+        expect(cells[8]).toHaveClass("whitespace-nowrap");
+        expect(cells[9]).toHaveClass("whitespace-nowrap");
     });
 
     // ==================== BEATING ICON ====================
@@ -245,14 +262,14 @@ describe("Heartbeats Component", () => {
         ]));
         renderWithRouter(<Heartbeats/>);
         const rows = getDataRows();
-        const staleRow = rows.find(row => within(row).queryByText("1.rx"));
+        const staleRow = rows.find(row => streamOf(row) === "1.rx");
         expect(staleRow).toBeInTheDocument();
-        const beatingCell = within(staleRow).getAllByRole("cell")[1];
-        const mark = within(beatingCell).getByTitle("Stale");
+        const beatingCell = within(staleRow).getAllByRole("cell")[7];
+        const mark = within(beatingCell).getByText("Stale");
         expect(mark).toHaveAttribute("data-state", "down");
         expect(mark).toHaveClass("text-state-down");
-        const beatingRow = rows.find(row => within(row).queryByText("2.rx"));
-        expect(within(within(beatingRow).getAllByRole("cell")[1]).getByTitle("Beating"))
+        const beatingRow = rows.find(row => streamOf(row) === "2.rx");
+        expect(within(within(beatingRow).getAllByRole("cell")[7]).getByText("Beating"))
             .toHaveAttribute("data-state", "up");
     });
 
@@ -271,8 +288,8 @@ describe("Heartbeats Component", () => {
             }]
         }]));
         renderWithRouter(<Heartbeats/>);
-        const beatingCell = within(screen.getAllByRole("row")[1]).getAllByRole("cell")[1];
-        const mark = within(beatingCell).getByTitle("Healthy (single node)");
+        const beatingCell = within(screen.getAllByRole("row")[1]).getAllByRole("cell")[7];
+        const mark = within(beatingCell).getByText("Healthy (single node)");
         expect(mark).toHaveAttribute("data-state", "up");
     });
 
@@ -315,7 +332,7 @@ describe("Heartbeats Component", () => {
         const dataRows = getDataRows();
         expect(dataRows).toHaveLength(expectedLength);
         if (expectedText) {
-            expect(within(dataRows[0]).getByText(expectedText)).toBeInTheDocument();
+            expect(streamOf(dataRows[0])).toBe(expectedText);
         } else {
             expect(screen.getByText(EMPTY_MESSAGE)).toBeInTheDocument();
         }
@@ -337,7 +354,7 @@ describe("Heartbeats Component", () => {
         }]));
         renderWithRouter(<Heartbeats/>, {route: "/?id=3.tx"});
         expect(getDataRows()).toHaveLength(1);
-        expect(screen.getByText("3.tx")).toBeInTheDocument();
+        expect(getDataRows().map(streamOf)).toContain("3.tx");
     });
 
     test("filter by id without hb# prefix and without rx/tx suffix", async () => {
@@ -350,7 +367,7 @@ describe("Heartbeats Component", () => {
         }]));
         renderWithRouter(<Heartbeats/>, {route: "/?id=5"});
         expect(getDataRows()).toHaveLength(1);
-        expect(screen.getByText("5.rx")).toBeInTheDocument();
+        expect(getDataRows().map(streamOf)).toContain("5.rx");
     });
 
     test("invalid status defaults to all", async () => {
@@ -368,7 +385,7 @@ describe("Heartbeats Component", () => {
             }]
         }]));
         renderWithRouter(<Heartbeats/>, {route: "/?status=invalid"});
-        await waitFor(() => expect(screen.getByText("1.rx")).toBeInTheDocument());
+        await waitFor(() => expect(getDataRows().map(streamOf)).toContain("1.rx"));
     });
 
     test("does not update URL if filter unchanged", async () => {
@@ -411,7 +428,7 @@ describe("Heartbeats Component", () => {
 
         const rows = getDataRows();
         expect(rows).toHaveLength(1);
-        expect(within(rows[0]).getByText("2.rx")).toBeInTheDocument();
+        expect(streamOf(rows[0])).toBe("2.rx");
     });
 
     test("changes state filter via UI and updates URL", async () => {
@@ -425,7 +442,7 @@ describe("Heartbeats Component", () => {
         }]));
         renderWithRouter(<Heartbeats/>);
 
-        await selectFilterOption(user, "running", "Stopped");
+        await selectFilterOption(user, "running", "stopped");
 
         await waitFor(() => {
             expect(mockNavigate).toHaveBeenCalledWith("/?state=stopped", {replace: true});
@@ -451,7 +468,7 @@ describe("Heartbeats Component", () => {
 
         const rows = getDataRows();
         expect(rows).toHaveLength(1);
-        expect(within(rows[0]).getByText("1.rx")).toBeInTheDocument();
+        expect(streamOf(rows[0])).toBe("1.rx");
     });
 
     test("changes id filter via UI and updates URL", async () => {
@@ -501,7 +518,7 @@ describe("Heartbeats Component", () => {
         renderWithRouter(<Heartbeats/>, {route: "/?status=beating&node=node1&state=running&id=1"});
         const rows = getDataRows();
         expect(rows).toHaveLength(1);
-        expect(within(rows[0]).getByText("1.rx")).toBeInTheDocument();
+        expect(streamOf(rows[0])).toBe("1.rx");
     });
 
     // ==================== EDGE CASES: STOPPED STREAMS & CACHE ====================
@@ -519,7 +536,7 @@ describe("Heartbeats Component", () => {
         await waitFor(() => {
             const updatedCells = within(screen.getAllByRole("row")[1]).getAllByRole("cell");
             expect(updatedCells[4]).toHaveTextContent("peer1");
-            expect(updatedCells[6]).toHaveTextContent(":10011 ← peer1");
+            expect(updatedCells[5]).toHaveTextContent(":10011 ← peer1");
         }, {timeout: 2000});
     });
 
@@ -531,10 +548,10 @@ describe("Heartbeats Component", () => {
         renderWithRouter(<Heartbeats/>);
         const cells = within(screen.getAllByRole("row")[1]).getAllByRole("cell");
         expect(cells[4]).toHaveTextContent("N/A");
-        expect(cells[5]).toHaveTextContent("unicast");
-        expect(cells[6]).toHaveTextContent("N/A");
-        expect(cells[7]).toHaveTextContent("N/A");
-        expect(cells[8]).toHaveTextContent("N/A");
+        expect(cells[1]).toHaveTextContent("unicast");
+        expect(cells[5]).toHaveTextContent("N/A");
+        expect(cells[8]).toHaveTextContent(/^-$/);
+        expect(cells[9]).toHaveTextContent(/^-$/);
     });
 
     test("stopped stream with no cache and null type falls back to N/A", () => {
@@ -544,10 +561,10 @@ describe("Heartbeats Component", () => {
         }]));
         renderWithRouter(<Heartbeats/>);
         const cells = within(screen.getAllByRole("row")[1]).getAllByRole("cell");
-        expect(cells[5]).toHaveTextContent("N/A");
+        expect(cells[1]).toHaveTextContent("N/A");
     });
 
-    test("stopped stream with cached peer missing fields shows N/A in timestamp columns", async () => {
+    test("stopped stream with cached peer missing fields shows a dash in timestamp columns", async () => {
         const {initialStatus, stoppedStatus} = stoppedStreamWithCacheScenario({
             cachedPeer: {is_beating: true}, // no desc, no changed_at, no last_beating_at
         });
@@ -559,9 +576,9 @@ describe("Heartbeats Component", () => {
 
         await waitFor(() => {
             const cells = within(screen.getAllByRole("row")[1]).getAllByRole("cell");
-            expect(cells[6]).toHaveTextContent("N/A");
-            expect(cells[7]).toHaveTextContent("N/A");
-            expect(cells[8]).toHaveTextContent("N/A");
+            expect(cells[5]).toHaveTextContent("N/A");
+            expect(cells[8]).toHaveTextContent(/^-$/);
+            expect(cells[9]).toHaveTextContent(/^-$/);
         }, {timeout: 2000});
     });
 
@@ -603,7 +620,7 @@ describe("Heartbeats Component", () => {
             }]
         }]));
         renderWithRouter(<Heartbeats/>, {route: "/?node=nonexistent"});
-        expect(screen.getByRole("cell", {name: EMPTY_MESSAGE})).toHaveAttribute("colspan", "9");
+        expect(screen.getByRole("cell", {name: EMPTY_MESSAGE})).toHaveAttribute("colspan", "10");
     });
 
     test("stream without state does not add empty entry to available states", () => {
@@ -646,6 +663,21 @@ describe("Heartbeats Component", () => {
         expect(cells[4]).toHaveTextContent("N/A");
     });
 
+    test("times show as the nodes table shows them: their age, the full date on hover", () => {
+        const twoHoursAgo = new Date(Date.now() - 2 * 3600 * 1000).toISOString();
+        mockHeartbeatStore(buildStatus([{
+            node: "node1",
+            streams: [{
+                id: "hb#1.rx", state: "running", type: "unicast",
+                peers: {peer1: {is_beating: true, changed_at: twoHoursAgo, last_beating_at: twoHoursAgo}}
+            }]
+        }]));
+        renderWithRouter(<Heartbeats/>);
+        const cells = within(screen.getAllByRole("row")[1]).getAllByRole("cell");
+        expect(cells[8]).toHaveTextContent("2h ago");
+        expect(within(cells[9]).getByText("2h ago")).toHaveAttribute("title", new Date(twoHoursAgo).toLocaleString(i18n.language));
+    });
+
     test("peer without desc/changed_at/last_beating_at shows N/A", () => {
         mockHeartbeatStore(buildStatus([{
             node: "node1",
@@ -656,9 +688,9 @@ describe("Heartbeats Component", () => {
         }]));
         renderWithRouter(<Heartbeats/>);
         const cells = within(screen.getAllByRole("row")[1]).getAllByRole("cell");
-        expect(cells[6]).toHaveTextContent("N/A");
-        expect(cells[7]).toHaveTextContent("N/A");
-        expect(cells[8]).toHaveTextContent("N/A");
+        expect(cells[5]).toHaveTextContent("N/A");
+        expect(cells[8]).toHaveTextContent(/^-$/);
+        expect(cells[9]).toHaveTextContent(/^-$/);
     });
 
     test("stream without type or state falls back to N/A and unknown", () => {
@@ -671,18 +703,18 @@ describe("Heartbeats Component", () => {
         }]));
         renderWithRouter(<Heartbeats/>);
         const cells = within(screen.getAllByRole("row")[1]).getAllByRole("cell");
-        expect(cells[5]).toHaveTextContent("N/A");
-        expect(within(cells[0]).getByTitle("State unknown")).toHaveAttribute("data-state", "unknown");
+        expect(cells[1]).toHaveTextContent("N/A");
+        expect(within(cells[6]).getByText("unknown")).toHaveAttribute("data-state", "unknown");
     });
 
     // ==================== SORTING ====================
     const sortTestData = [
-        ["id", "ID", "a.rx", "b.rx"],
-        ["peer", "PEER", "a_peer", "b_peer"],
-        ["type", "TYPE", "a_type", "b_type"],
-        ["desc", "DESC", "a_desc", "b_desc"],
-        ["changed_at", "CHANGED_AT", "2024-01-01", "2024-02-01"],
-        ["last_beating_at", "LAST_BEATING_AT", "2024-01-01", "2024-02-01"],
+        ["id", "Heartbeat", "a.rx", "b.rx"],
+        ["peer", "Peer", "a_peer", "b_peer"],
+        ["type", "Type", "a_type", "b_type"],
+        ["desc", "Desc", "a_desc", "b_desc"],
+        ["changed_at", "Since", "2024-01-01", "2024-02-01"],
+        ["last_beating_at", "Last Beat", "2024-01-01", "2024-02-01"],
     ];
 
     test.each(sortTestData)("sorts by %s column", async (key, headerText, ascValue, descValue) => {
@@ -720,19 +752,27 @@ describe("Heartbeats Component", () => {
         };
         mockHeartbeatStore(status);
         renderWithRouter(<Heartbeats/>);
+        // A time older than a week shows as its date, as the nodes table shows it.
+        const shown = (v) => key.endsWith("_at") ? new Date(v).toLocaleDateString(i18n.language) : v;
+        ascValue = shown(ascValue);
+        descValue = shown(descValue);
 
         const header = screen.getByRole("button", {name: headerText});
         await userEvent.click(header);
         expect(header.closest("th")).toHaveAttribute("aria-sort", "ascending");
+        // The id is the heartbeat and the side of the row, in two cells.
+        const shows = (row, value) => key === "id"
+            ? expect(streamOf(row)).toBe(value)
+            : expect(within(row).getByText(value)).toBeInTheDocument();
         let rows = getDataRows();
-        expect(within(rows[0]).getByText(ascValue)).toBeInTheDocument();
-        expect(within(rows[1]).getByText(descValue)).toBeInTheDocument();
+        shows(rows[0], ascValue);
+        shows(rows[1], descValue);
 
         await userEvent.click(header);
         expect(header.closest("th")).toHaveAttribute("aria-sort", "descending");
         rows = getDataRows();
-        expect(within(rows[0]).getByText(descValue)).toBeInTheDocument();
-        expect(within(rows[1]).getByText(ascValue)).toBeInTheDocument();
+        shows(rows[0], descValue);
+        shows(rows[1], ascValue);
     });
 
     test("sorts by beating column", async () => {
@@ -751,16 +791,16 @@ describe("Heartbeats Component", () => {
         });
         renderWithRouter(<Heartbeats/>);
 
-        const beatingHeader = screen.getByRole("button", {name: "BEATING"});
+        const beatingHeader = screen.getByRole("button", {name: "Beating"});
         await userEvent.click(beatingHeader);
         let rows = getDataRows();
-        expect(within(rows[0]).getByText("2.rx")).toBeInTheDocument();
-        expect(within(rows[1]).getByText("1.rx")).toBeInTheDocument();
+        expect(streamOf(rows[0])).toBe("2.rx");
+        expect(streamOf(rows[1])).toBe("1.rx");
 
         await userEvent.click(beatingHeader);
         rows = getDataRows();
-        expect(within(rows[0]).getByText("1.rx")).toBeInTheDocument();
-        expect(within(rows[1]).getByText("2.rx")).toBeInTheDocument();
+        expect(streamOf(rows[0])).toBe("1.rx");
+        expect(streamOf(rows[1])).toBe("2.rx");
     });
 
     test("sorting by state column", async () => {
@@ -778,17 +818,17 @@ describe("Heartbeats Component", () => {
         mockHeartbeatStore(status);
         renderWithRouter(<Heartbeats/>);
 
-        const stateHeader = screen.getByRole("button", {name: "RUNNING"});
+        const stateHeader = screen.getByRole("button", {name: "Routine"});
         await userEvent.click(stateHeader);
         let rows = getDataRows();
         ["5.rx", "4.rx", "3.rx", "2.rx", "1.rx"].forEach((id, idx) =>
-            expect(within(rows[idx]).getByText(id)).toBeInTheDocument()
+            expect(streamOf(rows[idx])).toBe(id)
         );
 
         await userEvent.click(stateHeader);
         rows = getDataRows();
         ["1.rx", "2.rx", "3.rx", "4.rx", "5.rx"].forEach((id, idx) =>
-            expect(within(rows[idx]).getByText(id)).toBeInTheDocument()
+            expect(streamOf(rows[idx])).toBe(id)
         );
     });
 
@@ -803,12 +843,12 @@ describe("Heartbeats Component", () => {
         });
         renderWithRouter(<Heartbeats/>);
 
-        const beatingHeader = screen.getByRole("button", {name: "BEATING"});
+        const beatingHeader = screen.getByRole("button", {name: "Beating"});
         await userEvent.click(beatingHeader);
         await userEvent.click(beatingHeader);
-        await userEvent.click(screen.getByRole("button", {name: "ID"}));
+        await userEvent.click(screen.getByRole("button", {name: "Heartbeat"}));
         const rows = getDataRows();
-        expect(within(rows[0]).getByText("a.rx")).toBeInTheDocument();
+        expect(streamOf(rows[0])).toBe("a.rx");
     });
 
     test("third click on same header toggles direction back to ascending", async () => {
@@ -822,13 +862,13 @@ describe("Heartbeats Component", () => {
         });
         renderWithRouter(<Heartbeats/>);
 
-        const idHeader = screen.getByRole("button", {name: "ID"});
+        const idHeader = screen.getByRole("button", {name: "Heartbeat"});
         await userEvent.click(idHeader); // asc
         await userEvent.click(idHeader); // desc
         await userEvent.click(idHeader); // back to asc
         const rows = getDataRows();
-        expect(within(rows[0]).getByText("a.rx")).toBeInTheDocument();
-        expect(within(rows[1]).getByText("b.rx")).toBeInTheDocument();
+        expect(streamOf(rows[0])).toBe("a.rx");
+        expect(streamOf(rows[1])).toBe("b.rx");
     });
 
     test("sorts by node column", async () => {
@@ -846,7 +886,7 @@ describe("Heartbeats Component", () => {
         let rows = getDataRows();
         expect(within(rows[0]).getByText("nodeA")).toBeInTheDocument();
 
-        await userEvent.click(screen.getByRole("button", {name: "NODE"}));
+        await userEvent.click(screen.getByRole("button", {name: "Node"}));
         rows = getDataRows();
         expect(within(rows[0]).getByText("nodeB")).toBeInTheDocument();
     });
@@ -903,6 +943,154 @@ describe("Heartbeats Component", () => {
         mockHeartbeatStore({});
         renderWithRouter(<Heartbeats/>);
         expect(mockRetainEventReception).not.toHaveBeenCalled();
+    });
+
+    // ==================== MESH LINES AND STREAM ACTIONS ====================
+    const TWO_NODES = () => buildStatus([
+        {node: "n1", streams: [
+            {id: "hb#1.tx", state: "running", type: "unicast", peers: {n2: {is_beating: true, desc: "→ n2"}}},
+            {id: "hb#1.rx", state: "running", type: "unicast", peers: {n2: {is_beating: true, desc: "← n2"}}},
+        ]},
+        {node: "n2", streams: [
+            {id: "hb#1.tx", state: "stopped", type: "unicast", peers: {n1: {is_beating: false, desc: "→ n1"}}},
+            {id: "hb#1.rx", state: "running", type: "unicast", peers: {n1: {is_beating: true, desc: "← n1"}}},
+        ]},
+    ]);
+
+    /** The API: whoami saying the grants given, the stream actions answered ok. */
+    const mockApi = (grant) => {
+        clearGrants();
+        const calls = [];
+        global.fetch = vi.fn(async (url, options = {}) => {
+            calls.push({url, method: options.method ?? "GET"});
+            if (url === "/api/auth/whoami") return {ok: true, json: async () => ({grant})};
+            return {ok: true, json: async () => ({})};
+        });
+        return calls;
+    };
+
+    test("a link is the sender's tx and the receiver's rx between its two nodes", () => {
+        expect(linkMatches("n1>n2", {node: "n1", id: "hb#1.tx", peer: "n2"})).toBe(true);
+        expect(linkMatches("n1>n2", {node: "n2", id: "hb#1.rx", peer: "n1"})).toBe(true);
+        expect(linkMatches("n1>n2", {node: "n1", id: "hb#1.rx", peer: "n2"})).toBe(false);
+        expect(linkMatches("n1>n2", {node: "n2", id: "hb#1.tx", peer: "n1"})).toBe(false);
+        expect(linkMatches("", {node: "n2", id: "hb#1.tx", peer: "n1"})).toBe(true);
+        // A stopped tx of the sender reports no peer: kept, it is the cause of a failing link.
+        expect(linkMatches("n1>n2", {node: "n1", id: "4.tx", peer: "N/A", peerUnknown: true})).toBe(true);
+        expect(linkMatches("n1>n2", {node: "n2", id: "4.tx", peer: "N/A", peerUnknown: true})).toBe(false);
+    });
+
+    test("a line of the mesh clicked unfolds the streams, filtered to its links, other filters cleared", async () => {
+        mockApi({});
+        mockHeartbeatStore(TWO_NODES());
+        const {container} = renderWithRouter(<Heartbeats/>, {route: "/heartbeats?node=n2", folded: true});
+        fireEvent.click(screen.getByRole("button", {name: /^Streams/}));
+        expect(screen.getByRole("button", {name: /^Streams/})).toHaveAttribute("aria-expanded", "false");
+        fireEvent.click(container.querySelector('[data-group="n1 n2"]'));
+        expect(screen.getByRole("button", {name: /^Streams/})).toHaveAttribute("aria-expanded", "true");
+        // n1 tx toward n2, n2 rx from n1: two rows, whatever the node filter was.
+        expect(getDataRows().map((row) => [streamOf(row), ...[2, 4].map((i) => within(row).getAllByRole("cell")[i].textContent)]))
+            .toEqual(expect.arrayContaining([["1.tx", "n1", "n2"], ["1.rx", "n2", "n1"]]));
+        expect(getDataRows()).toHaveLength(2);
+        expect(getFilter("node")).toHaveValue("all");
+        await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith(expect.stringContaining("link=n1%3En2"), {replace: true}));
+        // The chip of the link removes its filter.
+        fireEvent.click(screen.getByRole("button", {name: "Remove the n1 → n2 filter"}));
+        expect(getDataRows()).toHaveLength(4);
+    });
+
+    test("root stops a running stream, confirmed first, and starts a stopped one, by the API of the daemon thread", async () => {
+        const calls = mockApi({root: null});
+        mockHeartbeatStore(TWO_NODES());
+        renderWithRouter(<Heartbeats/>);
+        await waitFor(() => expect(screen.getAllByRole("button", {name: "started, Stop"}).length).toBeGreaterThan(0));
+        const row = (id, node) => getDataRows().find((r) => {
+            const cells = within(r).getAllByRole("cell").map((c) => c.textContent);
+            return `${cells[0].replace(/^hb#/, "")}.${sideOf(cells)}` === id && cells[2] === node;
+        });
+        // The routine word is the button of its action: started stops, stopped starts.
+        const routineCell = within(row("1.tx", "n1")).getAllByRole("cell")[6];
+        expect(within(routineCell).getByRole("button", {name: "started, Stop"})).toHaveTextContent(/^started$/);
+        expect(within(within(row("1.tx", "n2")).getAllByRole("cell")[6]).getByRole("button", {name: "stopped, Start"}))
+            .toHaveTextContent(/^stopped$/);
+        // The direction between the node and the peer: n1 sends on its tx, receives on its rx.
+        expect(within(row("1.tx", "n1")).getAllByRole("cell")[3]).toHaveTextContent(/^sends to$/);
+        expect(within(row("1.rx", "n1")).getAllByRole("cell")[3]).toHaveTextContent(/^receives from$/);
+        // Started is the normal state, in the ink of the text; stopped in the tint of down.
+        expect(within(row("1.tx", "n1")).getByRole("button", {name: "started, Stop"})).toHaveClass("text-ink");
+        expect(within(row("1.tx", "n2")).getByRole("button", {name: "stopped, Start"})).toHaveClass("text-state-down");
+        // The table names a stream as om does, "1.tx", the "hb#" left out.
+        fireEvent.click(within(row("1.tx", "n1")).getByRole("button", {name: "started, Stop"}));
+        const dialog = screen.getByRole("dialog", {name: "Stop a heartbeat stream"});
+        expect(dialog).toHaveTextContent("Stop the 1.tx stream of n1?");
+        expect(calls.some((c) => c.method === "POST")).toBe(false);
+        fireEvent.click(within(dialog).getByRole("button", {name: "Stop"}));
+        await waitFor(() => expect(calls).toContainEqual({url: "/api/node/name/n1/daemon/hb/name/1.tx/action/stop", method: "POST"}));
+        expect(await screen.findByText("Stop of the 1.tx stream of n1 requested.")).toBeInTheDocument();
+        // A stopped stream: Start, without confirmation.
+        fireEvent.click(within(row("1.tx", "n2")).getByRole("button", {name: "stopped, Start"}));
+        await waitFor(() => expect(calls).toContainEqual({url: "/api/node/name/n2/daemon/hb/name/1.tx/action/start", method: "POST"}));
+    });
+
+    test("an orange line clicked shows the stopped tx of its sender, which reports no peer", async () => {
+        mockApi({});
+        mockHeartbeatStore(buildStatus([
+            {node: "dev3n1", streams: [
+                {id: "hb#4.tx", state: "stopped", type: "unicast", peers: {}},
+                {id: "hb#4.rx", state: "running", type: "unicast", peers: {dev3n2: {is_beating: true, desc: "← dev3n2"}}},
+            ]},
+            {node: "dev3n2", streams: [
+                {id: "hb#4.rx", state: "running", type: "unicast", peers: {dev3n1: {is_beating: false, desc: ":10009 ← dev3n1"}}},
+                {id: "hb#4.tx", state: "running", type: "unicast", peers: {dev3n1: {is_beating: true, desc: "→ dev3n1"}}},
+            ]},
+        ]));
+        const {container} = renderWithRouter(<Heartbeats/>, {folded: true});
+        const line = container.querySelector('[data-group="dev3n1 dev3n2"]');
+        expect(line).toHaveAttribute("data-state", "down");
+        fireEvent.click(line);
+        const shown = getDataRows().map((r) => [streamOf(r), within(r).getAllByRole("cell")[2].textContent]);
+        expect(shown).toEqual(expect.arrayContaining([["4.tx", "dev3n1"], ["4.rx", "dev3n2"]]));
+        expect(shown).toHaveLength(2);
+    });
+
+    test("no stop nor start for a user who is not root", async () => {
+        const calls = mockApi({admin: ["ns1"]});
+        mockHeartbeatStore(TWO_NODES());
+        renderWithRouter(<Heartbeats/>);
+        await waitFor(() => expect(calls.some((c) => c.url === "/api/auth/whoami")).toBe(true));
+        await act(async () => {});
+        expect(screen.queryByRole("button", {name: /Stop$/})).not.toBeInTheDocument();
+        expect(screen.queryByRole("button", {name: /Start$/})).not.toBeInTheDocument();
+        // The routine as a word only.
+        expect(screen.getAllByText("started").length).toBeGreaterThan(0);
+    });
+
+    // ==================== FOLDED STREAMS ====================
+    test("the streams table is folded by default under the mesh, its count beside its title", () => {
+        mockHeartbeatStore(buildStatus([{node: "node1", streams: [
+            {id: "hb#1.rx", state: "running", type: "unicast", peers: {p: {is_beating: true, desc: "d"}}},
+            {id: "hb#1.tx", state: "running", type: "unicast", peers: {p: {is_beating: true, desc: "d"}}},
+        ]}]));
+        renderWithRouter(<Heartbeats/>, {folded: true});
+        const toggle = screen.getByRole("button", {name: /^Streams/});
+        expect(toggle).toHaveAttribute("aria-expanded", "false");
+        expect(toggle).toHaveTextContent("Streams2");
+        expect(screen.queryByRole("table")).not.toBeInTheDocument();
+        expect(screen.queryByLabelText("Per page")).not.toBeInTheDocument();
+        fireEvent.click(toggle);
+        expect(toggle).toHaveAttribute("aria-expanded", "true");
+        expect(screen.getByRole("table")).toBeInTheDocument();
+        fireEvent.click(toggle);
+        expect(screen.queryByRole("table")).not.toBeInTheDocument();
+    });
+
+    test("a link filtering the streams opens them", () => {
+        mockHeartbeatStore(buildStatus([{node: "node1", streams: [
+            {id: "hb#1.rx", state: "running", type: "unicast", peers: {p: {is_beating: true, desc: "d"}}},
+        ]}]));
+        renderWithRouter(<Heartbeats/>, {route: "/heartbeats?node=node1", folded: true});
+        expect(screen.getByRole("button", {name: /^Streams/})).toHaveAttribute("aria-expanded", "true");
+        expect(screen.getByRole("table")).toBeInTheDocument();
     });
 
     // ==================== PAGES ====================

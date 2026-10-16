@@ -2,6 +2,7 @@ import React, {useEffect, useMemo, useRef, useState} from "react";
 import {useTranslation} from "react-i18next";
 import {URL_METRICS_PG} from "../config/apiPath.js";
 import {cpuPercent, formatBytes, namespaceCgroupMetrics, namespaceTotals} from "../utils/cgroupMetrics";
+import {formatCpuPercent} from "../app/namespace-usage";
 import {Table, HeaderRow, HeaderCell, Row, Cell, EmptyRow} from "../ui/components/Table";
 import {Alert} from "../ui/components/Alert";
 import {Spinner} from "../ui/components/Spinner";
@@ -9,7 +10,6 @@ import logger from "../utils/logger.js";
 
 export const REFRESH_INTERVAL_MS = 5000;
 
-const formatCpu = (percent) => (percent === null ? "-" : `${percent.toFixed(1)} %`);
 
 /** A figure of the namespace as a whole, over the per object table. */
 const TotalTile = ({label, value}) => (
@@ -86,7 +86,7 @@ const NamespaceMetrics = ({namespace}) => {
                 {sortedRows.length > 0 && (
                     <section aria-label={t("metrics.totals.label")}>
                         <dl className="grid grid-cols-2 gap-3">
-                            <TotalTile label={t("metrics.totals.cpu")} value={formatCpu(totals.cpu)}/>
+                            <TotalTile label={t("metrics.totals.cpu")} value={formatCpuPercent(totals.cpu)}/>
                             <TotalTile label={t("metrics.totals.memory")} value={formatBytes(totals.memoryCurrent)}/>
                         </dl>
                     </section>
@@ -104,7 +104,7 @@ const NamespaceMetrics = ({namespace}) => {
                         {sortedRows.length > 0 ? sortedRows.map((row) => (
                             <Row key={row.path}>
                                 <Cell className="font-medium">{row.path}</Cell>
-                                <Cell numeric>{formatCpu(row.cpu)}</Cell>
+                                <Cell numeric>{formatCpuPercent(row.cpu)}</Cell>
                                 <Cell numeric>{formatBytes(row.memoryCurrent)}</Cell>
                                 <Cell numeric>{formatBytes(row.memoryMax)}</Cell>
                             </Row>

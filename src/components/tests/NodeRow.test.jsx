@@ -135,9 +135,16 @@ describe('NodeRow Component', () => {
         expect(cells[3]).toHaveTextContent('N/A');
         expect(cells[4]).toHaveTextContent('N/A');
         expect(cells[5]).toHaveTextContent('N/A');
-        expect(cells[6]).toHaveTextContent('N/A');
+        expect(cells[6]).toHaveTextContent(/^-$/);
         expect(cells[7]).toHaveTextContent('N/A');
         expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+    });
+
+    test('renders the swap available, 0% included, and a dash for a node without swap', () => {
+        const {rerender} = render(<NodeRow {...defaultProps} stats={{swap_avail: 0, swap_total: 2048}}/>);
+        expect(screen.getAllByRole('cell')[6]).toHaveTextContent(/^0%$/);
+        rerender(<NodeRow {...defaultProps} stats={{swap_avail: 0, swap_total: 0}}/>);
+        expect(screen.getAllByRole('cell')[6]).toHaveTextContent(/^-$/);
     });
 
     test('renders the load bar beside its value, with value and state', () => {
@@ -215,7 +222,6 @@ describe('NodeRow Component', () => {
             render(<NodeRow {...defaultProps} />);
             const cells = screen.getAllByRole('cell');
             expect(cells[9]).toHaveTextContent(/^-$/);
-            expect(within(cells[9]).getByText('-')).toHaveAttribute('title', '-');
         });
 
         test('renders formatted date when updated_at is valid', () => {

@@ -14,12 +14,13 @@ const TONES = ["error", "warning", "info", "success"];
 /**
  * The configuration of an object, in a tab of its panel: the file as a node holding
  * an instance has it, its tools in place (ConfigSection, inline), read again when
- * an event says it changed.
+ * an event says it changed. `statusPath` is the key the cluster status lists the
+ * object under, when it is not its path: "ns1/" for ns1/nscfg/namespace.
  */
-const ObjectConfig = ({path}) => {
+const ObjectConfig = ({path, statusPath = path}) => {
     const {t} = useTranslation();
-    const instances = useEventStore((s) => s.objectInstanceStatus?.[path]);
-    const configs = useEventStore((s) => s.instanceConfig?.[path]);
+    const instances = useEventStore((s) => s.objectInstanceStatus?.[statusPath]);
+    const configs = useEventStore((s) => s.instanceConfig?.[statusPath]);
     const nodes = useMemo(() => Object.keys(instances ?? {}).sort(), [instances]);
     const [configNode, setConfigNode] = useState(null);
     const [refresh, setRefresh] = useState(0);

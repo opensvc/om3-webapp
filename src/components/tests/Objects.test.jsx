@@ -77,6 +77,7 @@ vi.mock('../../ui/lib/media', async (importOriginal) => {
 });
 
 import useEventStore from '../../hooks/useEventStore';
+import {clearKeyStats} from '../../hooks/useKeyStats';
 import useFetchDaemonStatus from '../../hooks/useFetchDaemonStatus';
 import {useMediaQuery} from '../../ui/lib/media';
 import {useLocation} from 'react-router-dom';
@@ -247,9 +248,13 @@ const getFeedback = () =>
 const sortButton = (label) =>
     within(screen.getByRole('columnheader', {name: new RegExp(`^${label}`)})).getByRole('button');
 const clickHeader = (label) => fireEvent.click(sortButton(label));
-/** The names of the rows: the third cell, the second on a list of names only (configurations, users). */
-const objectNamesInOrder = () =>
-    screen.getAllByRole('row').slice(1).map((row) => (rowCells(row).length === 2 ? rowCells(row)[1] : rowCells(row)[2]).textContent);
+/** The names of the rows: the cell under the Object column, wherever the list puts it. */
+const objectNamesInOrder = () => {
+    const table = screen.getByRole('table', {name: 'Objects'});
+    const column = within(table).getAllByRole('columnheader')
+        .findIndex((h) => h.textContent.replace(/[▲▼]/g, '').trim() === 'Object');
+    return within(table).getAllByRole('row').slice(1).map((row) => rowCells(row)[column].textContent);
+};
 
 const makeMany = (n) => {
     const objectStatus = {};
@@ -515,12 +520,16 @@ describe('Objects Component', () => {
         };
         const configs = ['test-ns/cfg/conf1', 'cluster'];
 
-        test('the services, volumes, configurations, secrets and users in tabs of their own, then the namespaces, then all of them', async () => {
+        test('all of them first, then the services, volumes, configurations, secrets and users in tabs of their own, then the namespaces', async () => {
             setup(mixed);
             await waitForLoad();
             expect(screen.getAllByRole('tab').map((tab) => tab.textContent.replace(/\d+$/, '')))
-                .toEqual(['Services', 'Volumes', 'Configurations', 'Secrets', 'Users', 'Namespaces', 'Any']);
+                .toEqual(['Any', 'Services', 'Volumes', 'Configurations', 'Secrets', 'Users', 'Namespaces']);
+            // Services stays the tab shown by default, Any at its left.
             expect(screen.getByRole('tab', {name: /^Services/})).toHaveAttribute('aria-selected', 'true');
+            // Each count a badge in the name of its tab.
+            const badge = within(screen.getByRole('tab', {name: /^Volumes/})).getByText('1');
+            expect(badge).toHaveClass('rounded-full', 'bg-surface-sunken');
             expect(screen.getByRole('tab', {name: /^Services/})).toHaveTextContent('6');
             expect(screen.getByRole('tab', {name: /^Volumes/})).toHaveTextContent('1');
             expect(screen.getByRole('tab', {name: /^Configurations/})).toHaveTextContent('2');
@@ -544,15 +553,44 @@ describe('Objects Component', () => {
             expect(screen.getByRole('tab', {name: /^Secrets/}).querySelector('svg')).toHaveClass('text-icon-compliance');
         });
 
-        test.each(['configs', 'secrets', 'users'])('list=%s, held on all the nodes, shows their names only: no status, placement nor node column', async (tab) => {
+        test.each(['configs', 'secrets', 'users'])('list=%s, held on all the nodes, shows their names and keys only: no status, placement nor node column', async (tab) => {
             setup({...mixed, objectInstanceStatus: {'test-ns/usr/usr1': {node1: {}}, 'test-ns/cfg/conf1': {node1: {}}}},
                 `?list=${tab}`, {isWideScreen: true, isMobile: false});
             await waitForLoad();
             const table = screen.getByRole('table', {name: 'Objects'});
-            expect(within(table).getAllByRole('columnheader').map((h) => h.textContent.replace(/[▲▼]/g, '').trim())).toEqual(['', 'Object']);
+            expect(within(table).getAllByRole('columnheader').map((h) => h.textContent.replace(/[▲▼]/g, '').trim())).toEqual(['', 'Object', 'Keys', 'Size']);
             for (const row of within(table).getAllByRole('row').slice(1)) {
-                expect(within(row).getAllByRole('cell')).toHaveLength(2);
+                expect(within(row).getAllByRole('cell')).toHaveLength(4);
             }
+        });
+
+        test('the keys of each configuration shown: how many, and their size as stored; the cluster object has none', async () => {
+            const state = {...mixed, instanceConfig: {'test-ns/cfg/conf1': {node1: {csum: 'a', updated_at: 't1'}}}};
+            const {state: full} = setup(state, '?list=configs');
+            await waitForLoad();
+            // What the rows read with the fetch of setup, settled then forgotten.
+            await act(async () => {});
+            clearKeyStats();
+            global.fetch = vi.fn((url) => Promise.resolve(url === '/api/object/path/test-ns/cfg/conf1/data/keys'
+                ? {ok: true, json: () => Promise.resolve({items: [{name: 'a', size: 10}, {name: 'b', size: 2038}]})}
+                : {ok: false, status: 400, json: () => Promise.resolve({})}));
+            // Rendered again, the rows read their keys with the fetch of this test.
+            cleanup();
+            render(<MemoryRouter><Objects/></MemoryRouter>);
+            await waitForLoad();
+            const cells = (name) => rowCells(objectRow(name)).map((c) => c.textContent);
+            await waitFor(() => expect(cells('test-ns/cfg/conf1').slice(2)).toEqual(['2', '2 KiB']));
+            // The cluster object is no store of keys: a dash, after a refused read.
+            await waitFor(() => expect(cells('cluster').slice(2)).toEqual(['–', '–']));
+            // Read once per configuration of the object, whatever the renders.
+            const reads = () => global.fetch.mock.calls.filter(([url]) => url.endsWith('/cfg/conf1/data/keys')).length;
+            expect(reads()).toBe(1);
+
+            // Its configuration changed: read again.
+            useEventStore.mockImplementation((sel) => sel({...full, instanceConfig: {'test-ns/cfg/conf1': {node1: {csum: 'b', updated_at: 't2'}}}}));
+            cleanup();
+            render(<MemoryRouter><Objects/></MemoryRouter>);
+            await waitFor(() => expect(reads()).toBe(2));
         });
 
         test.each(['configs', 'secrets', 'users'])('list=%s has no global state filter, one in the URL filtering nothing', async (tab) => {
@@ -582,13 +620,12 @@ describe('Objects Component', () => {
             expect(objectNamesInOrder()).toEqual(['test-ns/usr/usr1']);
         });
 
-        test('list=configs shows the configurations alone, their kinds alone in the filter', async () => {
+        test('list=configs shows the configurations alone, no Kind filter: the kind filter is Any\'s', async () => {
             setup(mixed, '?list=configs');
             await waitForLoad();
             expect(screen.getByRole('tab', {name: /^Configurations/})).toHaveAttribute('aria-selected', 'true');
             expect([...objectNamesInOrder()].sort()).toEqual([...configs].sort());
-            const kinds = within(filterGroup('Kind')).getAllByRole('checkbox').map(optionText);
-            expect(kinds).toEqual(['ccfg', 'cfg']);
+            expect(queryFilterGroup('Kind')).not.toBeInTheDocument();
         });
 
         test.each([
@@ -703,7 +740,7 @@ describe('Objects Component', () => {
         test.each(filterTests)(
             '$label filter',
             async ({label, option, visible, hidden, isSearch}) => {
-                setup(label === 'Kind' ? TWO_KINDS : {});
+                setup(label === 'Kind' ? TWO_KINDS : {}, label === 'Kind' ? '?list=any' : '');
                 await waitForLoad();
                 if (isSearch) {
                     fireEvent.change(screen.getByLabelText('Name'), {target: {value: option}});
@@ -781,7 +818,7 @@ describe('Objects Component', () => {
         });
 
         test('filter popovers list the global states, namespaces and kinds on offer', async () => {
-            setup(TWO_KINDS);
+            setup(TWO_KINDS, '?list=any');
             await waitForLoad();
             expect(within(filterGroup('Global State')).getAllByRole('checkbox').map(optionText))
                 .toEqual(['Up', 'Down', 'Warn', 'N/a', 'Unprovisioned']);
@@ -822,8 +859,15 @@ describe('Objects Component', () => {
             expect(filterSummary('Namespace')).toHaveTextContent('Namespacetest-ns, root');
         });
 
+        test('no Kind filter on a tab of a kind; a kind in the URL, from Any, filters nothing there', async () => {
+            setup(TWO_KINDS, '?kind=nscfg');
+            await waitForLoad();
+            expect(queryFilterGroup('Kind')).not.toBeInTheDocument();
+            expect(objectNamesInOrder()).toEqual(expect.arrayContaining(['test-ns/svc/test1', 'test-ns/nscfg/ns1']));
+        });
+
         test('Kind filter excludes objects whose kind does not match the selection', async () => {
-            setup(TWO_KINDS);
+            setup(TWO_KINDS, '?list=any');
             await waitForLoad();
             await selectFilter('Kind', 'svc');
             await waitFor(() => {
@@ -895,7 +939,7 @@ describe('Objects Component', () => {
     });
 
     test('unchecking a Kind option keeps the other filters', async () => {
-        setup(TWO_KINDS);
+        setup(TWO_KINDS, '?list=any');
         await waitForLoad();
         await selectFilter('Kind', 'svc');
         await selectFilter('Namespace', 'test-ns');
@@ -1403,7 +1447,7 @@ describe('Objects Component', () => {
     });
 
     test('the filters with a choice to make are visible', async () => {
-        setup(TWO_KINDS);
+        setup(TWO_KINDS, '?list=any');
         await waitForLoad();
         expect(filterGroup('Namespace')).toBeInTheDocument();
         expect(filterGroup('Global State')).toBeInTheDocument();
@@ -1552,10 +1596,10 @@ describe('Objects Component', () => {
     });
 
     test('URL filters update state on location change', async () => {
-        const {rerender} = setup(TWO_KINDS);
+        const {rerender} = setup(TWO_KINDS, '?list=any');
         await waitForLoad();
         vi.mocked(useLocation).mockReturnValue({
-            search: '?namespace=test-ns&kind=svc&name=test1',
+            search: '?list=any&namespace=test-ns&kind=svc&name=test1',
             pathname: '/objects',
         });
         rerender(
@@ -1608,7 +1652,7 @@ describe('Objects Component', () => {
     test('URL sync writes every filter, comma-joined', async () => {
         vi.useFakeTimers();
         try {
-            setup(TWO_KINDS);
+            setup(TWO_KINDS, '?list=any');
             fireEvent.click(filterOption('Global State', 'Up'));
             fireEvent.click(filterOption('Global State', 'Unprovisioned'));
             fireEvent.click(filterOption('Namespace', 'test-ns'));
@@ -1618,7 +1662,7 @@ describe('Objects Component', () => {
                 vi.advanceTimersByTime(300);
             });
             expect(mockNavigate).toHaveBeenCalledWith(
-                '/objects?globalState=up%2Cunprovisioned&namespace=test-ns&kind=svc&name=te',
+                '/objects?list=any&globalState=up%2Cunprovisioned&namespace=test-ns&kind=svc&name=te',
                 {replace: true}
             );
         } finally {
@@ -1785,7 +1829,7 @@ describe('Objects Component', () => {
             ['Namespace', 'test-ns'],
             ['Kind', 'svc'],
         ])('rapidly toggling a %s option twice re-adds it', async (label, option) => {
-            setup(TWO_KINDS, '', {isWideScreen: true, isMobile: false});
+            setup(TWO_KINDS, label === 'Kind' ? '?list=any' : '', {isWideScreen: true, isMobile: false});
             await waitForLoad();
             await selectFilter(label, option);
             const checkbox = filterOption(label, option);

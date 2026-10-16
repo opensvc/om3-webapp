@@ -17,7 +17,10 @@ vi.mock('../ObjectTabs', () => ({
     ObjectSchedules: ({path}) => <div data-testid="object-schedules">{path}</div>,
 }));
 vi.mock('../NetworkDetails', () => ({default: ({name}) => <div data-testid="network-details">{name}</div>}));
-vi.mock('../NamespaceMetrics', () => ({default: ({namespace}) => <div data-testid="namespace-metrics">{namespace}</div>}));
+vi.mock('../NamespacePanel', () => ({
+    NamespaceUsage: ({namespace}) => <div data-testid="namespace-usage">{namespace}</div>,
+    NamespaceConfig: ({namespace}) => <div data-testid="namespace-config">{namespace}</div>,
+}));
 vi.mock('../LogsViewer', () => ({
     default: ({nodename, type, namespace, kind, instanceName}) => (
         <div data-testid="logs">{`${type} ${namespace}/${kind}/${instanceName} on ${nodename}`}</div>
@@ -150,11 +153,21 @@ describe('record panels', () => {
 
     test.each([
         ['network:lo', 'lo', 'network-details', 'lo'],
-        ['namespace:ns1', 'Metrics of ns1', 'namespace-metrics', 'ns1'],
+        ['namespace:ns1', 'ns1', 'namespace-usage', 'ns1'],
     ])('%s opens its panel', (peek, title, testId, content) => {
         renderPeek(`/objects?peek=${peek}`);
         const panel = screen.getByRole('dialog', {name: new RegExp(title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))});
         expect(within(panel).getByTestId(testId)).toHaveTextContent(content);
+    });
+
+    test('a namespace opens on its usage, its configuration on a tab of its own', () => {
+        renderPeek('/objects?peek=namespace:ns1');
+        const panel = screen.getByRole('dialog', {name: 'ns1'});
+        expect(within(panel).getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Usage', 'Configuration']);
+        fireEvent.click(within(panel).getByRole('tab', {name: 'Configuration'}));
+        expect(screen.getByTestId('search')).toHaveTextContent('peektab=config');
+        expect(within(panel).getByTestId('namespace-config')).toHaveTextContent('ns1');
+        expect(within(panel).queryByTestId('namespace-usage')).not.toBeInTheDocument();
     });
 
     test('closing the panel leaves the view as it was', () => {

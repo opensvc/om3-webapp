@@ -156,27 +156,6 @@
     }
   },
   "alerts": {
-    "pills": {
-      "up_one": "up",
-      "up_other": "up",
-      "warn_one": "warn",
-      "warn_other": "warn",
-      "down_one": "down",
-      "down_other": "down",
-      "unknown_one": "n/a",
-      "unknown_other": "n/a",
-      "frozen_one": "frozen",
-      "frozen_other": "frozen",
-      "beating_one": "beating",
-      "beating_other": "beating",
-      "staleOrStopped_one": "stale or stopped",
-      "staleOrStopped_other": "stale or stopped",
-      "full_one": "full",
-      "full_other": "full"
-    },
-    "countTitle": "{{count}} {{label}}",
-    "showObjects": "Show the {{label}} objects",
-    "showThem": "{{label}}, show them",
     "details": {
       "node_one": "{{count}} node",
       "node_other": "{{count}} nodes",
@@ -187,7 +166,15 @@
       "frozen": "frozen: {{count}}",
       "full": "full: {{count}}",
       "highestUsage": "highest usage: {{name}} {{percent}}%"
-    }
+    },
+    "objectsDown_one": "{{count}} object down",
+    "objectsDown_other": "{{count}} objects down",
+    "objectsWarn_one": "{{count}} object in warn",
+    "objectsWarn_other": "{{count}} objects in warn",
+    "linksDown_one": "{{count}} of {{total}} heartbeat links down",
+    "linksDown_other": "{{count}} of {{total}} heartbeat links down",
+    "nodesOverloaded_one": "{{count}} of {{total}} nodes overloaded",
+    "nodesOverloaded_other": "{{count}} of {{total}} nodes overloaded"
   },
   "auth": {
     "login": {
@@ -406,32 +393,62 @@
   },
   "heartbeats": {
     "columns": {
-      "running": "RUNNING",
-      "beating": "BEATING",
-      "id": "ID",
-      "node": "NODE",
-      "peer": "PEER",
-      "type": "TYPE",
-      "desc": "DESC",
-      "changedAt": "CHANGED_AT",
-      "lastBeatingAt": "LAST_BEATING_AT"
+      "heartbeat": "Heartbeat",
+      "type": "Type",
+      "node": "Node",
+      "direction": "Direction",
+      "peer": "Peer",
+      "desc": "Desc",
+      "routine": "Routine",
+      "beating": "Beating",
+      "since": "Since",
+      "lastBeat": "Last Beat"
     },
     "filters": {
-      "running": "Running",
+      "routine": "Routine",
       "beating": "Beating",
       "id": "ID",
       "show": "Show filters",
-      "hide": "Hide filters"
+      "hide": "Hide filters",
+      "clearLink": "Remove the {{link}} filter"
     },
     "marks": {
-      "state": "State {{state}}",
       "healthySingleNode": "Healthy (single node)",
       "beating": "Beating",
       "stale": "Stale"
     },
     "empty": "No heartbeats found matching the current filters.",
     "eventsLogger": "Heartbeat Events Logger",
-    "events": "Heartbeat Events"
+    "events": "Heartbeat Events",
+    "mesh": {
+      "title": "Mesh",
+      "desc": "Description",
+      "lastBeat": "Last beat",
+      "heartbeat": "Heartbeat",
+      "side": "Side",
+      "groupLabel_one": "{{from}} to {{to}}: {{beating}} of {{count}} link beating",
+      "groupLabel_other": "{{from}} to {{to}}: {{beating}} of {{count}} links beating",
+      "beatingOf_one": "{{beating}} of {{count}} beating",
+      "beatingOf_other": "{{beating}} of {{count}} beating"
+    },
+    "streams": "Streams",
+    "actions": {
+      "stop": "Stop",
+      "start": "Start",
+      "target": "the {{id}} stream of {{node}}",
+      "requested": "{{action}} of {{target}} requested.",
+      "failed": "{{action}} of {{target}} could not be requested: {{message}}",
+      "confirmTitle": "Stop a heartbeat stream",
+      "confirmStop": "Stop the {{id}} stream of {{node}}? The node stops sending or receiving on it until it is started again."
+    },
+    "routine": {
+      "running": "started",
+      "stopped": "stopped"
+    },
+    "direction": {
+      "tx": "sends to",
+      "rx": "receives from"
+    }
   },
   "instance": {
     "unknown": "unknown",
@@ -647,27 +664,82 @@
     "footer": "Usage on the node serving this page, refreshed every {{seconds}} seconds. CPU is in percent of one CPU."
   },
   "namespaces": {
-    "filterBy": "Filter by namespace",
-    "allOption": "all",
     "columns": {
-      "namespace": "Namespace",
-      "up": "Up",
-      "down": "Down",
-      "warn": "Warn",
-      "na": "N/A",
-      "total": "Total",
-      "metrics": "Metrics"
+      "namespace": "Name",
+      "services": "Services",
+      "volumes": "Volumes",
+      "sec": "Secrets",
+      "cfg": "Configs",
+      "pools": "Pools",
+      "nets": "Networks",
+      "cpu": "CPU",
+      "memory": "Memory"
     },
-    "showObjects_one": "Show the {{count}} {{status}} object of {{namespace}}",
-    "showObjects_other": "Show the {{count}} {{status}} objects of {{namespace}}",
-    "viewMetrics": "View metrics for namespace {{namespace}}",
-    "emptyFiltered": "No namespaces match the selected filter",
     "empty": "No namespaces available",
-    "metricsTitle": "Metrics",
-    "metricsOf": "Metrics of {{namespace}}",
-    "resizeDrawer": "Resize drawer",
     "eventsLogger": "Namespaces Events Logger",
-    "events": "Namespace Events"
+    "events": "Namespace Events",
+    "tableLabel": "Namespaces",
+    "show": {
+      "svc_one": "Show the {{count}} {{status}} service of {{namespace}}",
+      "svc_other": "Show the {{count}} {{status}} services of {{namespace}}",
+      "vol_one": "Show the {{count}} {{status}} volume of {{namespace}}",
+      "vol_other": "Show the {{count}} {{status}} volumes of {{namespace}}",
+      "sec_one": "Show the {{count}} secret of {{namespace}}",
+      "sec_other": "Show the {{count}} secrets of {{namespace}}",
+      "cfg_one": "Show the {{count}} configuration of {{namespace}}",
+      "cfg_other": "Show the {{count}} configurations of {{namespace}}"
+    },
+    "usage": {
+      "claimed": "{{name}}: {{used}} of {{total}} claimed ({{percent}})",
+      "unclaimed": "{{name}}: {{used}} of {{total}}, no claim ({{percent}})",
+      "error": "Pool and network usage could not be read: {{message}}",
+      "percentOf": "{{percent}} of {{total}}",
+      "free": "Free",
+      "used": "Used",
+      "total": "Total",
+      "cap": "Cap",
+      "noClaim": "no claim",
+      "share": "Share",
+      "barLabel": "{{title}}: {{parts}}"
+    },
+    "cpu": {
+      "trend": "CPU of {{namespace}}, last 5 minutes"
+    },
+    "memory": {
+      "used": "{{used}} used",
+      "trend": "Memory of {{namespace}}, last 5 minutes"
+    },
+    "panel": {
+      "tabs": {
+        "usage": "Usage",
+        "config": "Configuration"
+      },
+      "claims": "Claims and usage",
+      "resource": "Resource",
+      "limit": "Limit",
+      "share": "Share",
+      "trend": "Last 5 minutes",
+      "shareOf": "Share of {{name}} used",
+      "types": {
+        "pool": "Pool",
+        "network": "Network",
+        "cpu": "CPU",
+        "memory": "Memory"
+      },
+      "sizeOf": "{{size}} ({{of}})",
+      "sizeOfType": {
+        "pool": "pool size, no claim",
+        "network": "network size, no claim"
+      },
+      "noClaim": "This namespace claims nothing: it is capped by nothing but the pools and networks themselves.",
+      "nothing": "No pool, network, cpu or memory used.",
+      "pgNode": "CPU and memory are those of the objects on the node serving this page.",
+      "byObject": "CPU and memory by object",
+      "noConfig": "The {{namespace}} namespace has no configuration object yet: its claims and pg settings are written there.",
+      "create": "Create its configuration",
+      "creating": "Creating…",
+      "createFailed": "The configuration could not be created: {{message}}"
+    }
   },
   "nav": {
     "openCluster": "Open the cluster",
@@ -961,7 +1033,10 @@
     "columns": {
       "object": "Object",
       "orchestrate": "Orchestrate",
-      "topology": "Topology"
+      "topology": "Topology",
+      "keys": "Keys",
+      "keysSize": "Size",
+      "keysSizeHint": "The size of the keys as stored in the configuration, their encoding included"
     },
     "filters": {
       "show": "Show filters",

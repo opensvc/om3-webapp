@@ -156,27 +156,6 @@
     }
   },
   "alerts": {
-    "pills": {
-      "up_one": "up",
-      "up_other": "up",
-      "warn_one": "warn",
-      "warn_other": "warn",
-      "down_one": "down",
-      "down_other": "down",
-      "unknown_one": "n/d",
-      "unknown_other": "n/d",
-      "frozen_one": "gelé",
-      "frozen_other": "gelés",
-      "beating_one": "actif",
-      "beating_other": "actifs",
-      "staleOrStopped_one": "en retard ou arrêté",
-      "staleOrStopped_other": "en retard ou arrêtés",
-      "full_one": "plein",
-      "full_other": "pleins"
-    },
-    "countTitle": "{{count}} {{label}}",
-    "showObjects": "Afficher les objets {{label}}",
-    "showThem": "{{label}}, les afficher",
     "details": {
       "node_one": "{{count}} nœud",
       "node_other": "{{count}} nœuds",
@@ -187,7 +166,15 @@
       "frozen": "gelés : {{count}}",
       "full": "pleins : {{count}}",
       "highestUsage": "usage le plus élevé : {{name}} {{percent}} %"
-    }
+    },
+    "objectsDown_one": "{{count}} objet down",
+    "objectsDown_other": "{{count}} objets down",
+    "objectsWarn_one": "{{count}} objet en warn",
+    "objectsWarn_other": "{{count}} objets en warn",
+    "linksDown_one": "{{count}} lien de heartbeat sur {{total}} down",
+    "linksDown_other": "{{count}} liens de heartbeat sur {{total}} down",
+    "nodesOverloaded_one": "{{count}} nœud sur {{total}} surchargé",
+    "nodesOverloaded_other": "{{count}} nœuds sur {{total}} surchargés"
   },
   "auth": {
     "login": {
@@ -406,32 +393,62 @@
   },
   "heartbeats": {
     "columns": {
-      "running": "EN MARCHE",
-      "beating": "BATTEMENT",
-      "id": "ID",
-      "node": "NŒUD",
-      "peer": "PAIR",
-      "type": "TYPE",
-      "desc": "DESC",
-      "changedAt": "MODIFIÉ LE",
-      "lastBeatingAt": "DERNIER BATTEMENT"
+      "heartbeat": "Heartbeat",
+      "type": "Type",
+      "node": "Nœud",
+      "direction": "Direction",
+      "peer": "Pair",
+      "desc": "Desc",
+      "routine": "Routine",
+      "beating": "Battement",
+      "since": "Depuis",
+      "lastBeat": "Dernier battement"
     },
     "filters": {
-      "running": "En marche",
+      "routine": "Routine",
       "beating": "Battement",
       "id": "ID",
       "show": "Afficher les filtres",
-      "hide": "Masquer les filtres"
+      "hide": "Masquer les filtres",
+      "clearLink": "Retirer le filtre {{link}}"
     },
     "marks": {
-      "state": "État {{state}}",
       "healthySingleNode": "Sain (nœud unique)",
       "beating": "Actif",
       "stale": "Périmé"
     },
     "empty": "Aucun heartbeat ne correspond aux filtres actuels.",
     "eventsLogger": "Journal des événements heartbeat",
-    "events": "Événements heartbeat"
+    "events": "Événements heartbeat",
+    "mesh": {
+      "title": "Maillage",
+      "desc": "Description",
+      "lastBeat": "Dernier battement",
+      "heartbeat": "Heartbeat",
+      "side": "Côté",
+      "groupLabel_one": "de {{from}} vers {{to}} : {{beating}} lien sur {{count}} en battement",
+      "groupLabel_other": "de {{from}} vers {{to}} : {{beating}} liens sur {{count}} en battement",
+      "beatingOf_one": "{{beating}} sur {{count}} en battement",
+      "beatingOf_other": "{{beating}} sur {{count}} en battement"
+    },
+    "streams": "Flux",
+    "actions": {
+      "stop": "Arrêter",
+      "start": "Démarrer",
+      "target": "le flux {{id}} de {{node}}",
+      "requested": "{{action}} : demandé pour {{target}}.",
+      "failed": "{{action}} : n'a pas pu être demandé pour {{target}} : {{message}}",
+      "confirmTitle": "Arrêter un flux de heartbeat",
+      "confirmStop": "Arrêter le flux {{id}} de {{node}} ? Le nœud cesse d'y émettre ou d'y recevoir jusqu'à ce qu'il soit redémarré."
+    },
+    "routine": {
+      "running": "démarrée",
+      "stopped": "arrêtée"
+    },
+    "direction": {
+      "tx": "envoie à",
+      "rx": "reçoit de"
+    }
   },
   "instance": {
     "unknown": "inconnu",
@@ -647,27 +664,82 @@
     "footer": "Utilisation sur le nœud qui sert cette page, rafraîchie toutes les {{seconds}} secondes. Le CPU est en pourcentage d'un CPU."
   },
   "namespaces": {
-    "filterBy": "Filtrer par namespace",
-    "allOption": "tous",
     "columns": {
-      "namespace": "Namespace",
-      "up": "Up",
-      "down": "Down",
-      "warn": "Warn",
-      "na": "N/A",
-      "total": "Total",
-      "metrics": "Métriques"
+      "namespace": "Nom",
+      "services": "Services",
+      "volumes": "Volumes",
+      "sec": "Secrets",
+      "cfg": "Configs",
+      "pools": "Pools",
+      "nets": "Réseaux",
+      "cpu": "CPU",
+      "memory": "Mémoire"
     },
-    "showObjects_one": "Afficher {{count}} objet {{status}} de {{namespace}}",
-    "showObjects_other": "Afficher les {{count}} objets {{status}} de {{namespace}}",
-    "viewMetrics": "Voir les métriques du namespace {{namespace}}",
-    "emptyFiltered": "Aucun namespace ne correspond au filtre sélectionné",
     "empty": "Aucun namespace disponible",
-    "metricsTitle": "Métriques",
-    "metricsOf": "Métriques de {{namespace}}",
-    "resizeDrawer": "Redimensionner le panneau",
     "eventsLogger": "Journal des événements des namespaces",
-    "events": "Événements des namespaces"
+    "events": "Événements des namespaces",
+    "tableLabel": "Namespaces",
+    "show": {
+      "svc_one": "Afficher le service {{status}} de {{namespace}}",
+      "svc_other": "Afficher les {{count}} services {{status}} de {{namespace}}",
+      "vol_one": "Afficher le volume {{status}} de {{namespace}}",
+      "vol_other": "Afficher les {{count}} volumes {{status}} de {{namespace}}",
+      "sec_one": "Afficher le secret de {{namespace}}",
+      "sec_other": "Afficher les {{count}} secrets de {{namespace}}",
+      "cfg_one": "Afficher la configuration de {{namespace}}",
+      "cfg_other": "Afficher les {{count}} configurations de {{namespace}}"
+    },
+    "usage": {
+      "claimed": "{{name}} : {{used}} sur {{total}} réclamé ({{percent}})",
+      "unclaimed": "{{name}} : {{used}} sur {{total}}, sans réclamation ({{percent}})",
+      "error": "L'usage des pools et des réseaux n'a pas pu être lu : {{message}}",
+      "percentOf": "{{percent}} de {{total}}",
+      "free": "Libre",
+      "used": "Utilisé",
+      "total": "Total",
+      "cap": "Plafond",
+      "noClaim": "aucune réclamation",
+      "share": "Part",
+      "barLabel": "{{title}} : {{parts}}"
+    },
+    "cpu": {
+      "trend": "CPU de {{namespace}}, 5 dernières minutes"
+    },
+    "memory": {
+      "used": "{{used}} utilisé",
+      "trend": "Mémoire de {{namespace}}, 5 dernières minutes"
+    },
+    "panel": {
+      "tabs": {
+        "usage": "Usage",
+        "config": "Configuration"
+      },
+      "claims": "Réclamations et usage",
+      "resource": "Ressource",
+      "limit": "Limite",
+      "share": "Part",
+      "trend": "5 dernières minutes",
+      "shareOf": "Part de {{name}} utilisée",
+      "types": {
+        "pool": "Pool",
+        "network": "Réseau",
+        "cpu": "CPU",
+        "memory": "Mémoire"
+      },
+      "sizeOf": "{{size}} ({{of}})",
+      "sizeOfType": {
+        "pool": "taille du pool, sans réclamation",
+        "network": "taille du réseau, sans réclamation"
+      },
+      "noClaim": "Ce namespace ne réclame rien : il n'est limité que par les pools et les réseaux eux-mêmes.",
+      "nothing": "Aucun pool, réseau, cpu ni mémoire utilisé.",
+      "pgNode": "Le CPU et la mémoire sont ceux des objets du nœud qui sert cette page.",
+      "byObject": "CPU et mémoire par objet",
+      "noConfig": "Le namespace {{namespace}} n'a pas encore d'objet de configuration : ses réclamations et ses réglages pg s'y écrivent.",
+      "create": "Créer sa configuration",
+      "creating": "Création…",
+      "createFailed": "La configuration n'a pas pu être créée : {{message}}"
+    }
   },
   "nav": {
     "openCluster": "Ouvrir le cluster",
@@ -961,7 +1033,10 @@
     "columns": {
       "object": "Objet",
       "orchestrate": "Orchestration",
-      "topology": "Topologie"
+      "topology": "Topologie",
+      "keys": "Clés",
+      "keysSize": "Taille",
+      "keysSizeHint": "La taille des clés telles que stockées dans la configuration, encodage compris"
     },
     "filters": {
       "show": "Afficher les filtres",

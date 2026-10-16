@@ -24,8 +24,10 @@ import {Button, IconButton} from "../ui/components/Button";
 import {Checkbox, Input} from "../ui/components/Field";
 import {Alert} from "../ui/components/Alert";
 import {useMediaQuery} from "../ui/lib/media";
-import {TabList} from "../ui/components/Tabs";
+import {TabCount, TabList} from "../ui/components/Tabs";
 import {PolicyTag} from "../ui/components/PolicyTag";
+import {formatBytes} from "../ui/lib/format";
+import {useKeyStats} from "../hooks/useKeyStats";
 import {Pager} from "../ui/components/Pager";
 import {usePaging} from "../app/paging";
 import {ObjectIcon} from "../ui/components/ObjectIcon";
@@ -64,6 +66,10 @@ const actionIcon = ({icon, color}) => (
 );
 
 const parseObjectName = (objectName) => {
+    // A namespace configuration, as om3 writes it: "<namespace>/", "/" for the root one.
+    if (objectName.endsWith("/")) {
+        return {namespace: objectName === "/" ? "root" : objectName.slice(0, -1), kind: "nscfg", name: "namespace"};
+    }
     const parts = objectName.split("/");
     if (parts.length === 3) {
         return {namespace: parts[0], kind: parts[1], name: parts[2]};
@@ -83,8 +89,8 @@ const listOf = (objectName) => listOfKind(parseObjectName(objectName).kind);
 const LIST_KIND = {services: "svc", volumes: "vol", configs: "cfg", secrets: "sec", users: "usr", [ALL_LIST]: "svc"};
 /**
  * The lists of objects held on all the nodes, with no status nor placement: their
- * names only, the status, orchestrate, topology and node columns telling nothing,
- * and no global state filter.
+ * names and their keys only (how many, how big), the status, orchestrate, topology
+ * and node columns telling nothing, and no global state filter.
  */
 const NAMES_ONLY_LISTS = ["configs", "secrets", "users"];
 
@@ -201,6 +207,25 @@ const PropertyCells = ({objectName}) => {
 
 const stopPropagation = (e) => e.stopPropagation();
 
+/**
+ * How many keys a cfg, sec or usr object holds, and their size as stored: read for
+ * the rows shown only (useKeyStats). Nothing while read, a dash for an object
+ * without keys of its own, the cluster object say.
+ */
+const KeyCells = ({objectName}) => {
+    const {i18n} = useTranslation();
+    const stats = useKeyStats(objectName);
+    const dash = <span className="text-ink-muted">–</span>;
+    return (
+        <>
+            <Cell numeric className="tabular-nums">{stats === null ? "" : stats === undefined ? dash : stats.count}</Cell>
+            <Cell numeric className="whitespace-nowrap tabular-nums">
+                {stats === null ? "" : stats === undefined ? dash : stats.size > 0 ? formatBytes(stats.size, i18n.language) : "0"}
+            </Cell>
+        </>
+    );
+};
+
 const TableRowComponent = React.memo(({
                                           objectName,
                                           isSelected,
@@ -241,6 +266,7 @@ const TableRowComponent = React.memo(({
                 </Cell>
             )}
             <Cell className="text-data font-medium whitespace-nowrap">{objectName}</Cell>
+            {namesOnly && <KeyCells objectName={objectName}/>}
             {!namesOnly && <PropertyCells objectName={objectName}/>}
             {!namesOnly && isWideScreen &&
                 allNodes.map((node) => (
@@ -369,6 +395,9 @@ const Objects = () => {
     // Their objects have no status: no global state to filter on. One the URL holds,
     // from another tab, is kept for it but filters nothing here.
     const hasGlobalState = !namesOnly;
+    // A tab of a kind lists that kind: the kind filter is Any's only. One the URL
+    // holds, from Any, is kept for it but filters nothing here.
+    const hasKindFilter = list === ALL_LIST;
 
     const {daemon} = useFetchDaemonStatus();
     const objectStatus = useEventStore(selectObjectStatus);
@@ -495,8 +524,8 @@ const Objects = () => {
                 continue;
             }
 
-            // Check kind filter (multiple selection)
-            if (deferredSelectedKinds.length > 0 && !deferredSelectedKinds.includes(parseObjectName(name).kind)) {
+            // Check kind filter (multiple selection), on Any only
+            if (hasKindFilter && deferredSelectedKinds.length > 0 && !deferredSelectedKinds.includes(parseObjectName(name).kind)) {
                 continue;
             }
 
@@ -532,7 +561,7 @@ const Objects = () => {
 
         return result;
     }, [listObjectNames, hasGlobalState, deferredSelectedGlobalStates, deferredSelectedNamespaces,
-        deferredSelectedKinds, deferredSearchQuery, objects]);
+        deferredSelectedKinds, hasKindFilter, deferredSearchQuery, objects]);
 
     const getStatusOrder = (cycleIndex) => {
         const statuses = ["n/a", "up", "warn", "down"];
@@ -683,11 +712,14 @@ const Objects = () => {
     // A row is not rendered again for a new handler (TableRowComponent): one handler,
     // reading the latest URL, or a row opened after a filter changed would bring the
     // URL of before back, the filter dropped.
-    const objectClickRef = useRef({objectInstanceStatus, selectObject});
-    objectClickRef.current = {objectInstanceStatus, selectObject};
+    const objectClickRef = useRef({objectInstanceStatus, selectObject, openPeek: panel.openPeek});
+    objectClickRef.current = {objectInstanceStatus, selectObject, openPeek: panel.openPeek};
     const handleObjectClick = useCallback((objectName) => {
-        const {objectInstanceStatus: instances, selectObject: select} = objectClickRef.current;
-        if (instances[objectName]) select(objectName);
+        const {objectInstanceStatus: instances, selectObject: select, openPeek} = objectClickRef.current;
+        // A namespace configuration is edited in the panel of its namespace.
+        const {kind, namespace} = parseObjectName(objectName);
+        if (kind === "nscfg") openPeek({kind: "namespace", id: namespace}, "config");
+        else if (instances[objectName]) select(objectName);
     }, []);
 
     const handleSort = useCallback((column) => {
@@ -921,7 +953,7 @@ const Objects = () => {
             }));
     }, [selectedObjects, handleActionClick, t]);
 
-    const columnCount = namesOnly ? 2 : 3 + PROPERTY_COLUMNS.length + (isWideScreen ? allNodes.length : 0);
+    const columnCount = namesOnly ? 4 : 3 + PROPERTY_COLUMNS.length + (isWideScreen ? allNodes.length : 0);
 
     const tabList = (
         <TabList
@@ -929,7 +961,7 @@ const Objects = () => {
                 key,
                 label: t(`objects.lists.${key}`),
                 icon: LIST_ICONS[key],
-                badge: <span className="text-ink-muted tabular-nums">{listCounts[key]}</span>,
+                badge: <TabCount count={listCounts[key]}/>,
             }))}
             active={list}
             onChange={handleListChange}
@@ -987,7 +1019,7 @@ const Objects = () => {
                                 onToggle={handleNamespaceChange}
                             />
                         )}
-                        {hasChoice(kinds, selectedKinds) && (
+                        {hasKindFilter && hasChoice(kinds, selectedKinds) && (
                             <FilterPopover
                                 label={t("objects.filters.kind")}
                                 options={kindOptions}
@@ -1077,6 +1109,12 @@ const Objects = () => {
                             direction={sortDirection}
                             onSort={() => handleSort("object")}
                         />
+                        {namesOnly && (
+                            <>
+                                <HeaderCell className="text-right">{t("objects.columns.keys")}</HeaderCell>
+                                <HeaderCell className="text-right" title={t("objects.columns.keysSizeHint")}>{t("objects.columns.keysSize")}</HeaderCell>
+                            </>
+                        )}
                         {!namesOnly && PROPERTY_COLUMNS.map(({key, labelKey}) => (
                             <SortHeaderCell
                                 key={key}

@@ -34,6 +34,10 @@ export const parseObjectPath = (objName) => {
     if (!objName || typeof objName !== "string") {
         return {namespace: "root", kind: "svc", name: ""};
     }
+    // A namespace configuration, as om3 writes it: "<namespace>/", "/" for the root one.
+    if (objName.endsWith("/")) {
+        return {namespace: objName === "/" ? "root" : objName.slice(0, -1), kind: "nscfg", name: "namespace"};
+    }
     const parts = objName.split("/");
     let name, kind, namespace;
     if (parts.length === 3) {

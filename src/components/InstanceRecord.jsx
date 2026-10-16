@@ -1,0 +1,330 @@
+import React, {useEffect, useMemo, useRef} from "react";
+import {useTranslation} from "react-i18next";
+import useEventStore from "../hooks/useEventStore.js";
+import {parseInstanceId, parseResourceId} from "../app/peek";
+import {objectUsage} from "../app/pg-usage";
+import {PG_POLL_MS, usePgReadings} from "../hooks/usePgUsage";
+import {formatBytes} from "../utils/cgroupMetrics";
+import {RecordPanel} from "../app/RecordPanel";
+import {CrossLink} from "../app/CrossLink";
+import {Table, HeaderRow, HeaderCell, Row, Cell, EmptyRow} from "../ui/components/Table";
+import {Spinner} from "../ui/components/Spinner";
+import {StatusMark} from "../ui/components/StatusMark";
+import {FrozenMark} from "../ui/components/FrozenMark";
+import {NotProvisionedMark} from "../ui/components/StateMarks";
+import {toObjectState} from "../ui/components/status";
+import {ReadErrors, TotalTile, cpuText} from "./NamespaceMetrics";
+import {ObjectResources} from "./ObjectTabs";
+import {InstanceLink, ResourceLink} from "./RecordLinks";
+
+const ZERO_TIME = "0001-01-01T00:00:00Z";
+const EMPTY = {};
+
+/** The nodes an object has an instance on, in the order of their names. */
+function useInstanceNodes(path) {
+    const instances = useEventStore((s) => (path === undefined ? undefined : s.objectInstanceStatus?.[path]));
+    return useMemo(() => Object.keys(instances ?? {}).sort(), [instances]);
+}
+
+/** Its cpu, memory and memory limit, a tile each. */
+const UsageTiles = ({usage, label}) => {
+    const {t} = useTranslation();
+    return (
+        <section aria-label={label}>
+            <dl className="grid grid-cols-3 gap-3">
+                <TotalTile label={t("metrics.columns.cpu")} value={cpuText(usage.cpu)}/>
+                <TotalTile label={t("metrics.columns.memory")} value={formatBytes(usage.memory)}/>
+                <TotalTile label={t("metrics.columns.limit")} value={formatBytes(usage.limit)}/>
+            </dl>
+        </section>
+    );
+};
+
+/**
+ * The usage of a service or a volume: the cpu, memory and memory limit of its
+ * instances summed over the nodes, then the instances node by node, each a badge
+ * opening its own panel.
+ */
+export function ObjectUsage({path}) {
+    const {t} = useTranslation();
+    const nodes = useInstanceNodes(path);
+    const {usage, errors} = usePgReadings(nodes);
+    const read = Object.keys(usage).length + Object.keys(errors).length > 0;
+    const total = useMemo(() => objectUsage(usage, path), [usage, path]);
+    const byNode = Object.fromEntries(total.instances.map((i) => [i.node, i]));
+
+    if (!read && nodes.length > 0) {
+        return <div className="flex justify-center"><Spinner label={t("metrics.loading")}/></div>;
+    }
+    return (
+        <div className="flex flex-col gap-3" data-testid="object-usage">
+            <ReadErrors errors={errors}/>
+            <UsageTiles usage={total} label={t("metrics.object.total")}/>
+            <Table aria-label={t("metrics.object.instances")}>
+                <thead>
+                    <HeaderRow>
+                        <HeaderCell>{t("metrics.columns.node")}</HeaderCell>
+                        <HeaderCell>{t("metrics.columns.cpu")}</HeaderCell>
+                        <HeaderCell>{t("metrics.columns.memory")}</HeaderCell>
+                        <HeaderCell>{t("metrics.columns.limit")}</HeaderCell>
+                    </HeaderRow>
+                </thead>
+                <tbody>
+                    {nodes.map((node) => {
+                        // An instance without a cgroup on its node, or not read yet: dashes.
+                        const u = byNode[node] ?? {cpu: null};
+                        return (
+                            <Row key={node}>
+                                <Cell className="whitespace-nowrap"><InstanceLink path={path} node={node}/></Cell>
+                                <Cell numeric>{cpuText(u.cpu)}</Cell>
+                                <Cell numeric>{formatBytes(u.memory)}</Cell>
+                                <Cell numeric>{formatBytes(u.limit)}</Cell>
+                            </Row>
+                        );
+                    })}
+                    {nodes.length === 0 && <EmptyRow colSpan={4}>{t("metrics.object.none")}</EmptyRow>}
+                </tbody>
+            </Table>
+            <p className="text-ink-muted">{t("metrics.object.footer", {seconds: PG_POLL_MS / 1000})}</p>
+        </div>
+    );
+}
+
+/** The usage of an instance: the cpu, memory and memory limit of its cgroup on its node. */
+export function InstanceUsage({path, node}) {
+    const {t} = useTranslation();
+    const nodes = useMemo(() => [node], [node]);
+    const {usage, errors} = usePgReadings(nodes);
+    if (usage[node] === undefined && errors[node] === undefined) {
+        return <div className="flex justify-center"><Spinner label={t("metrics.loading")}/></div>;
+    }
+    const u = usage[node]?.[path];
+    return (
+        <div className="flex flex-col gap-3" data-testid="instance-usage">
+            <ReadErrors errors={errors}/>
+            {usage[node] === undefined ? null : u === undefined
+                ? <p className="text-ink-muted">{t("metrics.instance.none", {node})}</p>
+                : <UsageTiles usage={u} label={t("metrics.instance.total")}/>}
+            <p className="text-ink-muted">{t("metrics.instance.footer", {node, seconds: PG_POLL_MS / 1000})}</p>
+        </div>
+    );
+}
+
+/** A fact of a record: its name, then what it says. */
+const Fact = ({label, children}) => (
+    <>
+        <dt className="text-ink-muted">{label}</dt>
+        <dd>{children}</dd>
+    </>
+);
+
+/** A status in a word, after its mark, and the P of a resource not provisioned. */
+const StatusWord = ({status, notProvisioned = false}) => {
+    const {t} = useTranslation();
+    return (
+        <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+            <StatusMark state={toObjectState(status)} label={status || t("instance.unknown")}/>
+            {status || "-"}
+            {notProvisioned && <NotProvisionedMark/>}
+        </span>
+    );
+};
+
+/**
+ * The status of an instance, as its node reports it: its object and its node, a
+ * badge each, its availability, overall state, provisioning, freeze and monitor
+ * state, then its resources, each a badge opening its own panel.
+ */
+export function InstanceStatus({path, node}) {
+    const {t} = useTranslation();
+    const status = useEventStore((s) => s.objectInstanceStatus?.[path]?.[node]) ?? EMPTY;
+    const monitor = useEventStore((s) => s.instanceMonitor?.[`${node}:${path}`]) ?? EMPTY;
+    const resources = Object.entries(status.resources ?? {}).sort(([a], [b]) => a.localeCompare(b));
+    const frozen = !!status.frozen_at && status.frozen_at !== ZERO_TIME;
+    const notProvisioned = status.provisioned === "false" || status.provisioned === false;
+    return (
+        <div className="space-y-4" data-testid="instance-status">
+            <dl className="grid w-max grid-cols-[auto_auto] items-center gap-x-3 gap-y-1">
+                <Fact label={t("instance.panel.object")}><CrossLink kind="object" id={path}>{path}</CrossLink></Fact>
+                <Fact label={t("instance.panel.node")}><CrossLink kind="node" id={node}>{node}</CrossLink></Fact>
+                <Fact label={t("instance.panel.avail")}><StatusWord status={status.avail}/></Fact>
+                <Fact label={t("instance.panel.overall")}>{status.overall || "-"}</Fact>
+                <Fact label={t("instance.panel.provisioned")}>
+                    <span className="inline-flex items-center gap-1.5">
+                        {String(status.provisioned ?? "-")}
+                        {notProvisioned && <NotProvisionedMark/>}
+                    </span>
+                </Fact>
+                <Fact label={t("instance.panel.frozen")}>
+                    <span className="inline-flex items-center gap-1.5">
+                        {frozen ? t("instance.panel.yes") : t("instance.panel.no")}
+                        <FrozenMark frozen={frozen}/>
+                    </span>
+                </Fact>
+                <Fact label={t("instance.panel.monitor")}>{monitor.state || "-"}</Fact>
+            </dl>
+            <Table aria-label={t("instance.panel.resources")}>
+                <thead>
+                    <HeaderRow>
+                        <HeaderCell>{t("instance.panel.rid")}</HeaderCell>
+                        <HeaderCell>{t("common.status")}</HeaderCell>
+                        <HeaderCell>{t("common.type")}</HeaderCell>
+                        <HeaderCell>{t("instance.panel.label")}</HeaderCell>
+                    </HeaderRow>
+                </thead>
+                <tbody>
+                    {resources.map(([rid, r]) => (
+                        <Row key={rid}>
+                            <Cell className="whitespace-nowrap"><ResourceLink path={path} rid={rid}/></Cell>
+                            <Cell><StatusWord status={r.status} notProvisioned={r.provisioned?.state === "false"}/></Cell>
+                            <Cell className="text-ink-muted">{r.type}</Cell>
+                            <Cell className="break-all">{r.label}</Cell>
+                        </Row>
+                    ))}
+                    {resources.length === 0 && <EmptyRow colSpan={4}>{t("instance.panel.noResource")}</EmptyRow>}
+                </tbody>
+            </Table>
+        </div>
+    );
+}
+
+/** The flags of a resource on a node, in words: how the daemon treats it there. */
+const FLAGS = ["disable", "monitor", "optional", "standby", "encap"];
+
+/**
+ * A resource of an object on all its nodes: its object, a badge, its type, then
+ * its state node by node, each node the badge of the instance there: its status,
+ * provisioning, flags, label and its last log message.
+ */
+export function ResourceStatus({path, rid}) {
+    const {t} = useTranslation();
+    const instances = useEventStore((s) => s.objectInstanceStatus?.[path]) ?? EMPTY;
+    const rows = Object.entries(instances)
+        .filter(([, status]) => status?.resources?.[rid] !== undefined)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([node, status]) => ({node, r: status.resources[rid]}));
+    const type = rows.find(({r}) => r.type)?.r.type;
+    return (
+        <div className="space-y-4" data-testid="resource-status">
+            <dl className="grid w-max grid-cols-[auto_auto] items-center gap-x-3 gap-y-1">
+                <Fact label={t("instance.panel.object")}><CrossLink kind="object" id={path}>{path}</CrossLink></Fact>
+                <Fact label={t("instance.panel.rid")}><span className="font-medium">{rid}</span></Fact>
+                <Fact label={t("common.type")}>{type ?? "-"}</Fact>
+            </dl>
+            <Table aria-label={t("resource.panel.nodes")}>
+                <thead>
+                    <HeaderRow>
+                        <HeaderCell>{t("metrics.columns.node")}</HeaderCell>
+                        <HeaderCell>{t("common.status")}</HeaderCell>
+                        <HeaderCell>{t("resource.panel.flags")}</HeaderCell>
+                        <HeaderCell>{t("instance.panel.label")}</HeaderCell>
+                        <HeaderCell>{t("resource.panel.log")}</HeaderCell>
+                    </HeaderRow>
+                </thead>
+                <tbody>
+                    {rows.map(({node, r}) => {
+                        const last = (r.log ?? []).at(-1);
+                        return (
+                            <Row key={node}>
+                                <Cell className="whitespace-nowrap"><InstanceLink path={path} node={node}/></Cell>
+                                <Cell><StatusWord status={r.status} notProvisioned={r.provisioned?.state === "false"}/></Cell>
+                                <Cell className="text-ink-muted">
+                                    {FLAGS.filter((flag) => r[flag]).map((flag) => t(`resource.panel.flag.${flag}`)).join(", ") || "-"}
+                                </Cell>
+                                <Cell className="break-all">{r.label}</Cell>
+                                <Cell className={last?.level === "error" ? "text-state-down" : last?.level === "warn" ? "text-state-warn" : "text-ink-muted"}>
+                                    {last?.message ?? "-"}
+                                </Cell>
+                            </Row>
+                        );
+                    })}
+                    {rows.length === 0 && <EmptyRow colSpan={5}>{t("resource.panel.none")}</EmptyRow>}
+                </tbody>
+            </Table>
+        </div>
+    );
+}
+
+/** Closes a panel once its record, seen, is gone. */
+function useCloseWhenGone(id, known, onClose) {
+    const seen = useRef(false);
+    useEffect(() => {
+        seen.current = false;
+    }, [id]);
+    useEffect(() => {
+        if (known) seen.current = true;
+        else if (seen.current) {
+            seen.current = false;
+            onClose();
+        }
+    }, [known, onClose]);
+}
+
+/**
+ * The instance of a service or a volume on a node, by `path@node`: its status, as
+ * its node reports it, what its resources report there (ObjectResources), then its
+ * usage there. It closes once the instance is gone.
+ */
+export function InstanceDetailPanel({id, tab, onTabChange, onClose}) {
+    const {t} = useTranslation();
+    const parsed = id === undefined ? null : parseInstanceId(id);
+    const known = useEventStore((s) => parsed !== null && s.objectInstanceStatus?.[parsed.path]?.[parsed.node] !== undefined);
+    useCloseWhenGone(id, known, onClose);
+    const tabs = [
+        {key: "status", label: t("panel.tabs.status")},
+        {key: "resources", label: t("panel.tabs.resources")},
+        {key: "usage", label: t("panel.tabs.usage")},
+    ];
+    return (
+        <RecordPanel
+            open={parsed !== null}
+            kind="instance"
+            recordId={id}
+            title={parsed ? t("instance.panel.title", {path: parsed.path, node: parsed.node}) : ""}
+            onClose={onClose}
+            tabs={tabs}
+            tab={tab}
+            onTabChange={onTabChange}
+            closeOnOutsideClick={false}
+        >
+            {(active) => (parsed === null ? null : active === "usage"
+                ? <InstanceUsage key={id} path={parsed.path} node={parsed.node}/>
+                : active === "resources"
+                    ? <ObjectResources key={id} path={parsed.path} node={parsed.node}/>
+                    : <InstanceStatus key={id} path={parsed.path} node={parsed.node}/>)}
+        </RecordPanel>
+    );
+}
+
+/**
+ * A resource of an object, by `path:rid`: its state on each node of the object,
+ * then what it reports on each (`om <path> resource info list`, ObjectResources).
+ * It closes once the object is gone.
+ */
+export function ResourceDetailPanel({id, tab, onTabChange, onClose}) {
+    const {t} = useTranslation();
+    const parsed = id === undefined ? null : parseResourceId(id);
+    const known = useEventStore((s) => parsed !== null && s.objectInstanceStatus?.[parsed.path] !== undefined);
+    useCloseWhenGone(id, known, onClose);
+    const tabs = [
+        {key: "status", label: t("panel.tabs.status")},
+        {key: "info", label: t("panel.tabs.info")},
+    ];
+    return (
+        <RecordPanel
+            open={parsed !== null}
+            kind="resource"
+            recordId={id}
+            title={parsed ? t("resource.panel.title", {path: parsed.path, rid: parsed.rid}) : ""}
+            onClose={onClose}
+            tabs={tabs}
+            tab={tab}
+            onTabChange={onTabChange}
+            closeOnOutsideClick={false}
+        >
+            {(active) => (parsed === null ? null : active === "info"
+                ? <ObjectResources key={id} path={parsed.path} rid={parsed.rid}/>
+                : <ResourceStatus key={id} path={parsed.path} rid={parsed.rid}/>)}
+        </RecordPanel>
+    );
+}

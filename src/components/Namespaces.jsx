@@ -33,7 +33,6 @@ const objectsUrl = (namespace, {kind, globalState} = {}) => {
 };
 
 const totalOf = (byAvail) => Object.values(byAvail ?? {}).reduce((n, c) => n + c, 0);
-const last = (values) => (values?.length ? values[values.length - 1] : undefined);
 
 /** A size, "0" rather than nothing for none. */
 const size = (bytes, locale) => (bytes > 0 ? formatBytes(bytes, locale) : "0");
@@ -122,8 +121,8 @@ function UsageCell({usage, format, title, locale}) {
 
 const NamespaceRow = React.memo(({namespace, counts, pools, networks, cpu, memory, locale, isOpen, onShow, onOpen}) => {
     const {t} = useTranslation();
-    const cpuUsed = last(cpu.series);
-    const memoryUsed = last(memory.series);
+    const cpuUsed = cpu.used;
+    const memoryUsed = memory.used;
     // In cpu, mcpu or µcpu, three significant digits at most.
     const cpus = (n) => formatCpu(n, locale);
     return (
@@ -180,8 +179,8 @@ const SORT = {
     cfg: (row) => row.counts.cfg,
     pools: (row) => row.pools.used,
     nets: (row) => row.networks.used,
-    cpu: (row) => last(row.cpu.series) ?? -1,
-    memory: (row) => last(row.memory.series) ?? -1,
+    cpu: (row) => row.cpu.used ?? -1,
+    memory: (row) => row.memory.used ?? -1,
 };
 
 const COLUMNS = ["namespace", "services", "volumes", "sec", "cfg", "pools", "nets", "cpu", "memory"];
@@ -232,8 +231,9 @@ const Namespaces = () => {
             counts: counts.get(namespace),
             pools: poolUsage(namespace, claims.poolsHeld, claims.pools, own),
             networks: networkUsage(namespace, claims.networksHeld, claims.networks, own),
-            cpu: {series: pg[namespace]?.cpu ?? [], cap: computeLimit(own, "cpu")},
-            memory: {series: pg[namespace]?.memory ?? [], cap: computeLimit(own, "memory")},
+            // Over every node of the cluster: none until read, the cpu until a second reading.
+            cpu: {used: pg[namespace]?.cpu ?? undefined, cap: computeLimit(own, "cpu")},
+            memory: {used: pg[namespace]?.memory, cap: computeLimit(own, "memory")},
         };
     }), [namespaces, counts, claims, pg]);
 

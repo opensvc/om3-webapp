@@ -1,8 +1,14 @@
 import React from 'react';
-import {render, screen, fireEvent, waitFor, within} from '@testing-library/react';
+import {render as renderInDom, screen, fireEvent, waitFor, within} from '@testing-library/react';
+import {MemoryRouter} from 'react-router-dom';
 import {vi} from 'vitest';
 import {NamespaceClaims} from '../NamespaceClaims';
 import {clearGrants} from '../../hooks/useGrants';
+import useEventStore from '../../hooks/useEventStore';
+import {resetPgUsage} from '../../hooks/usePgUsage';
+
+/** Rendered in a router: its badges open their records over the view. */
+const render = (ui) => renderInDom(<MemoryRouter>{ui}</MemoryRouter>);
 
 const GiB = 1024 ** 3;
 
@@ -49,11 +55,14 @@ beforeEach(() => {
     requests = [];
     grant = {squatter: null};
     refuse = null;
+    resetPgUsage();
+    // One node, its cgroups read through the API.
+    useEventStore.setState({nodeStatus: {n1: {}}, objectInstanceStatus: {}});
     global.fetch = vi.fn(async (url, options = {}) => {
         const method = options.method ?? 'GET';
         requests.push({url, method, body: options.body});
         if (url === '/api/auth/whoami') return new Response(JSON.stringify({grant}), {status: 200});
-        if (url === '/metrics/pg') {
+        if (url === '/api/node/name/n1/metrics/pg') {
             return new Response(`opensvc_pg_cgroup_memory_current_bytes{namespace="prod",path="prod/svc/web"} ${GiB}`, {status: 200});
         }
         if (method !== 'GET') {
@@ -67,7 +76,10 @@ beforeEach(() => {
     });
 });
 
-afterEach(() => localStorage.clear());
+afterEach(() => {
+    resetPgUsage();
+    localStorage.clear();
+});
 
 const claimsTable = () => screen.getByRole('table', {name: 'Claims and usage'});
 const line = (text) => within(claimsTable()).getAllByRole('row').find((r) => r.textContent.startsWith(text));

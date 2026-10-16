@@ -6,6 +6,7 @@ import userEvent from '@testing-library/user-event';
 import {URL_OBJECT} from '../../config/apiPath.js';
 import {vi, describe, test, expect, beforeEach, afterEach} from 'vitest';
 import i18n from '../../i18n';
+import {PencilIcon, SlidersIcon} from '../../ui/icons';
 
 // ── Hoisted variables ─────────────────────────────────────────────────
 const {
@@ -378,6 +379,16 @@ describe('ConfigSection Component', () => {
             await act(() => user.click(edit));
             return screen.findByRole('textbox', {name: 'Configuration file'});
         };
+
+        test('the pencil edits the file; the sliders open the parameters wizard', async () => {
+            mockDaemon({stored: '[DEFAULT]\nnodes = *'});
+            renderConfig();
+            const glyph = (Icon) => render(<Icon/>).container.querySelector('svg').innerHTML;
+            const edit = await screen.findByRole('button', {name: 'Edit configuration file'});
+            const wizard = screen.getByRole('button', {name: 'Manage configuration parameters'});
+            expect(edit.querySelector('svg').innerHTML).toBe(glyph(PencilIcon));
+            expect(wizard.querySelector('svg').innerHTML).toBe(glyph(SlidersIcon));
+        });
 
         test('edits the file as stored, secrets in clear, and uploads it', async () => {
             const openSnackbar = vi.fn();

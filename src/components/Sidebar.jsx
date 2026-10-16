@@ -1,8 +1,8 @@
-import {useState, useCallback} from "react";
+import {useState, useCallback, useEffect} from "react";
 import {Link, NavLink, useLocation} from "react-router-dom";
 import {useTranslation} from "react-i18next";
 import {cn} from "../ui/cn";
-import useSidebarAlerts from "../hooks/useSidebarAlerts";
+import {useMediaQuery} from "../ui/lib/media";
 import {AlertMark} from "../ui/components/AlertMark";
 import {ALL_LIST, OBJECT_LISTS, listUrl} from "../utils/objectLists";
 
@@ -70,9 +70,27 @@ function readSidebarOpen() {
 }
 
 /** Open state of the sidebar, remembered in local storage. */
+/** A window short of room, below lg (1200px): the menu takes too much of it to stay open. */
+export const COMPACT_QUERY = "(max-width:1199.95px)";
+
+/**
+ * Open state of the sidebar, and what toggles it. A wide window remembers it in
+ * local storage. A window short of room (`compact`) has it folded: by default, on
+ * becoming so, and once an entry is chosen (`fold`), unfolded the time to choose,
+ * a choice not remembered.
+ */
 export function useSidebarOpen() {
+    const compact = useMediaQuery(COMPACT_QUERY);
     const [open, setOpen] = useState(readSidebarOpen);
+    const [compactOpen, setCompactOpen] = useState(false);
+    useEffect(() => {
+        if (compact) setCompactOpen(false);
+    }, [compact]);
     const toggle = useCallback(() => {
+        if (compact) {
+            setCompactOpen((previous) => !previous);
+            return;
+        }
         setOpen((previous) => {
             const next = !previous;
             try {
@@ -82,8 +100,22 @@ export function useSidebarOpen() {
             }
             return next;
         });
-    }, []);
-    return [open, toggle];
+    }, [compact]);
+    const fold = useCallback(() => setCompactOpen(false), []);
+    return [compact ? compactOpen : open, toggle, {compact, fold}];
+}
+
+const LEVELS = ["warn", "down"];
+
+/**
+ * The alert of the folded menu, on its button: the worst of the alerts of its
+ * entries, all of them said in its tooltip. None while all is well.
+ */
+export function menuAlert(alerts) {
+    const raised = Object.values(alerts ?? {}).map((entry) => entry?.alert).filter(Boolean);
+    if (raised.length === 0) return null;
+    const level = raised.reduce((worst, a) => (LEVELS.indexOf(a.level) > LEVELS.indexOf(worst) ? a.level : worst), "warn");
+    return {level, text: raised.map((a) => a.text).join("\n")};
 }
 
 const LINK = "flex items-center gap-2 rounded-(--radius-control) px-2 py-1 text-ink-muted hover:text-ink";
@@ -102,7 +134,7 @@ function shownList(location) {
  * their title, is current when its list is the one shown, the page being the same
  * for all of them.
  */
-function NavSection({section, alerts}) {
+function NavSection({section, alerts, onNavigate}) {
     const {t} = useTranslation();
     const location = useLocation();
     const shown = shownList(location);
@@ -116,6 +148,7 @@ function NavSection({section, alerts}) {
                 <h2 id={titleId} className="relative">
                     <Link
                         to={section.to}
+                        onClick={onNavigate}
                         aria-current={shown === section.list ? "page" : undefined}
                         className={cn(TITLE, "flex rounded-(--radius-control) hover:text-ink", shown === section.list && CURRENT)}
                     >
@@ -130,6 +163,7 @@ function NavSection({section, alerts}) {
                     const link = list === undefined ? (
                         <NavLink
                             to={to}
+                            onClick={onNavigate}
                             // Mouseover details of the entries that have some.
                             title={alerts[id]?.details?.join("\n")}
                             className={({isActive}) => cn(LINK, isActive && CURRENT)}
@@ -137,7 +171,7 @@ function NavSection({section, alerts}) {
                             {t(labelKey)}
                         </NavLink>
                     ) : (
-                        <Link to={to} aria-current={shown === list ? "page" : undefined} className={cn(LINK, shown === list && CURRENT)}>
+                        <Link to={to} onClick={onNavigate} aria-current={shown === list ? "page" : undefined} className={cn(LINK, shown === list && CURRENT)}>
                             {t(labelKey)}
                         </Link>
                     );
@@ -184,8 +218,7 @@ function onMenuKeyDown(event) {
  * header: folded, it keeps its place in the layout but not its width, and `inert`
  * takes it out of the keyboard path.
  */
-export function Sidebar({open}) {
-    const alerts = useSidebarAlerts();
+export function Sidebar({open, alerts = {}, onNavigate}) {
     const {t} = useTranslation();
     return (
         <aside
@@ -197,7 +230,7 @@ export function Sidebar({open}) {
             )}
         >
             <nav aria-label={t("nav.main")} aria-keyshortcuts="n" onKeyDown={onMenuKeyDown} className="w-60 p-2">
-                {NAV_SECTIONS.map((section) => <NavSection key={section.key} section={section} alerts={alerts}/>)}
+                {NAV_SECTIONS.map((section) => <NavSection key={section.key} section={section} alerts={alerts} onNavigate={onNavigate}/>)}
             </nav>
         </aside>
     );

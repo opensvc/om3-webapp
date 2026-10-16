@@ -547,7 +547,24 @@
       "title": "Instance Logs - {{node}}/{{name}}",
       "close": "Close instance logs",
       "resize": "Resize drawer"
-    }
+    },
+    "panel": {
+      "title": "{{path}} @ {{node}}",
+      "avail": "Avail",
+      "overall": "Overall",
+      "provisioned": "Provisioned",
+      "frozen": "Frozen",
+      "monitor": "Monitor",
+      "yes": "yes",
+      "no": "no",
+      "resources": "Resources of the instance",
+      "rid": "Resource",
+      "label": "Label",
+      "noResource": "No resource.",
+      "object": "Object",
+      "node": "Node"
+    },
+    "on": "on {{node}}"
   },
   "keys": {
     "title": "Object Keys ({{total}})",
@@ -649,6 +666,8 @@
   "metrics": {
     "columns": {
       "object": "Object",
+      "node": "Node",
+      "instances": "Instances",
       "cpu": "CPU",
       "memory": "Memory",
       "limit": "Limit"
@@ -661,7 +680,19 @@
     "fetchError": "Failed to fetch metrics: {{error}}",
     "loading": "Loading metrics",
     "empty": "No cgroup metrics for the objects of {{namespace}}",
-    "footer": "Usage on the node serving this page, refreshed every {{seconds}} seconds. CPU is in percent of one CPU."
+    "footer": "Summed over the nodes of the cluster, refreshed every {{seconds}} seconds. CPU is in percent of one CPU.",
+    "object": {
+      "total": "Usage of the object",
+      "instances": "Usage by instance",
+      "openInstance": "Open the instance on {{node}}",
+      "none": "No instance.",
+      "footer": "Summed over its instances, refreshed every {{seconds}} seconds. CPU is in percent of one CPU; the limits add up, unlimited if one is."
+    },
+    "instance": {
+      "total": "Usage of the instance",
+      "none": "No cgroup for this instance on {{node}}.",
+      "footer": "On {{node}}, refreshed every {{seconds}} seconds. CPU is in percent of one CPU."
+    }
   },
   "namespaces": {
     "columns": {
@@ -974,7 +1005,9 @@
       "filter": "Filter the resources",
       "none": "No resource reports information",
       "noMatch": "No resource matches the filter",
-      "key": "Key"
+      "key": "Key",
+      "noneOf": "{{rid}} reports no information.",
+      "table": "Resource information"
     }
   },
   "nodePanel": {
@@ -1011,15 +1044,22 @@
       "hardware": "Hardware",
       "disks": "Disks",
       "addresses": "IP addresses",
-      "san": "SAN",
       "initiators": "SAN initiators",
       "paths": "SAN paths",
       "packages": "Packages",
       "filterPackages": "Filter the packages",
-      "morePackages_one": "{{count}} more package: refine the filter.",
-      "morePackages_other": "{{count}} more packages: refine the filter.",
       "users": "Users",
-      "groups": "Groups"
+      "groups": "Groups",
+      "views": {
+        "label": "Inventory views",
+        "hardware": "Hardware",
+        "disks": "Disks",
+        "addresses": "Addresses",
+        "san": "SAN",
+        "packages": "Packages",
+        "accounts": "Accounts"
+      },
+      "filterAddresses": "Filter the addresses"
     },
     "config": {
       "file": "Node configuration file",
@@ -1202,7 +1242,9 @@
       "actionsMenu": "Object actions"
     },
     "selectHint": "Select objects to act on them",
-    "selectNamespace": "Select the objects of {{namespace}}"
+    "selectNamespace": "Select the objects of {{namespace}}",
+    "openInstance": "Open the instance on {{node}}",
+    "openInstanceOf": "Open the instance of {{name}} on {{node}}"
   },
   "pools": {
     "columns": {
@@ -1267,17 +1309,22 @@
     "resize": "Resize the panel",
     "tabs": {
       "status": "Status",
+      "usage": "Usage",
       "logs": "Logs",
       "resources": "Resources",
       "schedules": "Schedules",
       "keys": "Keys",
-      "config": "Configuration"
+      "config": "Configuration",
+      "info": "Info"
     },
     "crossLink": "Show the {{kind}} here",
     "kinds": {
       "object": "object",
       "network": "network",
-      "namespace": "namespace"
+      "namespace": "namespace",
+      "node": "node",
+      "instance": "instance",
+      "resource": "resource"
     },
     "logs": {
       "noNode": "No instance to read the logs of."
@@ -1316,7 +1363,9 @@
       "nscfg": "Namespace configurations",
       "ccfg": "Cluster",
       "network": "Networks",
-      "namespace": "Namespaces"
+      "namespace": "Namespaces",
+      "instance": "Instances",
+      "resource": "Resources"
     }
   },
   "statusBoard": {
@@ -1387,7 +1436,7 @@
       "object": "Actions",
       "allNodes": "all nodes",
       "clearSelection": "Clear the selection",
-      "selectionHelp": "Click on resources or on instances to select them.",
+      "selectionHelp": "Check resources or instances to select them.",
       "selectionResources_one": "Actions on 1 resource",
       "selectionResources_other": "Actions on {{count}} resources",
       "selectionInstances_one": "Actions on 1 instance",
@@ -1511,12 +1560,12 @@
       "daemondata": "Daemon data"
     },
     "listener": {
-      "title": "Listener",
       "confirm": {
         "start": "Start the {{listener}} listener of {{node}}?",
         "stop": "Stop the {{listener}} listener of {{node}}? Its API stops answering over the network, this page included if it goes through {{node}}.",
         "restart": "Restart the {{listener}} listener of {{node}}? Its API stops answering for a moment."
-      }
+      },
+      "actionsOf": "Actions on the listener {{listener}}"
     },
     "heartbeats": {
       "title": "Heartbeats",
@@ -1538,13 +1587,43 @@
     "execs": {
       "title": "Executions",
       "filter": "Filter executions",
-      "shown": "The latest {{shown}} of {{count}} shown.",
       "terminate": "Terminate",
       "confirm": "Send TERM to \"{{command}}\" on {{node}}?"
     },
     "dns": {
       "title": "DNS zone",
       "filter": "Filter records"
+    },
+    "views": {
+      "label": "Daemon views",
+      "overview": "Overview",
+      "executions": "Executions",
+      "orchestrations": "Orchestrations",
+      "dns": "DNS"
+    },
+    "summary": {
+      "overview": "{{up}} of {{components}} components running, {{beating}} of {{streams}} heartbeat streams beating",
+      "executions": "{{count}} executions, {{running}} running",
+      "orchestrations": "{{count}} orchestrations, {{running}} in progress",
+      "dns": "{{count}} records of {{names}} names",
+      "running_one": "{{count}} running",
+      "running_other": "{{count}} running"
+    }
+  },
+  "resource": {
+    "panel": {
+      "title": "{{rid}} of {{path}}",
+      "nodes": "The resource on each node",
+      "flags": "Flags",
+      "log": "Last message",
+      "none": "No node reports this resource.",
+      "flag": {
+        "disable": "disabled",
+        "monitor": "monitored",
+        "optional": "optional",
+        "standby": "standby",
+        "encap": "encapsulated"
+      }
     }
   }
 }

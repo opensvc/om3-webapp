@@ -547,7 +547,24 @@
       "title": "Journaux de l'instance - {{node}}/{{name}}",
       "close": "Fermer les journaux de l'instance",
       "resize": "Redimensionner le panneau"
-    }
+    },
+    "panel": {
+      "title": "{{path}} @ {{node}}",
+      "avail": "Disponibilité",
+      "overall": "Global",
+      "provisioned": "Provisionné",
+      "frozen": "Gelé",
+      "monitor": "Moniteur",
+      "yes": "oui",
+      "no": "non",
+      "resources": "Ressources de l'instance",
+      "rid": "Ressource",
+      "label": "Libellé",
+      "noResource": "Aucune ressource.",
+      "object": "Objet",
+      "node": "Nœud"
+    },
+    "on": "sur {{node}}"
   },
   "keys": {
     "title": "Clés de l'objet ({{total}})",
@@ -649,6 +666,8 @@
   "metrics": {
     "columns": {
       "object": "Objet",
+      "node": "Nœud",
+      "instances": "Instances",
       "cpu": "CPU",
       "memory": "Mémoire",
       "limit": "Limite"
@@ -661,7 +680,19 @@
     "fetchError": "Échec de la récupération des métriques : {{error}}",
     "loading": "Chargement des métriques",
     "empty": "Aucune métrique cgroup pour les objets de {{namespace}}",
-    "footer": "Utilisation sur le nœud qui sert cette page, rafraîchie toutes les {{seconds}} secondes. Le CPU est en pourcentage d'un CPU."
+    "footer": "Additionné sur les nœuds du cluster, rafraîchi toutes les {{seconds}} secondes. Le CPU est en pourcentage d'un CPU.",
+    "object": {
+      "total": "Usage de l'objet",
+      "instances": "Usage par instance",
+      "openInstance": "Ouvrir l'instance sur {{node}}",
+      "none": "Aucune instance.",
+      "footer": "Additionné sur ses instances, rafraîchi toutes les {{seconds}} secondes. Le CPU est en pourcentage d'un CPU ; les limites s'additionnent, illimitées si l'une l'est."
+    },
+    "instance": {
+      "total": "Usage de l'instance",
+      "none": "Aucun cgroup pour cette instance sur {{node}}.",
+      "footer": "Sur {{node}}, rafraîchi toutes les {{seconds}} secondes. Le CPU est en pourcentage d'un CPU."
+    }
   },
   "namespaces": {
     "columns": {
@@ -974,7 +1005,9 @@
       "filter": "Filtrer les ressources",
       "none": "Aucune ressource ne remonte d’information",
       "noMatch": "Aucune ressource ne correspond au filtre",
-      "key": "Clé"
+      "key": "Clé",
+      "noneOf": "{{rid}} ne signale aucune information.",
+      "table": "Informations des ressources"
     }
   },
   "nodePanel": {
@@ -1011,15 +1044,22 @@
       "hardware": "Matériel",
       "disks": "Disques",
       "addresses": "Adresses IP",
-      "san": "SAN",
       "initiators": "Initiateurs SAN",
       "paths": "Chemins SAN",
       "packages": "Paquets",
       "filterPackages": "Filtrer les paquets",
-      "morePackages_one": "{{count}} paquet de plus : précisez le filtre.",
-      "morePackages_other": "{{count}} paquets de plus : précisez le filtre.",
       "users": "Utilisateurs",
-      "groups": "Groupes"
+      "groups": "Groupes",
+      "views": {
+        "label": "Vues de l'inventaire",
+        "hardware": "Matériel",
+        "disks": "Disques",
+        "addresses": "Adresses",
+        "san": "SAN",
+        "packages": "Paquets",
+        "accounts": "Comptes"
+      },
+      "filterAddresses": "Filtrer les adresses"
     },
     "config": {
       "file": "Fichier de configuration du nœud",
@@ -1202,7 +1242,9 @@
       "actionsMenu": "Actions sur l'objet"
     },
     "selectHint": "Sélectionnez des objets pour agir dessus",
-    "selectNamespace": "Sélectionner les objets de {{namespace}}"
+    "selectNamespace": "Sélectionner les objets de {{namespace}}",
+    "openInstance": "Ouvrir l'instance sur {{node}}",
+    "openInstanceOf": "Ouvrir l'instance de {{name}} sur {{node}}"
   },
   "pools": {
     "columns": {
@@ -1267,17 +1309,22 @@
     "resize": "Redimensionner le panneau",
     "tabs": {
       "status": "État",
+      "usage": "Usage",
       "logs": "Journaux",
       "resources": "Ressources",
       "schedules": "Planifications",
       "keys": "Clés",
-      "config": "Configuration"
+      "config": "Configuration",
+      "info": "Infos"
     },
     "crossLink": "Afficher la fiche ici ({{kind}})",
     "kinds": {
       "object": "objet",
       "network": "réseau",
-      "namespace": "espace de noms"
+      "namespace": "espace de noms",
+      "node": "nœud",
+      "instance": "instance",
+      "resource": "ressource"
     },
     "logs": {
       "noNode": "Aucune instance dont lire les journaux."
@@ -1316,7 +1363,9 @@
       "nscfg": "Configurations de namespace",
       "ccfg": "Cluster",
       "network": "Réseaux",
-      "namespace": "Namespaces"
+      "namespace": "Namespaces",
+      "instance": "Instances",
+      "resource": "Ressources"
     }
   },
   "statusBoard": {
@@ -1387,7 +1436,7 @@
       "object": "Actions",
       "allNodes": "tous les nœuds",
       "clearSelection": "Vider la sélection",
-      "selectionHelp": "Cliquez sur des ressources ou sur des instances pour les sélectionner.",
+      "selectionHelp": "Cochez des ressources ou des instances pour les sélectionner.",
       "selectionResources_one": "Actions sur 1 ressource",
       "selectionResources_other": "Actions sur {{count}} ressources",
       "selectionInstances_one": "Actions sur 1 instance",
@@ -1511,12 +1560,12 @@
       "daemondata": "Données du démon"
     },
     "listener": {
-      "title": "Listener",
       "confirm": {
         "start": "Démarrer le listener {{listener}} de {{node}} ?",
         "stop": "Arrêter le listener {{listener}} de {{node}} ? Son API ne répond plus par le réseau, cette page comprise si elle passe par {{node}}.",
         "restart": "Redémarrer le listener {{listener}} de {{node}} ? Son API ne répond plus un instant."
-      }
+      },
+      "actionsOf": "Actions sur le listener {{listener}}"
     },
     "heartbeats": {
       "title": "Heartbeats",
@@ -1538,13 +1587,43 @@
     "execs": {
       "title": "Exécutions",
       "filter": "Filtrer les exécutions",
-      "shown": "Les {{shown}} dernières sur {{count}} affichées.",
       "terminate": "Terminer",
       "confirm": "Envoyer TERM à « {{command}} » sur {{node}} ?"
     },
     "dns": {
       "title": "Zone DNS",
       "filter": "Filtrer les enregistrements"
+    },
+    "views": {
+      "label": "Vues du démon",
+      "overview": "Vue d'ensemble",
+      "executions": "Exécutions",
+      "orchestrations": "Orchestrations",
+      "dns": "DNS"
+    },
+    "summary": {
+      "overview": "{{up}} composants sur {{components}} actifs, {{beating}} flux de heartbeat sur {{streams}} battent",
+      "executions": "{{count}} exécutions, {{running}} en cours",
+      "orchestrations": "{{count}} orchestrations, {{running}} en cours",
+      "dns": "{{count}} enregistrements de {{names}} noms",
+      "running_one": "{{count}} en cours",
+      "running_other": "{{count}} en cours"
+    }
+  },
+  "resource": {
+    "panel": {
+      "title": "{{rid}} de {{path}}",
+      "nodes": "La ressource sur chaque nœud",
+      "flags": "Options",
+      "log": "Dernier message",
+      "none": "Aucun nœud ne signale cette ressource.",
+      "flag": {
+        "disable": "désactivée",
+        "monitor": "surveillée",
+        "optional": "facultative",
+        "standby": "standby",
+        "encap": "encapsulée"
+      }
     }
   }
 }

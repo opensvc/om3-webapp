@@ -89,11 +89,11 @@ describe('record panels', () => {
         expect(openDialogs()).toHaveLength(1);
     });
 
-    test('a service opens on its status board, its resources, schedules, logs and configuration on tabs of their own', () => {
+    test('a service opens on its status board, its usage, schedules, logs and configuration on tabs of their own', () => {
         renderPeek('/nodes?peek=object:ns1/svc/web');
         const panel = screen.getByRole('dialog', {name: 'ns1/svc/web'});
         expect(within(panel).getAllByRole('tab').map((tab) => tab.textContent))
-            .toEqual(['Status', 'Resources', 'Schedules', 'Logs', 'Configuration']);
+            .toEqual(['Status', 'Usage', 'Schedules', 'Logs', 'Configuration']);
         expect(within(panel).getByRole('tab', {name: 'Status'})).toHaveAttribute('aria-selected', 'true');
         expect(within(panel).getByTestId('object-status')).toBeVisible();
         expect(within(panel).queryByTestId('object-details')).not.toBeInTheDocument();
@@ -113,13 +113,12 @@ describe('record panels', () => {
         for (const tab of tabs) expect(tab.querySelector('svg')).toBeNull();
     });
 
-    test('the resources and the schedules of the object, a tab each', () => {
+    test('the schedules of the object on a tab; what its resources report, in the panels of its instances and resources', () => {
         renderPeek('/nodes?peek=object:ns1/svc/web');
         const panel = screen.getByRole('dialog', {name: 'ns1/svc/web'});
-        fireEvent.click(within(panel).getByRole('tab', {name: 'Resources'}));
-        expect(screen.getByTestId('search')).toHaveTextContent('peektab=resources');
-        expect(within(panel).getByTestId('object-resources')).toHaveTextContent('ns1/svc/web');
+        expect(within(panel).queryByRole('tab', {name: 'Resources'})).not.toBeInTheDocument();
         fireEvent.click(within(panel).getByRole('tab', {name: 'Schedules'}));
+        expect(screen.getByTestId('search')).toHaveTextContent('peektab=schedules');
         expect(within(panel).getByTestId('object-schedules')).toHaveTextContent('ns1/svc/web');
         expect(within(panel).queryByTestId('object-resources')).not.toBeInTheDocument();
     });

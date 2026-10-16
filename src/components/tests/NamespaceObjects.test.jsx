@@ -66,9 +66,11 @@ describe('NamespaceObjects', () => {
         expect(rows().map(texts)).toEqual([['app', '2', '2 KiB']]);
     });
 
-    test('a row opens its object over the view', () => {
+    test('the name of an object a badge opening it over the view; the row opens nothing', () => {
         renderList('services');
-        fireEvent.click(within(rows()[1]).getAllByRole('cell')[1]);
+        fireEvent.click(within(rows()[1]).getAllByRole('cell')[2]);
+        expect(screen.getByTestId('search')).not.toHaveTextContent('peek=');
+        fireEvent.click(within(rows()[1]).getByRole('button', {name: 'web'}));
         expect(screen.getByTestId('search')).toHaveTextContent('peek=object%3Aprod%2Fsvc%2Fweb');
     });
 

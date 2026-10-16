@@ -4,7 +4,8 @@ import {URL_OBJECT} from "../config/apiPath.js";
 import {parseObjectPath} from "../utils/objectUtils.jsx";
 import {Table, HeaderRow, HeaderCell, Row, Cell} from "../ui/components/Table";
 import {RelativeTime} from "../ui/components/RelativeTime";
-import {DataTable, FilterField, Loaded, Section, isSet, matches, useApiResource} from "./NodePanel";
+import {DataTable, FilterField, Loaded, isSet, matches, useApiResource} from "./NodePanel";
+import {InstanceLink, ResourceLink} from "./RecordLinks";
 
 /*
  * Tabs of the object panel, read from the daemon API as om reads them: the daemon
@@ -55,7 +56,7 @@ export function ObjectSchedules({path}) {
                     empty={t("objectTabs.schedules.none")}
                     columns={[
                         {key: "action", label: t("nodePanel.columns.action"), className: "font-medium"},
-                        {key: "node", label: t("common.node")},
+                        {key: "node", label: t("common.node"), render: (s) => (s.node ? <InstanceLink path={path} node={s.node}/> : "")},
                         {key: "schedule", label: t("nodePanel.columns.schedule"), className: "font-mono text-data", render: (s) => s.schedule || t("nodePanel.schedules.unscheduled")},
                         {key: "last_run_at", label: t("nodePanel.columns.lastRun"), render: (s) => when(s.last_run_at)},
                         {key: "next_run_at", label: t("nodePanel.columns.nextRun"), render: (s) => when(s.next_run_at)},
@@ -69,16 +70,24 @@ export function ObjectSchedules({path}) {
 }
 
 /**
- * What the resources of the object report on each node (`om <path> resource info
- * list`): a table per resource, a line per key, a column per node, for the values
- * of the nodes to be compared at a glance.
+ * What the resources of an object report on each node (`om <path> resource info
+ * list`): one plain table, a line per key, a column per node, for the values of
+ * the nodes to be compared at a glance; a line opening each resource, its badge,
+ * as the objects table opens each namespace. With `rid`, that resource alone: the
+ * info tab of its own panel. With `node`, that node alone: the resources tab of an
+ * instance. The filter keeps a resource whole by its name, else the keys and the
+ * values that match.
  */
-export function ObjectResources({path}) {
+export function ObjectResources({path, rid: only, node: onNode}) {
     const {t} = useTranslation();
     const info = useApiResource(objectUrl(path, "resource/info"));
     const [filter, setFilter] = useState("");
 
-    const items = useMemo(() => info.data?.items ?? [], [info.data]);
+    const items = useMemo(
+        () => (info.data?.items ?? []).filter((item) =>
+            (only === undefined || item.rid === only) && (onNode === undefined || item.node === onNode)),
+        [info.data, only, onNode],
+    );
     const nodes = useMemo(() => [...new Set(items.map((i) => i.node))].sort(), [items]);
     // rid → key → node → value, the resources and their keys in their order.
     const resources = useMemo(() => {
@@ -103,39 +112,49 @@ export function ObjectResources({path}) {
         .filter(({keys}) => keys.length > 0);
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-3">
             {resources.length > 0 && (
                 <div className="flex">
                     <FilterField label={t("objectTabs.resources.filter")} value={filter} onChange={setFilter}/>
                 </div>
             )}
             <Loaded resource={info}>
-                {resources.length === 0 && <p className="text-ink-muted">{t("objectTabs.resources.none")}</p>}
+                {resources.length === 0 && (
+                    <p className="text-ink-muted">{only === undefined ? t("objectTabs.resources.none") : t("objectTabs.resources.noneOf", {rid: only})}</p>
+                )}
                 {resources.length > 0 && shown.length === 0 && <p className="text-ink-muted">{t("objectTabs.resources.noMatch")}</p>}
-                {shown.map(({rid, keys}) => (
-                    <Section key={rid} id={`object-resource-${path}-${rid}`} title={rid} count={keys.length}>
-                        <Table aria-label={rid}>
-                            <thead>
-                            <HeaderRow>
-                                <HeaderCell>{t("objectTabs.resources.key")}</HeaderCell>
-                                {nodes.map((node) => <HeaderCell key={node}>{node}</HeaderCell>)}
-                            </HeaderRow>
-                            </thead>
-                            <tbody>
-                            {keys.map(([key, values]) => (
-                                <Row key={key}>
-                                    <Cell className="font-medium">{key}</Cell>
-                                    {nodes.map((node) => (
-                                        <Cell key={node} className="font-mono text-data break-all">
-                                            {values[node] ?? <span className="text-ink-muted">–</span>}
-                                        </Cell>
-                                    ))}
-                                </Row>
-                            ))}
-                            </tbody>
-                        </Table>
-                    </Section>
-                ))}
+                {shown.length > 0 && (
+                    <Table aria-label={t("objectTabs.resources.table")}>
+                        <thead>
+                        <HeaderRow>
+                            <HeaderCell>{t("objectTabs.resources.key")}</HeaderCell>
+                            {nodes.map((node) => <HeaderCell key={node}><InstanceLink path={path} node={node}/></HeaderCell>)}
+                        </HeaderRow>
+                        </thead>
+                        <tbody>
+                        {shown.map(({rid, keys}) => (
+                            <React.Fragment key={rid}>
+                                {/* The line opening the keys of a resource, its badge across the row. */}
+                                <tr data-resource-row={rid} className="h-[1.875rem] border-b border-line bg-surface-sunken">
+                                    <th scope="rowgroup" colSpan={nodes.length + 1} className="px-2 py-1 text-left font-semibold text-ink">
+                                        <ResourceLink path={path} rid={rid}/>
+                                    </th>
+                                </tr>
+                                {keys.map(([key, values]) => (
+                                    <Row key={key}>
+                                        <Cell className="font-medium">{key}</Cell>
+                                        {nodes.map((node) => (
+                                            <Cell key={node} className="font-mono text-data break-all">
+                                                {values[node] ?? <span className="text-ink-muted">–</span>}
+                                            </Cell>
+                                        ))}
+                                    </Row>
+                                ))}
+                            </React.Fragment>
+                        ))}
+                        </tbody>
+                    </Table>
+                )}
             </Loaded>
         </div>
     );

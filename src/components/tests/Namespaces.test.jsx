@@ -4,6 +4,7 @@ import {MemoryRouter} from 'react-router-dom';
 import {vi} from 'vitest';
 import Namespaces from '../Namespaces';
 import useEventStore from '../../hooks/useEventStore';
+import {PG_POLL_MS, resetPgUsage} from '../../hooks/usePgUsage';
 import i18n from '../../i18n';
 
 const {mockNavigate, mockRetain, mockRelease} = vi.hoisted(() => ({
@@ -105,11 +106,13 @@ beforeEach(() => {
     vi.clearAllMocks();
     localStorage.setItem('authToken', 'tok');
     pgReadings = 0;
-    useEventStore.setState({objectStatus: structuredClone(OBJECTS)});
+    resetPgUsage();
+    // One node, read through the API.
+    useEventStore.setState({objectStatus: structuredClone(OBJECTS), nodeStatus: {n1: {}}, objectInstanceStatus: {}});
     global.fetch = vi.fn(async (url) => {
-        if (url === '/metrics/pg') {
+        if (url === '/api/node/name/n1/metrics/pg') {
             pgReadings += 1;
-            // Five seconds of cpu between two readings ten seconds apart: about half a cpu.
+            // Five seconds of cpu between two readings a period apart: a third of a cpu.
             return new Response(pg(pgReadings * 5000000), {status: 200});
         }
         if (url === '/api/object/path/prod/nscfg/namespace/config/file') return new Response(PROD_NSCFG, {status: 200});
@@ -122,6 +125,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+    resetPgUsage();
     localStorage.clear();
     vi.useRealTimers();
 });
@@ -241,7 +245,7 @@ describe('Namespaces', () => {
         expect(cell('prod', 'CPU')).toHaveTextContent('– of 8 cpu');
         // The rate shows on the second reading, a couple of seconds after the first.
         await act(async () => {
-            await vi.advanceTimersByTimeAsync(2000);
+            await vi.advanceTimersByTimeAsync(PG_POLL_MS);
         });
         // About half a cpu of 8.
         // In cpu, mcpu or µcpu, three significant digits at most (formatCpu), of the 8 cpu cap.
@@ -249,8 +253,8 @@ describe('Namespaces', () => {
         // The trends are in the panel of the namespace, not in its line.
         expect(within(cell('prod', 'Memory')).queryByRole('img')).not.toBeInTheDocument();
         expect(within(cell('prod', 'CPU')).queryByRole('img')).not.toBeInTheDocument();
-        // No claim: the memory used alone, no cap (none reported for dev here).
-        expect(cell('dev', 'Memory')).toHaveTextContent('0 used');
+        // No claim: the memory used alone, no cap; dev's cgroup reports none: a dash, not a zero.
+        expect(cell('dev', 'Memory')).toHaveTextContent('– used');
         // No cpu cap: the cpu it uses now, however little, not a share of nothing.
         expect(cell('dev', 'CPU')).toHaveTextContent(/^\d+(\.\d+)? [mµ]?cpu$/);
         expect(cardOf(cell('dev', 'CPU').querySelector('[tabindex="0"]')).figures).toEqual({

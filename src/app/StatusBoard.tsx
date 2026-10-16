@@ -218,11 +218,9 @@ export interface BoardSelection {
 }
 
 /**
- * What answers a click, drawn so: the hand, and on hover the tint and the edge
- * of a selection to come. Selected, the tint and the edge stay, the cells selected
- * side by side making one block, edged on its outside only (`selectionEdges`).
+ * Selected, a cell is tinted and edged, the cells selected side by side making one
+ * block, edged on its outside only (`selectionEdges`).
  */
-const CLICKABLE = "cursor-pointer hover:bg-accent-soft/60 hover:inset-ring-1 hover:inset-ring-accent/60";
 const SELECTED = "bg-accent-soft";
 
 /**
@@ -242,15 +240,21 @@ export function selectionEdges(at: (row: number, column: number) => boolean, row
   return { boxShadow: edges.length === 0 ? "none" : edges.join(", ") };
 }
 
-/** A name selecting what it names: accent on hover. */
-const CLICKABLE_NAME = "group-hover:text-accent";
+/**
+ * The column of the first node in the grid of the selection: after the names, the
+ * type and the description, the nodes standing last.
+ */
+const FIRST_NODE = 3;
+
+/** The line before the nodes, apart from the rest. */
+const NODES_START = "border-l border-line";
 
 /**
- * A checkbox out of sight, which the cell or the header holding it shows instead:
- * a click on them toggles it, and the keyboard and the screen readers reach it as
- * any checkbox.
+ * What selects, out of the way until wanted: a checkbox the cell holding it shows
+ * on hover, or when it has the focus, and keeps shown once checked, or partly. A
+ * click elsewhere in the cell selects nothing: its badges open their records.
  */
-function HiddenCheckbox({
+function SelectBox({
   checked,
   indeterminate = false,
   label,
@@ -264,43 +268,49 @@ function HiddenCheckbox({
   return (
     <input
       type="checkbox"
-      className="sr-only"
+      className={cn(
+        "h-3.5 w-3.5 shrink-0 cursor-pointer accent-(--accent)",
+        !checked && !indeterminate && "opacity-0 group-hover:opacity-100 focus-visible:opacity-100",
+      )}
       checked={checked}
       ref={(el) => {
         if (el) el.indeterminate = indeterminate;
       }}
       aria-label={label}
       onChange={onToggle}
-      // The click toggles it: not the cell around too.
+      // The click toggles it: not the row around too.
       onClick={(event) => event.stopPropagation()}
     />
   );
 }
-
-/** What holds a hidden checkbox shows its focus, as a focused control would. */
-const FOCUS_WITHIN =
-  "has-[input:focus-visible]:outline-2 has-[input:focus-visible]:-outline-offset-2 has-[input:focus-visible]:outline-(--focus-ring)";
 
 /**
  * The status of an object as `om <path> status` tells it (`statusboard.ts`), drawn
  * as the rest of the webapp: its summary, the table of its instances and resources
  * by node, and the notes saying what needs attention.
  *
- * With a `selection`, the resources and the instances are picked by a click: a
- * resource on a node by its cell, on all its nodes by its name, an instance by the
- * column header of its node or its instance cell. The caller acts on what is
- * picked, from its `toolbar`. Every node has its instance to pick, reported or
- * not: its column is empty then, and a click on it selects it as well.
+ * With a `selection`, the resources and the instances are picked by checkboxes,
+ * shown on hover of their cell and kept shown once checked: a resource on a node
+ * in its cell, on all its nodes by its name, an instance by the header of its
+ * node. The caller acts on what is picked, from its `toolbar`. Every node has its
+ * instance to pick, reported or not. The names are the caller's badges
+ * (`linkNode`, `linkResource`): a click on one opens its record.
  */
 export function StatusBoard({
   board,
   selection,
   toolbar,
+  linkNode,
+  linkResource,
 }: {
   board: Board;
   selection?: BoardSelection;
   /** What acts on the selection, over the table. */
   toolbar?: ReactNode;
+  /** The name of a node as a badge opening its record (its instance); plain text without. */
+  linkNode?: (node: string) => ReactNode;
+  /** The id of a resource as a badge opening its record; plain text without. */
+  linkResource?: (rid: string) => ReactNode;
 }) {
   const { t } = useTranslation();
   const details = useCellDetails();
@@ -336,13 +346,15 @@ export function StatusBoard({
   /** The rows of the instances: their heading, then the state, the monitor and the others. */
   const INSTANCE_ROWS: ReadonlySet<string> = new Set(["instances", "instance", "monitor", "expect", "provisioned", "orchestration"]);
   const selectedAt = (v: number, c: number): boolean => {
-    if (selection === undefined || c < 0 || c > board.nodes.length) return false;
-    const node = board.nodes[c - 1]?.name ?? "";
-    if (v === 0) return c > 0 && nodeSelected(node);
+    if (selection === undefined || c < 0 || c >= FIRST_NODE + board.nodes.length) return false;
+    // The type and the description, between the names and the nodes, are never selected.
+    if (c > 0 && c < FIRST_NODE) return false;
+    const node = board.nodes[c - FIRST_NODE]?.name ?? "";
+    if (v === 0) return c >= FIRST_NODE && nodeSelected(node);
     const r = shown[v - 1];
     if (r === undefined) return false;
     // A selected instance: its column, from its header down through the rows of the instances.
-    if (INSTANCE_ROWS.has(r.kind)) return c > 0 && nodeSelected(node);
+    if (INSTANCE_ROWS.has(r.kind)) return c >= FIRST_NODE && nodeSelected(node);
     if (c === 0) return rowSelectState(r as BoardRow) === "all";
     return r.kind === "resource" && rowNodes(board, r).includes(node) && selection.isCell(r.name, node);
   };
@@ -395,72 +407,71 @@ export function StatusBoard({
 
       {toolbar}
 
-      {/* No border, no line between the rows: the tint and the edge of a selection stand out. */}
-      <Table aria-label={t("statusBoard.caption", { path: board.path })} className="rounded-none border-0 bg-transparent">
+      {/* A light border, no line between the rows: the tint and the edge of a selection stand out. */}
+      <Table aria-label={t("statusBoard.caption", { path: board.path })} className="bg-transparent">
         <thead>
           <HeaderRow className="border-b-0">
             <HeaderCell>
               <span className="sr-only">{t("statusBoard.item")}</span>
             </HeaderCell>
+            <HeaderCell>{t("common.type")}</HeaderCell>
+            <HeaderCell>{t("statusBoard.description")}</HeaderCell>
             {board.nodes.map((n, j) => {
               const pick = selection !== undefined;
               const picked = nodeSelected(n.name);
-              const look = selectedLook(0, j + 1);
+              const look = selectedLook(0, j + FIRST_NODE);
               return (
                 <HeaderCell
                   key={n.name}
-                  onClick={pick ? () => selection.toggleNode(n.name) : undefined}
                   style={look.style}
-                  className={cn(pick && cn("group", CLICKABLE, FOCUS_WITHIN), look.className, picked && "text-ink")}
+                  className={cn(j === 0 && NODES_START, pick && "group", look.className, picked && "text-ink")}
                 >
                   <span className="flex w-full items-center gap-1">
                       {pick && (
-                        <HiddenCheckbox
+                        <SelectBox
                           checked={picked}
                           label={t("statusBoard.selectInstance", { node: n.name })}
                           onToggle={() => selection.toggleNode(n.name)}
                         />
                       )}
-                      <span className={cn(pick && CLICKABLE_NAME)}>{n.name}</span>
+                      <span className="font-semibold text-ink">{linkNode ? linkNode(n.name) : n.name}</span>
                       {n.frozen && <FrozenMark frozen />}
                   </span>
                 </HeaderCell>
               );
             })}
-            <HeaderCell>{t("common.type")}</HeaderCell>
-            <HeaderCell>{t("statusBoard.description")}</HeaderCell>
           </HeaderRow>
         </thead>
         <tbody>
           {shown.map((r, i) => {
             if (r.kind === "instances")
               return (
-                <tr key={i}>
-                  <th scope="rowgroup" className="h-[1.875rem] px-2 pt-3 text-left font-semibold whitespace-nowrap text-ink">
+                <tr key={i} className="border-t border-line">
+                  <th scope="rowgroup" className="h-[1.875rem] px-2 pt-3 text-left font-normal whitespace-nowrap text-ink">
                     {t("statusBoard.rows.instances", { count: instances })}
                   </th>
-                  {/* Under each node, its instance: a click selects it, as anywhere in its column. */}
+                  <td colSpan={2} />
+                  {/* Under each node, its instance, tinted when selected. */}
                   {board.nodes.map((n, j) => {
-                    const pick = selection !== undefined;
-                    const look = selectedLook(i + 1, j + 1);
+                    const look = selectedLook(i + 1, j + FIRST_NODE);
                     return (
                       <td
                         key={n.name}
-                        onClick={pick ? () => selection.toggleNode(n.name) : undefined}
                         style={look.style}
-                        className={cn("pt-3", pick && CLICKABLE, look.className)}
+                        className={cn("pt-3", j === 0 && NODES_START, look.className)}
                       />
                     );
                   })}
-                  <td colSpan={2} />
                 </tr>
               );
             if (r.kind === "resources")
               return (
-                <tr key={i}>
-                  <th scope="rowgroup" colSpan={columns} className="h-[1.875rem] px-2 pt-3 text-left font-semibold text-ink">
+                <tr key={i} className="border-t border-line">
+                  <th scope="rowgroup" colSpan={FIRST_NODE} className="h-[1.875rem] px-2 pt-3 text-left font-normal text-ink">
                     {t("statusBoard.rows.resources", { count: resources })}
                   </th>
+                  {/* The line before the nodes runs through the heading too. */}
+                  <td colSpan={columns - FIRST_NODE} className={NODES_START} />
                 </tr>
               );
             // The instance row tells the state of each instance: under the heading of the instances.
@@ -482,69 +493,33 @@ export function StatusBoard({
               <Row key={i} className="border-b-0">
                 <th
                   scope="row"
-                  onClick={pickRow ? () => selection.toggleRow(r.name) : undefined}
                   className={cn(
                     "px-2 py-1 text-left whitespace-nowrap",
                     // The state, under its heading, sits with the monitor and the others.
                     INDENT[Math.min(r.kind === "instance" ? 1 : r.indent, INDENT.length - 1)],
                     r.kind === "resource" ? "font-medium" : r.kind === "subset" ? "font-normal text-ink-muted italic" : "font-normal",
                     (r.kind === "monitor" || r.kind === "expect" || r.kind === "provisioned" || r.kind === "orchestration") && "text-ink-muted",
-                    pickRow && cn("group", CLICKABLE, FOCUS_WITHIN),
+                    pickRow && "group",
                     nameLook.className,
                   )}
                   style={nameLook.style}
                 >
-                  {pickRow && (
-                    <HiddenCheckbox
-                      checked={rowState === "all"}
-                      indeterminate={rowState === "some"}
-                      label={t("statusBoard.selectResource", { rid: r.name })}
-                      onToggle={() => selection.toggleRow(r.name)}
-                    />
-                  )}
-                  <HoverNotes notes={r.rowNotes} showNodes fill>
-                    <span className="flex w-full items-center gap-1">
-                      <span className={cn(pickRow && CLICKABLE_NAME)}>{name}</span>
-                    </span>
-                  </HoverNotes>
+                  <span className="flex w-full items-center gap-1">
+                    {pickRow && (
+                      <SelectBox
+                        checked={rowState === "all"}
+                        indeterminate={rowState === "some"}
+                        label={t("statusBoard.selectResource", { rid: r.name })}
+                        onToggle={() => selection.toggleRow(r.name)}
+                      />
+                    )}
+                    <HoverNotes notes={r.rowNotes} showNodes fill>
+                      <span className="flex w-full items-center gap-1">
+                        {r.kind === "resource" && linkResource ? linkResource(r.name) : name}
+                      </span>
+                    </HoverNotes>
+                  </span>
                 </th>
-                {r.cells.map((c, j) => {
-                  const node = board.nodes[j]?.name ?? "";
-                  // The instance cell picks its node, as the column header does; a
-                  // resource cell, the resource on its node.
-                  // Any cell of the instances selects the instance of its node, an empty one too.
-                  const pickNode = INSTANCE_ROWS.has(r.kind) && selection !== undefined;
-                  const pickCell = pickRow && nodesOfRow.includes(node);
-                  const picked = pickNode ? nodeSelected(node) : pickCell && selection.isCell(r.name, node);
-                  const look = selectedLook(v, j + 1);
-                  return (
-                    <Cell
-                      style={look.style}
-                      key={j}
-                      onClick={
-                        pickNode
-                          ? () => selection.toggleNode(node)
-                          : pickCell
-                            ? () => selection.toggleCell(r.name, node)
-                            : undefined
-                      }
-                      className={cn((pickNode || pickCell) && cn(CLICKABLE, FOCUS_WITHIN), look.className)}
-                    >
-                      {pickCell && (
-                        <HiddenCheckbox
-                          checked={picked}
-                          label={t("statusBoard.selectCell", { rid: r.name, node })}
-                          onToggle={() => selection.toggleCell(r.name, node)}
-                        />
-                      )}
-                      <HoverNotes notes={r.cellNotes[j] ?? []} details={details(c)} fill>
-                        <span className="flex w-full items-center gap-1">
-                          <Pieces text={c} kind={r.kind} />
-                        </span>
-                      </HoverNotes>
-                    </Cell>
-                  );
-                })}
                 <Cell className="text-ink-muted">{r.typ}</Cell>
                 <Cell className={cn("break-all", r.kind === "label" && "text-ink-muted")}>
                   {r.kind === "instance" ? null : r.kind === "subset" && r.desc.length > 0 ? (
@@ -553,6 +528,37 @@ export function StatusBoard({
                     r.desc.map((s) => s.text).join("")
                   )}
                 </Cell>
+                {r.cells.map((c, j) => {
+                  const node = board.nodes[j]?.name ?? "";
+                  // A resource cell selects the resource on its node, by its checkbox.
+                  const pickCell = pickRow && nodesOfRow.includes(node);
+                  const picked = pickCell && selection.isCell(r.name, node);
+                  const look = selectedLook(v, j + FIRST_NODE);
+                  return (
+                    <Cell
+                      style={look.style}
+                      key={j}
+                      className={cn(j === 0 && NODES_START, pickCell && "group", look.className)}
+                    >
+                      <HoverNotes notes={r.cellNotes[j] ?? []} details={details(c)} fill>
+                        <span className="flex w-full items-center gap-1">
+                          {pickCell ? (
+                            <SelectBox
+                              checked={picked}
+                              label={t("statusBoard.selectCell", { rid: r.name, node })}
+                              onToggle={() => selection.toggleCell(r.name, node)}
+                            />
+                          ) : (
+                            // The room of a checkbox: the values of a column in line, those of the
+                            // instances under the resources' checkboxes.
+                            selection !== undefined && <span aria-hidden="true" data-checkbox-room className="h-3.5 w-3.5 shrink-0" />
+                          )}
+                          <Pieces text={c} kind={r.kind} />
+                        </span>
+                      </HoverNotes>
+                    </Cell>
+                  );
+                })}
               </Row>
             );
           })}

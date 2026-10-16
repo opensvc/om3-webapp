@@ -1,12 +1,14 @@
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { ObjectIcon } from "../ui/components/ObjectIcon";
 import { usePeek } from "./panel-search";
-import { stepIcon, type PeekKind } from "./peek";
+import type { PeekKind } from "./peek";
 
 /**
  * Value of a cell that names a record from another view: the object of an address,
- * the node of an instance… as the oc3 badges do.
+ * the node of an instance… as the oc3 badges do. In the body of a panel, the
+ * convention for what can be drilled down into: the nodes, the objects, their
+ * instances and their resources, each a badge opening its own panel. A badge of
+ * its name alone, no icon.
  *
  * A click shows its record over the view, without leaving it (`peek` in the URL, see
  * `PeekPanel`). The click stops at the badge: the row under it, whose own panel a
@@ -52,7 +54,6 @@ export function CrossLink({
       }}
       className="inline-flex max-w-full items-center gap-1 rounded-full border border-line bg-surface px-1.5 text-data hover:border-line-strong hover:bg-surface-sunken"
     >
-      <ObjectIcon kind={stepIcon({ kind, id })} className="h-3.5 w-3.5 shrink-0" />
       <span className="truncate">{children}</span>
     </button>
   );

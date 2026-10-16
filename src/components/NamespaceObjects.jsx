@@ -1,7 +1,7 @@
 import React, {useCallback, useMemo, useState} from "react";
 import {useTranslation} from "react-i18next";
 import useEventStore from "../hooks/useEventStore.js";
-import {usePeek} from "../app/panel-search";
+import {CrossLink} from "../app/CrossLink";
 import {parseObjectPath} from "../utils/objectUtils.jsx";
 import {listOfKind} from "../utils/objectLists";
 import {objectsAlert} from "../hooks/useSidebarAlerts";
@@ -72,13 +72,13 @@ const stopPropagation = (e) => e.stopPropagation();
 /**
  * The objects of one kind in a namespace, as the Objects page lists them: a
  * checkbox to select it, the services and volumes with their status, orchestrate
- * and topology, the configurations and secrets with their keys. A row opens the
- * object; the Actions menu acts on the ones selected, as on the Objects page.
+ * and topology, the configurations and secrets with their keys. The name of an
+ * object is a badge opening it; the Actions menu acts on the ones selected, as on
+ * the Objects page.
  */
 export function NamespaceObjects({namespace, list}) {
     const {t} = useTranslation();
     const {lists} = useNamespaceObjects(namespace);
-    const peek = usePeek();
     const paths = lists[list] ?? [];
     const keys = !ACTOR_LISTS.includes(list);
     const [picked, setPicked] = useState([]);
@@ -129,7 +129,7 @@ export function NamespaceObjects({namespace, list}) {
                 </thead>
                 <tbody>
                     {paths.map((path) => (
-                        <Row key={path} onActivate={() => peek("object", path)} className={selected.includes(path) ? "bg-accent-soft" : undefined}>
+                        <Row key={path} className={selected.includes(path) ? "bg-accent-soft" : undefined}>
                             <Cell className="w-8">
                                 <Checkbox
                                     checked={selected.includes(path)}
@@ -139,7 +139,9 @@ export function NamespaceObjects({namespace, list}) {
                                 />
                             </Cell>
                             {/* The name alone: the namespace is the panel's, the kind the tab's. */}
-                            <Cell className="text-data font-medium whitespace-nowrap" title={path}>{parseObjectPath(path).name}</Cell>
+                            <Cell className="whitespace-nowrap" title={path}>
+                            <CrossLink kind="object" id={path}>{parseObjectPath(path).name}</CrossLink>
+                        </Cell>
                             {keys ? <KeyCells objectName={path}/> : (
                                 <>
                                     <PropertyCells objectName={path}/>

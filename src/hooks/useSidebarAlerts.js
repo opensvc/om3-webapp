@@ -75,10 +75,12 @@ export function applySidebarEvent(state, type, data) {
  * an event stream of its own: the views open and close the shared one with their
  * own filters, the sidebar stays live whatever the view.
  */
-function useSidebarEventState() {
+function useSidebarEventState(enabled) {
     const [state, setState] = useState(emptyState);
 
     useEffect(() => {
+        // No menu, the sign-in screens: nothing to read.
+        if (!enabled) return undefined;
         let source = null;
         let reconnectTimer = null;
         let flushTimer = null;
@@ -152,17 +154,19 @@ function useSidebarEventState() {
             clearTimeout(flushTimer);
             source?.close();
         };
-    }, []);
+    }, [enabled]);
 
     return state;
 }
 
 /** Pool and network lists, polled; a failed request keeps the last known lists. */
-function useUsageLists() {
+function useUsageLists(enabled) {
     const [pools, setPools] = useState([]);
     const [networks, setNetworks] = useState([]);
 
     useEffect(() => {
+        // No menu, the sign-in screens: nothing to read.
+        if (!enabled) return undefined;
         let cancelled = false;
         const refresh = async () => {
             const token = localStorage.getItem("authToken");
@@ -182,7 +186,7 @@ function useUsageLists() {
             cancelled = true;
             clearInterval(timer);
         };
-    }, []);
+    }, [enabled]);
 
     return {pools, networks};
 }
@@ -289,9 +293,9 @@ const ofKind = (objects, kind) =>
  * for some entries the `details` lines of their mouseover. All the objects raise
  * the alert of all of them; the services and the volumes, each of theirs only.
  */
-export default function useSidebarAlerts() {
-    const {objects, nodeStatus, heartbeatStatus} = useSidebarEventState();
-    const {pools, networks} = useUsageLists();
+export default function useSidebarAlerts({enabled = true} = {}) {
+    const {objects, nodeStatus, heartbeatStatus} = useSidebarEventState(enabled);
+    const {pools, networks} = useUsageLists(enabled);
     // The alerts and details are text: computed again when the language changes.
     const {i18n: {language}} = useTranslation();
 

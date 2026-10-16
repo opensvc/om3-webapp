@@ -2,19 +2,29 @@ import React from 'react';
 import {render, screen, act, renderHook, within, fireEvent} from '@testing-library/react';
 import {MemoryRouter} from 'react-router-dom';
 import {describe, test, expect, beforeEach, afterEach, vi} from 'vitest';
-import {Sidebar, NAV_SECTIONS, useSidebarOpen} from '../Sidebar';
+import {Sidebar, NAV_SECTIONS, COMPACT_QUERY, menuAlert, useSidebarOpen} from '../Sidebar';
 import i18n from '../../i18n';
 
 const {mockPills} = vi.hoisted(() => ({mockPills: {current: {}}}));
 vi.mock('../../hooks/useSidebarAlerts', () => ({default: () => mockPills.current}));
 
-function renderSidebar(open = true, path = '/cluster') {
+function renderSidebar(open = true, path = '/cluster', onNavigate) {
     return render(
         <MemoryRouter initialEntries={[path]}>
-            <Sidebar open={open}/>
+            <Sidebar open={open} alerts={mockPills.current} onNavigate={onNavigate}/>
         </MemoryRouter>
     );
 }
+
+/** A window short of room or not, as matchMedia says it to the menu. */
+const setCompact = (compact) => {
+    window.matchMedia = vi.fn((query) => ({
+        matches: compact && query === COMPACT_QUERY,
+        media: query,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+    }));
+};
 
 const CLUSTER = ['Links', 'Nodes', 'Namespaces', 'Networks', 'Pools'];
 const OBJECTS = ['Services', 'Volumes', 'Configurations', 'Secrets', 'Users'];
@@ -133,6 +143,26 @@ describe('Sidebar', () => {
         expect(screen.getByRole('link', {name: 'Networks'})).toHaveAttribute('aria-current', 'page');
     });
 
+    test('an entry chosen, or the title of the objects, tells it: the menu short of room folds then', () => {
+        const onNavigate = vi.fn();
+        renderSidebar(true, '/cluster', onNavigate);
+        fireEvent.click(screen.getByRole('link', {name: 'Nodes'}));
+        fireEvent.click(screen.getByRole('link', {name: 'Volumes'}));
+        fireEvent.click(screen.getByRole('link', {name: 'Objects'}));
+        expect(onNavigate).toHaveBeenCalledTimes(3);
+    });
+
+    test('the alert of the folded menu: the worst of its entries, all of them said', () => {
+        expect(menuAlert({})).toBeNull();
+        expect(menuAlert({nodes: {alert: null}, pools: {alert: null}})).toBeNull();
+        expect(menuAlert({
+            links: {alert: {level: 'warn', text: '1 of 4 heartbeat links down'}},
+            'objects-any': {alert: {level: 'down', text: '1 object down'}},
+            pools: {alert: null},
+        })).toEqual({level: 'down', text: '1 of 4 heartbeat links down\n1 object down'});
+        expect(menuAlert({links: {alert: {level: 'warn', text: 'w'}}})).toEqual({level: 'warn', text: 'w'});
+    });
+
     test('is taken out of the keyboard path when folded', () => {
         const {container} = renderSidebar(false);
         const aside = container.querySelector('#app-sidebar');
@@ -151,6 +181,32 @@ describe('Sidebar', () => {
 describe('useSidebarOpen', () => {
     beforeEach(() => {
         localStorage.clear();
+        delete window.matchMedia;
+    });
+
+    afterEach(() => {
+        delete window.matchMedia;
+    });
+
+    test('short of room: folded by default whatever is remembered, unfolded the time to choose, the choice not remembered', () => {
+        localStorage.setItem('om3.sidebar', 'open');
+        setCompact(true);
+        const {result} = renderHook(() => useSidebarOpen());
+        expect(result.current[0]).toBe(false);
+        expect(result.current[2].compact).toBe(true);
+        act(() => result.current[1]());
+        expect(result.current[0]).toBe(true);
+        // An entry chosen: folded again.
+        act(() => result.current[2].fold());
+        expect(result.current[0]).toBe(false);
+        expect(localStorage.getItem('om3.sidebar')).toBe('open');
+    });
+
+    test('a wide window keeps its remembered state, an entry chosen leaving it open', () => {
+        setCompact(false);
+        const {result} = renderHook(() => useSidebarOpen());
+        expect(result.current[0]).toBe(true);
+        expect(result.current[2].compact).toBe(false);
     });
 
     test('is open by default and remembers the folded state', () => {

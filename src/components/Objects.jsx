@@ -3,7 +3,8 @@ import {useLocation, useNavigate} from "react-router-dom";
 import useEventStore from "../hooks/useEventStore.js";
 import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus";
 import {retainEventReception} from "../eventSourceManager";
-import {usePanelSearch} from "../app/panel-search";
+import {usePanelSearch, usePeek} from "../app/panel-search";
+import {instanceId} from "../app/peek";
 import {ObjectDetailPanel} from "./RecordPanels";
 import {extractNamespace} from "../utils/objectUtils";
 import {useTranslation} from "react-i18next";
@@ -70,19 +71,24 @@ const NAMES_ONLY_LISTS = ["configs", "secrets", "users"];
 const selectObjectStatus = (state) => state.objectStatus;
 const selectObjectInstanceStatus = (state) => state.objectInstanceStatus;
 
+/** The kinds of the objects that run, an instance on each of their nodes. */
+const ACTOR_KINDS = ["svc", "vol"];
+
 const NodeStatus = React.memo(({objectName, node}) => {
+    const {t} = useTranslation();
     const nodeData = useNodeData(objectName, node);
     // Stopped and RPO breached come straight from the instance status: one string each.
     const stoppedAt = useEventStore((s) => s.objectInstanceStatus?.[objectName]?.[node]?.stopped_at);
     const rpoBreachedAt = useEventStore((s) => s.objectInstanceStatus?.[objectName]?.[node]?.rpo_breached_at);
     const objectAvail = useEventStore((s) => s.objectStatus?.[objectName]?.avail);
+    const peek = usePeek();
     const hasData = Boolean(nodeData?.avail);
     if (!hasData) return null;
     const isNodeNotProvisioned = nodeData.provisioned === "false" || nodeData.provisioned === false;
     const isStopped = hasTimestamp(stoppedAt);
     const isLagging = hasTimestamp(rpoBreachedAt);
 
-    return (
+    const marks = (
         <span className="inline-flex items-center gap-1.5" data-node={node}>
             <StatusMark state={markState(nodeData.avail)} label={nodeData.avail} muted={isQuietDown(nodeData.avail, objectAvail)}/>
             {isStopped && <StoppedMark stoppedAt={stoppedAt}/>}
@@ -91,6 +97,22 @@ const NodeStatus = React.memo(({objectName, node}) => {
             {isNodeNotProvisioned && <NotProvisionedMark/>}
             {nodeData.state && <SideText>{nodeData.state}</SideText>}
         </span>
+    );
+    // The instance of a service or a volume opens its own panel, not the object's.
+    if (!ACTOR_KINDS.includes(parseObjectName(objectName).kind)) return marks;
+    return (
+        <button
+            type="button"
+            onClick={(event) => {
+                event.stopPropagation();
+                peek("instance", instanceId(objectName, node));
+            }}
+            title={t("objects.openInstance", {node})}
+            aria-label={t("objects.openInstanceOf", {node, name: objectName})}
+            className="inline-flex rounded-(--radius-control) hover:underline focus-visible:outline-2 focus-visible:outline-(--focus-ring)"
+        >
+            {marks}
+        </button>
     );
 }, (prev, next) => prev.objectName === next.objectName && prev.node === next.node);
 

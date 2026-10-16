@@ -1,4 +1,4 @@
-import React, {useEffect, useMemo, useRef, useState} from "react";
+import React, {useCallback, useEffect, useMemo, useRef, useState} from "react";
 import {useTranslation} from "react-i18next";
 import useEventStore from "../hooks/useEventStore.js";
 import {RecordPanel} from "../app/RecordPanel";
@@ -7,10 +7,13 @@ import {parseObjectPath} from "../utils/objectUtils.jsx";
 import ObjectDetail from "./ObjectDetails";
 import ObjectStatus from "./ObjectStatus";
 import ObjectConfig from "./ObjectConfig";
-import {ObjectResources, ObjectSchedules} from "./ObjectTabs";
+import {ObjectSchedules} from "./ObjectTabs";
 import NetworkDetails from "./NetworkDetails";
 import {NamespaceConfig, NamespaceUsage} from "./NamespacePanel";
 import {NamespaceClaims} from "./NamespaceClaims";
+import {ObjectUsage} from "./InstanceRecord";
+import {InstanceLink, ResourceLink} from "./RecordLinks";
+import {CrossLink} from "../app/CrossLink";
 import {NAMESPACE_LISTS, NamespaceObjects, useNamespaceObjectTabs} from "./NamespaceObjects";
 import LogsViewer from "./LogsViewer";
 import {OrchestrationLogsFilter} from "./OrchestrationLogsFilter";
@@ -61,9 +64,10 @@ function InstanceLogs({path, nodes, node, onNodeChange, orchestration, onClearOr
 
 /**
  * An object. A service or a volume shows its status as `om <path> status` does, with
- * its actions (ObjectStatus), then what its resources report and the tasks scheduled
- * for it on each node (ObjectTabs), then the logs of its instances, then its
- * configuration (ObjectConfig).
+ * its actions (ObjectStatus), then its usage summed over its instances and node by
+ * node (ObjectUsage), then the tasks scheduled for it on each node (ObjectTabs), then
+ * the logs of its instances, then its configuration (ObjectConfig). What its
+ * resources report is in the panels of its instances and of its resources.
  * A configuration, a secret or a user, which om shows no status of, shows its keys
  * (ObjectDetail), then its logs and its configuration, as a service does. The
  * badge of an orchestration in progress opens the logs of that orchestration.
@@ -76,6 +80,13 @@ export function ObjectDetailPanel({path, tab, onTabChange, onClose}) {
     const instances = useEventStore((s) => (path === undefined ? undefined : s.objectInstanceStatus[path]));
     const nodes = useMemo(() => Object.keys(instances ?? {}).sort(), [instances]);
     const [logsNode, setLogsNode] = useState(null);
+    // In the status board, the names of the nodes and the resources are badges: the
+    // instance on a node, the node itself for the cluster object, whose instances
+    // are the nodes; a resource, its panel.
+    const linkNode = useCallback((node) => (kind === "ccfg"
+        ? <CrossLink kind="node" id={node}>{node}</CrossLink>
+        : <InstanceLink path={path} node={node}/>), [kind, path]);
+    const linkResource = useCallback((rid) => <ResourceLink path={path} rid={rid}/>, [path]);
     const [logsOrchestration, setLogsOrchestration] = useState(null);
     useEffect(() => {
         setLogsNode(null);
@@ -110,7 +121,7 @@ export function ObjectDetailPanel({path, tab, onTabChange, onClose}) {
         ]
         : [
             {key: "status", label: t("panel.tabs.status")},
-            {key: "resources", label: t("panel.tabs.resources")},
+            {key: "usage", label: t("panel.tabs.usage")},
             {key: "schedules", label: t("panel.tabs.schedules")},
             {key: "logs", label: t("panel.tabs.logs")},
             {key: "config", label: t("panel.tabs.config")},
@@ -134,9 +145,10 @@ export function ObjectDetailPanel({path, tab, onTabChange, onClose}) {
                     <div hidden={active !== tabs[0].key}>
                         {keysOnly
                             ? <ObjectDetail key={path} path={path} embedded onOrchestrationLogs={showOrchestrationLogs}/>
-                            : <ObjectStatus key={path} path={path} onOrchestrationLogs={showOrchestrationLogs}/>}
+                            : <ObjectStatus key={path} path={path} onOrchestrationLogs={showOrchestrationLogs}
+                                            linkNode={linkNode} linkResource={linkResource}/>}
                     </div>
-                    {active === "resources" && <ObjectResources key={path} path={path}/>}
+                    {active === "usage" && <ObjectUsage key={path} path={path}/>}
                     {active === "schedules" && <ObjectSchedules key={path} path={path}/>}
                     {active === "logs" && (
                         <InstanceLogs path={path} nodes={nodes} node={logsNode} onNodeChange={setLogsNode}

@@ -3,7 +3,7 @@ import { act, fireEvent, render, renderHook, screen } from "@testing-library/rea
 import type { ReactNode } from "react";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import "../../i18n";
-import { DEFAULT_LIMIT, usePaging } from "../paging";
+import { DEFAULT_LIMIT, useLocalPaging, usePaging } from "../paging";
 import { Pager } from "../../ui/components/Pager";
 
 let location: ReturnType<typeof useLocation>;
@@ -76,6 +76,22 @@ describe("usePaging", () => {
 function PagerOf({ total }: { total: number }) {
   return <Pager paging={usePaging("test", total)} />;
 }
+
+describe("useLocalPaging", () => {
+  test("held by the panel, not the URL: the page and the size its own, the size kept for its view", () => {
+    const { result } = renderHook(({ total }) => useLocalPaging("test-local", total), {
+      initialProps: { total: 120 },
+    });
+    expect(result.current.offset).toBe(0);
+    expect(result.current.limit).toBe(DEFAULT_LIMIT);
+    act(() => result.current.setOffset(100));
+    expect(result.current.offset).toBe(100);
+    expect(result.current.page(Array.from({ length: 120 }, (_, i) => i))).toEqual([100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119]);
+    act(() => result.current.setLimit(25));
+    expect(result.current.offset).toBe(0);
+    expect(localStorage.getItem("om3.pageSize.test-local")).toBe("25");
+  });
+});
 
 describe("Pager", () => {
   const renderPager = (total: number, entry = "/list") =>

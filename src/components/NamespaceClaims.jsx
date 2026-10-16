@@ -26,8 +26,8 @@ import {Field, Input, Select} from "../ui/components/Field";
 import {UsageBar} from "../ui/components/UsageBar";
 import {formatBytes} from "../ui/lib/format";
 import {DataTable, Section} from "./NodePanel";
+import {CrossLink} from "../app/CrossLink";
 
-const last = (values) => (values?.length ? values[values.length - 1] : undefined);
 const authHeaders = () => ({Authorization: `Bearer ${localStorage.getItem("authToken") || ""}`});
 const configUrl = (namespace) => `${URL_OBJECT}/${encodeURIComponent(namespace)}/nscfg/namespace/config`;
 
@@ -52,7 +52,8 @@ export function claimLines(namespace, claims, pg) {
     for (const type of ["cpu", "memory"]) {
         const claim = own.find((c) => c.type === type);
         const limit = computeLimit(own, type);
-        const used = last(pg[namespace]?.[type]);
+        // Over every node of the cluster; the cpu none until a second reading.
+        const used = pg[namespace]?.[type] ?? undefined;
         if (claim !== undefined || used !== undefined) {
             lines.push({type, used, limit, claimed: limit !== undefined, claim});
         }
@@ -97,7 +98,11 @@ export function NamespaceClaims({namespace}) {
         {key: "type", label: t("namespaces.panel.resource"), className: "font-medium", render: (line) => (
             <span className="whitespace-nowrap">
                 {t(`namespaces.panel.types.${line.type}`)}
-                {line.name && <span className="ml-1.5 font-mono text-data">{line.name}</span>}
+                {line.name && (
+                    <span className="ml-1.5 font-mono text-data">
+                        {line.type === "network" ? <CrossLink kind="network" id={line.name}>{line.name}</CrossLink> : line.name}
+                    </span>
+                )}
             </span>
         )},
         {key: "used", label: t("namespaces.usage.used"), numeric: true, render: (line) => amount(line.type, line.used)},

@@ -7,7 +7,8 @@ import AuthChoice from "./AuthChoice.jsx";
 import Login from "./Login.jsx";
 import '../styles/main.css';
 import NavBar from './NavBar';
-import {Sidebar, useSidebarOpen} from './Sidebar';
+import {Sidebar, menuAlert, useSidebarOpen} from './Sidebar';
+import useSidebarAlerts from '../hooks/useSidebarAlerts';
 import {OidcProvider, useOidc} from "../context/OidcAuthContext.tsx";
 import {
     AuthProvider,
@@ -324,9 +325,11 @@ const App = () => {
     const mainRef = useRef(null);
 
     const authInfo = useAuthInfo();
-    const [sidebarOpen, toggleSidebar] = useSidebarOpen();
+    const [sidebarOpen, toggleSidebar, {compact: compactMenu, fold: foldSidebar}] = useSidebarOpen();
     // The sign-in screens have no view to navigate to: no menu there.
     const showSidebar = !AUTH_PATHS.some((path) => location.pathname.startsWith(path));
+    // The alerts of the menu, read once: on its entries, and on its button while folded.
+    const sidebarAlerts = useSidebarAlerts({enabled: showSidebar});
 
     // "n", for navigation, moves the focus to the menu, on the entry of the view on
     // display, unfolding the menu first when it is folded: the focus waits for it to
@@ -396,10 +399,12 @@ const App = () => {
                         <NavBar
                             sidebarOpen={sidebarOpen}
                             onToggleSidebar={toggleSidebar}
+                            menuAlert={sidebarOpen ? null : menuAlert(sidebarAlerts)}
                             showSidebarToggle={showSidebar}
                         />
                         <div style={{display: 'flex', flex: 1, minHeight: 0}}>
-                            {showSidebar && <Sidebar open={sidebarOpen}/>}
+                            {/* Short of room, the menu folds once an entry is chosen. */}
+                            {showSidebar && <Sidebar open={sidebarOpen} alerts={sidebarAlerts} onNavigate={compactMenu ? foldSidebar : undefined}/>}
                             <main id="app-scroll-container" ref={mainRef} style={mainStyle}>
                                 <Suspense fallback={<Loading/>}>
                                     <Routes>

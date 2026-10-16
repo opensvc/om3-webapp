@@ -1,6 +1,8 @@
 import {Link, useLocation} from "react-router-dom";
 import {useTranslation} from "react-i18next";
 import {SidebarIcon, UserIcon} from "../ui/icons";
+import {AlertMark} from "../ui/components/AlertMark";
+import {cn} from "../ui/cn";
 import {GlobalSearch} from "../app/GlobalSearch";
 import {loadSearchIndex} from "./searchIndex";
 import {applyPanelUpdate} from "../app/panel-search";
@@ -26,7 +28,7 @@ const crumb = (part, index, path) => ({
     key: index === 0 && SEGMENTS.has(part) ? `nav.breadcrumb.segments.${part}` : undefined,
 });
 
-const NavBar = ({sidebarOpen = false, onToggleSidebar, showSidebarToggle = false}) => {
+const NavBar = ({sidebarOpen = false, onToggleSidebar, showSidebarToggle = false, menuAlert = null}) => {
     const auth = useAuth();
     const location = useLocation();
     const {clusterName, fetchNodes, loading} = useFetchDaemonStatus();
@@ -156,15 +158,25 @@ const NavBar = ({sidebarOpen = false, onToggleSidebar, showSidebarToggle = false
                     aria-controls="app-sidebar"
                     aria-label={sidebarOpen ? t("nav.hideMenu") : t("nav.showMenu")}
                     title={sidebarOpen ? t("nav.hideMenu") : t("nav.showMenu")}
-                    className={HEADER_BUTTON}
+                    className={cn(HEADER_BUTTON, "relative")}
                 >
                     <SidebarIcon open={sidebarOpen} width={18} height={18}/>
+                    {/* Folded, the alerts of its entries on the button: the worst of them. */}
+                    {menuAlert && (
+                        <AlertMark
+                            level={menuAlert.level}
+                            text={menuAlert.text}
+                            testId="menu-alert"
+                            className="absolute -top-0.5 -right-0.5 h-3.5 w-3.5 text-[0.625rem]"
+                        />
+                    )}
                 </button>
             )}
 
             {/* The product name, back to the home view, tagged not to be taken for
-                the collector. */}
-            <div className="flex shrink-0 items-center gap-2">
+                the collector. Short of room, as the menu folds (COMPACT_QUERY), left
+                out: the breadcrumb and the search need the bar. */}
+            <div data-testid="brand" className="hidden shrink-0 items-center gap-2 min-[1200px]:flex">
                 <Link to="/" className="font-semibold tracking-tight text-ink">OpenSVC</Link>
                 {/* The tag opens the cluster over the view on display, as a node or an
                     object opens: the panel of the cluster object, its configuration

@@ -1,5 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
+  instanceId,
+  parseInstanceId,
   parseStep,
   serialiseStep,
   stepIcon,
@@ -13,8 +15,19 @@ describe("peek steps", () => {
     expect(serialiseStep({ kind: "namespace", id: "ns1" })).toBe("namespace:ns1");
   });
 
-  test.each([undefined, "", "object", ":x", "object:", "disk:x", "instance:n1/ns1/svc/web"])("%s is no step", (raw) => {
+  test.each([undefined, "", "object", ":x", "object:", "disk:x"])("%s is no step", (raw) => {
     expect(parseStep(raw)).toBeNull();
+  });
+
+  test("an instance by the path of its object and its node: path@node", () => {
+    expect(instanceId("ns1/svc/web", "n1")).toBe("ns1/svc/web@n1");
+    expect(parseStep("instance:ns1/svc/web@n1")).toEqual({ kind: "instance", id: "ns1/svc/web@n1" });
+    expect(parseInstanceId("ns1/svc/web@n1")).toEqual({ path: "ns1/svc/web", node: "n1" });
+    expect(parseInstanceId("svc@n1")).toEqual({ path: "svc", node: "n1" });
+    expect(parseInstanceId("ns1/svc/web")).toBeNull();
+    expect(parseInstanceId("@n1")).toBeNull();
+    expect(parseInstanceId("ns1/svc/web@")).toBeNull();
+    expect(stepIcon({ kind: "instance", id: "ns1/svc/web@n1" })).toBe("instance");
   });
 
   test("a record shows the icon of its kind, an object the one of its object kind", () => {

@@ -452,11 +452,25 @@ export function StateIcon(props: IconProps) {
   );
 }
 
-/** Editing. */
+/** Editing, a configuration file say. */
 export function PencilIcon(props: IconProps) {
   return (
     <Svg {...props}>
       <path d="M17.6 2.6c.5 0 1 .2 1.4.6l1.8 1.8a2 2 0 0 1 0 2.8L9.2 19.4l-5.7 1.9a.7.7 0 0 1-.9-.9l1.9-5.7L16.2 3.2c.4-.4.9-.6 1.4-.6Zm-2.2 3.9L6 15.9l-1 3.1 3.1-1 9.4-9.4-2.1-2.1Z" />
+    </Svg>
+  );
+}
+
+/** Setting parameters one by one, as a wizard does: three sliders. */
+export function SlidersIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <rect x="3" y="5" width="18" height="2" rx="1" />
+      <rect x="3" y="11" width="18" height="2" rx="1" />
+      <rect x="3" y="17" width="18" height="2" rx="1" />
+      <circle cx="8" cy="6" r="2.6" />
+      <circle cx="16" cy="12" r="2.6" />
+      <circle cx="10" cy="18" r="2.6" />
     </Svg>
   );
 }

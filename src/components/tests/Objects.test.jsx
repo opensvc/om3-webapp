@@ -354,7 +354,9 @@ describe('Objects Component', () => {
         setup({}, '', {isWideScreen: true, isMobile: false});
         await waitForLoad();
         expect(screen.queryByRole('columnheader', {name: 'Actions'})).not.toBeInTheDocument();
-        expect(within(objectRow('test-ns/svc/test1')).queryByRole('button')).not.toBeInTheDocument();
+        // No action button in a row: its only buttons open the instances of its nodes.
+        expect(within(objectRow('test-ns/svc/test1')).getAllByRole('button').map((b) => b.getAttribute('aria-label')))
+            .toEqual(['Open the instance of test-ns/svc/test1 on node1', 'Open the instance of test-ns/svc/test1 on node2']);
     });
 
     describe('object property columns', () => {
@@ -431,6 +433,8 @@ describe('Objects Component', () => {
 
         const row1 = objectRow('test-ns/svc/test1');
         const node1 = nodeCell(row1, 0);
+        // The instance of a service on a node opens its own panel, a button of its own.
+        expect(within(node1).getByRole('button', {name: 'Open the instance of test-ns/svc/test1 on node1'})).toBeInTheDocument();
         expect(node1.querySelector('[data-state]')).toHaveAttribute('data-state', 'up');
         expect(within(node1).getByText('running')).toHaveClass('text-ink-muted', 'whitespace-nowrap');
         expect(within(node1).queryByTitle('frozen')).not.toBeInTheDocument();

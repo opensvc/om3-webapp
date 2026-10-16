@@ -1,7 +1,7 @@
 import React, {useId, useMemo, useState} from "react";
 import {createPortal} from "react-dom";
 import {useTranslation} from "react-i18next";
-import {DIRECTION_OFFSET, NODE_RADIUS, meshLayout, meshLinks, meshNodes} from "../app/heartbeat-mesh";
+import {DIRECTION_OFFSET, meshLayout, meshLinks, meshNodes} from "../app/heartbeat-mesh";
 import {RelativeTime} from "../ui/components/RelativeTime";
 
 /** The tint of a line: the state of its links, in the oc3 state colours. */
@@ -63,7 +63,7 @@ export function HeartbeatMesh({heartbeatStatus, onSelect}) {
         + (l.streamState && l.streamState !== "running" ? ` (${l.streamState})` : "");
 
     return (
-        // Foldable: the page fits its table to the window, the mesh takes room.
+        // Foldable: the mesh takes room above the streams table.
         <details open className="shrink-0 space-y-2">
             <summary id={`${id}-title`} className="cursor-pointer font-semibold">{t("heartbeats.mesh.title")}</summary>
             <div className="relative max-h-[60vh] overflow-auto rounded-(--radius-panel) border border-line bg-surface">
@@ -129,8 +129,18 @@ export function HeartbeatMesh({heartbeatStatus, onSelect}) {
                         const p = layout.nodes[name];
                         return (
                             <g key={name} data-node={name}>
-                                <circle cx={p.x} cy={p.y} r={NODE_RADIUS} className="fill-surface-raised stroke-line" strokeWidth={1.5}/>
-                                <text x={p.x} y={p.y} dy="0.35em" textAnchor="middle" className="fill-ink font-semibold">{name}</text>
+                                {/* A pill as wide as the name: a node name can be long, a circle would not hold it. */}
+                                <title>{name}</title>
+                                <rect
+                                    x={p.x - p.width / 2}
+                                    y={p.y - p.height / 2}
+                                    width={p.width}
+                                    height={p.height}
+                                    rx={p.height / 2}
+                                    className="fill-surface-raised stroke-line"
+                                    strokeWidth={1.5}
+                                />
+                                <text x={p.x} y={p.y} dy="0.35em" textAnchor="middle" className="fill-ink font-semibold">{p.label}</text>
                             </g>
                         );
                     })}

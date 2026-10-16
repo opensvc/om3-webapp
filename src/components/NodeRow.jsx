@@ -6,28 +6,7 @@ import {FrozenMark} from "../ui/components/FrozenMark";
 import {UsageBar} from "../ui/components/UsageBar";
 import {RssIcon} from "../ui/icons";
 import {useTranslation} from "react-i18next";
-
-const ZERO_DATE = "0001-01-01T00:00:00Z";
-
-const formatDate = (dateString, t, language) => {
-    if (!dateString || dateString === ZERO_DATE) {
-        return "-";
-    }
-
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffMs = now - date;
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMins / 60);
-    const diffDays = Math.floor(diffHours / 24);
-
-    if (diffMins < 1) return t("nodes.time.justNow");
-    if (diffMins < 60) return t("nodes.time.minutesAgo", {count: diffMins});
-    if (diffHours < 24) return t("nodes.time.hoursAgo", {count: diffHours});
-    if (diffDays < 7) return t("nodes.time.daysAgo", {count: diffDays});
-
-    return date.toLocaleDateString(language);
-};
+import {AgeTime, ZERO_DATE} from "./AgeTime";
 
 /**
  * The node monitor state as a mark: idle is the normal state, a failure is down,
@@ -56,7 +35,7 @@ const NodeRow = ({
                      onOpen,
                      isOpen = false,
                  }) => {
-    const {t, i18n} = useTranslation();
+    const {t} = useTranslation();
     const notAvailable = t("common.notAvailable");
     const isFrozen = !!status?.frozen_at && status.frozen_at !== ZERO_DATE;
     const isDaemonNode = daemonNodename === nodename;
@@ -64,8 +43,6 @@ const NodeRow = ({
 
     const loadState = stats?.load_15m > 4 ? "down" : stats?.load_15m > 2 ? "warn" : "up";
     const memState = stats?.mem_avail < 20 ? "down" : stats?.mem_avail < 50 ? "warn" : "up";
-    const bootedValid = status?.booted_at && status.booted_at !== ZERO_DATE;
-    const updatedValid = monitor?.updated_at && monitor.updated_at !== ZERO_DATE;
 
     return (
         <Row
@@ -121,20 +98,13 @@ const NodeRow = ({
                     notAvailable
                 )}
             </Cell>
-            <Cell numeric>{stats?.swap_avail || notAvailable}%</Cell>
+            {/* A dash rather than a percent of nothing: no value reported, or no swap. */}
+            <Cell numeric>
+                {typeof stats?.swap_avail === "number" && stats?.swap_total !== 0 ? `${stats.swap_avail}%` : "-"}
+            </Cell>
             <Cell className="whitespace-nowrap">{status?.agent || notAvailable}</Cell>
-            <Cell className="whitespace-nowrap">
-                {bootedValid ? (
-                    <span title={new Date(status.booted_at).toLocaleString(i18n.language)}>{formatDate(status.booted_at, t, i18n.language)}</span>
-                ) : (
-                    "-"
-                )}
-            </Cell>
-            <Cell className="whitespace-nowrap">
-                <span title={updatedValid ? new Date(monitor.updated_at).toLocaleString(i18n.language) : "-"}>
-                    {formatDate(monitor?.updated_at, t, i18n.language)}
-                </span>
-            </Cell>
+            <Cell className="whitespace-nowrap"><AgeTime value={status?.booted_at}/></Cell>
+            <Cell className="whitespace-nowrap"><AgeTime value={monitor?.updated_at}/></Cell>
         </Row>
     );
 };

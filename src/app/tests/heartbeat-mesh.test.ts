@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { DIRECTION_OFFSET, groupState, meshLayout, meshLinks, meshNodes } from "../heartbeat-mesh";
+import { DIRECTION_OFFSET, MAX_LABEL, groupState, meshLayout, meshLinks, meshNodes, nodeLabel, nodeWidth } from "../heartbeat-mesh";
 
 /** Two nodes beating each other on hb#1, n2 receiving nothing from n1 on hb#2. */
 const STATUS = {
@@ -37,6 +37,28 @@ describe("meshLinks", () => {
     const links = meshLinks(STATUS);
     expect(links.find((l) => l.hb === "hb#2")?.state).toBe("down");
     expect(links.find((l) => l.hb === "hb#relay")).toMatchObject({ state: "down", streamState: "stopped" });
+  });
+
+  test("a stream reporting no peer, as a stopped one, is down toward the peers of its heartbeat on its node", () => {
+    const links = meshLinks({
+      n1: { streams: [{ id: "hb#1.rx", state: "running", peers: { n2: { is_beating: true }, n3: { is_beating: true } } }] },
+      n2: { streams: [] },
+      n3: {
+        streams: [
+          { id: "hb#1.rx", state: "running", peers: { n1: { is_beating: true }, n2: { is_beating: true } } },
+          { id: "hb#1.tx", type: "unicast", state: "stopped", peers: {} },
+        ],
+      },
+    });
+    expect(links.filter((l) => l.node === "n3" && l.dir === "tx").map((l) => [l.from, l.to, l.state, l.streamState])).toEqual([
+      ["n3", "n1", "down", "stopped"],
+      ["n3", "n2", "down", "stopped"],
+    ]);
+  });
+
+  test("a stream reporting no peer, its heartbeat knowing none on its node, is toward every other node", () => {
+    const links = meshLinks({ n1: { streams: [{ id: "hb#1.tx", state: "stopped" }] }, n2: { streams: [] } });
+    expect(links.map((l) => [l.from, l.to, l.state])).toEqual([["n1", "n2", "down"]]);
   });
 
   test("the nodes: those reporting and their peers", () => {
@@ -88,6 +110,44 @@ describe("meshLayout", () => {
     expect(groupState([up, up])).toBe("up");
     expect(groupState([up, down])).toBe("warn");
     expect(groupState([down, down])).toBe("down");
+  });
+
+  test("a node is a box as wide as its name, a long name cut, its end an ellipsis", () => {
+    expect(nodeWidth("n1")).toBeLessThan(nodeWidth("a-node-with-a-much-longer-name"));
+    const long = "node.with.a.very.long.fully.qualified.domain.name.example.com";
+    expect(nodeLabel(long)).toHaveLength(MAX_LABEL);
+    expect(nodeLabel(long).endsWith("…")).toBe(true);
+    expect(nodeLabel("dev2n1")).toBe("dev2n1");
+    expect(nodeWidth(long)).toBe(nodeWidth(nodeLabel(long)));
+  });
+
+  test("a line runs from the edge of the box of its sender to the edge of the box of its receiver", () => {
+    const left = "a-rather-long-node-name-1";
+    const right = "b";
+    const status = {
+      [left]: { streams: [{ id: "hb#1.tx", state: "running", peers: { [right]: { is_beating: true } } }] },
+      [right]: { streams: [] },
+    };
+    const layout = meshLayout([left, right], meshLinks(status));
+    const [, x1, , x2] = /^M (\S+) (\S+) L (\S+) (\S+)$/.exec(layout.groups[0].path)!.map(Number);
+    const l = layout.nodes[left];
+    const r = layout.nodes[right];
+    expect(x1).toBeCloseTo(l.x + l.width / 2);
+    expect(x2).toBeCloseTo(r.x - r.width / 2);
+  });
+
+  test("boxes of long names on the circle do not overlap", () => {
+    const names = ["a", "b", "c", "d", "e"].map((c) => `${c}-node.long.domain.example`);
+    const layout = meshLayout(names, []);
+    const boxes = Object.values(layout.nodes);
+    for (const [i, p] of boxes.entries()) {
+      for (const q of boxes.slice(i + 1)) {
+        const apart = Math.abs(p.x - q.x) >= (p.width + q.width) / 2 || Math.abs(p.y - q.y) >= (p.height + q.height) / 2;
+        expect(apart).toBe(true);
+      }
+      expect(p.x - p.width / 2).toBeGreaterThanOrEqual(0);
+      expect(p.x + p.width / 2).toBeLessThanOrEqual(layout.width);
+    }
   });
 
   test("more nodes stand on a circle", () => {

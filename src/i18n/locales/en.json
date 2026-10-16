@@ -393,18 +393,19 @@
   },
   "heartbeats": {
     "columns": {
-      "running": "RUNNING",
-      "beating": "BEATING",
-      "id": "ID",
-      "node": "NODE",
-      "peer": "PEER",
-      "type": "TYPE",
-      "desc": "DESC",
-      "changedAt": "CHANGED_AT",
-      "lastBeatingAt": "LAST_BEATING_AT"
+      "heartbeat": "Heartbeat",
+      "type": "Type",
+      "node": "Node",
+      "direction": "Direction",
+      "peer": "Peer",
+      "desc": "Desc",
+      "routine": "Routine",
+      "beating": "Beating",
+      "since": "Since",
+      "lastBeat": "Last Beat"
     },
     "filters": {
-      "running": "Running",
+      "routine": "Routine",
       "beating": "Beating",
       "id": "ID",
       "show": "Show filters",
@@ -412,7 +413,6 @@
       "clearLink": "Remove the {{link}} filter"
     },
     "marks": {
-      "state": "State {{state}}",
       "healthySingleNode": "Healthy (single node)",
       "beating": "Beating",
       "stale": "Stale"
@@ -433,7 +433,6 @@
     },
     "streams": "Streams",
     "actions": {
-      "label": "Actions",
       "stop": "Stop",
       "start": "Start",
       "target": "the {{id}} stream of {{node}}",
@@ -441,6 +440,14 @@
       "failed": "{{action}} of {{target}} could not be requested: {{message}}",
       "confirmTitle": "Stop a heartbeat stream",
       "confirmStop": "Stop the {{id}} stream of {{node}}? The node stops sending or receiving on it until it is started again."
+    },
+    "routine": {
+      "running": "started",
+      "stopped": "stopped"
+    },
+    "direction": {
+      "tx": "sends to",
+      "rx": "receives from"
     }
   },
   "instance": {

@@ -14,7 +14,6 @@ import useEventStore from "../hooks/useEventStore.js";
 import {retainEventReception} from "../eventSourceManager.jsx";
 import EventLogger from "../components/EventLogger";
 import {Table, HeaderRow, HeaderCell, SortHeaderCell, Row, Cell, EmptyRow} from "../ui/components/Table";
-import {StatusMark} from "../ui/components/StatusMark";
 import {Select} from "../ui/components/Field";
 import {Button, IconButton} from "../ui/components/Button";
 import {Alert} from "../ui/components/Alert";
@@ -23,6 +22,7 @@ import {URL_NODE} from "../config/apiPath.js";
 import {getResponseErrorMessage} from "../services/api.jsx";
 import {useIsRoot} from "../hooks/useGrants";
 import {Pager} from "../ui/components/Pager";
+import {AgeTime} from "./AgeTime";
 import {HeartbeatMesh} from "./HeartbeatMesh";
 import {TabCount} from "../ui/components/Tabs";
 import {usePaging} from "../app/paging";
@@ -49,28 +49,53 @@ const STREAM_STATUS = {running: "up", warning: "warn", stopped: "down", failed: 
 
 /** The columns of the table, their titles translated at render. */
 const COLUMNS = [
-    {labelKey: "heartbeats.columns.running", key: "state"},
-    {labelKey: "heartbeats.columns.beating", key: "beating"},
-    {labelKey: "heartbeats.columns.id", key: "id"},
-    {labelKey: "heartbeats.columns.node", key: "node"},
-    {labelKey: "heartbeats.columns.peer", key: "peer"},
+    {labelKey: "heartbeats.columns.heartbeat", key: "id"},
     {labelKey: "heartbeats.columns.type", key: "type"},
+    {labelKey: "heartbeats.columns.node", key: "node"},
+    {labelKey: "heartbeats.columns.direction", key: "side"},
+    {labelKey: "heartbeats.columns.peer", key: "peer"},
     {labelKey: "heartbeats.columns.desc", key: "desc"},
-    {labelKey: "heartbeats.columns.changedAt", key: "changed_at"},
-    {labelKey: "heartbeats.columns.lastBeatingAt", key: "last_beating_at"}
+    {labelKey: "heartbeats.columns.routine", key: "state"},
+    {labelKey: "heartbeats.columns.beating", key: "beating"},
+    {labelKey: "heartbeats.columns.since", key: "changed_at"},
+    {labelKey: "heartbeats.columns.lastBeat", key: "last_beating_at"},
 ];
 
-const StateMark = React.memo(({state}) => {
+/** The heartbeat of a row and its side: "hb#1", "rx". */
+const rowHeartbeat = (row) => `hb#${row.id.replace(/\.(rx|tx)$/, "")}`;
+const rowSide = (row) => /\.(rx|tx)$/.exec(row.id)?.[1] ?? "";
+
+/** The tint of a status as text, as the marks of the objects tint their glyph. */
+const INK = {up: "text-state-up", warn: "text-state-warn", down: "text-state-down", unknown: "text-state-unknown"};
+
+/** A status said in a word, in its tint: the table reads by its words, not by glyphs. */
+const StatusText = ({status, children}) => (
+    <span data-state={status} className={`whitespace-nowrap ${INK[status]}`}>{children}</span>
+);
+
+/**
+ * The routine of the stream, its daemon thread, in a word: started when it runs,
+ * stopped, or the state the daemon says when it is neither.
+ */
+const routineWord = (state, t) =>
+    state === "running" || state === "stopped" ? t(`heartbeats.routine.${state}`) : (state || "unknown");
+
+/**
+ * The direction of the stream between the node and the peer columns, in words the
+ * row reads by: the node sends to the peer on a tx, receives from it on an rx.
+ */
+const DirectionMark = ({side}) => {
     const {t} = useTranslation();
-    return <StatusMark state={STREAM_STATUS[state] ?? "unknown"} label={t("heartbeats.marks.state", {state: state || "unknown"})}/>;
-}, (prev, next) => prev.state === next.state);
+    if (side !== "tx" && side !== "rx") return null;
+    return t(`heartbeats.direction.${side}`);
+};
 
 /** A beating peer is up, a stale one down. A single node has no peer to miss: up. */
 const BeatingMark = React.memo(({isBeating, isSingleNode}) => {
     const {t} = useTranslation();
     return isSingleNode || isBeating
-        ? <StatusMark state="up" label={t(isSingleNode ? "heartbeats.marks.healthySingleNode" : "heartbeats.marks.beating")}/>
-        : <StatusMark state="down" label={t("heartbeats.marks.stale")}/>;
+        ? <StatusText status="up">{t(isSingleNode ? "heartbeats.marks.healthySingleNode" : "heartbeats.marks.beating")}</StatusText>
+        : <StatusText status="down">{t("heartbeats.marks.stale")}</StatusText>;
 }, (prev, next) => prev.isBeating === next.isBeating && prev.isSingleNode === next.isSingleNode);
 
 /**
@@ -85,38 +110,50 @@ export const linkMatches = (link, row) => {
         (row.node === to && row.id.endsWith(".rx") && row.peer === from);
 };
 
-/** The tint of an action by its risk: stopping a stream cuts a heartbeat, starting one restores it. */
-const ACTION_TINT = {stop: "border-state-down text-state-down", start: "border-state-up text-state-up"};
-
 /**
- * Stop a running stream, start one that is not: the daemon thread of the stream on
- * its node (om node daemon hb stop|start). Shown to root only, which they ask for;
- * its border and text in the tint of its risk, red to stop, green to start.
+ * The routine of the stream, its daemon thread, in a word. Started is the normal
+ * state, said in the ink of the text; stopped, failed or warning in their tint.
+ * For root the word is the button of the action it calls for: stop a started one,
+ * start one that is not (om node daemon hb stop|start), the stop confirmed first.
  */
-const StreamAction = ({row, onAction}) => {
+const Routine = ({row, onAction}) => {
     const {t} = useTranslation();
+    const status = STREAM_STATUS[row.state] ?? "unknown";
+    const ink = row.state === "running" ? "text-ink" : INK[status];
+    const word = routineWord(row.state, t);
+    if (!onAction) {
+        return <span data-state={status} className={`whitespace-nowrap ${ink}`}>{word}</span>;
+    }
     const action = row.state === "running" ? "stop" : "start";
+    const label = t(`heartbeats.actions.${action}`);
     return (
-        <Button size="sm" variant="secondary" className={ACTION_TINT[action]} onClick={() => onAction(row, action)}>
-            {t(`heartbeats.actions.${action}`)}
-        </Button>
+        <button
+            type="button"
+            data-state={status}
+            title={label}
+            aria-label={`${word}, ${label}`}
+            onClick={() => onAction(row, action)}
+            className={`whitespace-nowrap rounded-(--radius-control) underline decoration-dotted underline-offset-4 hover:decoration-solid focus-visible:outline-2 focus-visible:outline-(--focus-ring) ${ink}`}
+        >
+            {word}
+        </button>
     );
 };
 
 const HeartbeatRow = React.memo(({row, isSingleNode, onAction}) => {
     return (
         <Row>
-            <Cell><StateMark state={row.state}/></Cell>
-            <Cell><BeatingMark isBeating={row.isBeating} isSingleNode={isSingleNode}/></Cell>
-            <Cell>{row.id}</Cell>
-            <Cell>{row.node}</Cell>
-            <Cell>{row.peer}</Cell>
+            <Cell className="whitespace-nowrap">{rowHeartbeat(row)}</Cell>
             <Cell>{row.type}</Cell>
+            <Cell>{row.node}</Cell>
+            <Cell className="whitespace-nowrap"><DirectionMark side={rowSide(row)}/></Cell>
+            <Cell>{row.peer}</Cell>
             <Cell>{row.desc}</Cell>
+            <Cell><Routine row={row} onAction={onAction}/></Cell>
+            <Cell><BeatingMark isBeating={row.isBeating} isSingleNode={isSingleNode}/></Cell>
             {/* The dates stay on one line: wrapped, they would make the row taller than the others. */}
-            <Cell className="whitespace-nowrap">{row.changedAt}</Cell>
-            <Cell className="whitespace-nowrap">{row.lastBeatingAt}</Cell>
-            {onAction && <Cell><StreamAction row={row} onAction={onAction}/></Cell>}
+            <Cell className="whitespace-nowrap"><AgeTime value={row.changedAt}/></Cell>
+            <Cell className="whitespace-nowrap"><AgeTime value={row.lastBeatingAt}/></Cell>
         </Row>
     );
 }, (prev, next) => {
@@ -126,6 +163,10 @@ const HeartbeatRow = React.memo(({row, isSingleNode, onAction}) => {
         prev.row.peer === next.row.peer &&
         prev.row.isBeating === next.row.isBeating &&
         prev.row.state === next.row.state &&
+        prev.row.type === next.row.type &&
+        prev.row.desc === next.row.desc &&
+        prev.row.changedAt === next.row.changedAt &&
+        prev.row.lastBeatingAt === next.row.lastBeatingAt &&
         prev.isSingleNode === next.isSingleNode &&
         prev.onAction === next.onAction
     );
@@ -354,8 +395,8 @@ const Heartbeats = () => {
                         type: stream.type || notAvailable,
                         desc: notAvailable,
                         isBeating: false,
-                        changedAt: notAvailable,
-                        lastBeatingAt: notAvailable,
+                        changedAt: "",
+                        lastBeatingAt: "",
                         state: stream.state,
                     });
                 } else {
@@ -369,8 +410,8 @@ const Heartbeats = () => {
                             type: stream.type || notAvailable,
                             desc: peerData?.desc || notAvailable,
                             isBeating: peerData?.is_beating || false,
-                            changedAt: peerData?.changed_at || notAvailable,
-                            lastBeatingAt: peerData?.last_beating_at || notAvailable,
+                            changedAt: peerData?.changed_at || "",
+                            lastBeatingAt: peerData?.last_beating_at || "",
                             state: stream.state || "unknown",
                         });
                     }
@@ -392,6 +433,8 @@ const Heartbeats = () => {
                 diff = Number(a.isBeating) - Number(b.isBeating);
             } else if (deferredSortColumn === "id") {
                 diff = a.id.localeCompare(b.id, undefined, {sensitivity: "base"});
+            } else if (deferredSortColumn === "side") {
+                diff = rowSide(a).localeCompare(rowSide(b));
             } else if (deferredSortColumn === "node") {
                 diff = a.node.localeCompare(b.node, undefined, {sensitivity: "base"});
             } else if (deferredSortColumn === "peer") {
@@ -501,7 +544,9 @@ const Heartbeats = () => {
     );
 
     return (
-        <div className="flex h-full flex-col p-4 space-y-3">
+        // The page grows with its table, all its rows shown, the page scrolling
+        // rather than the table in a box under the mesh.
+        <div className="flex flex-col p-4 space-y-3">
             <HeartbeatMesh heartbeatStatus={heartbeatStatus} onSelect={handleMeshSelect}/>
 
             <button
@@ -517,7 +562,7 @@ const Heartbeats = () => {
             </button>
 
             {showStreams && (
-                <div id="heartbeats-streams" className="flex min-h-0 flex-1 flex-col space-y-3">
+                <div id="heartbeats-streams" className="flex flex-col space-y-3">
                     <div className="flex shrink-0 flex-wrap items-center gap-3">
                         {isMobile && (
                             <Button
@@ -538,9 +583,9 @@ const Heartbeats = () => {
                             hidden={!showFilters}
                             className="flex flex-wrap items-center gap-3"
                         >
-                            {filterSelect(t("heartbeats.filters.running"), filterState, setFilterState, availableStates
+                            {filterSelect(t("heartbeats.filters.routine"), filterState, setFilterState, availableStates
                                 .filter(s => s !== "all")
-                                .map(state => [state, state.charAt(0).toUpperCase() + state.slice(1)]))}
+                                .map(state => [state, routineWord(state, t)]))}
                             {filterSelect(t("heartbeats.filters.beating"), filterBeating, setFilterBeating, [
                                 ["beating", t("heartbeats.marks.beating")],
                                 ["stale", t("heartbeats.marks.stale")],
@@ -577,7 +622,7 @@ const Heartbeats = () => {
 
                     <Pager paging={paging}/>
 
-                    <Table sticky className="min-h-0 overflow-auto">
+                    <Table sticky>
                         <thead>
                             <HeaderRow>
                                 {COLUMNS.map(({labelKey, key}) => (
@@ -589,7 +634,6 @@ const Heartbeats = () => {
                                         onSort={() => handleSort(key)}
                                     />
                                 ))}
-                                {isRoot && <HeaderCell>{t("heartbeats.actions.label")}</HeaderCell>}
                             </HeaderRow>
                         </thead>
                         <tbody>
@@ -602,7 +646,7 @@ const Heartbeats = () => {
                                 />
                             ))}
                             {visibleRows.length === 0 && (
-                                <EmptyRow colSpan={COLUMNS.length + (isRoot ? 1 : 0)}>
+                                <EmptyRow colSpan={COLUMNS.length}>
                                     {t("heartbeats.empty")}
                                 </EmptyRow>
                             )}

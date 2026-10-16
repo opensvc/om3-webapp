@@ -656,6 +656,7 @@ const ObjectDetail = ({path, embedded = false, onOpenLogs, onViewInstance, onOrc
                                 instanceName={name}
                                 onOpenLogs={handleOpenLogs}
                                 onViewInstance={viewInstance}
+                                objectAvail={objectStatus?.avail}
                             />
                         ))}
                     </div>

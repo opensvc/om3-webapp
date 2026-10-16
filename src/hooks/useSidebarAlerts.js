@@ -278,11 +278,16 @@ export function usageDetails(items, word) {
     return lines;
 }
 
+/** The objects of one kind, out of the objects by path. */
+const ofKind = (objects, kind) =>
+    Object.fromEntries(Object.entries(objects || {}).filter(([path]) => kindOf(path) === kind));
+
 /**
  * State of the sidebar entries, kept up to date without any user action. For each
- * entry path, `alert`: what calls for attention, orange or red, `null` when all is
- * well (pools and networks raise none); and for some entries the `details` lines
- * of their mouseover.
+ * entry id (`NAV_SECTIONS`), `alert`: what calls for attention, orange or red,
+ * `null` when all is well (pools, networks and the lists of keys raise none); and
+ * for some entries the `details` lines of their mouseover. All the objects raise
+ * the alert of all of them; the services and the volumes, each of theirs only.
  */
 export default function useSidebarAlerts() {
     const {objects, nodeStatus, heartbeatStatus} = useSidebarEventState();
@@ -291,11 +296,13 @@ export default function useSidebarAlerts() {
     const {i18n: {language}} = useTranslation();
 
     return useMemo(() => ({
-        "/objects": {alert: objectsAlert(objects)},
-        "/heartbeats": {alert: heartbeatAlert(heartbeatStatus)},
-        "/pools": {alert: null, details: usageDetails(pools, "pool")},
-        "/network": {alert: null, details: usageDetails(networks, "network")},
-        "/nodes": {alert: nodesAlert(nodeStatus), details: nodesDetails(nodeStatus)},
+        "objects-any": {alert: objectsAlert(objects)},
+        "objects-services": {alert: objectsAlert(ofKind(objects, "svc"))},
+        "objects-volumes": {alert: objectsAlert(ofKind(objects, "vol"))},
+        links: {alert: heartbeatAlert(heartbeatStatus)},
+        pools: {alert: null, details: usageDetails(pools, "pool")},
+        networks: {alert: null, details: usageDetails(networks, "network")},
+        nodes: {alert: nodesAlert(nodeStatus), details: nodesDetails(nodeStatus)},
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }), [objects, nodeStatus, heartbeatStatus, pools, networks, language]);
 }

@@ -1,47 +1,59 @@
 import {useState, useCallback} from "react";
-import {NavLink} from "react-router-dom";
+import {Link, NavLink, useLocation} from "react-router-dom";
 import {useTranslation} from "react-i18next";
 import {cn} from "../ui/cn";
-import {ObjectIcon} from "../ui/components/ObjectIcon";
 import useSidebarAlerts from "../hooks/useSidebarAlerts";
+import {AlertMark} from "../ui/components/AlertMark";
+import {ALL_LIST, OBJECT_LISTS, listUrl} from "../utils/objectLists";
 
-// Icons of the oc3 menu, glyph and tint (ObjectIcon): nodes, networks, pools as
-// disks, objects as services, and the om3 kinds drawn from the same set.
-// The cluster overview and the user page are reached from the top bar: the logo
-// and the user button. Entries in alphabetical order.
-// `labelKey` is the catalog key of the entry name, translated at render.
-export const NAV_ROUTES = [
-    {path: "/heartbeats", labelKey: "nav.routes.heartbeats", kind: "heartbeat"},
-    {path: "/network", labelKey: "nav.routes.networks", kind: "network"},
-    {path: "/nodes", labelKey: "nav.routes.nodes", kind: "node"},
-    // Its tabs list the objects by namespace and by kind too.
-    {path: "/objects", labelKey: "nav.routes.objects", kind: "service"},
-    {path: "/pools", labelKey: "nav.routes.pools", kind: "pool"},
+/**
+ * The menu, in two sections. The cluster: its links (the heartbeats), nodes,
+ * namespaces, networks and pools. The objects: their title opens all of them, then
+ * a list per kind. Names alone, no icon. The cluster overview and the user page
+ * are reached from the top bar: the logo and the user button. `id` keys the alert
+ * of an entry; `labelKey` is the catalog key of its name; `list`, the list of the
+ * Objects page it opens. A section with `to` is an entry itself, its title the link.
+ */
+export const NAV_SECTIONS = [
+    {
+        key: "cluster",
+        labelKey: "nav.sections.cluster",
+        entries: [
+            {id: "links", to: "/heartbeats", labelKey: "nav.routes.heartbeats"},
+            {id: "nodes", to: "/nodes", labelKey: "nav.routes.nodes"},
+            {id: "namespaces", to: "/namespaces", labelKey: "nav.routes.namespaces"},
+            {id: "networks", to: "/network", labelKey: "nav.routes.networks"},
+            {id: "pools", to: "/pools", labelKey: "nav.routes.pools"},
+        ],
+    },
+    {
+        key: "objects",
+        labelKey: "nav.sections.objects",
+        id: "objects-any",
+        to: listUrl(ALL_LIST),
+        list: ALL_LIST,
+        entries: OBJECT_LISTS.map((list) => ({
+            id: `objects-${list}`,
+            to: listUrl(list),
+            labelKey: `objects.lists.${list}`,
+            list,
+        })),
+    },
 ];
-
-/** The tint of an alert badge: orange for warn, red for down, the oc3 state colours. */
-const ALERT_TINT = {warn: "bg-state-warn", down: "bg-state-down"};
 
 /**
  * The alert of an entry, when something calls for attention: a round badge over
  * the right end of its link, orange or red, what it is about in its tooltip and
  * for screen readers. None while all is well: the menu counts nothing.
  */
-function AlertBadge({path, alert}) {
+function AlertBadge({id, alert}) {
     return (
-        <span
-            role="img"
-            aria-label={alert.text}
-            title={alert.text}
-            data-testid={`alert-${path.slice(1)}`}
-            data-level={alert.level}
-            className={cn(
-                "pointer-events-auto absolute top-1/2 right-2 inline-flex h-4 w-4 -translate-y-1/2 items-center justify-center rounded-full text-[0.6875rem] leading-none font-bold text-surface-raised",
-                ALERT_TINT[alert.level],
-            )}
-        >
-            <span aria-hidden="true">!</span>
-        </span>
+        <AlertMark
+            level={alert.level}
+            text={alert.text}
+            testId={`alert-${id}`}
+            className="pointer-events-auto absolute top-1/2 right-2 -translate-y-1/2"
+        />
     );
 }
 
@@ -75,35 +87,71 @@ export function useSidebarOpen() {
 }
 
 const LINK = "flex items-center gap-2 rounded-(--radius-control) px-2 py-1 text-ink-muted hover:text-ink";
+const CURRENT = "bg-accent-soft text-ink";
+const TITLE = "px-2 pt-1 pb-1 text-[0.6875rem] font-semibold tracking-wider text-ink-muted uppercase";
+
+/** The list of the Objects page shown, the services one when the URL names none it knows. */
+function shownList(location) {
+    if (location.pathname !== "/objects") return null;
+    const list = new URLSearchParams(location.search).get("list");
+    return [ALL_LIST, ...OBJECT_LISTS].includes(list) ? list : OBJECT_LISTS[0];
+}
 
 /**
- * Entries of the menu; the children of an entry are listed under it, indented
- * along a line that ties them to it.
+ * A section of the menu: its title, then its entries. An entry of the objects, or
+ * their title, is current when its list is the one shown, the page being the same
+ * for all of them.
  */
-function NavList({routes, alerts, nested = false}) {
+function NavSection({section, alerts}) {
     const {t} = useTranslation();
+    const location = useLocation();
+    const shown = shownList(location);
+    const titleId = `nav-section-${section.key}`;
     return (
-        <ul className={cn(nested && "ml-4 border-l border-line pl-1")}>
-            {routes.map(({path, labelKey, kind, children}) => (
-                <li key={path}>
-                    <div className="relative">
+        <section aria-labelledby={titleId} className="mb-3">
+            {section.to === undefined ? (
+                <h2 id={titleId} className={TITLE}>{t(section.labelKey)}</h2>
+            ) : (
+                // The title opens the section's whole list, as an entry does its own.
+                <h2 id={titleId} className="relative">
+                    <Link
+                        to={section.to}
+                        aria-current={shown === section.list ? "page" : undefined}
+                        className={cn(TITLE, "flex rounded-(--radius-control) hover:text-ink", shown === section.list && CURRENT)}
+                    >
+                        {t(section.labelKey)}
+                    </Link>
+                    {alerts[section.id]?.alert && <AlertBadge id={section.id} alert={alerts[section.id].alert}/>}
+                </h2>
+            )}
+            {/* Its entries indented under its title, along a line that ties them to it. */}
+            <ul className="ml-2 border-l border-line pl-1">
+                {section.entries.map(({id, to, labelKey, list}) => {
+                    const link = list === undefined ? (
                         <NavLink
-                            to={path}
+                            to={to}
                             // Mouseover details of the entries that have some.
-                            title={alerts[path]?.details?.join("\n")}
-                            className={({isActive}) => cn(LINK, isActive && "bg-accent-soft text-ink")}
+                            title={alerts[id]?.details?.join("\n")}
+                            className={({isActive}) => cn(LINK, isActive && CURRENT)}
                         >
-                            {/* The icon keeps its tint in every state: it identifies the view,
-                                the background and the label mark the selection. */}
-                            <ObjectIcon kind={kind} className="h-4 w-4"/>
                             {t(labelKey)}
                         </NavLink>
-                        {alerts[path]?.alert && <AlertBadge path={path} alert={alerts[path].alert}/>}
-                    </div>
-                    {children && <NavList routes={children} alerts={alerts} nested/>}
-                </li>
-            ))}
-        </ul>
+                    ) : (
+                        <Link to={to} aria-current={shown === list ? "page" : undefined} className={cn(LINK, shown === list && CURRENT)}>
+                            {t(labelKey)}
+                        </Link>
+                    );
+                    return (
+                        <li key={id}>
+                            <div className="relative">
+                                {link}
+                                {alerts[id]?.alert && <AlertBadge id={id} alert={alerts[id].alert}/>}
+                            </div>
+                        </li>
+                    );
+                })}
+            </ul>
+        </section>
     );
 }
 
@@ -149,7 +197,7 @@ export function Sidebar({open}) {
             )}
         >
             <nav aria-label={t("nav.main")} aria-keyshortcuts="n" onKeyDown={onMenuKeyDown} className="w-60 p-2">
-                <NavList routes={NAV_ROUTES} alerts={alerts}/>
+                {NAV_SECTIONS.map((section) => <NavSection key={section.key} section={section} alerts={alerts}/>)}
             </nav>
         </aside>
     );

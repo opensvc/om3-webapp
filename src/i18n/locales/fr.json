@@ -702,23 +702,19 @@
       "share": "Part",
       "barLabel": "{{title}} : {{parts}}"
     },
-    "cpu": {
-      "trend": "CPU de {{namespace}}, 5 dernières minutes"
-    },
     "memory": {
-      "used": "{{used}} utilisé",
-      "trend": "Mémoire de {{namespace}}, 5 dernières minutes"
+      "used": "{{used}} utilisé"
     },
     "panel": {
       "tabs": {
         "usage": "Usage",
+        "claims": "Réclamations",
         "config": "Configuration"
       },
       "claims": "Réclamations et usage",
       "resource": "Ressource",
       "limit": "Limite",
       "share": "Part",
-      "trend": "5 dernières minutes",
       "shareOf": "Part de {{name}} utilisée",
       "types": {
         "pool": "Pool",
@@ -739,12 +735,135 @@
       "create": "Créer sa configuration",
       "creating": "Création…",
       "createFailed": "La configuration n'a pas pu être créée : {{message}}"
+    },
+    "claims": {
+      "actions": "Actions",
+      "add": "Ajouter une réclamation",
+      "edit": "Modifier",
+      "editOf": "Modifier la réclamation de {{name}}",
+      "remove": "Supprimer",
+      "removeOf": "Supprimer la réclamation de {{name}}",
+      "claim": "Réclamer",
+      "claimOf": "Réclamer {{name}}",
+      "readOnly": "Seuls root et les squatters peuvent modifier les réclamations d'un namespace.",
+      "saveFailed": "La réclamation n'a pas pu être écrite : {{message}}",
+      "removeFailed": "La réclamation n'a pas pu être supprimée : {{message}}",
+      "removeTitle": "Supprimer la réclamation de {{name}}",
+      "removeText": "{{namespace}} ne sera plus limité à {{limit}} de {{name}}.",
+      "removeEffect": {
+        "pool": "Ses volumes ne seront alors limités que par la taille du pool.",
+        "network": "Ses objets ne seront alors limités que par les adresses du réseau.",
+        "cpu": "Ses objets utiliseront alors autant de cpu que les nœuds leur en donnent.",
+        "memory": "Ses objets utiliseront alors autant de mémoire que les nœuds leur en donnent."
+      },
+      "units": {
+        "m": "Mio",
+        "g": "Gio",
+        "t": "Tio"
+      },
+      "errors": {
+        "positive": "Saisissez un nombre supérieur à 0.",
+        "integer": "Saisissez un nombre entier d'adresses.",
+        "cpuMin": "Saisissez au moins 0,01 cpu."
+      },
+      "types": {
+        "pool": {
+          "label": "Stockage d'un pool",
+          "help": "Ce que ses volumes peuvent prendre d'un pool.",
+          "taken": "Tous les pools sont déjà réclamés : modifiez leur réclamation."
+        },
+        "network": {
+          "label": "Adresses d'un réseau",
+          "help": "Combien d'adresses ses objets peuvent tenir dans un réseau.",
+          "taken": "Tous les réseaux sont déjà réclamés : modifiez leur réclamation."
+        },
+        "cpu": {
+          "label": "CPU",
+          "help": "Combien de cpus ses objets peuvent utiliser ensemble.",
+          "taken": "Déjà réclamé : modifiez sa réclamation."
+        },
+        "memory": {
+          "label": "Mémoire",
+          "help": "Combien de mémoire ses objets peuvent utiliser ensemble.",
+          "taken": "Déjà réclamée : modifiez sa réclamation."
+        }
+      },
+      "wizard": {
+        "addTitle": "Nouvelle réclamation de {{namespace}}",
+        "editTitle": "Réclamation de {{name}} par {{namespace}}",
+        "steps": "Étapes",
+        "step": {
+          "type": "Quoi",
+          "target": "Lequel",
+          "limit": "Combien",
+          "review": "Vérification"
+        },
+        "back": "Précédent",
+        "next": "Suivant",
+        "save": "Enregistrer la réclamation",
+        "saving": "Enregistrement…",
+        "typeQuestion": "Que réclame le namespace ?",
+        "targetQuestion": {
+          "pool": "De quel pool ?",
+          "network": "De quel réseau ?"
+        },
+        "noTarget": {
+          "pool": "Tous les pools sont déjà réclamés.",
+          "network": "Tous les réseaux sont déjà réclamés."
+        },
+        "targetFigures": "{{used}} utilisés sur {{size}}",
+        "limitLabel": {
+          "pool": "Le plus qu'il peut prendre de {{name}}",
+          "network": "Le plus d'adresses qu'il peut tenir dans {{name}}",
+          "cpu": "Le plus de cpus qu'il peut utiliser",
+          "memory": "Le plus de mémoire qu'il peut utiliser"
+        },
+        "defaultLabel": {
+          "cpu": "Cpus d'un conteneur n'en fixant pas",
+          "memory": "Mémoire d'un conteneur n'en fixant pas"
+        },
+        "defaultHint": "La limite de chaque conteneur du namespace qui n'en fixe pas lui-même.",
+        "optional": "{{label}} (facultatif)",
+        "unit": "Unité",
+        "unitOf": {
+          "network": "adresses",
+          "cpu": "cpus"
+        },
+        "usedNow": "Utilisé maintenant : {{used}}.",
+        "sizeOf": {
+          "pool": "Taille du pool : {{size}}.",
+          "network": "Taille du réseau : {{size}}."
+        },
+        "cpuHint": "0,5 est un demi cpu.",
+        "belowUsage": "En dessous des {{used}} utilisés maintenant : ce qui grandit au-delà sera refusé jusqu'à ce que l'usage repasse sous la réclamation.",
+        "aboveSize": {
+          "pool": "Plus que les {{size}} du pool : le pool limite d'abord.",
+          "network": "Plus que les {{size}} adresses du réseau : le réseau limite d'abord."
+        },
+        "summary": {
+          "pool": "{{namespace}} pourra prendre jusqu'à {{limit}} du pool {{name}}.",
+          "network": "{{namespace}} pourra tenir jusqu'à {{limit}} adresses dans le réseau {{name}}.",
+          "cpu": "{{namespace}} pourra utiliser jusqu'à {{limit}}.",
+          "memory": "{{namespace}} pourra utiliser jusqu'à {{limit}} de mémoire."
+        },
+        "summaryDefault": {
+          "cpu": "Un conteneur sans limite propre reçoit {{value}}.",
+          "memory": "Un conteneur sans limite propre reçoit {{value}}."
+        },
+        "createsConfig": "{{namespace}} n'a pas encore d'objet de configuration : il est créé avec cette réclamation.",
+        "written": "Écrit dans la configuration du namespace :"
+      }
+    },
+    "objects": {
+      "tableLabel": "{{list}} de {{namespace}}",
+      "empty": "Aucun objet de type {{list}} dans {{namespace}}.",
+      "selectAll": "Sélectionner tous les objets de type {{list}}"
     }
   },
   "nav": {
     "openCluster": "Ouvrir le cluster",
     "routes": {
-      "heartbeats": "Heartbeats",
+      "heartbeats": "Liens",
       "networks": "Réseaux",
       "nodes": "Nœuds",
       "objects": "Objets",
@@ -767,7 +886,7 @@
       "cluster": "Cluster",
       "loading": "Chargement...",
       "segments": {
-        "heartbeats": "heartbeats",
+        "heartbeats": "liens",
         "kinds": "kinds",
         "namespaces": "namespaces",
         "network": "réseaux",
@@ -776,6 +895,10 @@
         "pools": "pools",
         "whoami": "utilisateur"
       }
+    },
+    "sections": {
+      "cluster": "Cluster",
+      "objects": "Objets"
     }
   },
   "networks": {
@@ -1014,6 +1137,13 @@
     }
   },
   "objects": {
+    "flex": {
+      "title": "Flex",
+      "min": "Instances min",
+      "max": "Instances max",
+      "target": "Instances visées"
+    },
+    "degraded": "Dégradé",
     "notProvisioned": "Non provisionné",
     "tableLabel": "Objets",
     "selectAll": "Sélectionner tous les objets",
@@ -1071,7 +1201,8 @@
       "notProvisionedLabel": "L'objet n'est pas provisionné",
       "actionsMenu": "Actions sur l'objet"
     },
-    "selectHint": "Sélectionnez des objets pour agir dessus"
+    "selectHint": "Sélectionnez des objets pour agir dessus",
+    "selectNamespace": "Sélectionner les objets de {{namespace}}"
   },
   "pools": {
     "columns": {
@@ -1103,6 +1234,7 @@
       "unknown": "inconnu"
     },
     "stateMarks": {
+      "notProvisioned": "Non provisionné",
       "stopped": "Arrêté",
       "stoppedTitle": "arrêté",
       "stoppedAt": "arrêté le {{date}}",
@@ -1186,10 +1318,6 @@
       "network": "Réseaux",
       "namespace": "Namespaces"
     }
-  },
-  "panelSide": {
-    "toLeft": "Déplacer les panneaux à gauche",
-    "toRight": "Déplacer les panneaux à droite"
   },
   "statusBoard": {
     "caption": "État de {{path}} par nœud",

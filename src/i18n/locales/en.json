@@ -702,23 +702,19 @@
       "share": "Share",
       "barLabel": "{{title}}: {{parts}}"
     },
-    "cpu": {
-      "trend": "CPU of {{namespace}}, last 5 minutes"
-    },
     "memory": {
-      "used": "{{used}} used",
-      "trend": "Memory of {{namespace}}, last 5 minutes"
+      "used": "{{used}} used"
     },
     "panel": {
       "tabs": {
         "usage": "Usage",
+        "claims": "Claims",
         "config": "Configuration"
       },
       "claims": "Claims and usage",
       "resource": "Resource",
       "limit": "Limit",
       "share": "Share",
-      "trend": "Last 5 minutes",
       "shareOf": "Share of {{name}} used",
       "types": {
         "pool": "Pool",
@@ -739,12 +735,135 @@
       "create": "Create its configuration",
       "creating": "Creating…",
       "createFailed": "The configuration could not be created: {{message}}"
+    },
+    "claims": {
+      "actions": "Actions",
+      "add": "Add a claim",
+      "edit": "Edit",
+      "editOf": "Edit the claim of {{name}}",
+      "remove": "Remove",
+      "removeOf": "Remove the claim of {{name}}",
+      "claim": "Claim",
+      "claimOf": "Claim of {{name}}",
+      "readOnly": "Only root and the squatters may change the claims of a namespace.",
+      "saveFailed": "The claim could not be written: {{message}}",
+      "removeFailed": "The claim could not be removed: {{message}}",
+      "removeTitle": "Remove the claim of {{name}}",
+      "removeText": "{{namespace}} will no longer be limited to {{limit}} of {{name}}.",
+      "removeEffect": {
+        "pool": "Its volumes will then be capped by nothing but the size of the pool.",
+        "network": "Its objects will then be capped by nothing but the addresses of the network.",
+        "cpu": "Its objects will then use as much cpu as the nodes give them.",
+        "memory": "Its objects will then use as much memory as the nodes give them."
+      },
+      "units": {
+        "m": "MiB",
+        "g": "GiB",
+        "t": "TiB"
+      },
+      "errors": {
+        "positive": "Enter a number greater than 0.",
+        "integer": "Enter a whole number of addresses.",
+        "cpuMin": "Enter at least 0.01 cpu."
+      },
+      "types": {
+        "pool": {
+          "label": "Storage of a pool",
+          "help": "How much its volumes may take of one pool.",
+          "taken": "Every pool is claimed already: edit its claim instead."
+        },
+        "network": {
+          "label": "Addresses of a network",
+          "help": "How many addresses its objects may hold in one network.",
+          "taken": "Every network is claimed already: edit its claim instead."
+        },
+        "cpu": {
+          "label": "CPU",
+          "help": "How many cpus its objects may use together.",
+          "taken": "Claimed already: edit its claim instead."
+        },
+        "memory": {
+          "label": "Memory",
+          "help": "How much memory its objects may use together.",
+          "taken": "Claimed already: edit its claim instead."
+        }
+      },
+      "wizard": {
+        "addTitle": "New claim of {{namespace}}",
+        "editTitle": "Claim of {{name}} by {{namespace}}",
+        "steps": "Steps",
+        "step": {
+          "type": "What",
+          "target": "Which",
+          "limit": "How much",
+          "review": "Review"
+        },
+        "back": "Back",
+        "next": "Next",
+        "save": "Save the claim",
+        "saving": "Saving…",
+        "typeQuestion": "What does the namespace claim?",
+        "targetQuestion": {
+          "pool": "Of which pool?",
+          "network": "Of which network?"
+        },
+        "noTarget": {
+          "pool": "Every pool is claimed already.",
+          "network": "Every network is claimed already."
+        },
+        "targetFigures": "{{used}} used of {{size}}",
+        "limitLabel": {
+          "pool": "Most it may take of {{name}}",
+          "network": "Most addresses it may hold in {{name}}",
+          "cpu": "Most cpus it may use",
+          "memory": "Most memory it may use"
+        },
+        "defaultLabel": {
+          "cpu": "Cpus of a container setting none",
+          "memory": "Memory of a container setting none"
+        },
+        "defaultHint": "The cap of each container of the namespace that sets no cap of its own.",
+        "optional": "{{label}} (optional)",
+        "unit": "Unit",
+        "unitOf": {
+          "network": "addresses",
+          "cpu": "cpus"
+        },
+        "usedNow": "Used now: {{used}}.",
+        "sizeOf": {
+          "pool": "Pool size: {{size}}.",
+          "network": "Network size: {{size}}."
+        },
+        "cpuHint": "0.5 is half a cpu.",
+        "belowUsage": "Below the {{used}} used now: what grows past it will be refused until the usage falls under the claim.",
+        "aboveSize": {
+          "pool": "More than the {{size}} of the pool: the pool caps it first.",
+          "network": "More than the {{size}} addresses of the network: the network caps it first."
+        },
+        "summary": {
+          "pool": "{{namespace}} may take up to {{limit}} of the pool {{name}}.",
+          "network": "{{namespace}} may hold up to {{limit}} addresses in the network {{name}}.",
+          "cpu": "{{namespace}} may use up to {{limit}}.",
+          "memory": "{{namespace}} may use up to {{limit}} of memory."
+        },
+        "summaryDefault": {
+          "cpu": "A container setting no cap of its own gets {{value}}.",
+          "memory": "A container setting no cap of its own gets {{value}}."
+        },
+        "createsConfig": "{{namespace}} has no configuration object yet: it is created with this claim.",
+        "written": "Written in the namespace configuration:"
+      }
+    },
+    "objects": {
+      "tableLabel": "{{list}} of {{namespace}}",
+      "empty": "No {{list}} in {{namespace}}.",
+      "selectAll": "Select all the {{list}}"
     }
   },
   "nav": {
     "openCluster": "Open the cluster",
     "routes": {
-      "heartbeats": "Heartbeats",
+      "heartbeats": "Links",
       "networks": "Networks",
       "nodes": "Nodes",
       "objects": "Objects",
@@ -767,7 +886,7 @@
       "cluster": "Cluster",
       "loading": "Loading...",
       "segments": {
-        "heartbeats": "heartbeats",
+        "heartbeats": "links",
         "kinds": "kinds",
         "namespaces": "namespaces",
         "network": "network",
@@ -776,6 +895,10 @@
         "pools": "pools",
         "whoami": "whoami"
       }
+    },
+    "sections": {
+      "cluster": "Cluster",
+      "objects": "Objects"
     }
   },
   "networks": {
@@ -1014,6 +1137,13 @@
     }
   },
   "objects": {
+    "flex": {
+      "title": "Flex",
+      "min": "Min instances",
+      "max": "Max instances",
+      "target": "Target instances"
+    },
+    "degraded": "Degraded",
     "notProvisioned": "Not provisioned",
     "tableLabel": "Objects",
     "selectAll": "Select all objects",
@@ -1028,7 +1158,7 @@
       "secrets": "Secrets",
       "users": "Users",
       "namespaces": "Namespaces",
-      "any": "Any"
+      "any": "All"
     },
     "columns": {
       "object": "Object",
@@ -1071,7 +1201,8 @@
       "notProvisionedLabel": "Object is not provisioned",
       "actionsMenu": "Object actions"
     },
-    "selectHint": "Select objects to act on them"
+    "selectHint": "Select objects to act on them",
+    "selectNamespace": "Select the objects of {{namespace}}"
   },
   "pools": {
     "columns": {
@@ -1103,6 +1234,7 @@
       "unknown": "unknown"
     },
     "stateMarks": {
+      "notProvisioned": "Not provisioned",
       "stopped": "Stopped",
       "stoppedTitle": "stopped",
       "stoppedAt": "stopped at {{date}}",
@@ -1186,10 +1318,6 @@
       "network": "Networks",
       "namespace": "Namespaces"
     }
-  },
-  "panelSide": {
-    "toLeft": "Move the panels to the left",
-    "toRight": "Move the panels to the right"
   },
   "statusBoard": {
     "caption": "Status of {{path}} by node",

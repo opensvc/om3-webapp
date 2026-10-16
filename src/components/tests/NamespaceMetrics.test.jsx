@@ -62,6 +62,30 @@ describe('NamespaceMetrics', () => {
         expect(Math.abs(parseFloat(cpu.textContent) - 50)).toBeLessThan(2);
     });
 
+    test('the busiest first: sorted by cpu, descending, by default; a figure not read yet last', async () => {
+        global.fetch.mockReturnValueOnce(respond(metricsText(0, 0)));
+        render(<NamespaceMetrics namespace="prod"/>);
+        await screen.findByRole('row', {name: /prod\/svc\/web/});
+        const paths = () => screen.getAllByRole('row').slice(1).map((row) => within(row).getAllByRole('cell')[0].textContent);
+        expect(screen.getByRole('columnheader', {name: /^CPU/})).toHaveAttribute('aria-sort', 'descending');
+        // No rate yet: in the order of the paths.
+        expect(paths()).toEqual(['prod/svc/db', 'prod/svc/web']);
+        // web busier than db on the second reading: first.
+        global.fetch.mockReturnValueOnce(respond(metricsText(REFRESH_INTERVAL_MS * 500, REFRESH_INTERVAL_MS * 100)));
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(REFRESH_INTERVAL_MS);
+        });
+        expect(paths()).toEqual(['prod/svc/web', 'prod/svc/db']);
+        // By memory, the largest first; again, the smallest.
+        act(() => within(screen.getByRole('columnheader', {name: /^Memory/})).getByRole('button').click());
+        expect(paths()).toEqual(['prod/svc/db', 'prod/svc/web']);
+        act(() => within(screen.getByRole('columnheader', {name: /^Memory/})).getByRole('button').click());
+        expect(paths()).toEqual(['prod/svc/web', 'prod/svc/db']);
+        // By limit: the unlimited one the largest, the one without a limit last.
+        act(() => within(screen.getByRole('columnheader', {name: /^Limit/})).getByRole('button').click());
+        expect(paths()).toEqual(['prod/svc/web', 'prod/svc/db']);
+    });
+
     test('totals the CPU and memory of the namespace', async () => {
         global.fetch.mockReturnValueOnce(respond(metricsText(0)));
         render(<NamespaceMetrics namespace="prod"/>);

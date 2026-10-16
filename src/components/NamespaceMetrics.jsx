@@ -1,15 +1,33 @@
-import React, {useEffect, useMemo, useRef, useState} from "react";
+import React, {useCallback, useEffect, useMemo, useRef, useState} from "react";
 import {useTranslation} from "react-i18next";
 import {URL_METRICS_PG} from "../config/apiPath.js";
 import {cpuPercent, formatBytes, namespaceCgroupMetrics, namespaceTotals} from "../utils/cgroupMetrics";
 import {formatCpuPercent} from "../app/namespace-usage";
-import {Table, HeaderRow, HeaderCell, Row, Cell, EmptyRow} from "../ui/components/Table";
+import {Table, HeaderRow, SortHeaderCell, Row, Cell, EmptyRow} from "../ui/components/Table";
 import {Alert} from "../ui/components/Alert";
 import {Spinner} from "../ui/components/Spinner";
 import logger from "../utils/logger.js";
 
 export const REFRESH_INTERVAL_MS = 5000;
 
+
+/** The value a column sorts a row by; none, a figure not read yet, goes last. */
+const SORT = {
+    path: (row) => row.path,
+    cpu: (row) => row.cpu,
+    memory: (row) => row.memoryCurrent,
+    limit: (row) => row.memoryMax,
+};
+
+const COLUMNS = [
+    {key: "path", labelKey: "metrics.columns.object"},
+    {key: "cpu", labelKey: "metrics.columns.cpu"},
+    {key: "memory", labelKey: "metrics.columns.memory"},
+    {key: "limit", labelKey: "metrics.columns.limit"},
+];
+
+/** A figure read; an unlimited limit, infinite, the largest of all. */
+const isFigure = (value) => typeof value === "number" && !Number.isNaN(value);
 
 /** A figure of the namespace as a whole, over the per object table. */
 const TotalTile = ({label, value}) => (
@@ -68,10 +86,32 @@ const NamespaceMetrics = ({namespace}) => {
         };
     }, [namespace]);
 
-    const sortedRows = useMemo(
-        () => (rows || []).slice().sort((a, b) => a.path.localeCompare(b.path)),
-        [rows]
-    );
+    // The busiest first: by cpu, descending. A figure from the largest, a name from A.
+    const [sortColumn, setSortColumn] = useState("cpu");
+    const [sortDirection, setSortDirection] = useState("desc");
+    const handleSort = useCallback((column) => {
+        if (column === sortColumn) {
+            setSortDirection((direction) => (direction === "asc" ? "desc" : "asc"));
+            return;
+        }
+        setSortColumn(column);
+        setSortDirection(column === "path" ? "asc" : "desc");
+    }, [sortColumn]);
+
+    const sortedRows = useMemo(() => {
+        const key = SORT[sortColumn];
+        const sign = sortDirection === "asc" ? 1 : -1;
+        return (rows || []).slice().sort((a, b) => {
+            const [x, y] = [key(a), key(b)];
+            if (sortColumn !== "path") {
+                // A figure not read yet, the cpu before a second reading say, last whatever the direction.
+                if (isFigure(x) !== isFigure(y)) return isFigure(x) ? -1 : 1;
+                const diff = isFigure(x) ? (x - y) * sign : 0;
+                return diff || a.path.localeCompare(b.path);
+            }
+            return x.localeCompare(y) * sign;
+        });
+    }, [rows, sortColumn, sortDirection]);
     const totals = useMemo(() => namespaceTotals(sortedRows), [sortedRows]);
 
     return (
@@ -94,10 +134,15 @@ const NamespaceMetrics = ({namespace}) => {
                 <Table>
                     <thead>
                         <HeaderRow>
-                            <HeaderCell>{t("metrics.columns.object")}</HeaderCell>
-                            <HeaderCell>{t("metrics.columns.cpu")}</HeaderCell>
-                            <HeaderCell>{t("metrics.columns.memory")}</HeaderCell>
-                            <HeaderCell>{t("metrics.columns.limit")}</HeaderCell>
+                            {COLUMNS.map(({key, labelKey}) => (
+                                <SortHeaderCell
+                                    key={key}
+                                    label={t(labelKey)}
+                                    active={sortColumn === key}
+                                    direction={sortDirection}
+                                    onSort={() => handleSort(key)}
+                                />
+                            ))}
                         </HeaderRow>
                     </thead>
                     <tbody>

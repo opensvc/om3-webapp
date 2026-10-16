@@ -21,6 +21,9 @@ vi.mock('../NamespacePanel', () => ({
     NamespaceUsage: ({namespace}) => <div data-testid="namespace-usage">{namespace}</div>,
     NamespaceConfig: ({namespace}) => <div data-testid="namespace-config">{namespace}</div>,
 }));
+vi.mock('../NamespaceClaims', () => ({
+    NamespaceClaims: ({namespace}) => <div data-testid="namespace-claims">{namespace}</div>,
+}));
 vi.mock('../LogsViewer', () => ({
     default: ({nodename, type, namespace, kind, instanceName}) => (
         <div data-testid="logs">{`${type} ${namespace}/${kind}/${instanceName} on ${nodename}`}</div>
@@ -102,18 +105,12 @@ describe('record panels', () => {
         expect(within(panel).getByTestId('object-status')).not.toBeVisible();
     });
 
-    test.each([['ns1/svc/web', 5], ['ns1/sec/key', 3]])('each tab of %s marked by an icon of its own, as oc3 marks its tabs', (path, count) => {
+    test.each([['ns1/svc/web', 5], ['ns1/sec/key', 3]])('the %s tabs are titled by their name alone, no icon', (path, count) => {
         renderPeek(`/nodes?peek=object:${path}`);
         const panel = screen.getByRole('dialog', {name: path});
-        const icons = within(panel).getAllByRole('tab').map((tab) => tab.querySelector('svg[aria-hidden="true"]'));
-        expect(icons.filter(Boolean)).toHaveLength(count);
-        expect(new Set(icons.map((svg) => svg.innerHTML)).size).toBe(count);
-    });
-
-    test('the resources tab marked by the hashtag of the resources, in the service tint', () => {
-        renderPeek('/nodes?peek=object:ns1/svc/web');
-        const panel = screen.getByRole('dialog', {name: 'ns1/svc/web'});
-        expect(within(panel).getByRole('tab', {name: 'Resources'}).querySelector('svg')).toHaveClass('text-icon-service');
+        const tabs = within(panel).getAllByRole('tab');
+        expect(tabs).toHaveLength(count);
+        for (const tab of tabs) expect(tab.querySelector('svg')).toBeNull();
     });
 
     test('the resources and the schedules of the object, a tab each', () => {
@@ -163,7 +160,8 @@ describe('record panels', () => {
     test('a namespace opens on its usage, its configuration on a tab of its own', () => {
         renderPeek('/objects?peek=namespace:ns1');
         const panel = screen.getByRole('dialog', {name: 'ns1'});
-        expect(within(panel).getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Usage', 'Configuration']);
+        expect(within(panel).getAllByRole('tab').map((tab) => tab.textContent.replace(/\d+!?$/, '')))
+            .toEqual(['Usage', 'Claims', 'Services', 'Volumes', 'Configurations', 'Secrets', 'Configuration']);
         fireEvent.click(within(panel).getByRole('tab', {name: 'Configuration'}));
         expect(screen.getByTestId('search')).toHaveTextContent('peektab=config');
         expect(within(panel).getByTestId('namespace-config')).toHaveTextContent('ns1');

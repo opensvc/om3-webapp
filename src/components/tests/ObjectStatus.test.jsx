@@ -77,26 +77,31 @@ describe('ObjectStatus', () => {
         expect(mockRelease).toHaveBeenCalled();
     });
 
-    test('the summary: the statuses on a line, the issues on the next, the policies and the actions apart', async () => {
+    test('the summary: a status a line, said in full in its tint, then an issue a line, the policies and the actions apart', async () => {
         const broken = structuredClone(dns);
         broken.provisioned = 'false';
         answer(broken);
         render(<ObjectStatus path="system/svc/dns"/>);
         await screen.findByRole('table');
-        expect(screen.getByText('Avail').nextSibling).toHaveTextContent('down');
+        expect(screen.getByText('Avail').nextSibling).toHaveTextContent(/^down$/);
+        // The word in full, bold, in the tint of its state: no badge, no glyph.
+        const avail = screen.getByText('Avail').nextSibling.querySelector('[data-state]');
+        expect(avail).toHaveClass('font-semibold', 'text-state-down');
+        expect(screen.getByText('Avail').nextSibling.querySelector('svg')).toBeNull();
+        const overall = screen.getByText('Overall').nextSibling.querySelector('[data-state]');
+        expect(overall.className).toMatch(/font-semibold text-(state-\w+|ink-muted)/);
+        // One a line: label and value pairs of a two-column list.
+        expect(screen.getByText('Avail').tagName).toBe('DT');
+        expect(screen.getByText('Overall').tagName).toBe('DT');
         expect(screen.getByRole('list', {name: 'Issues'})).toHaveTextContent('not provisioned');
+        expect(screen.getByRole('list', {name: 'Issues'})).toHaveClass('flex-col');
         // Out of a panel, the policies and the actions stand over the summary.
         const policies = screen.getByLabelText('Policies');
         expect(policies).toHaveTextContent('Topology: flexOrchestrate: haPlacement: nodes order');
-        // Each policy a tag with its own icon, named in its tooltip.
+        // Each policy a tag of its value alone, no icon, named in its tooltip.
         expect([...policies.querySelectorAll('[data-policy]')].map((tag) => [tag.dataset.policy, tag.title]))
             .toEqual([['topology', 'Topology: flex'], ['orchestrate', 'Orchestrate: ha'], ['placement', 'Placement: nodes order']]);
-        const icons = [...policies.querySelectorAll('[data-policy] svg')].map((svg) => svg.innerHTML);
-        expect(icons).toHaveLength(3);
-        expect(new Set(icons).size).toBe(3);
-        // Tinted by family, as oc3 does: what the object does in the service tint, where it runs in the node one.
-        expect([...policies.querySelectorAll('[data-policy]')].map((tag) => tag.querySelector('[aria-hidden="true"]').className))
-            .toEqual([expect.stringContaining('text-icon-service'), expect.stringContaining('text-icon-service'), expect.stringContaining('text-icon-node')]);
+        expect(policies.querySelectorAll('[data-policy] svg')).toHaveLength(0);
         expect(screen.getByRole('button', {name: 'Actions'})).toBeInTheDocument();
     });
 

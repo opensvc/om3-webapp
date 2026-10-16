@@ -18,10 +18,10 @@ const COLUMNS = [
 /** The usage percentage, a small bar beside it: the row keeps one line. */
 const Usage = ({network}) => {
     const {t} = useTranslation();
-    if (!network.size) return t("common.notAvailable");
     return (
         <UsageBar
-            value={(network.used / network.size) * 100}
+            value={network.size ? (network.used / network.size) * 100 : undefined}
+            missing={t("common.notAvailable")}
             title={`${network.used}/${network.size}`}
             label={t("networks.usageOf", {name: network.name})}
         />

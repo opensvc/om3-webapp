@@ -9,6 +9,7 @@ import {computeLimit, formatCpu, kindCounts, networkUsage, poolUsage} from "../a
 import {Table, HeaderRow, SortHeaderCell, Row, Cell, EmptyRow} from "../ui/components/Table";
 import {CountPill} from "../ui/components/CountPill";
 import {SegmentedBar} from "../ui/components/SegmentedBar";
+import {Figures} from "./Figures";
 import {HoverCard} from "../ui/components/HoverCard";
 import {formatBytes} from "../ui/lib/format";
 import {usePanelSearch} from "../app/panel-search";
@@ -44,28 +45,6 @@ const percentOf = (used, total, locale) => {
     if (ratio > 0 && ratio < 0.01) return "<1%";
     return (Math.round(ratio * 100) / 100).toLocaleString(locale, {style: "percent"});
 };
-
-/** The figures behind a cell, in its hover card: a title, then a label and a value a line. */
-function Figures({title, lines, notes = []}) {
-    return (
-        <div className="space-y-1.5">
-            <p className="font-semibold">{title}</p>
-            <dl className="grid grid-cols-[auto_auto] gap-x-3 gap-y-0.5">
-                {lines.map(([label, value]) => (
-                    <React.Fragment key={label}>
-                        <dt className="text-ink-muted">{label}</dt>
-                        <dd className="text-right tabular-nums">{value}</dd>
-                    </React.Fragment>
-                ))}
-            </dl>
-            {notes.length > 0 && (
-                <ul className="space-y-0.5 border-t border-line pt-1.5">
-                    {notes.map((note) => <li key={note}>{note}</li>)}
-                </ul>
-            )}
-        </div>
-    );
-}
 
 /** The services or volumes of a namespace: a pill per availability, the count in its tint. */
 function AvailPills({namespace, kind, counts, onShow}) {
@@ -210,10 +189,9 @@ const COLUMNS = ["namespace", "services", "volumes", "sec", "cfg", "pools", "net
 /**
  * The namespaces: what each holds, its services and volumes by availability, its
  * secrets and configurations, and what it takes of the cluster, out of what its
- * claims allow: the pools, the networks, the cpu and the memory. `embedded` in a
- * tab of the Objects page, which pads it.
+ * claims allow: the pools, the networks, the cpu and the memory.
  */
-const Namespaces = ({embedded = false}) => {
+const Namespaces = () => {
     const {t, i18n} = useTranslation();
     const navigate = useNavigate();
     const locale = i18n.language;
@@ -281,7 +259,8 @@ const Namespaces = ({embedded = false}) => {
                 setSortDirection((dir) => (dir === "asc" ? "desc" : "asc"));
                 return column;
             }
-            setSortDirection("asc");
+            // A name reads from A, a figure from the largest.
+            setSortDirection(column === "namespace" ? "asc" : "desc");
             return column;
         });
         // Sorted again, the list starts over: from its first page.
@@ -289,11 +268,12 @@ const Namespaces = ({embedded = false}) => {
     }, [setPageOffset]);
 
     const handleShow = useCallback((url) => navigate(url), [navigate]);
-    const handleOpen = useCallback((namespace) => selectNamespace(namespace), [selectNamespace]);
+    // A row opens its panel on its first tab, the usage, whatever tab was open before.
+    const handleOpen = useCallback((namespace) => selectNamespace(namespace, "usage"), [selectNamespace]);
     const handleClose = useCallback(() => selectNamespace(undefined), [selectNamespace]);
 
     return (
-        <div className={embedded ? "flex h-full flex-col gap-3" : "flex h-full flex-col gap-3 p-4"}>
+        <div className="flex h-full flex-col gap-3 p-4">
             <Pager paging={paging}/>
 
             <Table

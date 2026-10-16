@@ -6,6 +6,14 @@ import type { ObjectState } from "./StatusBadge";
  * that has never reported a status: n/a is a state of its own, the status does not
  * apply; the empty string is an unknown state.
  */
+/**
+ * A down instance that is no issue: its object is up, or standby up, so the
+ * instance it misses is not wanted. Drawn gray rather than red.
+ */
+export function isQuietDown(instanceAvail: string | undefined, objectAvail: string | undefined): boolean {
+  return instanceAvail === "down" && (objectAvail === "up" || objectAvail === "stdby up");
+}
+
 export function toObjectState(value: string | undefined): ObjectState {
   switch (value) {
     case "up":

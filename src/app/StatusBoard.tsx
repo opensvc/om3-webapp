@@ -1,9 +1,9 @@
 import type { CSSProperties, ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { cn } from "../ui/cn";
-import { AlertTriangleIcon, DrpIcon, HistoryIcon, InfoIcon, PlayIcon, SnowflakeIcon, StopIcon, TargetIcon } from "../ui/icons";
+import { AlertTriangleIcon, DrpIcon, HistoryIcon, InfoIcon, PlayIcon, PauseIcon, SnowflakeIcon, TargetIcon } from "../ui/icons";
 import { FrozenMark } from "../ui/components/FrozenMark";
-import { StatusBadge } from "../ui/components/StatusBadge";
+import { NotProvisionedMark } from "../ui/components/StateMarks";
 import { StateGlyph } from "../ui/components/StateGlyph";
 import type { ObjectState } from "../ui/components/StatusBadge";
 import { statusBadge } from "../ui/components/status";
@@ -89,7 +89,8 @@ function Mark({ span }: { span: Span }) {
       case "*":
         return [<SnowflakeIcon className="h-3.5 w-3.5" />, "text-icon-network"] as const;
       case "=":
-        return [<StopIcon className="h-3.5 w-3.5" />, "text-ink-muted"] as const;
+        // The pause bars, not the stop square: a gray square is a down that is no issue.
+        return [<PauseIcon className="h-3.5 w-3.5" />, "text-ink-muted"] as const;
       case "L":
         return [<HistoryIcon className="h-3.5 w-3.5" />, "text-state-warn"] as const;
       case "!":
@@ -100,12 +101,12 @@ function Mark({ span }: { span: Span }) {
         return [<DrpIcon className="h-3.5 w-3.5" />, "text-ink-muted"] as const;
       case "^":
         return [<TargetIcon className="h-3.5 w-3.5" />, span.tone === "error" ? "text-state-down" : "text-ink-muted"] as const;
-      case "P":
-        return [<AlertTriangleIcon className="h-3.5 w-3.5" />, "text-state-down"] as const;
       default:
         return null;
     }
   })();
+  // Not provisioned: the "P" pill of the unprovisioned resources, the same mark.
+  if (span.mark === "P") return <NotProvisionedMark label={label} />;
   if (glyph === null) return null;
   return (
     <span role="img" aria-label={label} className={cn("inline-flex", glyph[1])}>
@@ -178,16 +179,24 @@ function Pieces({ text, kind }: { text: Text; kind: BoardRow["kind"] }) {
   );
 }
 
-/** A status of the object in the summary, as a badge; n/a as om writes it, "/". */
+/** The tint of a status said in full: the availability states in their colour, n/a muted. */
+const STATUS_INK: Record<string, string> = {
+  up: "text-state-up",
+  "stdby up": "text-state-up",
+  down: "text-state-down",
+  "stdby down": "text-state-down",
+  warn: "text-state-warn",
+  "n/a": "text-ink-muted",
+};
+
+/** A status of the summary, said in full: the word, bold, in its tint. */
 function SummaryStatus({ status }: { status: string | undefined }) {
-  if (status === "n/a")
-    return (
-      <span className="font-medium text-ink-muted">
-        <span aria-hidden="true">/</span>
-        <span className="sr-only">n/a</span>
-      </span>
-    );
-  return <StatusBadge {...statusBadge(status)} label={status} className="w-auto" />;
+  const word = status || "n/a";
+  return (
+    <span data-state={word} className={cn("font-semibold", STATUS_INK[word] ?? "text-state-unknown")}>
+      {word}
+    </span>
+  );
 }
 
 /** The nodes a resource row reports the resource on: its cells holding a status. */
@@ -345,29 +354,29 @@ export function StatusBoard({
 
   return (
     <div className="space-y-3">
-      {/* The summary: the statuses of the object, then what is wrong with it, if anything. */}
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+      {/* The summary: the statuses of the object, one a line, then what is wrong with it, if anything. */}
+      <dl className="grid w-max grid-cols-[auto_auto] items-center gap-x-3 gap-y-1">
         {avail !== undefined && (
-          <span className="inline-flex items-center gap-2">
-            <span className="text-ink-muted">{t("statusBoard.avail")}</span>
-            <SummaryStatus status={avail.status} />
-          </span>
+          <>
+            <dt className="text-ink-muted">{t("statusBoard.avail")}</dt>
+            <dd><SummaryStatus status={avail.status} /></dd>
+          </>
         )}
         {overall !== undefined && (
-          <span className="inline-flex items-center gap-2">
-            <span className="text-ink-muted">{t("statusBoard.overall")}</span>
-            <SummaryStatus status={overall.status} />
-          </span>
+          <>
+            <dt className="text-ink-muted">{t("statusBoard.overall")}</dt>
+            <dd><SummaryStatus status={overall.status} /></dd>
+          </>
         )}
         {count !== undefined && (
-          <span className="inline-flex items-center gap-2">
-            <span className="text-ink-muted">{t("statusBoard.instancesUp")}</span>
-            <span className={cn("font-medium tabular-nums", count.tone === "error" && "text-state-down")}>{count.text}</span>
-          </span>
+          <>
+            <dt className="text-ink-muted">{t("statusBoard.instancesUp")}</dt>
+            <dd className={cn("font-medium tabular-nums", count.tone === "error" && "text-state-down")}>{count.text}</dd>
+          </>
         )}
-      </div>
+      </dl>
       {states.length > 0 && (
-        <ul aria-label={t("statusBoard.issues")} className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <ul aria-label={t("statusBoard.issues")} className="flex flex-col items-start gap-y-1">
           {states.map((s) =>
             s.text === "frozen" || s.text === "mixed-frozen" ? (
               <li key={s.text} className="inline-flex items-center gap-1 text-icon-network">

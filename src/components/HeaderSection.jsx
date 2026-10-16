@@ -5,7 +5,8 @@ import {StatusBadge} from '../ui/components/StatusBadge';
 import {statusBadge} from '../ui/components/status';
 import {FrozenMark} from '../ui/components/FrozenMark';
 import {ObjectIcon, om3ObjectKind} from '../ui/components/ObjectIcon';
-import {AlertTriangleIcon, GearIcon} from '../ui/icons';
+import {GearIcon} from '../ui/icons';
+import {NotProvisionedMark} from '../ui/components/StateMarks';
 import {KEY_KINDS, OBJECT_ACTIONS, actionLabel, objectActionsFor} from '../constants/actions';
 import {OrchestrationBadge} from './OrchestrationBadge';
 import {isActionAllowedForSelection} from '../utils/objectUtils';
@@ -66,14 +67,7 @@ const HeaderSection = ({
                 )}
                 <FrozenMark frozen={frozen === 'frozen'}/>
                 {hasStatus && isNotProvisioned && (
-                    <span
-                        role="img"
-                        title={t("objects.header.notProvisionedTitle")}
-                        aria-label={t("objects.header.notProvisionedLabel")}
-                        className="text-state-down"
-                    >
-                        <AlertTriangleIcon className="h-4 w-4"/>
-                    </span>
+                    <NotProvisionedMark label={t("objects.header.notProvisionedLabel")} title={t("objects.header.notProvisionedTitle")}/>
                 )}
                 <MenuButton
                     // The actions, as in oc3: a pill tinted with the accent, the gear of the actions.

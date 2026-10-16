@@ -1,13 +1,13 @@
 import React from "react";
 import {useTranslation} from "react-i18next";
 import {Checkbox} from "../ui/components/Field";
-import {StoppedMark, RpoBreachedMark} from "../ui/components/StateMarks";
+import {NotProvisionedMark, StoppedMark, RpoBreachedMark} from "../ui/components/StateMarks";
 import {IconButton} from "../ui/components/Button";
 import {MenuButton} from "../ui/components/MenuButton";
 import {StatusMark} from "../ui/components/StatusMark";
-import {toObjectState} from "../ui/components/status";
+import {isQuietDown, toObjectState} from "../ui/components/status";
 import {FrozenMark} from "../ui/components/FrozenMark";
-import {AlertTriangleIcon, FileIcon, MoreIcon} from "../ui/icons";
+import {FileIcon, MoreIcon} from "../ui/icons";
 import logger from '../utils/logger.js';
 import {actionLabel} from "../constants/actions";
 
@@ -38,6 +38,7 @@ const InstanceCard = ({
                           instanceName,
                           onOpenLogs = () => logger.warn("onOpenLogs not provided"),
                           onViewInstance,
+                          objectAvail,
                       }) => {
     const {t} = useTranslation();
     const resolvedInstanceName = instanceName || nodeData?.instanceName || nodeData?.name || node;
@@ -77,7 +78,7 @@ const InstanceCard = ({
                     aria-label={t("instance.card.selectNode", {node})}
                 />
             </span>
-            <StatusMark state={toObjectState(avail)} label={avail || t("instance.unknown")}/>
+            <StatusMark state={toObjectState(avail)} label={avail || t("instance.unknown")} muted={isQuietDown(avail, objectAvail)}/>
             {canView ? (
                 <button
                     type="button"
@@ -103,14 +104,7 @@ const InstanceCard = ({
                 <FrozenMark frozen={frozen === "frozen"}/>
             )}
             {isInstanceNotProvisioned && (
-                <span
-                    role="img"
-                    title={t("instance.notProvisionedTitle")}
-                    aria-label={t("instance.card.notProvisioned", {node})}
-                    className="text-state-down"
-                >
-                    <AlertTriangleIcon className="h-3.5 w-3.5"/>
-                </span>
+                <NotProvisionedMark label={t("instance.card.notProvisioned", {node})} title={t("instance.notProvisionedTitle")}/>
             )}
             {state && <span className="truncate text-ink-muted">{state}</span>}
 

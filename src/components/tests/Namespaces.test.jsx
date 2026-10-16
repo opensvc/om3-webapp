@@ -30,6 +30,9 @@ vi.mock('../NamespacePanel', () => ({
     NamespaceUsage: ({namespace}) => <div data-testid="namespace-usage">{namespace}</div>,
     NamespaceConfig: ({namespace}) => <div data-testid="namespace-config">{namespace}</div>,
 }));
+vi.mock('../NamespaceClaims', () => ({
+    NamespaceClaims: ({namespace}) => <div data-testid="namespace-claims">{namespace}</div>,
+}));
 
 const GiB = 1024 ** 3;
 
@@ -260,21 +263,44 @@ describe('Namespaces', () => {
         await loaded();
         fireEvent.click(cell('prod', 'Name'));
         const panel = screen.getByRole('dialog', {name: 'prod'});
-        expect(within(panel).getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Usage', 'Configuration']);
+        // The claims second, between the usage and the configuration.
+        // Its objects by kind after them, each its count, a service down a red alert; its configuration last.
+        expect(within(panel).getAllByRole('tab').map((tab) => tab.textContent))
+            .toEqual(['Usage', 'Claims', 'Services3!', 'Volumes2', 'Configurations2', 'Secrets1', 'Configuration']);
+        expect(within(panel).getByTestId('ns-tab-alert-services')).toHaveAttribute('data-level', 'down');
         expect(within(panel).getByTestId('namespace-usage')).toHaveTextContent('prod');
         expect(row('prod')).toHaveAttribute('aria-current', 'true');
         expect(mockNavigate).not.toHaveBeenCalled();
+        fireEvent.click(within(panel).getByRole('tab', {name: 'Claims'}));
+        expect(within(panel).getByTestId('namespace-claims')).toHaveTextContent('prod');
         fireEvent.click(within(panel).getByRole('tab', {name: 'Configuration'}));
         expect(within(panel).getByTestId('namespace-config')).toHaveTextContent('prod');
+        // Another row opens on the usage again, whatever tab was open.
+        fireEvent.click(cell('dev', 'Name'));
+        const next = screen.getByRole('dialog', {name: 'dev'});
+        expect(within(next).getByRole('tab', {name: 'Usage'})).toHaveAttribute('aria-selected', 'true');
+        expect(within(next).getByTestId('namespace-usage')).toHaveTextContent('dev');
     });
 
-    test('sorted by a column, ties in the order of the names', async () => {
+    test('sorted by a column, a figure from the largest, ties in the order of the names', async () => {
         renderNamespaces();
         await loaded();
         fireEvent.click(screen.getByRole('button', {name: 'Services'}));
-        expect(names()).toEqual(['dev', 'root', 'prod']);
-        fireEvent.click(screen.getByRole('button', {name: 'Services'}));
         expect(names()).toEqual(['prod', 'dev', 'root']);
+        fireEvent.click(screen.getByRole('button', {name: 'Services'}));
+        expect(names()).toEqual(['dev', 'root', 'prod']);
+        // A name reads from A.
+        fireEvent.click(screen.getByRole('button', {name: 'Name'}));
+        expect(names()).toEqual(['dev', 'prod', 'root']);
+        fireEvent.click(screen.getByRole('button', {name: 'Name'}));
+        expect(names()).toEqual(['root', 'prod', 'dev']);
+    });
+
+    test('sorted by name by default', async () => {
+        renderNamespaces();
+        await loaded();
+        expect(screen.getByRole('columnheader', {name: /^Name/})).toHaveAttribute('aria-sort', 'ascending');
+        expect(names()).toEqual(['dev', 'prod', 'root']);
     });
 
     test('reads the claims of each namespace, a namespace without nscfg claiming nothing', async () => {

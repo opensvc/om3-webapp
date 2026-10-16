@@ -147,6 +147,18 @@ describe('InstanceCard Component', () => {
         expect(statusMark()).toHaveAttribute('title', avail || 'unknown');
     });
 
+    test.each([
+        ['up', true],
+        ['stdby up', true],
+        ['down', false],
+        ['warn', false],
+        [undefined, false],
+    ])('a down instance of an object %p is gray: %p', (objectAvail, gray) => {
+        renderCard({getNodeState: vi.fn(() => ({avail: 'down', frozen: 'unfrozen', state: null})), objectAvail});
+        expect(statusMark()).toHaveAttribute('data-state', 'down');
+        expect(statusMark()).toHaveClass(gray ? 'text-ink-muted' : 'text-state-down');
+    });
+
     test('shows frozen mark when node is frozen', () => {
         renderCard({getNodeState: vi.fn(() => ({avail: 'up', frozen: 'frozen', state: null}))});
         expect(screen.getByTitle('frozen')).toBeInTheDocument();

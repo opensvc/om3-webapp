@@ -34,6 +34,10 @@ vi.mock('../Objects', async () => {
     const {useLocation} = await vi.importActual('react-router-dom');
     return {default: () => <div data-testid="objects">{useLocation().search}</div>};
 });
+vi.mock('../Namespaces', async () => {
+    const {useLocation} = await vi.importActual('react-router-dom');
+    return {default: () => <div data-testid="namespaces">{useLocation().search}</div>};
+});
 vi.mock('../Network', async () => {
     const {useLocation} = await vi.importActual('react-router-dom');
     return {default: () => <div data-testid="network">{useLocation().search}</div>};
@@ -226,6 +230,7 @@ describe('App Component', () => {
         ['/pools', 'pools'],
         ['/network', 'network'],
         ['/objects', 'objects'],
+        ['/namespaces', 'namespaces'],
         ['/whoami', 'whoami'],
     ])('protected route %s renders %s', async (path, testId) => {
         setupBasicAuth();
@@ -239,9 +244,10 @@ describe('App Component', () => {
         ['/objects/ns1%2Fsvc%2Fweb', 'objects', '?sel=ns1%2Fsvc%2Fweb'],
         ['/network/test-network', 'network', '?sel=test-network'],
         ['/nodes/node1/objects/ns1%2Fsvc%2Fweb', 'objects', '?sel=ns1%2Fsvc%2Fweb'],
-        // The kinds and namespaces pages are tabs of the Objects page, their filter kept.
+        // The kinds page is the All tab of the Objects page, its filter kept.
         ['/kinds?kind=sec', 'objects', '?kind=sec&list=any'],
-        ['/namespaces', 'objects', '?list=namespaces'],
+        // The former namespaces tab is the Namespaces view, the namespace open in it kept.
+        ['/objects?list=namespaces&sel=prod&tab=claims', 'namespaces', '?sel=prod&tab=claims'],
     ])('old record address %s opens the panel over %s', async (path, testId, search) => {
         setupBasicAuth();
         const {unmount} = renderApp([path]);

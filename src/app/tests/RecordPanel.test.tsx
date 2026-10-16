@@ -8,8 +8,6 @@ import { PanelAnchor } from "../PanelAnchor";
 import { CrossLink } from "../CrossLink";
 import { usePanelSearch } from "../panel-search";
 import { readLastRecord, reloadRecordHistory } from "../record-history";
-import { PanelSideProvider } from "../PanelSideProvider";
-import { setPanelSide } from "../panel-side-pref";
 
 function token(claims: Record<string, unknown>): string {
   return `h.${btoa(JSON.stringify(claims)).replace(/=+$/, "")}.s`;
@@ -24,7 +22,6 @@ beforeEach(() => {
 afterEach(() => {
   localStorage.clear();
   sessionStorage.clear();
-  setPanelSide("right");
 });
 
 /** The panels open: a closed one stays mounted for its animation, inert. */
@@ -175,27 +172,15 @@ describe("record panels", () => {
     expect(screen.getByRole("heading", { name: "lo" }).nextElementSibling).toHaveTextContent("flex");
   });
 
-  test("as in oc3, the panels move to the left edge and back, the choice kept by the browser", () => {
+  test("the panels open on the right, no control to move them, whatever an earlier choice", () => {
+    localStorage.setItem("om3.panelSide", "left");
     render(
       <MemoryRouter initialEntries={["/objects?peek=network:lo"]}>
-        <PanelSideProvider>
-          <View />
-        </PanelSideProvider>
+        <View />
       </MemoryRouter>,
     );
-    const panel = () => screen.getByRole("dialog", { name: "lo" });
-    expect(panel()).toHaveClass("right-0");
-    fireEvent.click(within(panel()).getByRole("button", { name: "Move the panels to the left" }));
-    expect(panel()).toHaveClass("left-0", "flex-row-reverse");
-    expect(localStorage.getItem("om3.panelSide")).toBe("left");
-
-    // Closed, the anchor that brings it back stands on the left edge too.
-    fireEvent.click(within(panel()).getAllByRole("button", { name: "Close" })[0]!);
-    expect(screen.getByRole("button", { name: /Reopen lo/ })).toHaveClass("rounded-r-(--radius-panel)");
-
-    fireEvent.click(screen.getByRole("button", { name: /Reopen lo/ }));
-    fireEvent.click(within(panel()).getByRole("button", { name: "Move the panels to the right" }));
-    expect(panel()).toHaveClass("right-0");
-    expect(localStorage.getItem("om3.panelSide")).toBeNull();
+    const panel = screen.getByRole("dialog", { name: "lo" });
+    expect(panel).toHaveClass("right-0");
+    expect(within(panel).queryByRole("button", { name: /Move the panels/ })).not.toBeInTheDocument();
   });
 });

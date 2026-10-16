@@ -18,6 +18,12 @@ export interface Claim {
   name?: string;
   /** Bytes for a pool and memory, addresses for a network, cpus for cpu. */
   limit?: number;
+  /** Its section in the configuration, "claim#1": what an edit or a removal names. */
+  section?: string;
+  /** The limit as written ("20g", "400%"), for an edit to start from. */
+  raw?: string;
+  /** The cap given to a container setting none, cpu and memory only, as written. */
+  defaultRaw?: string;
 }
 
 const SIZE = /^(\d+(?:[.,]\d+)*) ?([kmgtpe])?(i)?(b)?$/i;
@@ -56,6 +62,7 @@ export function parseCpuLimit(text: string | undefined): number | undefined {
 export function parseClaims(ini: string | undefined): Claim[] {
   const claims: Claim[] = [];
   let current: Record<string, string> | null = null;
+  let section = "";
   const flush = () => {
     if (!current) return;
     const type = current.type;
@@ -63,17 +70,18 @@ export function parseClaims(ini: string | undefined): Claim[] {
       const raw = current.limit;
       const limit =
         type === "cpu" ? parseCpuLimit(raw) : type === "network" ? (raw === undefined ? undefined : Number(raw)) : parseSize(raw);
-      claims.push({ type, name: current.name, limit: Number.isFinite(limit) ? limit : undefined });
+      claims.push({ type, name: current.name, limit: Number.isFinite(limit) ? limit : undefined, section, raw, defaultRaw: current.default });
     }
     current = null;
   };
   for (const line of (ini ?? "").split("\n")) {
     const text = line.trim();
     if (text === "" || text.startsWith("#") || text.startsWith(";")) continue;
-    const section = /^\[(.+)\]$/.exec(text);
-    if (section) {
+    const header = /^\[(.+)\]$/.exec(text);
+    if (header) {
       flush();
-      current = /^claim#/.test(section[1]) ? {} : null;
+      current = /^claim#/.test(header[1]) ? {} : null;
+      section = header[1];
       continue;
     }
     const pair = /^([^=\s]+)\s*=\s*(.*)$/.exec(text);

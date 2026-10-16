@@ -79,24 +79,22 @@ const NodeRow = ({
             </Cell>
             <Cell numeric>{stats?.score || notAvailable}</Cell>
             <Cell numeric className="whitespace-nowrap">
-                {stats?.load_15m ? (
-                    <span className="inline-flex items-center gap-2">
-                        <span>{stats.load_15m}</span>
-                        <UsageBar showValue={false} value={Math.min(stats.load_15m * 20, 100)} state={loadState} label={t("nodes.columns.load15m")}/>
-                    </span>
-                ) : (
-                    notAvailable
-                )}
+                <UsageBar
+                    value={stats?.load_15m ? Math.min(stats.load_15m * 20, 100) : undefined}
+                    text={String(stats?.load_15m)}
+                    missing={notAvailable}
+                    state={loadState}
+                    label={t("nodes.columns.load15m")}
+                />
             </Cell>
             <Cell numeric className="whitespace-nowrap">
-                {stats?.mem_avail ? (
-                    <span className="inline-flex items-center gap-2">
-                        <span>{stats.mem_avail}%</span>
-                        <UsageBar showValue={false} value={stats.mem_avail} state={memState} label={t("nodes.columns.memAvail")}/>
-                    </span>
-                ) : (
-                    notAvailable
-                )}
+                <UsageBar
+                    value={stats?.mem_avail ? stats.mem_avail : undefined}
+                    text={`${stats?.mem_avail}%`}
+                    missing={notAvailable}
+                    state={memState}
+                    label={t("nodes.columns.memAvail")}
+                />
             </Cell>
             {/* A dash rather than a percent of nothing: no value reported, or no swap. */}
             <Cell numeric>

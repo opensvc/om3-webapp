@@ -13,13 +13,20 @@ import {useTranslation} from "react-i18next";
 import useEventStore from "../hooks/useEventStore.js";
 import {retainEventReception} from "../eventSourceManager.jsx";
 import EventLogger from "../components/EventLogger";
-import {Table, HeaderRow, SortHeaderCell, Row, Cell, EmptyRow} from "../ui/components/Table";
+import {Table, HeaderRow, HeaderCell, SortHeaderCell, Row, Cell, EmptyRow} from "../ui/components/Table";
 import {StatusMark} from "../ui/components/StatusMark";
 import {Select} from "../ui/components/Field";
-import {Button} from "../ui/components/Button";
+import {Button, IconButton} from "../ui/components/Button";
+import {Alert} from "../ui/components/Alert";
+import {Dialog} from "../ui/components/Dialog";
+import {URL_NODE} from "../config/apiPath.js";
+import {getResponseErrorMessage} from "../services/api.jsx";
+import {useIsRoot} from "../hooks/useGrants";
 import {Pager} from "../ui/components/Pager";
+import {HeartbeatMesh} from "./HeartbeatMesh";
+import {TabCount} from "../ui/components/Tabs";
 import {usePaging} from "../app/paging";
-import {ChevronDownIcon, FilterIcon} from "../ui/icons";
+import {ChevronDownIcon, CloseIcon, FilterIcon} from "../ui/icons";
 
 // The breakpoints of the MUI theme the view used: below md (900px) the filters fold
 // behind a button, from lg (1200px) they are always shown at first.
@@ -66,7 +73,37 @@ const BeatingMark = React.memo(({isBeating, isSingleNode}) => {
         : <StatusMark state="down" label={t("heartbeats.marks.stale")}/>;
 }, (prev, next) => prev.isBeating === next.isBeating && prev.isSingleNode === next.isSingleNode);
 
-const HeartbeatRow = React.memo(({row, isSingleNode}) => {
+/**
+ * A link of the mesh as a filter: "from>to", its streams the sender's tx and the
+ * receiver's rx. A tx of the sender whose peer is not known is kept too: a stopped
+ * stream reports no peer, and it is the one a link turning orange or red calls for.
+ */
+export const linkMatches = (link, row) => {
+    const [from, to] = (link || "").split(">");
+    if (!from || !to) return true;
+    return (row.node === from && row.id.endsWith(".tx") && (row.peer === to || row.peerUnknown === true)) ||
+        (row.node === to && row.id.endsWith(".rx") && row.peer === from);
+};
+
+/** The tint of an action by its risk: stopping a stream cuts a heartbeat, starting one restores it. */
+const ACTION_TINT = {stop: "border-state-down text-state-down", start: "border-state-up text-state-up"};
+
+/**
+ * Stop a running stream, start one that is not: the daemon thread of the stream on
+ * its node (om node daemon hb stop|start). Shown to root only, which they ask for;
+ * its border and text in the tint of its risk, red to stop, green to start.
+ */
+const StreamAction = ({row, onAction}) => {
+    const {t} = useTranslation();
+    const action = row.state === "running" ? "stop" : "start";
+    return (
+        <Button size="sm" variant="secondary" className={ACTION_TINT[action]} onClick={() => onAction(row, action)}>
+            {t(`heartbeats.actions.${action}`)}
+        </Button>
+    );
+};
+
+const HeartbeatRow = React.memo(({row, isSingleNode, onAction}) => {
     return (
         <Row>
             <Cell><StateMark state={row.state}/></Cell>
@@ -79,6 +116,7 @@ const HeartbeatRow = React.memo(({row, isSingleNode}) => {
             {/* The dates stay on one line: wrapped, they would make the row taller than the others. */}
             <Cell className="whitespace-nowrap">{row.changedAt}</Cell>
             <Cell className="whitespace-nowrap">{row.lastBeatingAt}</Cell>
+            {onAction && <Cell><StreamAction row={row} onAction={onAction}/></Cell>}
         </Row>
     );
 }, (prev, next) => {
@@ -88,7 +126,8 @@ const HeartbeatRow = React.memo(({row, isSingleNode}) => {
         prev.row.peer === next.row.peer &&
         prev.row.isBeating === next.row.isBeating &&
         prev.row.state === next.row.state &&
-        prev.isSingleNode === next.isSingleNode
+        prev.isSingleNode === next.isSingleNode &&
+        prev.onAction === next.onAction
     );
 });
 
@@ -106,6 +145,12 @@ const Heartbeats = () => {
     const [sortDirection, setSortDirection] = useState("asc");
 
     const [showFilters, setShowFilters] = useState(() => isWideScreen ? true : !isMobile);
+    // The raw table of the streams, folded by default under the mesh: open when the
+    // URL filters it, a link asking for some streams in particular.
+    const [showStreams, setShowStreams] = useState(() => {
+        const params = new URLSearchParams(location.search);
+        return ["status", "node", "state", "id", "link"].some((key) => params.has(key));
+    });
 
     // Read query parameters
     const queryParams = new URLSearchParams(location.search);
@@ -113,6 +158,9 @@ const Heartbeats = () => {
     const rawNode = queryParams.get("node") || "all";
     const rawState = queryParams.get("state") || "all";
     const rawId = queryParams.get("id") || "all";
+    const rawLink = queryParams.get("link") || "";
+    // A link of the mesh, "from>to": its streams only.
+    const [filterLink, setFilterLink] = useState(rawLink);
 
     const [filterBeating, setFilterBeating] = useState(
         ["all", "beating", "stale"].includes(rawStatus) ? rawStatus : "all"
@@ -151,22 +199,25 @@ const Heartbeats = () => {
             const currentNode = currentParams.get("node") || "all";
             const currentState = currentParams.get("state") || "all";
             const currentId = currentParams.get("id") || "all";
+            const currentLink = currentParams.get("link") || "";
 
             if (currentStatus === filterBeating &&
                 currentNode === filterNode &&
                 currentState === filterState &&
-                currentId === filterId) {
+                currentId === filterId &&
+                currentLink === filterLink) {
                 return;
             }
 
             // The other parameters, the page size and the open panel's, stay as they
             // are; the page goes, the list filtered otherwise starting over from its first.
             const newQueryParams = new URLSearchParams(location.search);
-            ["status", "node", "state", "id", "offset"].forEach((key) => newQueryParams.delete(key));
+            ["status", "node", "state", "id", "link", "offset"].forEach((key) => newQueryParams.delete(key));
             if (filterBeating !== "all") newQueryParams.set("status", filterBeating);
             if (filterNode !== "all") newQueryParams.set("node", filterNode);
             if (filterState !== "all") newQueryParams.set("state", filterState);
             if (filterId !== "all") newQueryParams.set("id", filterId);
+            if (filterLink) newQueryParams.set("link", filterLink);
 
             const queryString = newQueryParams.toString();
             const newUrl = `${location.pathname}${queryString ? `?${queryString}` : ""}`;
@@ -177,7 +228,7 @@ const Heartbeats = () => {
         }, 300);
 
         return () => clearTimeout(timer);
-    }, [filterBeating, filterNode, filterState, filterId, navigate, location.pathname, location.search]);
+    }, [filterBeating, filterNode, filterState, filterId, filterLink, navigate, location.pathname, location.search]);
 
     // Initialize filter states from URL
     useEffect(() => {
@@ -191,7 +242,8 @@ const Heartbeats = () => {
         setFilterNode(rawNode);
         setFilterState(rawState);
         setFilterId(baseId);
-    }, [location.search, rawStatus, rawNode, rawState, rawId]);
+        setFilterLink(rawLink);
+    }, [location.search, rawStatus, rawNode, rawState, rawId, rawLink]);
 
     // Cache stopped streams with their last known peers
     useEffect(() => {
@@ -297,6 +349,8 @@ const Heartbeats = () => {
                         id: cleanedId,
                         node: node,
                         peer: notAvailable,
+                        // Stopped, it reports no peer: toward any of them, as far as a link is concerned.
+                        peerUnknown: true,
                         type: stream.type || notAvailable,
                         desc: notAvailable,
                         isBeating: false,
@@ -364,10 +418,49 @@ const Heartbeats = () => {
                     (deferredFilterBeating === "stale" && row.isBeating === false)) &&
                 (deferredFilterNode === "all" || row.node === deferredFilterNode) &&
                 (deferredFilterState === "all" || row.state === deferredFilterState) &&
-                (deferredFilterId === "all" || rowBaseId === deferredFilterId)
+                (deferredFilterId === "all" || rowBaseId === deferredFilterId) &&
+                linkMatches(filterLink, row)
             );
         });
-    }, [sortedRows, deferredFilterBeating, deferredFilterNode, deferredFilterState, deferredFilterId]);
+    }, [sortedRows, deferredFilterBeating, deferredFilterNode, deferredFilterState, deferredFilterId, filterLink]);
+
+    // A line of the mesh clicked: its streams, unfolded, the other filters cleared.
+    const handleMeshSelect = useCallback((group) => {
+        setFilterBeating("all");
+        setFilterNode("all");
+        setFilterState("all");
+        setFilterId("all");
+        setFilterLink(`${group.from}>${group.to}`);
+        setShowStreams(true);
+    }, []);
+
+    // Stop or start a stream, root only; stopping is confirmed first.
+    const isRoot = useIsRoot();
+    const [pendingStop, setPendingStop] = useState(null);
+    const [actionFeedback, setActionFeedback] = useState(null);
+    const runAction = useCallback(async (row, action) => {
+        const label = t(`heartbeats.actions.${action}`);
+        const name = row.id.replace(/^hb#/, "");
+        const target = t("heartbeats.actions.target", {id: row.id, node: row.node});
+        try {
+            const response = await fetch(
+                `${URL_NODE}/${encodeURIComponent(row.node)}/daemon/hb/name/${encodeURIComponent(name)}/action/${action}`,
+                {method: "POST", headers: {Authorization: `Bearer ${localStorage.getItem("authToken") || ""}`}},
+            );
+            if (!response.ok) {
+                const message = (await getResponseErrorMessage(response)) || `HTTP ${response.status}`;
+                setActionFeedback({tone: "error", message: t("heartbeats.actions.failed", {action: label, target, message})});
+                return;
+            }
+            setActionFeedback({tone: "success", message: t("heartbeats.actions.requested", {action: label, target})});
+        } catch (error) {
+            setActionFeedback({tone: "error", message: t("heartbeats.actions.failed", {action: label, target, message: error.message})});
+        }
+    }, [t]);
+    const handleAction = useCallback((row, action) => {
+        if (action === "stop") setPendingStop(row);
+        else void runAction(row, action);
+    }, [runAction]);
 
     // The rows of the page shown, as oc3 pages its lists.
     const paging = usePaging("heartbeats", filteredRows.length);
@@ -409,69 +502,134 @@ const Heartbeats = () => {
 
     return (
         <div className="flex h-full flex-col p-4 space-y-3">
-            <div className="flex shrink-0 flex-wrap items-center gap-3">
-                {isMobile && (
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        icon={<FilterIcon className="h-4 w-4"/>}
-                        onClick={toggleShowFilters}
-                        aria-label={showFilters ? t("heartbeats.filters.hide") : t("heartbeats.filters.show")}
-                        aria-expanded={showFilters}
-                        aria-controls="heartbeats-filters"
-                    >
-                        <span className="hidden sm:inline">{t("common.filters")}</span>
-                        <ChevronDownIcon className={showFilters ? "h-4 w-4 rotate-180" : "h-4 w-4"}/>
-                    </Button>
-                )}
-                <div
-                    id="heartbeats-filters"
-                    hidden={!showFilters}
-                    className="flex flex-wrap items-center gap-3"
-                >
-                    {filterSelect(t("heartbeats.filters.running"), filterState, setFilterState, availableStates
-                        .filter(s => s !== "all")
-                        .map(state => [state, state.charAt(0).toUpperCase() + state.slice(1)]))}
-                    {filterSelect(t("heartbeats.filters.beating"), filterBeating, setFilterBeating, [
-                        ["beating", t("heartbeats.marks.beating")],
-                        ["stale", t("heartbeats.marks.stale")],
-                    ])}
-                    {filterSelect(t("common.node"), filterNode, setFilterNode, nodes.map(node => [node, node]))}
-                    {filterSelect(t("heartbeats.filters.id"), filterId, setFilterId, availableIds.map(id => [id, id]))}
-                </div>
-            </div>
+            <HeartbeatMesh heartbeatStatus={heartbeatStatus} onSelect={handleMeshSelect}/>
 
-            <Pager paging={paging}/>
+            <button
+                type="button"
+                className="flex shrink-0 items-center gap-1.5 self-start font-semibold"
+                aria-expanded={showStreams}
+                aria-controls="heartbeats-streams"
+                onClick={() => setShowStreams((open) => !open)}
+            >
+                <ChevronDownIcon className={showStreams ? "h-4 w-4" : "h-4 w-4 -rotate-90"}/>
+                {t("heartbeats.streams")}
+                <TabCount count={filteredRows.length}/>
+            </button>
 
-            <Table sticky className="min-h-0 overflow-auto">
-                <thead>
-                    <HeaderRow>
-                        {COLUMNS.map(({labelKey, key}) => (
-                            <SortHeaderCell
-                                key={key}
-                                label={t(labelKey)}
-                                active={sortColumn === key}
-                                direction={sortDirection}
-                                onSort={() => handleSort(key)}
-                            />
-                        ))}
-                    </HeaderRow>
-                </thead>
-                <tbody>
-                    {visibleRows.map(row => (
-                        <HeartbeatRow
-                            key={`${row.node}-${row.id}-${row.peer}`}
-                            row={row}
-                            isSingleNode={isSingleNode}
-                        />
-                    ))}
-                    {visibleRows.length === 0 && (
-                        <EmptyRow colSpan={COLUMNS.length}>
-                            {t("heartbeats.empty")}
-                        </EmptyRow>
+            {showStreams && (
+                <div id="heartbeats-streams" className="flex min-h-0 flex-1 flex-col space-y-3">
+                    <div className="flex shrink-0 flex-wrap items-center gap-3">
+                        {isMobile && (
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                icon={<FilterIcon className="h-4 w-4"/>}
+                                onClick={toggleShowFilters}
+                                aria-label={showFilters ? t("heartbeats.filters.hide") : t("heartbeats.filters.show")}
+                                aria-expanded={showFilters}
+                                aria-controls="heartbeats-filters"
+                            >
+                                <span className="hidden sm:inline">{t("common.filters")}</span>
+                                <ChevronDownIcon className={showFilters ? "h-4 w-4 rotate-180" : "h-4 w-4"}/>
+                            </Button>
+                        )}
+                        <div
+                            id="heartbeats-filters"
+                            hidden={!showFilters}
+                            className="flex flex-wrap items-center gap-3"
+                        >
+                            {filterSelect(t("heartbeats.filters.running"), filterState, setFilterState, availableStates
+                                .filter(s => s !== "all")
+                                .map(state => [state, state.charAt(0).toUpperCase() + state.slice(1)]))}
+                            {filterSelect(t("heartbeats.filters.beating"), filterBeating, setFilterBeating, [
+                                ["beating", t("heartbeats.marks.beating")],
+                                ["stale", t("heartbeats.marks.stale")],
+                            ])}
+                            {filterSelect(t("common.node"), filterNode, setFilterNode, nodes.map(node => [node, node]))}
+                            {filterSelect(t("heartbeats.filters.id"), filterId, setFilterId, availableIds.map(id => [id, id]))}
+                            {filterLink && (
+                                <button
+                                    type="button"
+                                    className="inline-flex items-center gap-1 rounded-full border border-line bg-surface-raised px-2 text-data"
+                                    aria-label={t("heartbeats.filters.clearLink", {link: filterLink.replace(">", " → ")})}
+                                    onClick={() => setFilterLink("")}
+                                >
+                                    {filterLink.replace(">", " → ")}
+                                    <CloseIcon className="h-3 w-3"/>
+                                </button>
+                            )}
+                        </div>
+                    </div>
+
+                    {actionFeedback && (
+                        <Alert
+                            tone={actionFeedback.tone}
+                            className="shrink-0"
+                            action={
+                                <IconButton label={t("common.close")} bare onClick={() => setActionFeedback(null)}>
+                                    <CloseIcon className="h-4 w-4"/>
+                                </IconButton>
+                            }
+                        >
+                            {actionFeedback.message}
+                        </Alert>
                     )}
-                </tbody>
-            </Table>
+
+                    <Pager paging={paging}/>
+
+                    <Table sticky className="min-h-0 overflow-auto">
+                        <thead>
+                            <HeaderRow>
+                                {COLUMNS.map(({labelKey, key}) => (
+                                    <SortHeaderCell
+                                        key={key}
+                                        label={t(labelKey)}
+                                        active={sortColumn === key}
+                                        direction={sortDirection}
+                                        onSort={() => handleSort(key)}
+                                    />
+                                ))}
+                                {isRoot && <HeaderCell>{t("heartbeats.actions.label")}</HeaderCell>}
+                            </HeaderRow>
+                        </thead>
+                        <tbody>
+                            {visibleRows.map(row => (
+                                <HeartbeatRow
+                                    key={`${row.node}-${row.id}-${row.peer}`}
+                                    row={row}
+                                    isSingleNode={isSingleNode}
+                                    onAction={isRoot ? handleAction : undefined}
+                                />
+                            ))}
+                            {visibleRows.length === 0 && (
+                                <EmptyRow colSpan={COLUMNS.length + (isRoot ? 1 : 0)}>
+                                    {t("heartbeats.empty")}
+                                </EmptyRow>
+                            )}
+                        </tbody>
+                    </Table>
+                </div>
+            )}
+
+            <Dialog
+                open={pendingStop !== null}
+                onClose={() => setPendingStop(null)}
+                title={t("heartbeats.actions.confirmTitle")}
+                footer={
+                    <>
+                        <Button variant="secondary" onClick={() => setPendingStop(null)}>{t("common.cancel")}</Button>
+                        <Button variant="danger" onClick={() => {
+                            const row = pendingStop;
+                            setPendingStop(null);
+                            void runAction(row, "stop");
+                        }}>
+                            {t("heartbeats.actions.stop")}
+                        </Button>
+                    </>
+                }
+            >
+                <p>{pendingStop && t("heartbeats.actions.confirmStop", {id: pendingStop.id, node: pendingStop.node})}</p>
+            </Dialog>
 
             <EventLogger eventTypes={heartbeatEventTypes} title={t("heartbeats.eventsLogger")}
                          buttonLabel={t("heartbeats.events")}/>

@@ -408,7 +408,8 @@
       "beating": "Battement",
       "id": "ID",
       "show": "Afficher les filtres",
-      "hide": "Masquer les filtres"
+      "hide": "Masquer les filtres",
+      "clearLink": "Retirer le filtre {{link}}"
     },
     "marks": {
       "state": "État {{state}}",
@@ -418,7 +419,29 @@
     },
     "empty": "Aucun heartbeat ne correspond aux filtres actuels.",
     "eventsLogger": "Journal des événements heartbeat",
-    "events": "Événements heartbeat"
+    "events": "Événements heartbeat",
+    "mesh": {
+      "title": "Maillage",
+      "desc": "Description",
+      "lastBeat": "Dernier battement",
+      "heartbeat": "Heartbeat",
+      "side": "Côté",
+      "groupLabel_one": "de {{from}} vers {{to}} : {{beating}} lien sur {{count}} en battement",
+      "groupLabel_other": "de {{from}} vers {{to}} : {{beating}} liens sur {{count}} en battement",
+      "beatingOf_one": "{{beating}} sur {{count}} en battement",
+      "beatingOf_other": "{{beating}} sur {{count}} en battement"
+    },
+    "streams": "Flux",
+    "actions": {
+      "label": "Actions",
+      "stop": "Arrêter",
+      "start": "Démarrer",
+      "target": "le flux {{id}} de {{node}}",
+      "requested": "{{action}} : demandé pour {{target}}.",
+      "failed": "{{action}} : n'a pas pu être demandé pour {{target}} : {{message}}",
+      "confirmTitle": "Arrêter un flux de heartbeat",
+      "confirmStop": "Arrêter le flux {{id}} de {{node}} ? Le nœud cesse d'y émettre ou d'y recevoir jusqu'à ce qu'il soit redémarré."
+    }
   },
   "instance": {
     "unknown": "inconnu",

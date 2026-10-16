@@ -408,7 +408,8 @@
       "beating": "Beating",
       "id": "ID",
       "show": "Show filters",
-      "hide": "Hide filters"
+      "hide": "Hide filters",
+      "clearLink": "Remove the {{link}} filter"
     },
     "marks": {
       "state": "State {{state}}",
@@ -418,7 +419,29 @@
     },
     "empty": "No heartbeats found matching the current filters.",
     "eventsLogger": "Heartbeat Events Logger",
-    "events": "Heartbeat Events"
+    "events": "Heartbeat Events",
+    "mesh": {
+      "title": "Mesh",
+      "desc": "Description",
+      "lastBeat": "Last beat",
+      "heartbeat": "Heartbeat",
+      "side": "Side",
+      "groupLabel_one": "{{from}} to {{to}}: {{beating}} of {{count}} link beating",
+      "groupLabel_other": "{{from}} to {{to}}: {{beating}} of {{count}} links beating",
+      "beatingOf_one": "{{beating}} of {{count}} beating",
+      "beatingOf_other": "{{beating}} of {{count}} beating"
+    },
+    "streams": "Streams",
+    "actions": {
+      "label": "Actions",
+      "stop": "Stop",
+      "start": "Start",
+      "target": "the {{id}} stream of {{node}}",
+      "requested": "{{action}} of {{target}} requested.",
+      "failed": "{{action}} of {{target}} could not be requested: {{message}}",
+      "confirmTitle": "Stop a heartbeat stream",
+      "confirmStop": "Stop the {{id}} stream of {{node}}? The node stops sending or receiving on it until it is started again."
+    }
   },
   "instance": {
     "unknown": "unknown",

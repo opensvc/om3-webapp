@@ -537,6 +537,15 @@ export function GearIcon(props: IconProps) {
   );
 }
 
+/** Actions on a record or a selection: a bolt, apart from the gear of the settings. */
+export function BoltIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M13.5 2 4 13.5h6.5L9.5 22 20 9.5h-6.5L13.5 2Z" />
+    </Svg>
+  );
+}
+
 /** Compliance (`comp16`, fa-bullseye). */
 export function TargetIcon(props: IconProps) {
   return (

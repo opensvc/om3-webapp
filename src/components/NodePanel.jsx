@@ -10,6 +10,7 @@ import {getResponseErrorMessage} from "../services/api.jsx";
 import {NODE_ACTIONS, actionLabel} from "../constants/actions";
 import ActionDialogManager from "./ActionDialogManager";
 import LogsViewer from "./LogsViewer";
+import {EventLog, NODE_EVENT_TYPES} from "./EventLogger";
 import {ConfigText} from "./ConfigText";
 import {monitorMark} from "./NodeRow";
 import {MenuButton} from "../ui/components/MenuButton";
@@ -23,7 +24,7 @@ import {Table, HeaderRow, HeaderCell, Row, Cell, EmptyRow} from "../ui/component
 import {StatusMark} from "../ui/components/StatusMark";
 import {FrozenMark} from "../ui/components/FrozenMark";
 import {RelativeTime} from "../ui/components/RelativeTime";
-import {CloseIcon, EyeIcon, EyeOffIcon, GearIcon, PencilIcon, SearchIcon} from "../ui/icons";
+import {BoltIcon, CloseIcon, EyeIcon, EyeOffIcon, PencilIcon, SearchIcon} from "../ui/icons";
 import {formatSeconds, useAutoHide} from "../ui/lib/reveal";
 import {formatBytes, formatSizeMiB} from "../ui/lib/format";
 import {NodeDaemon} from "./NodeDaemon";
@@ -220,9 +221,9 @@ function NodeActions({node, frozen, monitor, onFeedback, onOrchestrationLogs}) {
                 onAbort={() => setPending({action: "abort", node})}
             />
             <MenuButton
-                // The actions, as in oc3: a pill tinted with the accent, the gear of the actions.
-                prominent
-                icon={<GearIcon className="h-3.5 w-3.5"/>}
+                // In the title bar, a button as the history and close ones, solid: the bolt alone.
+                solid
+                icon={<BoltIcon className="h-3.5 w-3.5"/>}
                 label={t("nodePanel.actions")}
                 align="end"
                 items={items}
@@ -744,7 +745,7 @@ function NodeDrivers({node}) {
 
 /**
  * A node: its state, properties and actions, then its inventory, configuration,
- * schedules, drivers, daemon and logs, a tab each, as oc3 gives a node its tabs. The state
+ * schedules, drivers, daemon, events and logs, a tab each, as oc3 gives a node its tabs. The state
  * tab stays mounted under the others: its event stream and its actions hold.
  */
 export function NodeDetailPanel({node, tab, onTabChange, onClose}) {
@@ -757,7 +758,7 @@ export function NodeDetailPanel({node, tab, onTabChange, onClose}) {
         setLogsOrchestration(id);
         onTabChange("logs");
     };
-    const tabs = ["status", "inventory", "config", "schedules", "drivers", "daemon", "logs"]
+    const tabs = ["status", "inventory", "config", "schedules", "drivers", "daemon", "events", "logs"]
         .map((key) => ({key, label: t(`nodePanel.tabs.${key}`)}));
     return (
         <RecordPanel
@@ -781,6 +782,11 @@ export function NodeDetailPanel({node, tab, onTabChange, onClose}) {
                     {active === "schedules" && <NodeSchedules key={node} node={node}/>}
                     {active === "drivers" && <NodeDrivers key={node} node={node}/>}
                     {active === "daemon" && <NodeDaemon key={node} node={node}/>}
+                    {active === "events" && (
+                        <div className="h-[calc(100dvh-10rem)]">
+                            <EventLog key={node} eventTypes={NODE_EVENT_TYPES} nodeName={node} label={t("nodePanel.tabs.events")}/>
+                        </div>
+                    )}
                     {active === "logs" && (
                         <div className="flex h-[calc(100dvh-10rem)] flex-col gap-2">
                             <OrchestrationLogsFilter id={logsOrchestration} onClear={() => setLogsOrchestration(null)}/>

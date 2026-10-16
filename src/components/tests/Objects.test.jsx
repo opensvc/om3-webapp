@@ -317,7 +317,7 @@ describe('Objects Component', () => {
     });
 
     test('renders object data correctly (status labels)', async () => {
-        setup();
+        setup({}, '', {isWideScreen: true, isMobile: false});
         await waitForLoad();
         ['test-ns/svc/test1', 'test-ns/svc/test2', 'root/svc/test3'].forEach((name) =>
             expect(screen.getByRole('row', {name: new RegExp(name)})).toBeInTheDocument()
@@ -379,7 +379,7 @@ describe('Objects Component', () => {
         };
 
         test('show orchestrate and topology', async () => {
-            setup(propertyState);
+            setup(propertyState, '', {isWideScreen: true, isMobile: false});
             await waitForLoad();
             ['Placement', 'Up', 'Priority'].forEach((label) =>
                 expect(screen.queryByRole('columnheader', {name: new RegExp(`^${label}`)})).not.toBeInTheDocument()
@@ -407,7 +407,7 @@ describe('Objects Component', () => {
         });
 
         test('the status marks a degraded object, its overall warn, whatever its availability', async () => {
-            setup(propertyState);
+            setup(propertyState, '', {isWideScreen: true, isMobile: false});
             await waitForLoad();
             const degraded = within(statusCell(objectRow('test-ns/svc/fx'))).getByRole('img', {name: 'Degraded'});
             expect(degraded).toHaveClass('text-state-warn');
@@ -415,8 +415,22 @@ describe('Objects Component', () => {
             expect(within(statusCell(objectRow('test-ns/svc/fo'))).queryByRole('img', {name: 'Degraded'})).not.toBeInTheDocument();
         });
 
+        test('narrow: no orchestrate column, ha and start a badge by the path, none for no orchestrate', async () => {
+            setup(propertyState, '', {isWideScreen: false, isMobile: true});
+            await waitFor(() => expect(screen.getByRole('table')).toBeInTheDocument());
+            expect(screen.queryByRole('columnheader', {name: /^Orchestrate/})).not.toBeInTheDocument();
+            expect(screen.getByRole('columnheader', {name: /^Topology/})).toBeInTheDocument();
+            const cells = (name) => rowCells(objectRow(name));
+            expect(within(cells('test-ns/svc/fo')[1]).getByRole('img', {name: 'Orchestrate: ha'})).toHaveTextContent('ha');
+            expect(within(cells('test-ns/svc/fx')[1]).getByRole('img', {name: 'Orchestrate: start'})).toHaveTextContent('start');
+            expect(cells('test-ns/nscfg/c')[1].querySelector('[data-mark="orchestrate"]')).toBeNull();
+            // The topology next to the path, then the status.
+            expect(cells('test-ns/svc/fo')[2]).toHaveTextContent(/^failover$/);
+            expect(cells('test-ns/svc/fo')).toHaveLength(4);
+        });
+
         test('are empty for an object with no instances to place', async () => {
-            setup(propertyState);
+            setup(propertyState, '', {isWideScreen: true, isMobile: false});
             await waitForLoad();
             const cfg = objectRow('test-ns/nscfg/c');
             ['Orchestrate', 'Topology'].forEach((label) =>
@@ -1811,10 +1825,10 @@ describe('Objects Component', () => {
         expect(screen.getByRole('row', {name: /validObj/})).toBeInTheDocument();
     });
 
-    test('renders EventLogger component', async () => {
+    test('no floating events button: the events are a tab of the object panel', async () => {
         setup();
         await waitForLoad();
-        expect(screen.getByText('Object Events')).toBeInTheDocument();
+        expect(screen.queryByText('Object Events')).not.toBeInTheDocument();
     });
 
     describe('filter option toggle handlers (add branch coverage)', () => {

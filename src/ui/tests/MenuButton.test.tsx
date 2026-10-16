@@ -348,13 +348,31 @@ describe("submenuShift", () => {
 });
 
 describe("MenuButton prominent", () => {
-  test("as oc3 draws the actions: an accent pill, its icon before the label, filled when open", () => {
-    render(<MenuButton label="Actions" items={items()} prominent icon={<svg data-testid="gear" />} />);
+  test("the actions: a pill of the accent fill, brighter when open", () => {
+    render(<MenuButton label="Actions" items={items()} prominent />);
     const button = screen.getByRole("button", { name: "Actions" });
-    expect(button).toHaveClass("rounded-(--radius-pill)", "border-accent", "bg-accent-soft", "aria-expanded:bg-accent");
-    // The label names it, the icon only shows: no tooltip of an icon alone.
-    expect(button).not.toHaveAttribute("title");
-    expect(button.firstElementChild).toBe(screen.getByTestId("gear"));
+    expect(button).toHaveClass("rounded-(--radius-pill)", "bg-accent", "text-accent-ink", "aria-expanded:brightness-110");
+    expect(button).not.toHaveClass("bg-accent-soft");
     expect(button).toHaveTextContent("Actions");
+    expect(button).not.toHaveAttribute("title");
+  });
+
+  test("solid, an icon alone of the accent fill, named by its label", () => {
+    render(<MenuButton label="Actions" items={items()} solid icon={<svg data-testid="bolt" />} />);
+    const button = screen.getByRole("button", { name: "Actions" });
+    expect(button).toHaveClass("w-7", "bg-accent", "text-accent-ink");
+    expect(button).not.toHaveClass("border-line");
+    expect(button).toHaveAttribute("title", "Actions");
+  });
+
+  test("its label in a wide window, its icon alone in a narrow one, the label then its name and tooltip", () => {
+    render(<MenuButton label="Actions" items={items()} prominent icon={<svg data-testid="bolt" />} />);
+    const button = screen.getByRole("button", { name: "Actions" });
+    const icon = screen.getByTestId("bolt").parentElement!;
+    expect(icon).toHaveClass("hidden", "max-md:inline-flex");
+    expect(icon).toHaveAttribute("aria-hidden", "true");
+    expect(screen.getByText("Actions")).toHaveClass("max-md:sr-only");
+    expect(button).toHaveClass("max-md:w-7");
+    expect(button).toHaveAttribute("title", "Actions");
   });
 });

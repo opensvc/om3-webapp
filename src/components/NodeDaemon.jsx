@@ -10,7 +10,7 @@ import {Dialog} from "../ui/components/Dialog";
 import {MenuButton} from "../ui/components/MenuButton";
 import {RelativeTime} from "../ui/components/RelativeTime";
 import {StatusMark} from "../ui/components/StatusMark";
-import {CloseIcon, GearIcon, RefreshIcon} from "../ui/icons";
+import {BoltIcon, CloseIcon, RefreshIcon} from "../ui/icons";
 import {CategoryCount, CategoryTabs} from "../ui/components/CategoryTabs";
 import {Pager} from "../ui/components/Pager";
 import {Table, HeaderRow, HeaderCell, Row, Cell, EmptyRow} from "../ui/components/Table";
@@ -296,7 +296,8 @@ export function NodeDaemon({node}) {
                             // The listener started, stopped and restarted from its line.
                             {key: "actions", label: t("nodeDaemon.actions.label"), render: (c) => (c.id === "listener" ? (
                                 <MenuButton
-                                    icon={<GearIcon className="h-3.5 w-3.5"/>}
+                                    solid
+                                    icon={<BoltIcon className="h-3.5 w-3.5"/>}
                                     label={t("nodeDaemon.listener.actionsOf", {listener: LISTENER})}
                                     align="end"
                                     items={listenerItems}
@@ -335,7 +336,8 @@ export function NodeDaemon({node}) {
                             )},
                             {key: "actions", label: t("nodeDaemon.actions.label"), render: (s) => (
                                 <MenuButton
-                                    icon={<GearIcon className="h-3.5 w-3.5"/>}
+                                    solid
+                                    icon={<BoltIcon className="h-3.5 w-3.5"/>}
                                     label={t("nodeDaemon.heartbeats.actionsOf", {id: s.id})}
                                     align="end"
                                     items={streamActions(s)}

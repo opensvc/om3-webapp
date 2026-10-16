@@ -6,7 +6,7 @@ import {IconButton} from "../ui/components/Button";
 import {MenuButton} from "../ui/components/MenuButton";
 import {SlideOver} from "../ui/components/SlideOver";
 import {Spinner} from "../ui/components/Spinner";
-import {CloseIcon, GearIcon} from "../ui/icons";
+import {BoltIcon, CloseIcon} from "../ui/icons";
 import useEventStore from "../hooks/useEventStore.js";
 import {retainEventReception} from "../eventSourceManager.jsx";
 import {URL_NODE, URL_OBJECT} from "../config/apiPath.js";
@@ -20,7 +20,6 @@ import LogsViewer from "./LogsViewer";
 import {INSTANCE_ACTIONS, KEY_KINDS, OBJECT_ACTIONS, actionLabel} from "../constants/actions";
 import {parseObjectPath} from "../utils/objectUtils.jsx";
 import {orchestrationOf} from "./OrchestrationBadge";
-import EventLogger from "../components/EventLogger";
 import logger from "../utils/logger";
 
 const DEFAULT_CHECKBOXES = {failover: false};
@@ -625,9 +624,9 @@ const ObjectDetail = ({path, embedded = false, onOpenLogs, onViewInstance, onOrc
                             {t("objectDetails.instancesHeading", {count: nodesList.length})}
                         </h2>
                         <MenuButton
-                            // The actions, as in oc3: a pill tinted with the accent, the gear of the actions.
+                            // The actions: a solid pill.
                             prominent
-                            icon={<GearIcon className="h-3.5 w-3.5"/>}
+                            icon={<BoltIcon className="h-3.5 w-3.5"/>}
                             label={t("objectDetails.batchActionsMenu", {count: selectedNodes.length})}
                             disabled={selectedNodes.length === 0}
                             className="ml-auto"
@@ -684,11 +683,6 @@ const ObjectDetail = ({path, embedded = false, onOpenLogs, onViewInstance, onOrc
                 )}
             </SlideOver>
 
-            {!embedded && (
-                <EventLogger eventTypes={objectEventTypes} objectName={decodedObjectName}
-                             title={t("objectDetails.events.title", {name: decodedObjectName})}
-                             buttonLabel={t("objectDetails.events.button")}/>
-            )}
         </div>
     );
 };

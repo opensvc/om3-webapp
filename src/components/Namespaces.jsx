@@ -2,7 +2,6 @@ import React, {useCallback, useDeferredValue, useEffect, useMemo, useState} from
 import {useNavigate} from "react-router-dom";
 import {useTranslation} from "react-i18next";
 import {retainEventReception} from "../eventSourceManager.jsx";
-import EventLogger from "../components/EventLogger";
 import useEventStore from "../hooks/useEventStore";
 import {useNamespaceClaims, useNamespacePg} from "../hooks/useNamespaceUsage";
 import {computeLimit, formatCpu, kindCounts, networkUsage, poolUsage} from "../app/namespace-usage";
@@ -320,12 +319,6 @@ const Namespaces = () => {
                 tab={panelTab}
                 onTabChange={setPanelTab}
                 onClose={handleClose}
-            />
-
-            <EventLogger
-                eventTypes={namespaceEventTypes}
-                title={t("namespaces.eventsLogger")}
-                buttonLabel={t("namespaces.events")}
             />
         </div>
     );

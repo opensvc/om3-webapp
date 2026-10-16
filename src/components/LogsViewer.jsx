@@ -10,8 +10,15 @@ import {URL_NODE} from "../config/apiPath.js";
 import logger from '../utils/logger.js';
 import {useTranslation} from "react-i18next";
 
+/**
+ * The logs of a node, or of an object instance on a node, followed. Given several
+ * `nodenames`, the logs of the instances of the object on each, one stream a node,
+ * merged in the order of their time, as `ox <path> logs` does: each line then says
+ * its node.
+ */
 const LogsViewer = ({
                         nodename,
+                        nodenames,
                         type = "node",
                         namespace = "root",
                         kind = "svc",
@@ -42,6 +49,9 @@ const LogsViewer = ({
     const highlightTimeoutRef = useRef(null);
     const [highlightedLogId, setHighlightedLogId] = useState(null);
     const levelsLabelId = useId();
+    const nodesKey = (nodenames?.length ? nodenames : nodename ? [nodename] : []).join(",");
+    const nodes = useMemo(() => (nodesKey === "" ? [] : nodesKey.split(",")), [nodesKey]);
+    const merged = nodes.length > 1;
 
     useEffect(() => {
         isPausedRef.current = isPaused;
@@ -54,37 +64,39 @@ const LogsViewer = ({
         setAutoScroll(false);
         setSelectedLogId(null);
         setShouldScrollToLog(false);
-    }, [nodename, type, namespace, kind, instanceName]);
+    }, [nodesKey, type, namespace, kind, instanceName]);
 
-    const buildLogUrl = useCallback(() => {
+    const buildLogUrl = useCallback((node) => {
         let baseUrl;
         if (type === "instance" && instanceName && instanceName.trim() !== "") {
-            baseUrl = `${URL_NODE}/${nodename}/instance/path/${namespace}/${kind}/${instanceName}/log`;
+            baseUrl = `${URL_NODE}/${node}/instance/path/${namespace}/${kind}/${instanceName}/log`;
         } else {
-            baseUrl = `${URL_NODE}/${nodename}/log`;
+            baseUrl = `${URL_NODE}/${node}/log`;
         }
         // The journal fields to match, `ORCHESTRATION_ID=…` for the logs of one orchestration.
         const filterQuery = filters.map((f) => `&filter=${encodeURIComponent(f)}`).join("");
         return `${baseUrl}?follow=true${filterQuery}`;
-    }, [type, nodename, namespace, kind, instanceName, filters.join("\n")]);
+    }, [type, namespace, kind, instanceName, filters.join("\n")]);
 
     const buildSubtitle = useCallback(() => {
+        const where = nodes.join(", ");
         if (type === "instance" && instanceName && instanceName.trim() !== "") {
-            return t("logs.subtitle", {instance: instanceName, node: nodename});
+            return t("logs.subtitle", {instance: instanceName, node: where});
         }
-        return nodename;
-    }, [type, nodename, instanceName, t]);
+        return where;
+    }, [type, nodes, instanceName, t]);
 
     const buildDownloadFilename = useCallback(() => {
         const timestamp = new Date().toISOString();
+        const where = nodes.join("+");
         if (type === "instance" && instanceName && instanceName.trim() !== "") {
-            return `${nodename}-${instanceName}-logs-${timestamp}.txt`;
+            return `${where}-${instanceName}-logs-${timestamp}.txt`;
         }
-        return `${nodename}-logs-${timestamp}.txt`;
-    }, [type, nodename, instanceName]);
+        return `${where}-logs-${timestamp}.txt`;
+    }, [type, nodes, instanceName]);
 
     const parseLogMessage = useCallback(
-        (logData) => {
+        (logData, nodename) => {
             try {
                 if (logData.JSON) {
                     const jsonData = JSON.parse(logData.JSON);
@@ -121,20 +133,23 @@ const LogsViewer = ({
                 };
             }
         },
-        [nodename]
+        []
     );
 
     const updateLogs = useCallback(() => {
         if (logBufferRef.current.length === 0 || isPausedRef.current) return;
         setLogs((prev) => {
-            const newLogs = [...prev, ...logBufferRef.current].slice(-maxLogs);
+            const all = [...prev, ...logBufferRef.current];
+            // The streams of several nodes, merged in the order of their time.
+            if (merged) all.sort((a, b) => Number(a.__REALTIME_TIMESTAMP) - Number(b.__REALTIME_TIMESTAMP));
+            const newLogs = all.slice(-maxLogs);
             logBufferRef.current = [];
             return newLogs;
         });
-    }, [maxLogs]);
+    }, [maxLogs, merged]);
 
     const fetchLogs = useCallback(
-        async (signal) => {
+        async (signal, nodename) => {
             if (isPausedRef.current || !nodename) return;
             if (type === "instance" && (!instanceName || instanceName.trim() === "")) {
                 setErrorMessage(t("logs.errors.instanceRequired"));
@@ -147,7 +162,7 @@ const LogsViewer = ({
                 return;
             }
             try {
-                const url = buildLogUrl();
+                const url = buildLogUrl(nodename);
                 const response = await fetch(url, {
                     method: "GET",
                     headers: {
@@ -188,11 +203,13 @@ const LogsViewer = ({
                                 const jsonStr = line.slice(6).trim();
                                 if (jsonStr) {
                                     const logData = JSON.parse(jsonStr);
-                                    const parsedLog = parseLogMessage(logData);
+                                    const parsedLog = parseLogMessage(logData, nodename);
                                     const timestamp = parsedLog.__REALTIME_TIMESTAMP;
-                                    if (timestamp && !seenLogsRef.current.has(timestamp)) {
-                                        seenLogsRef.current.add(timestamp);
-                                        logBufferRef.current.push(parsedLog);
+                                    // Two nodes may log at the same instant: a line is its node's.
+                                    const key = `${nodename}:${timestamp}`;
+                                    if (timestamp && !seenLogsRef.current.has(key)) {
+                                        seenLogsRef.current.add(key);
+                                        logBufferRef.current.push({...parsedLog, key});
                                     }
                                 }
                             } catch (e) {
@@ -223,7 +240,7 @@ const LogsViewer = ({
                 setIsLoading(false);
             }
         },
-        [nodename, type, instanceName, buildLogUrl, parseLogMessage, updateLogs, t]
+        [type, instanceName, buildLogUrl, parseLogMessage, updateLogs, t]
     );
 
     const startStreaming = useCallback(() => {
@@ -234,8 +251,8 @@ const LogsViewer = ({
         setErrorMessage("");
         const controller = new AbortController();
         abortControllerRef.current = controller;
-        void fetchLogs(controller.signal);
-    }, [fetchLogs]);
+        for (const node of nodes) void fetchLogs(controller.signal, node);
+    }, [fetchLogs, nodes]);
 
     const isFiltered = useMemo(() => {
         return levelFilter.length > 0 || searchTerm !== "";
@@ -299,7 +316,7 @@ const LogsViewer = ({
     }, []);
 
     useEffect(() => {
-        if (!nodename) return;
+        if (nodes.length === 0) return;
         if (type === "instance" && (!instanceName || instanceName.trim() === "")) {
             setErrorMessage(t("logs.errors.instanceRequired"));
             return;
@@ -308,7 +325,7 @@ const LogsViewer = ({
         return () => {
             if (abortControllerRef.current) abortControllerRef.current.abort();
         };
-    }, [nodename, type, instanceName, startStreaming, isPaused, t]);
+    }, [nodes, type, instanceName, startStreaming, isPaused, t]);
 
     useEffect(() => {
         if (isPaused) {
@@ -352,12 +369,12 @@ const LogsViewer = ({
         if (isFiltered) {
             setSearchTerm("");
             setLevelFilter([]);
-            setSelectedLogId(log.__REALTIME_TIMESTAMP);
+            setSelectedLogId(log.key ?? log.__REALTIME_TIMESTAMP);
             setShouldScrollToLog(true);
         }
     };
 
-    const getLogId = (log) => `log-${log.__REALTIME_TIMESTAMP}`;
+    const getLogId = (log) => `log-${log.key ?? log.__REALTIME_TIMESTAMP}`;
 
     const handleDownload = () => {
         const content = filteredLogs
@@ -517,11 +534,11 @@ const LogsViewer = ({
                 ) : (
                     filteredLogs.map((log) => (
                         <div
-                            key={log.__REALTIME_TIMESTAMP}
+                            key={log.key ?? log.__REALTIME_TIMESTAMP}
                             className={cn(
                                 "log-line flex gap-2 border-b border-line px-2 py-0.5 transition-colors",
                                 isFiltered && "cursor-pointer hover:bg-surface-raised",
-                                highlightedLogId === log.__REALTIME_TIMESTAMP && "bg-accent-soft"
+                                highlightedLogId === (log.key ?? log.__REALTIME_TIMESTAMP) && "bg-accent-soft"
                             )}
                             id={getLogId(log)}
                             onClick={() => handleLogClick(log)}
@@ -530,6 +547,7 @@ const LogsViewer = ({
                             <span className={cn("w-[9ch] shrink-0 font-semibold", getLevelClass(log.level))}>
                                 [{log.level.toUpperCase()}]
                             </span>
+                            {merged && <span className="shrink-0 text-ink-muted" data-node>{log.node}</span>}
                             {log.method && <span className="shrink-0 font-semibold">{log.method}</span>}
                             {log.path && <span className="shrink-0 text-ink-muted">{log.path}</span>}
                             <span className="min-w-0 flex-1 break-words whitespace-pre-wrap">{log.message}</span>

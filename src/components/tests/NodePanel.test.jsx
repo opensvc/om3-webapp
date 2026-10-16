@@ -4,17 +4,20 @@ import {MemoryRouter, useLocation} from 'react-router-dom';
 import {vi} from 'vitest';
 import {PeekPanel} from '../PeekPanel';
 import useEventStore from '../../hooks/useEventStore.js';
+import useEventLogStore from '../../hooks/useEventLogStore';
 import {reloadRecordHistory} from '../../app/record-history';
 import node from './fixtures/node-dev3n1.json';
 import daemon from './fixtures/daemon-dev3n1.json';
 
-const {mockRetain, mockRelease} = vi.hoisted(() => ({mockRetain: vi.fn(), mockRelease: vi.fn()}));
+const {mockRetain, mockRelease, mockStartLogger} = vi.hoisted(() => ({mockRetain: vi.fn(), mockRelease: vi.fn(), mockStartLogger: vi.fn()}));
 
 vi.mock('../../eventSourceManager', () => ({
     retainEventReception: (...args) => {
         mockRetain(...args);
         return mockRelease;
     },
+    startLoggerReception: (...args) => mockStartLogger(...args),
+    closeLoggerEventSource: () => {},
 }));
 // The logs stream is tested on its own: here, which node and which kind it reads.
 vi.mock('../LogsViewer', () => ({
@@ -95,7 +98,7 @@ describe('NodeDetailPanel', () => {
     test('opens on its state, kept current by the node events, and its properties', async () => {
         renderPanel();
         expect(within(panel()).getAllByRole('tab').map((tab) => tab.textContent))
-            .toEqual(['Status', 'Inventory', 'Configuration', 'Schedules', 'Drivers', 'Daemon', 'Logs']);
+            .toEqual(['Status', 'Inventory', 'Configuration', 'Schedules', 'Drivers', 'Daemon', 'Events', 'Logs']);
         const facts = within(panel()).getByLabelText('Node state');
         expect(facts).toHaveTextContent('Stateidle');
         expect(facts).toHaveTextContent('Agentv3.0.0-rc46');
@@ -109,10 +112,12 @@ describe('NodeDetailPanel', () => {
         expect(within(properties).getByRole('row', {name: /enclosure not implemented/})).toBeInTheDocument();
     });
 
-    test('its actions stand in the title bar, an oc3 pill, each confirmed then posted', async () => {
+    test('its actions stand in the title bar, a solid button the size of the close one, each confirmed then posted', async () => {
         renderPanel();
         const actions = within(panel()).getByRole('button', {name: 'Node actions'});
-        expect(actions).toHaveClass('rounded-(--radius-pill)');
+        expect(actions).toHaveClass('w-7', 'bg-accent');
+        expect(actions).not.toHaveClass('rounded-(--radius-pill)');
+        expect(actions).toHaveAttribute('title', 'Node actions');
         fireEvent.click(actions);
         const menu = screen.getByRole('menu', {name: 'Node actions'});
         // Not frozen: freeze on offer, unfreeze not.
@@ -300,6 +305,23 @@ describe('NodeDetailPanel', () => {
 
         openTab('Logs');
         expect(within(panel()).getByTestId('logs')).toHaveTextContent('node logs of dev3n1');
+    });
+
+    test('its events, read for the node alone, in a tab', async () => {
+        localStorage.setItem('authToken', 'token');
+        useEventLogStore.getState().clearLogs();
+        useEventLogStore.getState().addEventLog('NodeMonitorUpdated', {node: 'dev3n2', labels: {node: 'dev3n2'}});
+        useEventLogStore.getState().addEventLog('NodeStatusUpdated', {node: 'dev3n1', labels: {node: 'dev3n1'}});
+        renderPanel('?peek=node:dev3n1&peektab=events');
+        const events = await within(panel()).findByRole('region', {name: 'Events'});
+        expect(mockStartLogger).toHaveBeenCalledWith('token', expect.arrayContaining(['NodeStatusUpdated', 'NodeMonitorUpdated', 'DaemonHeartbeatUpdated']), null, 'dev3n1');
+        const list = within(events).getByRole('region', {name: 'Event list'});
+        expect(await within(list).findByText('NodeStatusUpdated')).toBeInTheDocument();
+        expect(within(list).queryByText('NodeMonitorUpdated')).not.toBeInTheDocument();
+        // In place: no close of its own.
+        expect(within(events).queryByRole('button', {name: 'Close'})).not.toBeInTheDocument();
+        useEventLogStore.getState().clearLogs();
+        localStorage.removeItem('authToken');
     });
 
     test('a read refused is said in its section', async () => {

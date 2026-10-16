@@ -16,6 +16,7 @@ import {toObjectState} from "../ui/components/status";
 import {ReadErrors, TotalTile, cpuText} from "./NamespaceMetrics";
 import {ObjectResources} from "./ObjectTabs";
 import {InstanceLink, ResourceLink} from "./RecordLinks";
+import {ObjectLogs} from "./ObjectLogs";
 
 const ZERO_TIME = "0001-01-01T00:00:00Z";
 const EMPTY = {};
@@ -262,8 +263,8 @@ function useCloseWhenGone(id, known, onClose) {
 
 /**
  * The instance of a service or a volume on a node, by `path@node`: its status, as
- * its node reports it, what its resources report there (ObjectResources), then its
- * usage there. It closes once the instance is gone.
+ * its node reports it, what its resources report there (ObjectResources), its
+ * usage there, then its logs there. It closes once the instance is gone.
  */
 export function InstanceDetailPanel({id, tab, onTabChange, onClose}) {
     const {t} = useTranslation();
@@ -274,6 +275,7 @@ export function InstanceDetailPanel({id, tab, onTabChange, onClose}) {
         {key: "status", label: t("panel.tabs.status")},
         {key: "resources", label: t("panel.tabs.resources")},
         {key: "usage", label: t("panel.tabs.usage")},
+        {key: "logs", label: t("panel.tabs.logs")},
     ];
     return (
         <RecordPanel
@@ -287,7 +289,9 @@ export function InstanceDetailPanel({id, tab, onTabChange, onClose}) {
             onTabChange={onTabChange}
             closeOnOutsideClick={false}
         >
-            {(active) => (parsed === null ? null : active === "usage"
+            {(active) => (parsed === null ? null : active === "logs"
+                ? <ObjectLogs key={id} path={parsed.path} nodes={[parsed.node]}/>
+                : active === "usage"
                 ? <InstanceUsage key={id} path={parsed.path} node={parsed.node}/>
                 : active === "resources"
                     ? <ObjectResources key={id} path={parsed.path} node={parsed.node}/>
@@ -298,17 +302,20 @@ export function InstanceDetailPanel({id, tab, onTabChange, onClose}) {
 
 /**
  * A resource of an object, by `path:rid`: its state on each node of the object,
- * then what it reports on each (`om <path> resource info list`, ObjectResources).
- * It closes once the object is gone.
+ * then what it reports on each (`om <path> resource info list`, ObjectResources),
+ * then its logs on all of them, merged. It closes once the object is gone.
  */
 export function ResourceDetailPanel({id, tab, onTabChange, onClose}) {
     const {t} = useTranslation();
     const parsed = id === undefined ? null : parseResourceId(id);
     const known = useEventStore((s) => parsed !== null && s.objectInstanceStatus?.[parsed.path] !== undefined);
     useCloseWhenGone(id, known, onClose);
+    const instances = useEventStore((s) => (parsed === null ? undefined : s.objectInstanceStatus?.[parsed.path]));
+    const nodes = useMemo(() => Object.keys(instances ?? {}).sort(), [instances]);
     const tabs = [
         {key: "status", label: t("panel.tabs.status")},
         {key: "info", label: t("panel.tabs.info")},
+        {key: "logs", label: t("panel.tabs.logs")},
     ];
     return (
         <RecordPanel
@@ -322,7 +329,9 @@ export function ResourceDetailPanel({id, tab, onTabChange, onClose}) {
             onTabChange={onTabChange}
             closeOnOutsideClick={false}
         >
-            {(active) => (parsed === null ? null : active === "info"
+            {(active) => (parsed === null ? null : active === "logs"
+                ? <ObjectLogs key={id} path={parsed.path} nodes={nodes} filters={[`RID=${parsed.rid}`]}/>
+                : active === "info"
                 ? <ObjectResources key={id} path={parsed.path} rid={parsed.rid}/>
                 : <ResourceStatus key={id} path={parsed.path} rid={parsed.rid}/>)}
         </RecordPanel>

@@ -418,8 +418,6 @@
       "stale": "Périmé"
     },
     "empty": "Aucun heartbeat ne correspond aux filtres actuels.",
-    "eventsLogger": "Journal des événements heartbeat",
-    "events": "Événements heartbeat",
     "mesh": {
       "title": "Maillage",
       "desc": "Description",
@@ -707,8 +705,6 @@
       "memory": "Mémoire"
     },
     "empty": "Aucun namespace disponible",
-    "eventsLogger": "Journal des événements des namespaces",
-    "events": "Événements des namespaces",
     "tableLabel": "Namespaces",
     "show": {
       "svc_one": "Afficher le service {{status}} de {{namespace}}",
@@ -740,6 +736,7 @@
       "tabs": {
         "usage": "Usage",
         "claims": "Réclamations",
+        "events": "Événements",
         "config": "Configuration"
       },
       "claims": "Réclamations et usage",
@@ -967,8 +964,6 @@
     "bulkActions": "Actions",
     "selectAll": "Sélectionner tous les nœuds",
     "loading": "Chargement des nœuds",
-    "eventsLogger": "Journal des événements des nœuds",
-    "events": "Événements des nœuds",
     "target": {
       "node": "le nœud {{node}}",
       "selected_one": "{{count}} nœud",
@@ -1022,8 +1017,9 @@
       "config": "Configuration",
       "schedules": "Planifications",
       "drivers": "Pilotes",
-      "logs": "Journaux",
-      "daemon": "Démon"
+      "daemon": "Démon",
+      "events": "Événements",
+      "logs": "Journaux"
     },
     "status": {
       "title": "État du nœud",
@@ -1129,10 +1125,6 @@
       "title": "Journaux",
       "close": "Fermer les journaux",
       "resize": "Redimensionner le panneau"
-    },
-    "events": {
-      "title": "Événements - {{name}}",
-      "button": "Événements de l'objet"
     }
   },
   "createObject": {
@@ -1230,10 +1222,6 @@
       "objects_one": "{{count}} objet",
       "objects_other": "{{count}} objets"
     },
-    "events": {
-      "title": "Journal des événements des objets",
-      "button": "Événements des objets"
-    },
     "header": {
       "statusTitle": "Statut de l'objet : {{status}}",
       "unknown": "inconnu",
@@ -1310,6 +1298,7 @@
     "tabs": {
       "status": "État",
       "usage": "Usage",
+      "events": "Événements",
       "logs": "Journaux",
       "resources": "Ressources",
       "schedules": "Planifications",

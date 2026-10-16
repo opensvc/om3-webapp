@@ -10,7 +10,6 @@ import {extractNamespace} from "../utils/objectUtils";
 import {useTranslation} from "react-i18next";
 import {useObjectBulkActions} from "./useObjectBulkActions";
 import CreateObjectDialog from "./CreateObjectDialog";
-import EventLogger from "../components/EventLogger";
 import {useObjectData} from "../hooks/useObjectData";
 import {useNodeData} from "../hooks/useNodeData";
 import {Table, HeaderRow, HeaderCell, Row, Cell, EmptyRow} from "../ui/components/Table";
@@ -22,11 +21,11 @@ import {MenuButton} from "../ui/components/MenuButton";
 import {Button} from "../ui/components/Button";
 import {Checkbox, Input} from "../ui/components/Field";
 import {useMediaQuery} from "../ui/lib/media";
-import {KeyCells, NotProvisionedMark, PropertyCells, SideText, StatusMarks, markState} from "./ObjectCells";
+import {KeyCells, NotProvisionedMark, OrchestrateBadge, PropertyCells, SideText, StatusMarks, markState} from "./ObjectCells";
 import {Pager} from "../ui/components/Pager";
 import {usePaging} from "../app/paging";
 import {ALL_LIST, OBJECT_LISTS, OBJECTS_TABS, listOfKind} from "../utils/objectLists";
-import {ChevronDownIcon, FilterIcon, GearIcon, PlusIcon, SearchIcon} from "../ui/icons";
+import {BoltIcon, ChevronDownIcon, FilterIcon, PlusIcon, SearchIcon} from "../ui/icons";
 
 // The breakpoints of the MUI theme the view used: below md (900px) the filters fold
 // behind a button, from lg (1200px) the node columns are shown.
@@ -126,6 +125,9 @@ export const PROPERTY_COLUMNS = [
     {key: "topology", labelKey: "objects.columns.topology", value: (status) => status?.topology},
 ];
 
+/** The property columns of a narrow list: the orchestrate a badge by the path there. */
+const NARROW_PROPERTY_COLUMNS = PROPERTY_COLUMNS.filter(({key}) => key !== "orchestrate");
+
 const stopPropagation = (e) => e.stopPropagation();
 
 /**
@@ -166,6 +168,7 @@ const TableRowComponent = React.memo(({
                                           onObjectClick,
                                           allNodes,
                                           isWideScreen,
+                                          isNarrow = false,
                                           namesOnly = false,
                                       }) => {
     const {t} = useTranslation();
@@ -188,9 +191,18 @@ const TableRowComponent = React.memo(({
                     aria-label={t("objects.selectObject", {name: objectName})}
                 />
             </Cell>
-            <Cell className="text-data font-medium whitespace-nowrap">{objectName}</Cell>
+            <Cell className="text-data font-medium whitespace-nowrap">
+                {isNarrow && !namesOnly
+                    ? (
+                        <span className="inline-flex items-center gap-1">
+                            {objectName}
+                            <OrchestrateBadge objectName={objectName}/>
+                        </span>
+                    )
+                    : objectName}
+            </Cell>
             {namesOnly && <KeyCells objectName={objectName}/>}
-            {!namesOnly && <PropertyCells objectName={objectName}/>}
+            {!namesOnly && <PropertyCells objectName={objectName} withOrchestrate={!isNarrow}/>}
             {!namesOnly && (
                 <Cell className="whitespace-nowrap">
                     <StatusMarks
@@ -217,6 +229,7 @@ const TableRowComponent = React.memo(({
         prevProps.isSelected === nextProps.isSelected &&
         prevProps.isOpen === nextProps.isOpen &&
         prevProps.isWideScreen === nextProps.isWideScreen &&
+        prevProps.isNarrow === nextProps.isNarrow &&
         prevProps.namesOnly === nextProps.namesOnly &&
         prevProps.allNodes.length === nextProps.allNodes.length &&
         prevProps.allNodes.every((node, i) => node === nextProps.allNodes[i])
@@ -348,17 +361,6 @@ const Objects = () => {
     const [searchQuery, setSearchQuery] = useState(rawSearchQuery);
     const isWideScreen = useMediaQuery(WIDE_QUERY);
     const isMobile = useMediaQuery(MOBILE_QUERY);
-    const objectEventTypes = useMemo(() => [
-        "ObjectStatusUpdated",
-        "InstanceStatusUpdated",
-        "ObjectDeleted",
-        "InstanceMonitorUpdated",
-        "CONNECTION_OPENED",
-        "CONNECTION_ERROR",
-        "RECONNECTION_ATTEMPT",
-        "MAX_RECONNECTIONS_REACHED",
-        "CONNECTION_CLOSED"
-    ], []);
 
     const [showFilters, setShowFilters] = useState(() => isWideScreen ? true : !isMobile);
 
@@ -692,7 +694,9 @@ const Objects = () => {
         [kinds, selectedKinds]
     );
 
-    const columnCount = namesOnly ? 4 : 3 + PROPERTY_COLUMNS.length + (isWideScreen ? allNodes.length : 0);
+    // Narrow, the orchestrate is a badge by the path: no column for it.
+    const propertyColumns = isMobile ? NARROW_PROPERTY_COLUMNS : PROPERTY_COLUMNS;
+    const columnCount = namesOnly ? 4 : 3 + propertyColumns.length + (isWideScreen ? allNodes.length : 0);
 
     return (
         <div className="flex h-full flex-col gap-3 p-4">
@@ -760,9 +764,9 @@ const Objects = () => {
                         <>
                             <span className="whitespace-nowrap text-ink-muted">{t("common.selected", {count: selectedObjects.length})}</span>
                             <MenuButton
-                                // The actions, as in oc3: a pill tinted with the accent, the gear of the actions.
+                                // The actions: a solid pill.
                                 prominent
-                                icon={<GearIcon className="h-3.5 w-3.5"/>}
+                                icon={<BoltIcon className="h-3.5 w-3.5"/>}
                                 label={t("objects.actionsMenu")}
                                 align="end"
                                 items={bulkActions}
@@ -800,7 +804,7 @@ const Objects = () => {
                                 <HeaderCell className="text-right" title={t("objects.columns.keysSizeHint")}>{t("objects.columns.keysSize")}</HeaderCell>
                             </>
                         )}
-                        {!namesOnly && PROPERTY_COLUMNS.map(({key, labelKey}) => (
+                        {!namesOnly && propertyColumns.map(({key, labelKey}) => (
                             <HeaderCell key={key}>{t(labelKey)}</HeaderCell>
                         ))}
                         {!namesOnly && <HeaderCell>{t("common.status")}</HeaderCell>}
@@ -834,6 +838,7 @@ const Objects = () => {
                                     onObjectClick={handleObjectClick}
                                     allNodes={allNodes}
                                     isWideScreen={isWideScreen}
+                                    isNarrow={isMobile}
                                     namesOnly={namesOnly}
                                 />
                             </React.Fragment>
@@ -857,8 +862,6 @@ const Objects = () => {
                 paths={allObjectNames}
                 onCreated={handleCreated}
             />
-            <EventLogger eventTypes={objectEventTypes} title={t("objects.events.title")}
-                         buttonLabel={t("objects.events.button")}/>
 
             <ObjectDetailPanel
                 path={panel.sel}

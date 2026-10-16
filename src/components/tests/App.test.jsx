@@ -24,7 +24,7 @@ vi.mock('../../app/record-history', async (importOriginal) => ({
     ...(await importOriginal()),
     useRecordHistory: () => mockHistory,
 }));
-vi.mock('../NavBar', () => ({default: () => <div data-testid="navbar">NavBar</div>}));
+vi.mock('../NavBar', () => ({default: ({anchor}) => <div data-testid="navbar">NavBar{anchor}</div>}));
 vi.mock('../../hooks/useSidebarAlerts', () => ({default: () => ({})}));
 vi.mock('../NodesTable', () => ({default: () => <div data-testid="nodes">NodesTable</div>}));
 vi.mock('../Heartbeats', () => ({default: () => <div data-testid="heartbeats">Heartbeats</div>}));
@@ -43,7 +43,7 @@ vi.mock('../Network', async () => {
     return {default: () => <div data-testid="network">{useLocation().search}</div>};
 });
 vi.mock('../PeekPanel', () => ({PeekPanel: () => <div data-testid="peek-panel"/>}));
-vi.mock('../../app/PanelAnchor', () => ({PanelAnchor: () => <div data-testid="panel-anchor"/>}));
+vi.mock('../../app/PanelAnchor', () => ({PanelAnchor: ({inBar}) => <div data-testid="panel-anchor" data-in-bar={String(!!inBar)}/>}));
 vi.mock('../../app/ShortcutsHelp', () => ({ShortcutsHelp: () => <div data-testid="shortcuts-help"/>}));
 vi.mock('../WhoAmI', () => ({default: () => <div data-testid="whoami">WhoAmI</div>}));
 vi.mock('../SilentRenew.jsx', () => ({default: () => <div data-testid="silent-renew">SilentRenew</div>}));
@@ -908,6 +908,29 @@ describe('App Component', () => {
             renderApp(['/nodes']);
             await screen.findByTestId('nodes');
             expect(document.getElementById('app-scroll-container').style.paddingRight).toBe('2.5rem');
+            expect(screen.getByTestId('panel-anchor')).toHaveAttribute('data-in-bar', 'false');
+        });
+
+        test('none in a narrow window: the anchor is a button of the header bar', async () => {
+            const matchMedia = window.matchMedia;
+            window.matchMedia = (query) => ({
+                matches: query === '(max-width: 47.95rem)',
+                addEventListener: () => {},
+                removeEventListener: () => {},
+            });
+            try {
+                mockHistory.entries = [{kind: 'node', id: 'dev3n1', at: Date.now()}];
+                setupBasicAuth();
+                renderApp(['/nodes']);
+                await screen.findByTestId('nodes');
+                expect(document.getElementById('app-scroll-container').style.paddingRight).toBe('');
+                const anchors = screen.getAllByTestId('panel-anchor');
+                expect(anchors).toHaveLength(1);
+                expect(screen.getByTestId('navbar')).toContainElement(anchors[0]);
+                expect(anchors[0]).toHaveAttribute('data-in-bar', 'true');
+            } finally {
+                window.matchMedia = matchMedia;
+            }
         });
     });
 });

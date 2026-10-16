@@ -95,7 +95,30 @@ export const FlexBadge = ({min, max, target}) => {
 };
 
 /** The property cells of an object row, each read on its own from the store. */
-export const PropertyCells = ({objectName}) => {
+/**
+ * The orchestrate of an object as a small badge by its path, where the narrow list
+ * has no column for it: "ha" or "start"; nothing for "no", as for no orchestrate.
+ */
+export const OrchestrateBadge = ({objectName}) => {
+    const {t} = useTranslation();
+    const orchestrate = useEventStore((s) => s.objectStatus?.[objectName]?.orchestrate);
+    if (orchestrate !== "ha" && orchestrate !== "start") return null;
+    const label = `${t("objects.columns.orchestrate")}: ${orchestrate}`;
+    return (
+        <span
+            role="img"
+            aria-label={label}
+            title={label}
+            data-mark="orchestrate"
+            className="inline-flex h-4 shrink-0 items-center rounded-sm border border-line-strong px-0.5 text-[0.6875rem] leading-none font-medium text-ink-muted"
+        >
+            <span aria-hidden="true">{orchestrate}</span>
+        </span>
+    );
+};
+
+/** The property cells of an object row; the orchestrate one left out when its badge stands by the path. */
+export const PropertyCells = ({objectName, withOrchestrate = true}) => {
     const status = (s) => s.objectStatus?.[objectName];
     const orchestrate = useEventStore((s) => status(s)?.orchestrate);
     const topology = useEventStore((s) => status(s)?.topology);
@@ -106,7 +129,7 @@ export const PropertyCells = ({objectName}) => {
 
     return (
         <>
-            <Cell className="whitespace-nowrap">{orchestrate}</Cell>
+            {withOrchestrate && <Cell className="whitespace-nowrap">{orchestrate}</Cell>}
             <Cell className="whitespace-nowrap">
                 <span className="inline-flex items-center gap-1.5">
                     {topology}

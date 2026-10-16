@@ -5,7 +5,7 @@ import {StatusBadge} from '../ui/components/StatusBadge';
 import {statusBadge} from '../ui/components/status';
 import {FrozenMark} from '../ui/components/FrozenMark';
 import {ObjectIcon, om3ObjectKind} from '../ui/components/ObjectIcon';
-import {GearIcon} from '../ui/icons';
+import {BoltIcon} from '../ui/icons';
 import {NotProvisionedMark} from '../ui/components/StateMarks';
 import {KEY_KINDS, OBJECT_ACTIONS, actionLabel, objectActionsFor} from '../constants/actions';
 import {OrchestrationBadge} from './OrchestrationBadge';
@@ -70,9 +70,9 @@ const HeaderSection = ({
                     <NotProvisionedMark label={t("objects.header.notProvisionedLabel")} title={t("objects.header.notProvisionedTitle")}/>
                 )}
                 <MenuButton
-                    // The actions, as in oc3: a pill tinted with the accent, the gear of the actions.
+                    // The actions: a solid pill.
                     prominent
-                    icon={<GearIcon className="h-3.5 w-3.5"/>}
+                    icon={<BoltIcon className="h-3.5 w-3.5"/>}
                     label={t("objects.header.actionsMenu")}
                     align="end"
                     disabled={actionInProgress}

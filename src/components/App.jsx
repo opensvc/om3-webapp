@@ -24,6 +24,7 @@ import logger from "../utils/logger.js";
 import {prepareForNavigation} from "../eventSourceManager";
 import {PeekPanel} from "./PeekPanel";
 import {PanelAnchor} from "../app/PanelAnchor";
+import {useMediaQuery} from "../ui/lib/media";
 import {useRecordHistory} from "../app/record-history";
 import {ShortcutsHelp} from "../app/ShortcutsHelp";
 import {useShortcut} from "../ui/lib/shortcuts";
@@ -319,6 +320,9 @@ const ProtectedRoute = ({children}) => {
 
 const AUTH_PATHS = ['/auth', '/login', '/silent-renew'];
 
+/** A narrow window, as Tailwind's max-md: the anchor in the header bar, no gutter for it. */
+const NARROW_QUERY = "(max-width: 47.95rem)";
+
 const App = () => {
     logger.info("App init");
     const location = useLocation();
@@ -379,9 +383,12 @@ const App = () => {
     // The anchor that brings the panels back stands on the right edge of the window,
     // over the views: while there is a record to bring back, the views keep a gutter
     // as wide as it there, so that it covers nothing, an Actions menu at the end of a
-    // toolbar included.
+    // toolbar included. A narrow window spares no such gutter: the anchor is a button
+    // of the header bar there.
     const historySize = useRecordHistory().entries.length;
-    const anchorShown = showSidebar && historySize > 0;
+    const narrow = useMediaQuery(NARROW_QUERY);
+    const anchorEnabled = showSidebar && !!localStorage.getItem("authToken");
+    const anchorShown = showSidebar && historySize > 0 && !narrow;
     const mainStyle = {
         flex: 1,
         minWidth: 0,
@@ -401,6 +408,7 @@ const App = () => {
                             onToggleSidebar={toggleSidebar}
                             menuAlert={sidebarOpen ? null : menuAlert(sidebarAlerts)}
                             showSidebarToggle={showSidebar}
+                            anchor={anchorEnabled && narrow ? <PanelAnchor inBar/> : null}
                         />
                         <div style={{display: 'flex', flex: 1, minHeight: 0}}>
                             {/* Short of room, the menu folds once an entry is chosen. */}
@@ -432,7 +440,7 @@ const App = () => {
                                     {showSidebar && localStorage.getItem("authToken") && (
                                         <>
                                             <PeekPanel/>
-                                            <PanelAnchor/>
+                                            {!narrow && <PanelAnchor/>}
                                             <ShortcutsHelp/>
                                         </>
                                     )}

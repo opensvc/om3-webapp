@@ -270,7 +270,7 @@ describe('Namespaces', () => {
         // The claims second, between the usage and the configuration.
         // Its objects by kind after them, each its count, a service down a red alert; its configuration last.
         expect(within(panel).getAllByRole('tab').map((tab) => tab.textContent))
-            .toEqual(['Usage', 'Claims', 'Services3!', 'Volumes2', 'Configurations2', 'Secrets1', 'Configuration']);
+            .toEqual(['Usage', 'Claims', 'Services3!', 'Volumes2', 'Configurations2', 'Secrets1', 'Events', 'Configuration']);
         expect(within(panel).getByTestId('ns-tab-alert-services')).toHaveAttribute('data-level', 'down');
         expect(within(panel).getByTestId('namespace-usage')).toHaveTextContent('prod');
         expect(row('prod')).toHaveAttribute('aria-current', 'true');

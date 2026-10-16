@@ -2,6 +2,7 @@ import React from 'react';
 import {act, fireEvent, render, screen, waitFor, within} from '@testing-library/react';
 import {vi} from 'vitest';
 import ObjectStatus from '../ObjectStatus';
+import {PanelHeaderContext} from '../../app/panel-header';
 import useEventStore from '../../hooks/useEventStore.js';
 import dns from '../../app/tests/fixtures/system-svc-dns.json';
 
@@ -103,6 +104,32 @@ describe('ObjectStatus', () => {
             .toEqual([['topology', 'Topology: flex'], ['orchestrate', 'Orchestrate: ha'], ['placement', 'Placement: nodes order']]);
         expect(policies.querySelectorAll('[data-policy] svg')).toHaveLength(0);
         expect(screen.getByRole('button', {name: 'Actions'})).toBeInTheDocument();
+    });
+
+    test('in a panel: the policies over the summary, the actions a solid button of the title bar', async () => {
+        answer(dns);
+        function InPanel() {
+            const [title, setTitle] = React.useState(null);
+            const [actions, setActions] = React.useState(null);
+            return (
+                <>
+                    <div data-testid="bar-title" ref={setTitle}/>
+                    <div data-testid="bar-actions" ref={setActions}/>
+                    <div data-testid="body">
+                        <PanelHeaderContext.Provider value={{title, actions}}>
+                            <ObjectStatus path="system/svc/dns"/>
+                        </PanelHeaderContext.Provider>
+                    </div>
+                </>
+            );
+        }
+        render(<InPanel/>);
+        await screen.findByRole('table');
+        expect(screen.getByTestId('body')).toContainElement(screen.getByLabelText('Policies'));
+        expect(screen.getByTestId('bar-title')).toBeEmptyDOMElement();
+        const actions = within(screen.getByTestId('bar-actions')).getByRole('button', {name: 'Actions'});
+        expect(actions).toHaveClass('w-7', 'bg-accent');
+        expect(actions).not.toHaveClass('rounded-(--radius-pill)');
     });
 
     test('no issue, no issue line', async () => {

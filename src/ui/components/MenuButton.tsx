@@ -38,12 +38,14 @@ const ITEM =
  * the right arrow; within it the arrows walk its own entries, and the left arrow
  * or Escape give the focus back to the entry that opened it.
  *
- * `prominent`, as in oc3, draws a menu the page is used for, such as the actions:
- * a pill outlined and tinted with the accent, filled when hovered or open, its
- * `icon` before the label.
+ * `prominent` draws a menu the page is used for, such as the actions: a pill of
+ * the accent fill, brighter when hovered or open, its
+ * label and chevron in a wide window, its `icon` alone in a narrow one, the label
+ * then its accessible name and tooltip.
  *
  * om3 additions: `icon` without `prominent` makes the trigger an icon alone, `label`
- * staying its accessible name and tooltip; `compact` makes it small and borderless, for a table
+ * staying its accessible name and tooltip, of the accent fill with `solid`, as the
+ * actions; `compact` makes it small and borderless, for a table
  * row; `align="end"` lines the menu up with the right edge of the trigger. The menu
  * is placed against the window, so that a scrolling container (a table) cannot cut
  * it, and closes when the page scrolls or resizes rather than drift from its button.
@@ -54,6 +56,7 @@ export function MenuButton({
   disabled = false,
   className = "",
   prominent = false,
+  solid = false,
   icon,
   compact = false,
   trigger,
@@ -69,9 +72,11 @@ export function MenuButton({
    * secondary menu, is muted. A primary button, filled, stays apart from both.
    */
   prominent?: boolean;
+  /** An icon alone of the accent fill, as the actions, rather than outlined and muted. */
+  solid?: boolean;
   /**
    * Icon alone in the trigger, instead of the label and the chevron; with
-   * `prominent`, the visual placed before the label.
+   * `prominent`, so only in a narrow window.
    */
   icon?: ReactNode;
   /** Small borderless trigger, for a table row. */
@@ -226,16 +231,20 @@ export function MenuButton({
           setOpen((previous) => !previous);
         }}
         onKeyDown={onButtonKeyDown}
-        title={iconOnly ? label : undefined}
+        title={iconOnly || (prominent && icon !== undefined) ? label : undefined}
         aria-label={iconOnly || trigger !== undefined ? label : undefined}
         className={
           prominent
-            ? "flex h-7 items-center gap-1.5 rounded-(--radius-pill) border border-accent bg-accent-soft pr-2.5 pl-3 font-medium text-ink hover:bg-accent hover:text-accent-ink disabled:opacity-60 aria-expanded:bg-accent aria-expanded:text-accent-ink"
+            ? `flex h-7 items-center gap-1.5 rounded-(--radius-pill) border border-accent bg-accent pr-2.5 pl-3 font-medium text-accent-ink hover:brightness-110 disabled:opacity-60 disabled:hover:brightness-100 aria-expanded:brightness-110 ${
+                icon !== undefined ? "max-md:w-7 max-md:justify-center max-md:px-0" : ""
+              }`
             : trigger !== undefined
             ? // Drawn as the other menu triggers, lighter: a border and a chevron say it opens.
               "inline-flex h-6 cursor-pointer items-center gap-1 rounded-(--radius-control) border border-line pr-0.5 pl-1 hover:border-line-strong hover:bg-surface-sunken disabled:cursor-default disabled:opacity-60 aria-expanded:border-line-strong aria-expanded:bg-surface-sunken"
             : compact
             ? "flex h-5 w-5 items-center justify-center rounded-(--radius-control) text-ink-muted hover:bg-surface-sunken hover:text-ink disabled:opacity-60 aria-expanded:bg-surface-sunken aria-expanded:text-ink"
+            : iconOnly && solid
+            ? "flex h-7 w-7 items-center justify-center rounded-(--radius-control) border border-accent bg-accent text-accent-ink hover:brightness-110 disabled:opacity-60 disabled:hover:brightness-100 aria-expanded:brightness-110"
             : `flex h-7 items-center gap-1.5 rounded-(--radius-control) border border-line text-ink-muted hover:border-line-strong hover:text-ink disabled:opacity-60 aria-expanded:text-ink ${
                 iconOnly ? "w-7 justify-center" : "px-2"
               }`
@@ -248,9 +257,17 @@ export function MenuButton({
           </>
         ) : iconOnly ? (
           icon
+        ) : prominent && icon !== undefined ? (
+          // The label and chevron in a wide window, the icon alone in a narrow one.
+          <>
+            <span aria-hidden="true" className="hidden max-md:inline-flex">
+              {icon}
+            </span>
+            <span className="max-md:sr-only">{label}</span>
+            <ChevronDownIcon className="h-3.5 w-3.5 max-md:hidden" />
+          </>
         ) : (
           <>
-            {icon}
             {label}
             <ChevronDownIcon className="h-3.5 w-3.5" />
           </>

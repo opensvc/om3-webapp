@@ -418,8 +418,6 @@
       "stale": "Stale"
     },
     "empty": "No heartbeats found matching the current filters.",
-    "eventsLogger": "Heartbeat Events Logger",
-    "events": "Heartbeat Events",
     "mesh": {
       "title": "Mesh",
       "desc": "Description",
@@ -707,8 +705,6 @@
       "memory": "Memory"
     },
     "empty": "No namespaces available",
-    "eventsLogger": "Namespaces Events Logger",
-    "events": "Namespace Events",
     "tableLabel": "Namespaces",
     "show": {
       "svc_one": "Show the {{count}} {{status}} service of {{namespace}}",
@@ -740,6 +736,7 @@
       "tabs": {
         "usage": "Usage",
         "claims": "Claims",
+        "events": "Events",
         "config": "Configuration"
       },
       "claims": "Claims and usage",
@@ -967,8 +964,6 @@
     "bulkActions": "Actions",
     "selectAll": "Select all nodes",
     "loading": "Loading nodes",
-    "eventsLogger": "Node Events Logger",
-    "events": "Node Events",
     "target": {
       "node": "node {{node}}",
       "selected_one": "{{count}} nodes",
@@ -1022,8 +1017,9 @@
       "config": "Configuration",
       "schedules": "Schedules",
       "drivers": "Drivers",
-      "logs": "Logs",
-      "daemon": "Daemon"
+      "daemon": "Daemon",
+      "events": "Events",
+      "logs": "Logs"
     },
     "status": {
       "title": "Node state",
@@ -1129,10 +1125,6 @@
       "title": "Logs",
       "close": "Close logs",
       "resize": "Resize drawer"
-    },
-    "events": {
-      "title": "Events - {{name}}",
-      "button": "Object Events"
     }
   },
   "createObject": {
@@ -1230,10 +1222,6 @@
       "objects_one": "{{count}} objects",
       "objects_other": "{{count}} objects"
     },
-    "events": {
-      "title": "Object Events Logger",
-      "button": "Object Events"
-    },
     "header": {
       "statusTitle": "Object status: {{status}}",
       "unknown": "unknown",
@@ -1310,6 +1298,7 @@
     "tabs": {
       "status": "Status",
       "usage": "Usage",
+      "events": "Events",
       "logs": "Logs",
       "resources": "Resources",
       "schedules": "Schedules",

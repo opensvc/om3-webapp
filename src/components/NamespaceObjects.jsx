@@ -10,7 +10,7 @@ import {TabCount} from "../ui/components/Tabs";
 import {AlertMark} from "../ui/components/AlertMark";
 import {Checkbox} from "../ui/components/Field";
 import {MenuButton} from "../ui/components/MenuButton";
-import {GearIcon} from "../ui/icons";
+import {BoltIcon} from "../ui/icons";
 import {useObjectBulkActions} from "./useObjectBulkActions";
 import {KeyCells, ObjectStatusCell, PropertyCells} from "./ObjectCells";
 
@@ -101,7 +101,7 @@ export function NamespaceObjects({namespace, list}) {
                         <span className="whitespace-nowrap text-ink-muted">{t("common.selected", {count: selected.length})}</span>
                         <MenuButton
                             prominent
-                            icon={<GearIcon className="h-3.5 w-3.5"/>}
+                            icon={<BoltIcon className="h-3.5 w-3.5"/>}
                             label={t("objects.actionsMenu")}
                             align="end"
                             items={items}

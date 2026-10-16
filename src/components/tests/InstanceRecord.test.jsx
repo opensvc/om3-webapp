@@ -6,6 +6,12 @@ import {InstanceDetailPanel, InstanceStatus, InstanceUsage, ObjectUsage, Resourc
 import useEventStore from '../../hooks/useEventStore';
 import {PG_POLL_MS, resetPgUsage} from '../../hooks/usePgUsage';
 
+// The logs stream is tested on its own: here, the nodes, the instance and the matches it reads.
+vi.mock('../LogsViewer', () => ({
+    default: ({nodenames = [], namespace, kind, instanceName, filters = []}) => (
+        <div data-testid="logs">{`${namespace}/${kind}/${instanceName} on ${nodenames.join('+')}${filters.length ? ` where ${filters.join(', ')}` : ''}`}</div>
+    ),
+}));
 vi.mock('../../utils/logger.js', () => ({
     default: {error: vi.fn(), info: vi.fn(), warn: vi.fn(), debug: vi.fn()},
 }));
@@ -153,7 +159,7 @@ describe('InstanceDetailPanel', () => {
         const onTabChange = vi.fn();
         render(<MemoryRouter><InstanceDetailPanel id="prod/svc/web@n1" tab={undefined} onTabChange={onTabChange} onClose={vi.fn()}/></MemoryRouter>);
         const panel = screen.getByRole('dialog', {name: 'prod/svc/web @ n1'});
-        expect(within(panel).getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Status', 'Resources', 'Usage']);
+        expect(within(panel).getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Status', 'Resources', 'Usage', 'Logs']);
         expect(within(panel).getByTestId('instance-status')).toBeInTheDocument();
         fireEvent.click(within(panel).getByRole('tab', {name: 'Usage'}));
         expect(onTabChange).toHaveBeenCalledWith('usage');
@@ -162,7 +168,7 @@ describe('InstanceDetailPanel', () => {
     test('its resources tab: what its resources report on its node alone, a table each', async () => {
         render(<MemoryRouter><InstanceDetailPanel id="prod/svc/web@n1" tab="resources" onTabChange={vi.fn()} onClose={vi.fn()}/></MemoryRouter>);
         const panel = screen.getByRole('dialog', {name: 'prod/svc/web @ n1'});
-        expect(within(panel).getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Status', 'Resources', 'Usage']);
+        expect(within(panel).getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Status', 'Resources', 'Usage', 'Logs']);
         const table = await within(panel).findByRole('table', {name: 'Resource information'});
         expect(within(panel).getAllByRole('table')).toHaveLength(1);
         // A line opening each resource, its badge.
@@ -171,6 +177,11 @@ describe('InstanceDetailPanel', () => {
         // n1 alone: n2's value of app#1 left out.
         expect(within(table).getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['Key', 'on n1']);
         expect(within(table).getByRole('row', {name: /pid/})).toHaveTextContent('pid42');
+    });
+
+    test('its logs tab: the logs of the instance on its node alone', () => {
+        render(<MemoryRouter><InstanceDetailPanel id="prod/svc/web@n1" tab="logs" onTabChange={vi.fn()} onClose={vi.fn()}/></MemoryRouter>);
+        expect(screen.getByTestId('logs')).toHaveTextContent(/^prod\/svc\/web on n1$/);
     });
 
     test('closes once its instance is gone', () => {
@@ -203,10 +214,15 @@ describe('ResourceStatus', () => {
         expect(screen.getByTestId('search')).toHaveTextContent('peek=object%3Aprod%2Fsvc%2Fweb');
     });
 
+    test('its logs tab: the logs of the object on all its nodes, merged, of the resource alone', () => {
+        render(<MemoryRouter><ResourceDetailPanel id="prod/svc/web:app#1" tab="logs" onTabChange={vi.fn()} onClose={vi.fn()}/></MemoryRouter>);
+        expect(screen.getByTestId('logs')).toHaveTextContent(/^prod\/svc\/web on n1\+n2\+n3 where RID=app#1$/);
+    });
+
     test('its info tab: what the resource alone reports on each node, its table without title nor filter', async () => {
         render(<MemoryRouter><ResourceDetailPanel id="prod/svc/web:app#1" tab="info" onTabChange={vi.fn()} onClose={vi.fn()}/></MemoryRouter>);
         const panel = screen.getByRole('dialog', {name: 'app#1 of prod/svc/web'});
-        expect(within(panel).getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Status', 'Info']);
+        expect(within(panel).getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Status', 'Info', 'Logs']);
         const table = await within(panel).findByRole('table', {name: 'Resource information'});
         expect(within(panel).getAllByRole('table')).toHaveLength(1);
         expect(within(table).getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['Key', 'on n1', 'on n2']);

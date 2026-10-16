@@ -114,7 +114,7 @@ export const isEqual = (a, b) => {
     return true;
 };
 
-const createQueryString = (filters = DEFAULT_FILTERS, objectName = null, useCache = true) => {
+const createQueryString = (filters = DEFAULT_FILTERS, objectName = null, useCache = true, nodeName = null) => {
     const validFilters = filters.filter(f => Object.values(EVENT_TYPES).includes(f));
     if (validFilters.length < filters.length) {
         logger.warn(`Invalid filters detected: ${filters.filter(f => !validFilters.includes(f)).join(', ')}. Using only valid ones.`);
@@ -128,6 +128,11 @@ const createQueryString = (filters = DEFAULT_FILTERS, objectName = null, useCach
     if (objectName) {
         queryFilters = OBJECT_SPECIFIC_FILTERS.map(
             filter => `${encodeURIComponent(filter)},path=${encodeURIComponent(objectName)}`
+        );
+    } else if (nodeName) {
+        // The events of one node: those labelled with its name.
+        queryFilters = validFilters.map(
+            filter => `${encodeURIComponent(filter)},node=${encodeURIComponent(nodeName)}`
         );
     } else {
         queryFilters = validFilters.map(filter => encodeURIComponent(filter));
@@ -1071,24 +1076,24 @@ export const retainEventReception = (token, filters = DEFAULT_FILTERS, objectNam
     };
 };
 
-export const configureLoggerEventSource = (token, objectName = null, filters = DEFAULT_FILTERS) => {
+export const configureLoggerEventSource = (token, objectName = null, filters = DEFAULT_FILTERS, nodeName = null) => {
     if (!token) {
         logger.error('❌ No token provided for Logger SSE!');
         return;
     }
 
-    const queryString = createQueryString(filters, objectName);
+    const queryString = createQueryString(filters, objectName, true, nodeName);
     const url = `${URL_NODE_EVENT}?${queryString}`;
     closeLoggerEventSource();
     currentLoggerEventSource = createLoggerEventSource(url, token, filters);
 };
 
-export const startLoggerReception = (token, filters = DEFAULT_FILTERS, objectName = null) => {
+export const startLoggerReception = (token, filters = DEFAULT_FILTERS, objectName = null, nodeName = null) => {
     if (!token) {
         logger.error('❌ No token provided for Logger SSE!');
         return;
     }
-    configureLoggerEventSource(token, objectName, filters);
+    configureLoggerEventSource(token, objectName, filters, nodeName);
 };
 
 export const setPageActive = (active) => {

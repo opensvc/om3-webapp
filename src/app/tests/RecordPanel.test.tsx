@@ -33,7 +33,7 @@ function Search() {
 }
 
 /** A view with a record panel driven by the URL, as the views have. */
-function View() {
+function View({ inBar = false }: { inBar?: boolean }) {
   const { peek, peektab, setPeekTab, closePeek } = usePanelSearch();
   return (
     <>
@@ -64,16 +64,16 @@ function View() {
           {(active) => <p>content of {active}</p>}
         </RecordPanel>
       ))}
-      <PanelAnchor />
+      <PanelAnchor inBar={inBar} />
       <Search />
     </>
   );
 }
 
-function renderView(url = "/objects?kind=svc") {
+function renderView(url = "/objects?kind=svc", inBar = false) {
   return render(
     <MemoryRouter initialEntries={[url]}>
-      <View />
+      <View inBar={inBar} />
     </MemoryRouter>,
   );
 }
@@ -148,6 +148,17 @@ describe("record panels", () => {
     expect(openDialogs().map((d) => d.getAttribute("aria-label"))).toEqual(["ns1/svc/web"]);
   });
 
+  test("in the header bar, the anchor is a button in line, not on the edge of the window", () => {
+    renderView("/objects?kind=svc", true);
+    fireEvent.click(screen.getByRole("button", { name: "web" }));
+    fireEvent.click(within(screen.getByRole("dialog", { name: "ns1/svc/web" })).getAllByRole("button", { name: "Close" })[0]!);
+    const anchor = screen.getByRole("button", { name: /Reopen ns1\/svc\/web/ });
+    expect(anchor).not.toHaveClass("fixed");
+    expect(anchor).toHaveTextContent("1");
+    fireEvent.click(anchor);
+    expect(screen.getByRole("dialog", { name: "ns1/svc/web" })).toBeInTheDocument();
+  });
+
   test("the content puts what concerns the whole record in the title bar", () => {
     function Content() {
       const slots = usePanelHeader();
@@ -170,6 +181,14 @@ describe("record panels", () => {
     expect(actions.closest("[role=dialog] > div > div:first-child")).toContainElement(screen.getByRole("button", { name: "Close" }));
     // What qualifies the record, by its name.
     expect(screen.getByRole("heading", { name: "lo" }).nextElementSibling).toHaveTextContent("flex");
+    // The actions, then the history where its rail has no room, then the close button.
+    const bar = actions.closest("[role=dialog] > div > div:first-child") as HTMLElement;
+    const names = within(bar)
+      .getAllByRole("button")
+      .map((button) => button.getAttribute("title") ?? button.textContent);
+    const at = (pattern: RegExp) => names.findIndex((name) => pattern.test(name ?? ""));
+    expect(at(/^Actions$/)).toBeLessThan(at(/^History:/));
+    expect(at(/^History:/)).toBeLessThan(at(/^Close$/));
   });
 
   test("the panels open on the right, no control to move them, whatever an earlier choice", () => {

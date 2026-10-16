@@ -126,6 +126,20 @@ describe("Pager", () => {
     expect(screen.getByText("Page 1 of 2")).toBeInTheDocument();
   });
 
+  test("its narrow form: glyphs and the page as 2/3 shown, the names kept for assistive tools", () => {
+    renderPager(120);
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    const short = screen.getByText("2/3");
+    expect(short).toHaveAttribute("aria-hidden", "true");
+    expect(short).toHaveClass("hidden", "max-md:inline");
+    expect(screen.getByText("Page 2 of 3")).toHaveClass("max-md:sr-only");
+    expect(screen.getByText("Per page")).toHaveClass("max-md:sr-only");
+    const glyphs = ["First", "Previous", "Next", "Last"].map(
+      (name) => screen.getByRole("button", { name }).querySelector('[aria-hidden="true"]')?.textContent,
+    );
+    expect(glyphs).toEqual(["«", "‹", "›", "»"]);
+  });
+
   test("an empty list: none of none, a single page", () => {
     renderPager(0);
     expect(screen.getByText("0–0 of 0")).toBeInTheDocument();

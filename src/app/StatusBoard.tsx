@@ -408,7 +408,8 @@ export function StatusBoard({
       {toolbar}
 
       {/* A light border, no line between the rows: the tint and the edge of a selection stand out. */}
-      <Table aria-label={t("statusBoard.caption", { path: board.path })} className="bg-transparent">
+      {/* Its columns are its nodes: the board keeps them, never cards. */}
+      <Table aria-label={t("statusBoard.caption", { path: board.path })} className="bg-transparent" cards={false}>
         <thead>
           <HeaderRow className="border-b-0">
             <HeaderCell>

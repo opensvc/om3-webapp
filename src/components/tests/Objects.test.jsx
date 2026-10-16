@@ -77,6 +77,7 @@ vi.mock('../../ui/lib/media', async (importOriginal) => {
 });
 
 import useEventStore from '../../hooks/useEventStore';
+import {clearKeyStats} from '../../hooks/useKeyStats';
 import useFetchDaemonStatus from '../../hooks/useFetchDaemonStatus';
 import {useMediaQuery} from '../../ui/lib/media';
 import {useLocation} from 'react-router-dom';
@@ -247,9 +248,13 @@ const getFeedback = () =>
 const sortButton = (label) =>
     within(screen.getByRole('columnheader', {name: new RegExp(`^${label}`)})).getByRole('button');
 const clickHeader = (label) => fireEvent.click(sortButton(label));
-/** The names of the rows: the third cell, the second on a list of names only (configurations, users). */
-const objectNamesInOrder = () =>
-    screen.getAllByRole('row').slice(1).map((row) => (rowCells(row).length === 2 ? rowCells(row)[1] : rowCells(row)[2]).textContent);
+/** The names of the rows: the cell under the Object column, wherever the list puts it. */
+const objectNamesInOrder = () => {
+    const table = screen.getByRole('table', {name: 'Objects'});
+    const column = within(table).getAllByRole('columnheader')
+        .findIndex((h) => h.textContent.replace(/[▲▼]/g, '').trim() === 'Object');
+    return within(table).getAllByRole('row').slice(1).map((row) => rowCells(row)[column].textContent);
+};
 
 const makeMany = (n) => {
     const objectStatus = {};
@@ -548,15 +553,44 @@ describe('Objects Component', () => {
             expect(screen.getByRole('tab', {name: /^Secrets/}).querySelector('svg')).toHaveClass('text-icon-compliance');
         });
 
-        test.each(['configs', 'secrets', 'users'])('list=%s, held on all the nodes, shows their names only: no status, placement nor node column', async (tab) => {
+        test.each(['configs', 'secrets', 'users'])('list=%s, held on all the nodes, shows their names and keys only: no status, placement nor node column', async (tab) => {
             setup({...mixed, objectInstanceStatus: {'test-ns/usr/usr1': {node1: {}}, 'test-ns/cfg/conf1': {node1: {}}}},
                 `?list=${tab}`, {isWideScreen: true, isMobile: false});
             await waitForLoad();
             const table = screen.getByRole('table', {name: 'Objects'});
-            expect(within(table).getAllByRole('columnheader').map((h) => h.textContent.replace(/[▲▼]/g, '').trim())).toEqual(['', 'Object']);
+            expect(within(table).getAllByRole('columnheader').map((h) => h.textContent.replace(/[▲▼]/g, '').trim())).toEqual(['', 'Object', 'Keys', 'Size']);
             for (const row of within(table).getAllByRole('row').slice(1)) {
-                expect(within(row).getAllByRole('cell')).toHaveLength(2);
+                expect(within(row).getAllByRole('cell')).toHaveLength(4);
             }
+        });
+
+        test('the keys of each configuration shown: how many, and their size as stored; the cluster object has none', async () => {
+            const state = {...mixed, instanceConfig: {'test-ns/cfg/conf1': {node1: {csum: 'a', updated_at: 't1'}}}};
+            const {state: full} = setup(state, '?list=configs');
+            await waitForLoad();
+            // What the rows read with the fetch of setup, settled then forgotten.
+            await act(async () => {});
+            clearKeyStats();
+            global.fetch = vi.fn((url) => Promise.resolve(url === '/api/object/path/test-ns/cfg/conf1/data/keys'
+                ? {ok: true, json: () => Promise.resolve({items: [{name: 'a', size: 10}, {name: 'b', size: 2038}]})}
+                : {ok: false, status: 400, json: () => Promise.resolve({})}));
+            // Rendered again, the rows read their keys with the fetch of this test.
+            cleanup();
+            render(<MemoryRouter><Objects/></MemoryRouter>);
+            await waitForLoad();
+            const cells = (name) => rowCells(objectRow(name)).map((c) => c.textContent);
+            await waitFor(() => expect(cells('test-ns/cfg/conf1').slice(2)).toEqual(['2', '2 KiB']));
+            // The cluster object is no store of keys: a dash, after a refused read.
+            await waitFor(() => expect(cells('cluster').slice(2)).toEqual(['–', '–']));
+            // Read once per configuration of the object, whatever the renders.
+            const reads = () => global.fetch.mock.calls.filter(([url]) => url.endsWith('/cfg/conf1/data/keys')).length;
+            expect(reads()).toBe(1);
+
+            // Its configuration changed: read again.
+            useEventStore.mockImplementation((sel) => sel({...full, instanceConfig: {'test-ns/cfg/conf1': {node1: {csum: 'b', updated_at: 't2'}}}}));
+            cleanup();
+            render(<MemoryRouter><Objects/></MemoryRouter>);
+            await waitFor(() => expect(reads()).toBe(2));
         });
 
         test.each(['configs', 'secrets', 'users'])('list=%s has no global state filter, one in the URL filtering nothing', async (tab) => {

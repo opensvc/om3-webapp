@@ -26,6 +26,8 @@ import {Alert} from "../ui/components/Alert";
 import {useMediaQuery} from "../ui/lib/media";
 import {TabCount, TabList} from "../ui/components/Tabs";
 import {PolicyTag} from "../ui/components/PolicyTag";
+import {formatBytes} from "../ui/lib/format";
+import {useKeyStats} from "../hooks/useKeyStats";
 import {Pager} from "../ui/components/Pager";
 import {usePaging} from "../app/paging";
 import {ObjectIcon} from "../ui/components/ObjectIcon";
@@ -87,8 +89,8 @@ const listOf = (objectName) => listOfKind(parseObjectName(objectName).kind);
 const LIST_KIND = {services: "svc", volumes: "vol", configs: "cfg", secrets: "sec", users: "usr", [ALL_LIST]: "svc"};
 /**
  * The lists of objects held on all the nodes, with no status nor placement: their
- * names only, the status, orchestrate, topology and node columns telling nothing,
- * and no global state filter.
+ * names and their keys only (how many, how big), the status, orchestrate, topology
+ * and node columns telling nothing, and no global state filter.
  */
 const NAMES_ONLY_LISTS = ["configs", "secrets", "users"];
 
@@ -205,6 +207,25 @@ const PropertyCells = ({objectName}) => {
 
 const stopPropagation = (e) => e.stopPropagation();
 
+/**
+ * How many keys a cfg, sec or usr object holds, and their size as stored: read for
+ * the rows shown only (useKeyStats). Nothing while read, a dash for an object
+ * without keys of its own, the cluster object say.
+ */
+const KeyCells = ({objectName}) => {
+    const {i18n} = useTranslation();
+    const stats = useKeyStats(objectName);
+    const dash = <span className="text-ink-muted">–</span>;
+    return (
+        <>
+            <Cell numeric className="tabular-nums">{stats === null ? "" : stats === undefined ? dash : stats.count}</Cell>
+            <Cell numeric className="whitespace-nowrap tabular-nums">
+                {stats === null ? "" : stats === undefined ? dash : stats.size > 0 ? formatBytes(stats.size, i18n.language) : "0"}
+            </Cell>
+        </>
+    );
+};
+
 const TableRowComponent = React.memo(({
                                           objectName,
                                           isSelected,
@@ -245,6 +266,7 @@ const TableRowComponent = React.memo(({
                 </Cell>
             )}
             <Cell className="text-data font-medium whitespace-nowrap">{objectName}</Cell>
+            {namesOnly && <KeyCells objectName={objectName}/>}
             {!namesOnly && <PropertyCells objectName={objectName}/>}
             {!namesOnly && isWideScreen &&
                 allNodes.map((node) => (
@@ -928,7 +950,7 @@ const Objects = () => {
             }));
     }, [selectedObjects, handleActionClick, t]);
 
-    const columnCount = namesOnly ? 2 : 3 + PROPERTY_COLUMNS.length + (isWideScreen ? allNodes.length : 0);
+    const columnCount = namesOnly ? 4 : 3 + PROPERTY_COLUMNS.length + (isWideScreen ? allNodes.length : 0);
 
     const tabList = (
         <TabList
@@ -1084,6 +1106,12 @@ const Objects = () => {
                             direction={sortDirection}
                             onSort={() => handleSort("object")}
                         />
+                        {namesOnly && (
+                            <>
+                                <HeaderCell className="text-right">{t("objects.columns.keys")}</HeaderCell>
+                                <HeaderCell className="text-right" title={t("objects.columns.keysSizeHint")}>{t("objects.columns.keysSize")}</HeaderCell>
+                            </>
+                        )}
                         {!namesOnly && PROPERTY_COLUMNS.map(({key, labelKey}) => (
                             <SortHeaderCell
                                 key={key}

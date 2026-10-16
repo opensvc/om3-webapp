@@ -1016,7 +1016,10 @@
     "columns": {
       "object": "Objet",
       "orchestrate": "Orchestration",
-      "topology": "Topologie"
+      "topology": "Topologie",
+      "keys": "Clés",
+      "keysSize": "Taille",
+      "keysSizeHint": "La taille des clés telles que stockées dans la configuration, encodage compris"
     },
     "filters": {
       "show": "Afficher les filtres",

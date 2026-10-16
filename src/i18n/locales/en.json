@@ -156,27 +156,6 @@
     }
   },
   "alerts": {
-    "pills": {
-      "up_one": "up",
-      "up_other": "up",
-      "warn_one": "warn",
-      "warn_other": "warn",
-      "down_one": "down",
-      "down_other": "down",
-      "unknown_one": "n/a",
-      "unknown_other": "n/a",
-      "frozen_one": "frozen",
-      "frozen_other": "frozen",
-      "beating_one": "beating",
-      "beating_other": "beating",
-      "staleOrStopped_one": "stale or stopped",
-      "staleOrStopped_other": "stale or stopped",
-      "full_one": "full",
-      "full_other": "full"
-    },
-    "countTitle": "{{count}} {{label}}",
-    "showObjects": "Show the {{label}} objects",
-    "showThem": "{{label}}, show them",
     "details": {
       "node_one": "{{count}} node",
       "node_other": "{{count}} nodes",
@@ -187,7 +166,15 @@
       "frozen": "frozen: {{count}}",
       "full": "full: {{count}}",
       "highestUsage": "highest usage: {{name}} {{percent}}%"
-    }
+    },
+    "objectsDown_one": "{{count}} object down",
+    "objectsDown_other": "{{count}} objects down",
+    "objectsWarn_one": "{{count}} object in warn",
+    "objectsWarn_other": "{{count}} objects in warn",
+    "linksDown_one": "{{count}} of {{total}} heartbeat links down",
+    "linksDown_other": "{{count}} of {{total}} heartbeat links down",
+    "nodesOverloaded_one": "{{count}} of {{total}} nodes overloaded",
+    "nodesOverloaded_other": "{{count}} of {{total}} nodes overloaded"
   },
   "auth": {
     "login": {

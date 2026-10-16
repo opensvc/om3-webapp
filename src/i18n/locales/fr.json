@@ -156,27 +156,6 @@
     }
   },
   "alerts": {
-    "pills": {
-      "up_one": "up",
-      "up_other": "up",
-      "warn_one": "warn",
-      "warn_other": "warn",
-      "down_one": "down",
-      "down_other": "down",
-      "unknown_one": "n/d",
-      "unknown_other": "n/d",
-      "frozen_one": "gelé",
-      "frozen_other": "gelés",
-      "beating_one": "actif",
-      "beating_other": "actifs",
-      "staleOrStopped_one": "en retard ou arrêté",
-      "staleOrStopped_other": "en retard ou arrêtés",
-      "full_one": "plein",
-      "full_other": "pleins"
-    },
-    "countTitle": "{{count}} {{label}}",
-    "showObjects": "Afficher les objets {{label}}",
-    "showThem": "{{label}}, les afficher",
     "details": {
       "node_one": "{{count}} nœud",
       "node_other": "{{count}} nœuds",
@@ -187,7 +166,15 @@
       "frozen": "gelés : {{count}}",
       "full": "pleins : {{count}}",
       "highestUsage": "usage le plus élevé : {{name}} {{percent}} %"
-    }
+    },
+    "objectsDown_one": "{{count}} objet down",
+    "objectsDown_other": "{{count}} objets down",
+    "objectsWarn_one": "{{count}} objet en warn",
+    "objectsWarn_other": "{{count}} objets en warn",
+    "linksDown_one": "{{count}} lien de heartbeat sur {{total}} down",
+    "linksDown_other": "{{count}} liens de heartbeat sur {{total}} down",
+    "nodesOverloaded_one": "{{count}} nœud sur {{total}} surchargé",
+    "nodesOverloaded_other": "{{count}} nœuds sur {{total}} surchargés"
   },
   "auth": {
     "login": {

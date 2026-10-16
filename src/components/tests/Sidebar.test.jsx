@@ -36,93 +36,45 @@ describe('Sidebar', () => {
     });
 
     test('shows the details of an entry on mouseover', () => {
-        mockPills.current = {'/nodes': {counts: [{state: 'frozen', count: 1}], details: ['2 nodes', 'frozen: 1']}};
+        mockPills.current = {'/nodes': {alert: null, details: ['2 nodes', 'frozen: 1']}};
         renderSidebar();
         expect(screen.getByRole('link', {name: /^Nodes/})).toHaveAttribute('title', '2 nodes\nfrozen: 1');
     });
 
-    test('shows the details of an entry even without a pill', () => {
-        mockPills.current = {'/pools': {counts: [], details: ['1 pool', 'full: 0']}};
+    test('counts nothing: no badge while all is well, the details still on mouseover', () => {
+        mockPills.current = {
+            '/objects': {alert: null},
+            '/pools': {alert: null, details: ['1 pool', 'full: 0']},
+        };
         renderSidebar();
-        expect(screen.queryByTestId('counts-pools')).toBeNull();
+        expect(screen.queryByTestId(/^alert-/)).toBeNull();
+        expect(screen.queryByTestId(/^counts-/)).toBeNull();
         expect(screen.getByRole('link', {name: /^Pools/})).toHaveAttribute('title', '1 pool\nfull: 0');
     });
 
-    test('shows no pill when there is nothing to report', () => {
-        renderSidebar();
-        expect(screen.queryByTestId(/^counts-/)).toBeNull();
-    });
-
     test.each([
-        ['/nodes', 'frozen', 'bg-icon-network', '3 frozen'],
-        ['/pools', 'down', 'bg-state-down', '2 full'],
-        ['/network', 'down', 'bg-state-down', '1 full'],
-    ])('numbers the alarming %s in a %s pill', (path, state, className, text) => {
-        const count = Number(text.split(' ')[0]);
-        mockPills.current = {[path]: {counts: [{state, count}], details: []}};
+        ['/objects', 'down', 'bg-state-down', '1 object down'],
+        ['/objects', 'warn', 'bg-state-warn', '2 objects in warn'],
+        ['/heartbeats', 'warn', 'bg-state-warn', '1 of 4 heartbeat links down'],
+        ['/nodes', 'down', 'bg-state-down', '2 of 2 nodes overloaded'],
+    ])('%s: a %s badge in %s, what it is about in its tooltip and for screen readers', (path, level, tint, text) => {
+        mockPills.current = {[path]: {alert: {level, text}}};
         renderSidebar();
-        const pills = [...screen.getByTestId(`counts-${path.slice(1)}`).children];
-        expect(pills).toHaveLength(1);
-        expect(pills[0]).toHaveAttribute('data-state', state);
-        expect(pills[0]).toHaveClass(className);
-        expect(pills[0].firstChild.textContent).toBe(String(count));
-        expect(pills[0]).toHaveTextContent(text);
-        // Not a link: only the pills of the Objects entry are.
-        expect(pills[0].tagName).toBe('SPAN');
+        const badge = screen.getByTestId(`alert-${path.slice(1)}`);
+        expect(badge).toHaveAttribute('data-level', level);
+        expect(badge).toHaveClass(tint, 'rounded-full');
+        expect(badge).toHaveAttribute('title', text);
+        expect(screen.getByRole('img', {name: text})).toBe(badge);
+        // A badge, no count: its "!" is out of the accessible name.
+        expect(badge).toHaveTextContent('!');
     });
 
-    test.each([
-        ['/objects', 'up', 'down', 'n/a'],
-        ['/heartbeats', 'beating', 'stale or stopped', 'n/a'],
-    ])('numbers the %s by state with coloured pills', (path, upLabel, downLabel, unknownLabel) => {
-        mockPills.current = {
-            [path]: {counts: [
-                {state: 'up', count: 49},
-                {state: 'warn', count: 2},
-                {state: 'down', count: 12},
-                {state: 'unknown', count: 18},
-            ]},
-        };
-        renderSidebar();
-        const pill = screen.getByTestId(`counts-${path.slice(1)}`);
-        // One pill, its segments flush, rounded as a whole.
-        expect(pill).toHaveClass('rounded-full', 'overflow-hidden');
-        expect(pill).not.toHaveClass('gap-0.5');
-        const pills = [...pill.children];
-        pills.forEach((segment) => expect(segment).not.toHaveClass('rounded-full'));
-        expect(pills.map((pill) => pill.getAttribute('data-state'))).toEqual(['up', 'warn', 'down', 'unknown']);
-        expect(pills.map((pill) => pill.firstChild.textContent)).toEqual(['49', '2', '12', '18']);
-        expect(pills[0]).toHaveClass('bg-state-up');
-        expect(pills[1]).toHaveClass('bg-state-warn');
-        expect(pills[2]).toHaveClass('bg-state-down');
-        expect(pills[3]).toHaveClass('bg-state-unknown');
-        expect(pills[0]).toHaveTextContent(`49 ${upLabel}`);
-        expect(pills[2]).toHaveTextContent(`12 ${downLabel}`);
-        expect(pills[3]).toHaveTextContent(`18 ${unknownLabel}`);
-    });
-
-    test('links each Objects pill to the Objects page filtered on its state', () => {
-        mockPills.current = {
-            '/objects': {counts: [
-                {state: 'up', count: 49},
-                {state: 'warn', count: 2},
-                {state: 'down', count: 12},
-                {state: 'unknown', count: 18},
-            ]},
-        };
-        renderSidebar();
-        expect(screen.getByRole('link', {name: /^49 up/})).toHaveAttribute('href', '/objects?globalState=up');
-        expect(screen.getByRole('link', {name: /^2 warn/})).toHaveAttribute('href', '/objects?globalState=warn');
-        expect(screen.getByRole('link', {name: /^12 down/})).toHaveAttribute('href', '/objects?globalState=down');
-        expect(screen.getByRole('link', {name: /^18 n\/a/})).toHaveAttribute('href', '/objects?globalState=n%2Fa');
-    });
-
-    test('keeps the pills out of the menu link, which holds the name only', () => {
-        mockPills.current = {'/objects': {counts: [{state: 'down', count: 12}]}};
+    test('keeps the badge out of the menu link, which holds the name only', () => {
+        mockPills.current = {'/objects': {alert: {level: 'down', text: '12 objects down'}}};
         renderSidebar();
         const entry = screen.getByRole('link', {name: 'Objects'});
         expect(entry).toHaveAttribute('href', '/objects');
-        expect(entry).not.toContainElement(screen.getByTestId('counts-objects'));
+        expect(entry).not.toContainElement(screen.getByTestId('alert-objects'));
     });
 
     test('leaves the cluster overview and the user page to the top bar', () => {
@@ -216,20 +168,12 @@ describe('Sidebar in French', () => {
         expect(screen.getByRole('link', {name: /^Objets/})).toHaveAttribute('href', '/objects');
     });
 
-    test('says what the counts are in French', async () => {
-        await i18n.changeLanguage('fr');
-        mockPills.current = {'/nodes': {counts: [{state: 'frozen', count: 2}]}};
-        renderSidebar();
-        expect(screen.getByTestId('counts-nodes').querySelector('[data-state="frozen"]'))
-            .toHaveAttribute('title', '2 gelés');
-    });
-
-    test('the arrows, Home and End walk the menu entries, not their pills; Escape leaves it', () => {
-        mockPills.current = {'/objects': {counts: [{state: 'up', count: 45}]}};
+    test('the arrows, Home and End walk the menu entries, not their badges; Escape leaves it', () => {
+        mockPills.current = {'/objects': {alert: {level: 'warn', text: '2 objects in warn'}}};
         renderSidebar(true, '/nodes');
         const menu = screen.getByRole('navigation', {name: 'Main'});
         expect(menu).toHaveAttribute('aria-keyshortcuts', 'n');
-        const links = within(menu).getAllByRole('link').filter((l) => !l.hasAttribute('data-state'));
+        const links = within(menu).getAllByRole('link');
         const objects = links.find((l) => l.textContent === 'Objects');
         act(() => objects.focus());
         fireEvent.keyDown(objects, {key: 'ArrowDown'});

@@ -32,29 +32,6 @@ export const SIDEBAR_EVENTS_URL =
 
 const ZERO_TIME = "0001-01-01T00:00:00Z";
 
-/**
- * Pill of a set of objects: down wins over warn, warn over up. Grey when there is
- * no object, or none with an up, warn or down availability (n/a, or no
- * availability at all, as for cfg, sec and usr objects).
- */
-export function objectsPill(objects) {
-    let up = false;
-    let warn = false;
-    for (const status of Object.values(objects || {})) {
-        const avail = status?.avail;
-        if (avail === "down") return "down";
-        if (avail === "warn") warn = true;
-        if (avail === "up") up = true;
-    }
-    if (warn) return "warn";
-    return up ? "up" : "unknown";
-}
-
-/** A single pill numbering the items in an alarming state; none when there is none. */
-export function alertPills(state, count) {
-    return count > 0 ? [{state, count}] : [];
-}
-
 /** Pools or networks used to their full size. */
 export function fullCount(items) {
     return (items || []).filter(
@@ -210,42 +187,66 @@ function useUsageLists() {
     return {pools, networks};
 }
 
-/** Order of the count pills, from left to right. */
-const COUNT_ORDER = ["up", "warn", "down", "unknown"];
+/**
+ * The alert of a menu entry: `warn` (orange) or `down` (red), and what it is about,
+ * in the current language. None, `null`, while all is well.
+ */
+
+/** The kind of an object path, as om3 writes it: "ns/kind/name", "kind/name", a bare svc name, "ns/". */
+function kindOf(path) {
+    if (path.endsWith("/")) return "nscfg";
+    const parts = path.split("/");
+    if (parts.length >= 2) return parts[parts.length - 2];
+    return path === "cluster" ? "ccfg" : "svc";
+}
+
+/** The kinds that run: an object of these has an availability of its own. */
+const ACTORS = ["svc", "vol"];
 
 /**
- * Count pills of a tally by state: one pill per state with a non-zero count, in
- * `COUNT_ORDER`. A single grey 0 when there is nothing to count.
+ * Objects: red when an actor (svc, vol) is down; else orange when an object's
+ * overall state is warn.
  */
-export function countPills(tally) {
-    const pills = COUNT_ORDER
-        .filter((state) => (tally[state] || 0) > 0)
-        .map((state) => ({state, count: tally[state]}));
-    return pills.length > 0 ? pills : [{state: "unknown", count: 0}];
-}
-
-/** Objects by availability: up, warn, down, and unknown for n/a or none. */
-export function objectCounts(objects) {
-    const tally = {};
-    for (const status of Object.values(objects || {})) {
-        const state = objectsPill({x: status});
-        tally[state] = (tally[state] || 0) + 1;
+export function objectsAlert(objects) {
+    let down = 0;
+    let warn = 0;
+    for (const [path, status] of Object.entries(objects || {})) {
+        if (ACTORS.includes(kindOf(path)) && status?.avail === "down") down++;
+        else if (status?.overall === "warn") warn++;
     }
-    return countPills(tally);
+    if (down > 0) return {level: "down", text: i18n.t("alerts.objectsDown", {count: down})};
+    if (warn > 0) return {level: "warn", text: i18n.t("alerts.objectsWarn", {count: warn})};
+    return null;
 }
 
-/** Heartbeat streams: up when running with every peer beating, down when stopped or with a stale peer. */
-export function heartbeatCounts(heartbeatStatus) {
-    const tally = {};
+/**
+ * Heartbeats: each rx or tx stream of each node a link, down when it does not run
+ * or a peer stopped beating. Orange when one link is down, red when all are.
+ */
+export function heartbeatAlert(heartbeatStatus) {
+    let total = 0;
+    let down = 0;
     for (const node of Object.values(heartbeatStatus || {})) {
         for (const stream of node?.streams || []) {
-            const failing = stream?.state === "stopped" ||
+            total++;
+            const failing = (stream?.state !== undefined && stream.state !== "running") ||
                 Object.values(stream?.peers || {}).some((peer) => peer?.is_beating === false);
-            const state = failing ? "down" : "up";
-            tally[state] = (tally[state] || 0) + 1;
+            if (failing) down++;
         }
     }
-    return countPills(tally);
+    if (down === 0) return null;
+    return {level: down === total ? "down" : "warn", text: i18n.t("alerts.linksDown", {count: down, total})};
+}
+
+/** Nodes: orange when one is overloaded, red when all are (is_overloaded of the node status). */
+export function nodesAlert(nodeStatus) {
+    const nodes = Object.values(nodeStatus || {});
+    const overloaded = nodes.filter((status) => status?.is_overloaded === true).length;
+    if (overloaded === 0) return null;
+    return {
+        level: overloaded === nodes.length ? "down" : "warn",
+        text: i18n.t("alerts.nodesOverloaded", {count: overloaded, total: nodes.length}),
+    };
 }
 
 /** Lines of the mouseover of the Nodes entry: count and frozen ones, in the current language. */
@@ -279,21 +280,22 @@ export function usageDetails(items, word) {
 
 /**
  * State of the sidebar entries, kept up to date without any user action. For each
- * entry path, `counts`: the pills numbering its items by state (empty for no pill),
- * and for some entries the `details` lines of their mouseover.
+ * entry path, `alert`: what calls for attention, orange or red, `null` when all is
+ * well (pools and networks raise none); and for some entries the `details` lines
+ * of their mouseover.
  */
 export default function useSidebarAlerts() {
     const {objects, nodeStatus, heartbeatStatus} = useSidebarEventState();
     const {pools, networks} = useUsageLists();
-    // The details are text: computed again when the language changes.
+    // The alerts and details are text: computed again when the language changes.
     const {i18n: {language}} = useTranslation();
 
     return useMemo(() => ({
-        "/objects": {counts: objectCounts(objects)},
-        "/heartbeats": {counts: heartbeatCounts(heartbeatStatus)},
-        "/pools": {counts: alertPills("down", fullCount(pools)), details: usageDetails(pools, "pool")},
-        "/network": {counts: alertPills("down", fullCount(networks)), details: usageDetails(networks, "network")},
-        "/nodes": {counts: alertPills("frozen", frozenCount(nodeStatus)), details: nodesDetails(nodeStatus)},
+        "/objects": {alert: objectsAlert(objects)},
+        "/heartbeats": {alert: heartbeatAlert(heartbeatStatus)},
+        "/pools": {alert: null, details: usageDetails(pools, "pool")},
+        "/network": {alert: null, details: usageDetails(networks, "network")},
+        "/nodes": {alert: nodesAlert(nodeStatus), details: nodesDetails(nodeStatus)},
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }), [objects, nodeStatus, heartbeatStatus, pools, networks, language]);
 }

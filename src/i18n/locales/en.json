@@ -667,7 +667,6 @@
     "lines": "Log lines",
     "empty": "No logs available",
     "noMatch": "No logs match current filters",
-    "goToBottom": "Go to bottom",
     "errors": {
       "instanceRequired": "Instance name is required for instance logs",
       "tokenNotFound": "Authentication token not found",
@@ -677,7 +676,15 @@
       "instanceNotFound": "Instance logs endpoint not found for {{instance}} on node {{node}}",
       "nodeNotFound": "Node logs endpoint not found for node {{node}}",
       "fetchFailed": "Failed to fetch logs: {{message}}"
-    }
+    },
+    "following": "Following",
+    "follow": "Follow",
+    "latest": "Latest lines",
+    "newLines_one": "1 new line",
+    "newLines_other": "{{count}} new lines",
+    "loadOlder": "Load older lines",
+    "loadingOlder": "Loading older lines…",
+    "noOlder": "No older lines"
   },
   "metrics": {
     "columns": {

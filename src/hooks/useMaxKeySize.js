@@ -1,26 +1,13 @@
 import {useEffect, useState} from "react";
-import {URL_CLUSTER_STATUS} from "../config/apiPath.js";
+import {readClusterStatus, resetClusterStatus} from "./clusterStatusOnce";
 
 /*
  * The largest key the API takes: `node.max_key_size` of the node serving it, the
- * one a key is posted to, read in the cluster status. Read once a session.
+ * one a key is posted to, read in the cluster status.
  */
 
-let reading = null;
-
 /** Forgets the size read, for the tests. */
-export const resetMaxKeySize = () => {
-    reading = null;
-};
-
-const read = async () => {
-    const token = localStorage.getItem("authToken");
-    const response = await fetch(URL_CLUSTER_STATUS, {headers: {Authorization: `Bearer ${token}`}});
-    if (!response.ok) return null;
-    const status = await response.json();
-    const size = status?.cluster?.node?.[status?.daemon?.nodename]?.config?.max_key_size;
-    return typeof size === "number" && size > 0 ? size : null;
-};
+export const resetMaxKeySize = resetClusterStatus;
 
 /**
  * The largest key, in bytes, once read while `enabled`; null while read or when it
@@ -31,12 +18,9 @@ export function useMaxKeySize(enabled = true) {
     useEffect(() => {
         if (!enabled) return undefined;
         let live = true;
-        if (reading === null) reading = read().catch(() => null);
-        const current = reading;
-        current.then((size) => {
-            // Not read: tried again next time.
-            if (size === null && reading === current) reading = null;
-            if (live) setMax(size);
+        readClusterStatus().then((status) => {
+            const size = status?.cluster?.node?.[status?.daemon?.nodename]?.config?.max_key_size;
+            if (live) setMax(typeof size === "number" && size > 0 ? size : null);
         });
         return () => {
             live = false;

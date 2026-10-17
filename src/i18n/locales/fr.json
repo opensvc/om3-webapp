@@ -667,7 +667,6 @@
     "lines": "Lignes de journal",
     "empty": "Aucun journal disponible",
     "noMatch": "Aucune ligne ne correspond aux filtres",
-    "goToBottom": "Aller en bas",
     "errors": {
       "instanceRequired": "Le nom de l'instance est requis pour les journaux d'instance",
       "tokenNotFound": "Jeton d'authentification introuvable",
@@ -677,7 +676,15 @@
       "instanceNotFound": "Point d'accès des journaux d'instance introuvable pour {{instance}} sur le nœud {{node}}",
       "nodeNotFound": "Point d'accès des journaux introuvable pour le nœud {{node}}",
       "fetchFailed": "Échec de la récupération des journaux : {{message}}"
-    }
+    },
+    "following": "Suivi",
+    "follow": "Suivre",
+    "latest": "Dernières lignes",
+    "newLines_one": "1 nouvelle ligne",
+    "newLines_other": "{{count}} nouvelles lignes",
+    "loadOlder": "Charger les lignes plus anciennes",
+    "loadingOlder": "Chargement des lignes plus anciennes…",
+    "noOlder": "Pas de ligne plus ancienne"
   },
   "metrics": {
     "columns": {

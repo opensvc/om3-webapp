@@ -1,7 +1,7 @@
 import React from 'react';
 import '@testing-library/jest-dom';
 import {render, screen, fireEvent, waitFor, within, cleanup, act} from '@testing-library/react';
-import {MemoryRouter} from 'react-router-dom';
+import {MemoryRouter, useRouterLocation} from 'react-router-dom';
 import {vi} from 'vitest';
 import {axe} from 'vitest-axe';
 import Objects, {PROPERTY_COLUMNS} from '../Objects';
@@ -27,6 +27,8 @@ vi.mock('react-router-dom', async (importOriginal) => {
         ...actual,
         useNavigate: () => mockNavigate,
         useLocation: vi.fn(() => ({search: '', pathname: '/objects'})),
+        // The location the router holds, for a test to read what a panel opened.
+        useRouterLocation: actual.useLocation,
     };
 });
 
@@ -42,6 +44,8 @@ vi.mock('../../hooks/useEventStore', async (importOriginal) => {
     };
 });
 
+const mockGrants = vi.hoisted(() => ({value: {}}));
+vi.mock('../../hooks/useGrants', () => ({useGrants: () => mockGrants.value}));
 vi.mock('../../hooks/useFetchDaemonStatus', () => ({
     default: vi.fn(() => ({daemon: {cluster: {object: {}}}})),
 }));
@@ -172,9 +176,11 @@ const setup = (customState = {}, locationSearch = '', mediaQuery = true, {daemon
     mockRemoveObject.mockClear();
     mockSetObjectStatuses.mockClear();
 
+    const RouterSearch = () => <span data-testid="router-search">{decodeURIComponent(useRouterLocation().search)}</span>;
     const utils = render(
         <MemoryRouter>
             <Objects/>
+            <RouterSearch/>
         </MemoryRouter>
     );
     return {...utils, state};
@@ -373,7 +379,7 @@ describe('Objects Component', () => {
                     placement_policy: 'spread', placement_state: 'non-optimal', up_instances_count: 2,
                     scope: ['node1', 'node2', 'node3'], priority: 50,
                 },
-                'test-ns/nscfg/c': {avail: 'n/a', frozen: 'unfrozen', provisioned: 'true', scope: ['node1'], priority: 50},
+                'test-ns/usr/c': {avail: 'n/a', frozen: 'unfrozen', provisioned: 'true', scope: ['node1'], priority: 50},
             },
             objectInstanceStatus: {},
         };
@@ -415,24 +421,55 @@ describe('Objects Component', () => {
             expect(within(statusCell(objectRow('test-ns/svc/fo'))).queryByRole('img', {name: 'Degraded'})).not.toBeInTheDocument();
         });
 
-        test('narrow: no orchestrate column, ha and start a badge by the path, none for no orchestrate', async () => {
-            setup(propertyState, '', {isWideScreen: false, isMobile: true});
+        test('narrow: the orchestrate and the topology one badge by the path, the instances up out of the target in their column', async () => {
+            setup(propertyState, '?list=any', {isWideScreen: false, isMobile: true});
             await waitFor(() => expect(screen.getByRole('table')).toBeInTheDocument());
             expect(screen.queryByRole('columnheader', {name: /^Orchestrate/})).not.toBeInTheDocument();
-            expect(screen.getByRole('columnheader', {name: /^Topology/})).toBeInTheDocument();
+            expect(screen.queryByRole('columnheader', {name: /^Topology/})).not.toBeInTheDocument();
+            expect(screen.getByRole('columnheader', {name: /^Up/})).toBeInTheDocument();
             const cells = (name) => rowCells(objectRow(name));
-            expect(within(cells('test-ns/svc/fo')[1]).getByRole('img', {name: 'Orchestrate: ha'})).toHaveTextContent('ha');
-            expect(within(cells('test-ns/svc/fx')[1]).getByRole('img', {name: 'Orchestrate: start'})).toHaveTextContent('start');
-            expect(cells('test-ns/nscfg/c')[1].querySelector('[data-mark="orchestrate"]')).toBeNull();
-            // The topology next to the path, then the status.
-            expect(cells('test-ns/svc/fo')[2]).toHaveTextContent(/^failover$/);
+            expect(within(cells('test-ns/svc/fo')[1]).getByRole('img', {name: 'Orchestrate: ha, Topology: failover'}))
+                .toHaveTextContent(/^ha · failover$/);
+            // A flex: its sizes left out of the badge.
+            expect(within(cells('test-ns/svc/fx')[1]).getByRole('img', {name: 'Orchestrate: start, Topology: flex'}))
+                .toHaveTextContent(/^start · flex$/);
+            expect(cells('test-ns/usr/c')[1].querySelector('[data-mark="orchestrate"]')).toBeNull();
+            // Up out of the target: one for a failover, the flex target else; then the status.
+            expect(cells('test-ns/svc/fo')[2]).toHaveTextContent(/^1\/1$/);
+            expect(cells('test-ns/svc/fx')[2]).toHaveTextContent(/^2\/2$/);
+            expect(cells('test-ns/svc/fx')[2]).not.toHaveClass('text-state-warn');
+            expect(cells('test-ns/usr/c')[2]).toHaveTextContent(/^$/);
             expect(cells('test-ns/svc/fo')).toHaveLength(4);
+            // The badge on its line over the path; kept empty without one, the rows as high.
+            const line = cells('test-ns/svc/fo')[1].querySelector('[data-badge-line]');
+            expect(line.nextSibling.textContent).toBe('test-ns/svc/fo');
+            expect(cells('test-ns/usr/c')[1].querySelector('[data-badge-line]')).toBeEmptyDOMElement();
+        });
+
+        test('narrow: a cfg or a sec, a datastore', async () => {
+            const state = structuredClone(propertyState);
+            state.objectStatus['test-ns/cfg/settings'] = {avail: 'n/a', frozen: 'unfrozen', provisioned: 'true', scope: ['node1']};
+            setup(state, '?list=any', {isWideScreen: false, isMobile: true});
+            await waitFor(() => expect(screen.getByRole('table')).toBeInTheDocument());
+            const badge = rowCells(objectRow('test-ns/cfg/settings'))[1].querySelector('[data-badge-line] [data-mark="datastore"]');
+            expect(badge).toHaveTextContent(/^datastore$/);
+        });
+
+        test('narrow: the topology alone for no orchestrate; short of the target, in the warn tint', async () => {
+            const state = structuredClone(propertyState);
+            state.objectStatus['test-ns/svc/fo'] = {...state.objectStatus['test-ns/svc/fo'], orchestrate: 'no', up_instances_count: 0};
+            setup(state, '', {isWideScreen: false, isMobile: true});
+            await waitFor(() => expect(screen.getByRole('table')).toBeInTheDocument());
+            const cells = rowCells(objectRow('test-ns/svc/fo'));
+            expect(within(cells[1]).getByRole('img', {name: 'Topology: failover'})).toHaveTextContent(/^failover$/);
+            expect(cells[2]).toHaveTextContent(/^0\/1$/);
+            expect(cells[2]).toHaveClass('text-state-warn');
         });
 
         test('are empty for an object with no instances to place', async () => {
-            setup(propertyState, '', {isWideScreen: true, isMobile: false});
+            setup(propertyState, '?list=any', {isWideScreen: true, isMobile: false});
             await waitForLoad();
-            const cfg = objectRow('test-ns/nscfg/c');
+            const cfg = objectRow('test-ns/usr/c');
             ['Orchestrate', 'Topology'].forEach((label) =>
                 expect(propertyCell(cfg, label)).toHaveTextContent(/^$/)
             );
@@ -687,7 +724,8 @@ describe('Objects Component', () => {
             fireEvent.change(within(dialog).getByLabelText('Namespace'), {target: {value: 'test-ns'}});
             fireEvent.change(within(dialog).getByLabelText('Name'), {target: {value: 'tls'}});
             fireEvent.click(within(dialog).getByRole('button', {name: 'Create'}));
-            await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/objects?name=t&list=secrets&sel=test-ns%2Fsec%2Ftls'));
+            // A datastore, created empty: on its keys.
+            await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/objects?name=t&list=secrets&sel=test-ns%2Fsec%2Ftls&tab=keys'));
             expect(global.fetch).toHaveBeenCalledWith('/api/object/path/test-ns/sec/tls/config/file', expect.objectContaining({method: 'POST'}));
             expect(screen.queryByRole('dialog', {name: 'New object'})).not.toBeInTheDocument();
             expect(screen.getByText('test-ns/sec/tls created.')).toBeInTheDocument();
@@ -703,7 +741,7 @@ describe('Objects Component', () => {
             fireEvent.change(within(dialog).getByLabelText('Namespace'), {target: {value: 'test-ns'}});
             fireEvent.change(within(dialog).getByLabelText('Name'), {target: {value: 'tls'}});
             fireEvent.click(within(dialog).getByRole('button', {name: 'Create'}));
-            await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/objects?list=any&sel=test-ns%2Fsec%2Ftls'));
+            await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/objects?list=any&sel=test-ns%2Fsec%2Ftls&tab=keys'));
         });
     });
 
@@ -855,7 +893,10 @@ describe('Objects Component', () => {
             setup(TWO_KINDS, '?kind=nscfg');
             await waitForLoad();
             expect(queryFilterGroup('Kind')).not.toBeInTheDocument();
-            expect(objectNamesInOrder()).toEqual(expect.arrayContaining(['test-ns/svc/test1', 'test-ns/nscfg/ns1']));
+            // The configuration of the namespace stands in the line of its namespace, not its own.
+            expect(objectNamesInOrder()).toEqual(expect.arrayContaining(['test-ns/svc/test1']));
+            expect(objectNamesInOrder()).not.toContain('test-ns/nscfg/ns1');
+            expect(namespaceRows().map((row) => row.dataset.namespaceRow)).toContain('test-ns');
         });
 
         test('Kind filter excludes objects whose kind does not match the selection', async () => {
@@ -1229,16 +1270,16 @@ describe('Objects Component', () => {
             setup({
                 objectStatus: {
                     ...defaultState.objectStatus,
-                    'test-ns/nscfg/ns1': {avail: 'up', frozen: 'unfrozen', provisioned: 'true'},
+                    'test-ns/vol/v1': {avail: 'up', frozen: 'unfrozen', provisioned: 'true'},
                 },
                 objectInstanceStatus: {
                     ...defaultState.objectInstanceStatus,
-                    'test-ns/nscfg/ns1': {node1: {avail: 'up'}},
+                    'test-ns/vol/v1': {node1: {avail: 'up'}},
                 },
-            });
+            }, '?list=any');
             await waitForLoad();
             selectRow('test-ns/svc/test1');
-            selectRow('test-ns/nscfg/ns1');
+            selectRow('test-ns/vol/v1');
             openActionsMenu();
             const menu = await screen.findByRole('menu');
             expect(within(menu).queryByRole('menuitem', {name: /^Enable$/})).not.toBeInTheDocument();
@@ -1490,10 +1531,66 @@ describe('Objects Component', () => {
             }
         });
 
+        test('the line of a namespace stands for its configuration: no line of its own, the line of the namespace opens it', async () => {
+            setup({objectStatus: {
+                'prod/svc/web': {avail: 'up'}, 'prod/': {avail: 'n/a'}, 'dev/svc/x': {avail: 'up'},
+            }, objectInstanceStatus: {}}, '?list=any', {isWideScreen: true, isMobile: false});
+            await waitForLoad();
+            expect(objectNamesInOrder()).toEqual(['dev/svc/x', 'prod/svc/web']);
+            const prod = namespaceRows().find((row) => row.dataset.namespaceRow === 'prod');
+            expect(prod).toHaveAttribute('title', 'Open the configuration of prod');
+            fireEvent.click(prod);
+            await waitFor(() => expect(screen.getByTestId('router-search')).toHaveTextContent('peek=namespace:prod&peektab=config'));
+            // dev has none: its line opens nothing, nothing offered without the grant.
+            const dev = namespaceRows().find((row) => row.dataset.namespaceRow === 'dev');
+            expect(dev).not.toHaveAttribute('title');
+            // Its checkbox selects, it does not open.
+            fireEvent.click(within(dev).getByRole('checkbox', {name: /dev/}));
+            expect(screen.getByTestId('router-search')).not.toHaveTextContent('peek=namespace:dev');
+            expect(within(dev).queryByRole('button', {name: 'Create its configuration'})).toBeNull();
+        });
+
+        test('a configuration alone in its namespace: the line of the namespace kept, alone', async () => {
+            setup({objectStatus: {'prod/svc/web': {avail: 'up'}, 'empty/': {avail: 'n/a'}}, objectInstanceStatus: {}},
+                '?list=any', {isWideScreen: true, isMobile: false});
+            await waitForLoad();
+            expect(namespaceRows().map((row) => row.dataset.namespaceRow)).toEqual(['empty', 'prod']);
+            expect(objectNamesInOrder()).toEqual(['prod/svc/web']);
+        });
+
+        test('a namespace without its configuration: those who may write it offered to create it', async () => {
+            mockGrants.value = {squatter: null};
+            try {
+                setup({objectStatus: {'dev/svc/x': {avail: 'up'}}, objectInstanceStatus: {}}, '?list=any', {isWideScreen: true, isMobile: false});
+                await waitForLoad();
+                const dev = namespaceRows().find((row) => row.dataset.namespaceRow === 'dev');
+                fireEvent.click(within(dev).getByRole('button', {name: 'Create its configuration'}));
+                // Nothing to choose: a confirmation, then created, its claims shown.
+                const dialog = await screen.findByRole('dialog', {name: 'Create the configuration of dev'});
+                expect(within(dialog).queryByRole('textbox')).toBeNull();
+                global.fetch = vi.fn(() => Promise.resolve({ok: true, status: 200, json: () => Promise.resolve({})}));
+                fireEvent.click(within(dialog).getByRole('button', {name: 'Create'}));
+                await waitFor(() => expect(screen.getByTestId('router-search')).toHaveTextContent('peek=namespace:dev&peektab=claims'));
+                const [url, options] = global.fetch.mock.calls.find(([u]) => u.includes('/nscfg/'));
+                expect(url).toBe('/api/object/path/dev/nscfg/namespace/config/file');
+                expect(options.method).toBe('POST');
+                expect(options.body).toMatch(/id = /);
+                expect(screen.queryByRole('dialog', {name: 'Create the configuration of dev'})).toBeNull();
+            } finally {
+                mockGrants.value = {};
+            }
+        });
+
+        test('narrow, a small badge over the name of the namespace, its line as high as the others', async () => {
+            setup({objectStatus: {'prod/svc/web': {avail: 'up'}}, objectInstanceStatus: {}}, '', {isWideScreen: false, isMobile: true});
+            await waitFor(() => expect(screen.getByRole('table')).toBeInTheDocument());
+            expect(namespaceRows()[0].querySelector('th')).toHaveTextContent(/^namespaceprod$/);
+        });
+
         test('the short paths of the root namespace kept together under it', async () => {
             setup({objectStatus: {
                 'b-ns/svc/x': {avail: 'up'}, 'cluster': {avail: 'n/a'}, 'svc/dns': {avail: 'up'}, 'a-ns/vol/v': {avail: 'up'},
-            }, objectInstanceStatus: {}}, '?list=any');
+            }, objectInstanceStatus: {}}, '?list=any', {isWideScreen: true, isMobile: false});
             await waitForLoad();
             expect(namespaceRows().map((row) => row.textContent)).toEqual(['a-ns', 'b-ns', 'root']);
             expect(objectNamesInOrder()).toEqual(['a-ns/vol/v', 'b-ns/svc/x', 'cluster', 'svc/dns']);

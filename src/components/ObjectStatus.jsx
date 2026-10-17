@@ -20,6 +20,7 @@ import {PolicyTag} from "../ui/components/PolicyTag";
 import ActionDialogManager from "./ActionDialogManager";
 import ConsoleTerminal from "./ConsoleTerminal.jsx";
 import {CLEAR_ACTION, postAction, resourceActions} from "./objectActions";
+import {DatastoreLinks, RefreshStatusButton, datastoresOf} from "./InstanceActions";
 import logger from "../utils/logger.js";
 
 /** Icon of an action in a menu: the action icons are sized to the menu line. */
@@ -320,8 +321,8 @@ const ObjectStatus = ({path, onOrchestrationLogs, linkNode, linkResource}) => {
     const clusterIdle = (action) => kind === "ccfg" && (
         (action === "freeze" && board.nodes.every((n) => n.frozen))
         || (action === "unfreeze" && !board.nodes.some((n) => n.frozen)));
-    // In the title bar of the panel, a solid button as the history and close ones,
-    // the bolt alone; elsewhere, a solid pill.
+    // In the title bar of the panel, solid: "Actions" in a wide window, the bolt alone
+    // in a narrow one; elsewhere, a solid pill.
     const inHeader = header.title !== null && header.actions !== null;
     const objectMenu = (
         <MenuButton
@@ -352,6 +353,15 @@ const ObjectStatus = ({path, onOrchestrationLogs, linkNode, linkResource}) => {
             disabled={running}
         />
     );
+
+    // The status of all its instances refreshed; the cluster object has none of its own.
+    const refreshTool = kind === "ccfg" ? null : <RefreshStatusButton path={path} nodes={Object.keys(instances ?? {}).sort()}/>;
+
+    // The datastores its instances use, a badge each, in the summary after the instances up.
+    const datastores = datastoresOf(Object.values(instances ?? {}).flatMap((i) => Object.values(i?.resources ?? {})));
+    const facts = datastores.length > 0
+        ? [{label: t("statusBoard.datastores"), value: <DatastoreLinks paths={datastores}/>}]
+        : [];
 
     // The policies of the object over its status board, its actions at the right of the title of its panel.
     const policies = board.facts.length > 0 ? (
@@ -439,11 +449,14 @@ const ObjectStatus = ({path, onOrchestrationLogs, linkNode, linkResource}) => {
             )}
             {inHeader ? (
                 <>
-                    {policies}
+                    <div className="flex items-start justify-between gap-2">
+                        {policies ?? <span/>}
+                        {refreshTool}
+                    </div>
                     {createPortal(<>{orchestrationBadge}{objectMenu}</>, header.actions)}
                 </>
             ) : (
-                <div className="flex items-center justify-between gap-2">{policies}<span className="flex items-center gap-2">{orchestrationBadge}{objectMenu}</span></div>
+                <div className="flex items-center justify-between gap-2">{policies}<span className="flex items-center gap-2">{refreshTool}{orchestrationBadge}{objectMenu}</span></div>
             )}
             <StatusBoard
                 board={board}
@@ -451,6 +464,7 @@ const ObjectStatus = ({path, onOrchestrationLogs, linkNode, linkResource}) => {
                 toolbar={toolbar}
                 linkNode={linkNode}
                 linkResource={linkResource}
+                facts={facts}
             />
             <ActionDialogManager
                 pendingAction={pending}

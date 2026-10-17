@@ -77,6 +77,8 @@ const CreateObjectDialog = ({open, onClose, defaultKind = "svc", defaultNamespac
     const {t} = useTranslation();
     const ids = useId();
     const [kind, setKind] = useState(defaultKind);
+    // A cfg or a sec: created empty, its keys added in its panel.
+    const datastore = kind === "cfg" || kind === "sec";
     const [namespace, setNamespace] = useState(defaultNamespace);
     const [name, setName] = useState("");
     const [source, setSource] = useState("empty");
@@ -269,6 +271,11 @@ const CreateObjectDialog = ({open, onClose, defaultKind = "svc", defaultNamespac
                     {t("createObject.path")} <code className="font-mono text-ink">{path}</code>
                 </p>
 
+                {/* A datastore starts empty, its keys added next, in its panel: no source to choose. */}
+                {datastore ? (
+                    <p className="text-ink-muted">{t("createObject.datastoreHint")}</p>
+                ) : (
+                <>
                 <fieldset className="space-y-2">
                     <legend className="mb-1 font-medium">{t("createObject.source")}</legend>
                     <div className="flex flex-wrap gap-4">
@@ -333,6 +340,8 @@ const CreateObjectDialog = ({open, onClose, defaultKind = "svc", defaultNamespac
                         />
                     )}
                 </Field>
+                </>
+                )}
 
                 {canProvision && (
                     <Checkbox

@@ -1,11 +1,14 @@
-import React, {useState, useEffect, useCallback, useId} from "react";
+import React, {useState, useEffect, useCallback, useId, useRef} from "react";
 import {Dialog} from "../ui/components/Dialog";
 import {Button, IconButton} from "../ui/components/Button";
-import {Field, Input, Textarea} from "../ui/components/Field";
-import {Table, HeaderRow, HeaderCell, Row, Cell} from "../ui/components/Table";
+import {Checkbox, Field, Input, Textarea} from "../ui/components/Field";
+import {Table, HeaderRow, HeaderCell, SortHeaderCell, Row, Cell} from "../ui/components/Table";
 import {Alert} from "../ui/components/Alert";
 import {Spinner} from "../ui/components/Spinner";
-import {EyeIcon, EyeOffIcon, KeyIcon, LockIcon, PencilIcon, PlusIcon, TrashIcon} from "../ui/icons";
+import {CloseIcon, DownloadIcon, EyeIcon, EyeOffIcon, KeyIcon, LockIcon, PlusIcon, TrashIcon} from "../ui/icons";
+import {CopyButton} from "../ui/components/CopyButton";
+import {formatBytes} from "../ui/lib/format";
+import {useMaxKeySize} from "../hooks/useMaxKeySize";
 import {useAutoHide} from "../ui/lib/reveal";
 import {URL_OBJECT} from "../config/apiPath.js";
 import {getResponseErrorMessage} from "../services/api.jsx";
@@ -70,8 +73,55 @@ const parseBlobContent = async (blob) => {
 };
 
 
-const RADIO = "h-4 w-4 accent-(--accent)";
+/**
+ * The largest key, in the unit it is a round number of: om3 sizes are decimal
+ * ("1mb", 1000000 bytes) or binary ("1mib"); a size in neither in KiB or MiB.
+ */
+const formatKeyLimit = (bytes, locale) => {
+    const units = [[1024 ** 2, "MiB"], [1000 ** 2, "MB"], [1024, "KiB"], [1000, "kB"]];
+    const unit = units.find(([size]) => bytes % size === 0);
+    return unit ? `${(bytes / unit[0]).toLocaleString(locale)} ${unit[1]}` : formatBytes(bytes, locale);
+};
 
+/** Saves a key as it is stored, its bytes in a file of its name. */
+const downloadKey = (name, blob) => {
+    const url = URL.createObjectURL(blob instanceof Blob ? blob : new Blob([blob]));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = name;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+};
+
+/** A file as a key holds it: its text, when it reads as text, else the file itself, sent as is. */
+const readKeyFile = async (file) => {
+    if (file.size === 0) return {text: ""};
+    // Read by a FileReader where a file has no arrayBuffer of its own.
+    const bytes = typeof file.arrayBuffer === "function"
+        ? await file.arrayBuffer()
+        : await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = () => reject(reader.error);
+            reader.readAsArrayBuffer(file);
+        });
+    const parsed = await parseBlobContent({arrayBuffer: async () => bytes});
+    return parsed.type === "text" ? {text: parsed.content} : {file};
+};
+
+/**
+ * The form of a key, to create or to update it. Its content is typed or pasted in
+ * place, or read from a file dropped on it or browsed for: a text file in place, to
+ * edit before sending, a binary one shown by its name and sent as is. Empty, the key
+ * is empty. The name of a new key is that of the file, when not typed first.
+ *
+ * `hidden` is why the content of the key to update is not in the form: "secret", a
+ * secret is never read back; "binary", it does not read as text. The update then
+ * waits for new content. `maxSize`, the largest key the API takes, in bytes: a
+ * larger one is said, and not sent.
+ */
 const KeyFormDialog = ({
                            open,
                            onClose,
@@ -79,83 +129,122 @@ const KeyFormDialog = ({
                            mode,
                            initialName = "",
                            initialContent = "",
-                           initialInputMode = "empty",
+                           hidden = null,
                            title,
-                           allowEmpty = false,
                            loading = false,
                            initialLoading = false,
+                           maxSize = null,
+                           onRemove,
                        }) => {
-    const {t} = useTranslation();
+    const {t, i18n} = useTranslation();
     const [name, setName] = useState(initialName);
-    const [inputMode, setInputMode] = useState(initialInputMode);
-    const [file, setFile] = useState(null);
     const [text, setText] = useState(initialContent);
+    const [file, setFile] = useState(null);
+    const [dragOver, setDragOver] = useState(false);
     const [fullscreen, setFullscreen] = useState(false);
-    const radioName = useId();
+    const browse = useRef(null);
+    const hintId = useId();
 
     useEffect(() => {
         if (open) {
             setName(initialName);
-            setInputMode(initialInputMode);
-            setFile(null);
             setText(initialContent);
+            setFile(null);
+            setDragOver(false);
             setFullscreen(false);
         }
-    }, [open, initialName, initialInputMode, initialContent]);
+    }, [open, initialName, initialContent]);
+
+    const load = async (picked) => {
+        if (!picked) return;
+        if (mode === "create" && !name) setName(picked.name);
+        const read = await readKeyFile(picked);
+        setFile(read.file ?? null);
+        if (read.text !== undefined) setText(read.text);
+    };
+
+    const size = file ? file.size : new TextEncoder().encode(text).length;
+    const tooLarge = maxSize !== null && size > maxSize;
+    // The content of the key not shown: new content, typed or from a file, to update it.
+    const waiting = hidden !== null && file === null && text === "";
 
     const handleSubmit = () => {
-        if (!name) return;
-        let contentBlob = null;
-        if (inputMode === "empty") {
-            contentBlob = new Blob([], {type: "application/octet-stream"});
-        } else if (inputMode === "file" && file) {
-            contentBlob = file;
-        } else if (inputMode === "text") {
-            contentBlob = new Blob([text], {type: "application/octet-stream"});
-        } else {
-            return;
-        }
+        if (!name || tooLarge || waiting) return;
+        const contentBlob = file ?? new Blob([text], {type: "application/octet-stream"});
         onSubmit({name, contentBlob});
     };
-
-    const isSubmitDisabled = () => {
-        if (!name) return true;
-        return inputMode === "file" && !file;
-
-    };
-
-    const fileUploadId = `${mode}-key-file-upload`;
 
     const close = () => {
         onClose();
         setFullscreen(false);
     };
 
-    const radio = (value, label) => (
-        <label key={value} className="flex items-center gap-2">
-            <input
-                type="radio"
-                name={radioName}
-                value={value}
-                checked={inputMode === value}
-                onChange={(e) => setInputMode(e.target.value)}
-                disabled={loading}
-                className={RADIO}
-            />
-            {label}
-        </label>
+    const placeholder = hidden === "secret"
+        ? t("keys.form.hiddenSecret")
+        : hidden === "binary" ? t("keys.form.hiddenBinary") : t("keys.form.contentPlaceholder");
+
+    const sizeLine = (
+        <p className={tooLarge ? "text-data text-state-down" : "text-data text-ink-muted"} aria-live="polite">
+            {tooLarge
+                ? t("keys.form.tooLarge", {size: t("keys.bytes", {size}), max: formatKeyLimit(maxSize, i18n.language)})
+                : maxSize !== null
+                    ? t("keys.form.sizeOfMax", {size: t("keys.bytes", {size}), max: formatKeyLimit(maxSize, i18n.language)})
+                    : t("keys.bytes", {size})}
+        </p>
     );
 
-    const textArea = (control) => (
-        <Textarea
-            {...control}
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            disabled={loading}
-            placeholder={t("keys.form.contentPlaceholder")}
-            rows={fullscreen ? 24 : 8}
-            className={fullscreen ? "h-[60vh] resize-none font-mono text-data" : "resize-y font-mono text-data"}
-        />
+    // The content, typed in place or dropped on it; a binary file in its place, by its name.
+    const content = (
+        <div
+            onDragOver={(e) => {
+                e.preventDefault();
+                if (!loading) setDragOver(true);
+            }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={(e) => {
+                e.preventDefault();
+                setDragOver(false);
+                if (!loading) void load(e.dataTransfer?.files?.[0]);
+            }}
+            data-drop-zone=""
+            data-drag-over={dragOver ? "" : undefined}
+            className={dragOver
+                ? "relative rounded-(--radius-control) outline-2 outline-dashed outline-accent"
+                : "relative rounded-(--radius-control)"}
+        >
+            {file ? (
+                <div className="flex min-h-24 items-center gap-2 rounded-(--radius-control) border border-line bg-surface-sunken px-3">
+                    <span className="font-mono">{file.name}</span>
+                    <span className="text-ink-muted">· {t("keys.bytes", {size: file.size})} · {t("keys.form.binary")}</span>
+                    <IconButton
+                        size="sm"
+                        className="ml-auto"
+                        label={t("keys.form.dropFile")}
+                        onClick={() => setFile(null)}
+                        disabled={loading}
+                    >
+                        <CloseIcon/>
+                    </IconButton>
+                </div>
+            ) : (
+                <Textarea
+                    aria-label={t("keys.form.content")}
+                    aria-describedby={hintId}
+                    value={text}
+                    onChange={(e) => setText(e.target.value)}
+                    disabled={loading}
+                    placeholder={placeholder}
+                    spellCheck={false}
+                    rows={fullscreen ? 24 : 8}
+                    className={fullscreen ? "h-[60vh] resize-none font-mono text-data" : "resize-y font-mono text-data"}
+                />
+            )}
+            {dragOver && (
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-(--radius-control) bg-accent-soft/80 font-medium text-accent">
+                    {t("keys.form.dropHere")}
+                </div>
+            )}
+        </div>
     );
 
     return (
@@ -166,11 +255,17 @@ const KeyFormDialog = ({
             size={fullscreen ? "lg" : "md"}
             footer={
                 <>
+                    {/* The key edited, removed from here: the confirmation in the place of this dialog. */}
+                    {onRemove && (
+                        <Button variant="danger" className="mr-auto" onClick={onRemove} disabled={loading}>
+                            {t("common.remove")}
+                        </Button>
+                    )}
                     <Button onClick={close} disabled={loading}>{t("common.cancel")}</Button>
                     <Button
                         variant="primary"
                         onClick={handleSubmit}
-                        disabled={loading || isSubmitDisabled() || initialLoading}
+                        disabled={loading || initialLoading || !name || tooLarge || waiting}
                     >
                         {mode === 'create' ? t("keys.form.create") : t("keys.form.update")}
                     </Button>
@@ -182,78 +277,68 @@ const KeyFormDialog = ({
                     <Spinner label={t("keys.loadingContent")}/>
                 </div>
             ) : (
-                <>
+                <div className="space-y-2">
                     {!fullscreen && (
-                        <>
-                            <Field label={t("keys.form.name")}>
-                                {(control) => (
-                                    <Input
-                                        {...control}
-                                        value={name}
-                                        onChange={(e) => setName(e.target.value)}
-                                        disabled={loading}
-                                    />
-                                )}
-                            </Field>
-                            <fieldset className="space-y-1">
-                                <legend className="mb-1 font-medium">{t("keys.form.inputMode")}</legend>
-                                {allowEmpty && radio("empty", t("keys.form.modeEmpty"))}
-                                {radio("file", t("keys.form.modeFile"))}
-                                <div className="flex items-center gap-2">
-                                    {radio("text", t("keys.form.modeText"))}
-                                    {inputMode === "text" && (
-                                        <Button variant="ghost" size="sm" onClick={() => setFullscreen(true)}>
-                                            {t("keys.form.fullScreen")}
-                                        </Button>
-                                    )}
-                                </div>
-                            </fieldset>
-                        </>
+                        <Field label={t("keys.form.name")}>
+                            {(control) => (
+                                <Input
+                                    {...control}
+                                    value={name}
+                                    onChange={(e) => setName(e.target.value)}
+                                    disabled={loading}
+                                />
+                            )}
+                        </Field>
                     )}
-
-                    {inputMode === "file" && !fullscreen && (
-                        <div className="flex items-center gap-3">
-                            <input
-                                id={fileUploadId}
-                                type="file"
-                                className="peer sr-only"
-                                onChange={(e) => setFile(e.target.files[0])}
+                    <div className="flex items-center justify-between gap-2">
+                        <span className="font-medium">{t("keys.form.content")}</span>
+                        {!file && (
+                            <Button variant="ghost" size="sm" onClick={() => setFullscreen((f) => !f)}>
+                                {fullscreen ? t("keys.form.exitFullScreen") : t("keys.form.fullScreen")}
+                            </Button>
+                        )}
+                    </div>
+                    {content}
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p id={hintId} className="text-data text-ink-muted">
+                            {t("keys.form.dropHint")}{" "}
+                            <button
+                                type="button"
+                                className="text-accent underline-offset-2 hover:underline disabled:opacity-60"
+                                onClick={() => browse.current?.click()}
                                 disabled={loading}
-                            />
-                            <label
-                                htmlFor={fileUploadId}
-                                className={
-                                    loading
-                                        ? "inline-flex h-8 items-center rounded-(--radius-control) border border-line bg-surface-raised px-3 font-medium opacity-60"
-                                        : "inline-flex h-8 cursor-pointer items-center rounded-(--radius-control) border border-line bg-surface-raised px-3 font-medium hover:bg-surface-sunken peer-focus-visible:outline-2 peer-focus-visible:outline-(--focus-ring)"
-                                }
                             >
-                                {t("keys.form.chooseFile")}
-                            </label>
-                            <span className={file ? "text-ink" : "text-ink-muted"}>
-                                {file ? file.name : t("keys.form.noFileSelected")}
-                            </span>
-                        </div>
-                    )}
-
-                    {inputMode === "text" && (
-                        fullscreen ? (
-                            <>
-                                <div className="flex justify-end">
-                                    <Button variant="ghost" size="sm" onClick={() => setFullscreen(false)}>
-                                        {t("keys.form.exitFullScreen")}
-                                    </Button>
-                                </div>
-                                {textArea({"aria-label": t("keys.form.content")})}
-                            </>
-                        ) : (
-                            <Field label={t("keys.form.content")}>{textArea}</Field>
-                        )
-                    )}
-                </>
+                                {t("keys.form.browse")}
+                            </button>
+                        </p>
+                        {sizeLine}
+                    </div>
+                    <input
+                        ref={browse}
+                        type="file"
+                        className="sr-only"
+                        tabIndex={-1}
+                        aria-label={t("keys.form.browse")}
+                        data-testid="key-file-input"
+                        onChange={(e) => {
+                            void load(e.target.files?.[0]);
+                            e.target.value = "";
+                        }}
+                        disabled={loading}
+                    />
+                </div>
             )}
         </Dialog>
     );
+};
+
+/** The checkbox selecting all the keys: mixed when some of them only are checked. */
+const SelectAll = ({all, some, onChange, label}) => {
+    const box = useRef(null);
+    useEffect(() => {
+        if (box.current) box.current.indeterminate = some;
+    }, [some]);
+    return <Checkbox ref={box} checked={all} onChange={(e) => onChange(e.target.checked)} aria-label={label}/>;
 };
 
 /**
@@ -276,7 +361,14 @@ const KeysSection = ({decodedObjectName, openSnackbar, refreshKey}) => {
     const [createDialogOpen, setCreateDialogOpen] = useState(false);
     const [updateDialogOpen, setUpdateDialogOpen] = useState(false);
     const [viewDialogOpen, setViewDialogOpen] = useState(false);
-    const [keyToDelete, setKeyToDelete] = useState(null);
+    // The keys to delete once confirmed: the one of a line or of its dialog, or the keys checked.
+    const [keysToDelete, setKeysToDelete] = useState([]);
+    const [picked, setPicked] = useState([]);
+    // The order of the list: by name at first; by size, the largest first.
+    const [sort, setSort] = useState({by: "name", direction: "asc"});
+    const sortBy = (by) => setSort((current) => (current.by === by
+        ? {by, direction: current.direction === "asc" ? "desc" : "asc"}
+        : {by, direction: by === "size" ? "desc" : "asc"}));
     const [keyToView, setKeyToView] = useState(null);
     const [keyViewContent, setKeyViewContent] = useState(null);
     const [keyViewLoading, setKeyViewLoading] = useState(false);
@@ -287,7 +379,9 @@ const KeysSection = ({decodedObjectName, openSnackbar, refreshKey}) => {
 
     const [updateInitialName, setUpdateInitialName] = useState("");
     const [updateInitialContent, setUpdateInitialContent] = useState("");
-    const [updateInitialInputMode, setUpdateInitialInputMode] = useState("file");
+    // Why the content of the key to update is not in its form: "secret" or "binary".
+    const [updateHidden, setUpdateHidden] = useState(null);
+    const maxKeySize = useMaxKeySize(createDialogOpen || updateDialogOpen);
     const [updateContentLoading, setUpdateContentLoading] = useState(false);
     const titleId = useId();
 
@@ -355,15 +449,17 @@ const KeysSection = ({decodedObjectName, openSnackbar, refreshKey}) => {
                 const text = await response.text();
                 blob = new Blob([text], {type: 'text/plain'});
             }
-            return await parseBlobContent(blob);
+            // The bytes kept too, for the key to be saved as it is stored.
+            return {...(await parseBlobContent(blob)), blob};
         } catch (err) {
             openSnackbar(t("keys.errors.generic", {message: err.message}), "error");
             return {type: 'error', content: null};
         }
     }, [decodedObjectName, openSnackbar, t]);
 
+    /** Deletes the keys confirmed, one after the other: the first refused stops it, said. */
     const handleDeleteKey = async () => {
-        if (!keyToDelete) return;
+        if (keysToDelete.length === 0) return;
         const token = getAuthToken();
         if (!token) {
             openSnackbar(t("keys.errors.noToken"), "error");
@@ -371,28 +467,37 @@ const KeysSection = ({decodedObjectName, openSnackbar, refreshKey}) => {
             return;
         }
 
+        const one = keysToDelete.length === 1;
         setActionLoading(true);
-        openSnackbar(t("keys.feedback.deleting", {key: keyToDelete}), "info");
+        openSnackbar(one
+            ? t("keys.feedback.deleting", {key: keysToDelete[0]})
+            : t("keys.feedback.deletingMany", {count: keysToDelete.length}), "info");
         try {
             const baseUrl = buildObjectUrl(decodedObjectName);
-            const url = `${baseUrl}/data/key?name=${encodeURIComponent(keyToDelete)}`;
-            const response = await fetch(url, {
-                method: "DELETE",
-                headers: {Authorization: `Bearer ${token}`},
-            });
-            if (!response.ok) {
-                const errorMessage = await formatResponseError(response, t("keys.errors.delete", {status: response.status}));
-                openSnackbar(errorMessage, "error");
-                return;
+            for (const name of keysToDelete) {
+                const url = `${baseUrl}/data/key?name=${encodeURIComponent(name)}`;
+                const response = await fetch(url, {
+                    method: "DELETE",
+                    headers: {Authorization: `Bearer ${token}`},
+                });
+                if (!response.ok) {
+                    const errorMessage = await formatResponseError(response, t("keys.errors.delete", {status: response.status}));
+                    openSnackbar(errorMessage, "error");
+                    await fetchKeys();
+                    return;
+                }
             }
-            openSnackbar(t("keys.feedback.deleted", {key: keyToDelete}));
+            openSnackbar(one
+                ? t("keys.feedback.deleted", {key: keysToDelete[0]})
+                : t("keys.feedback.deletedMany", {count: keysToDelete.length}));
+            setPicked((l) => l.filter((name) => !keysToDelete.includes(name)));
             await fetchKeys();
         } catch (err) {
             openSnackbar(t("keys.errors.generic", {message: err.message}), "error");
         } finally {
             setActionLoading(false);
             setDeleteDialogOpen(false);
-            setKeyToDelete(null);
+            setKeysToDelete([]);
         }
     };
 
@@ -496,15 +601,12 @@ const KeysSection = ({decodedObjectName, openSnackbar, refreshKey}) => {
         setUpdateInitialName(keyName);
         setUpdateDialogOpen(true);
         setUpdateInitialContent("");
-        setUpdateInitialInputMode("file");
+        setUpdateHidden(null);
 
         if (isSecret) {
-            // Never fetch secret content to the client
+            // Never fetch secret content to the client: the form says it waits for new content.
+            setUpdateHidden("secret");
             setUpdateContentLoading(false);
-            openSnackbar(
-                t("keys.feedback.secretHidden"),
-                "info"
-            );
             return;
         }
 
@@ -512,9 +614,8 @@ const KeysSection = ({decodedObjectName, openSnackbar, refreshKey}) => {
         const result = await fetchKeyContent(keyName);
         if (result.type === "text") {
             setUpdateInitialContent(result.content);
-            setUpdateInitialInputMode("text");
         } else if (result.type === "binary") {
-            openSnackbar(t("keys.feedback.binary"), "info");
+            setUpdateHidden("binary");
         }
         setUpdateContentLoading(false);
     };
@@ -531,6 +632,15 @@ const KeysSection = ({decodedObjectName, openSnackbar, refreshKey}) => {
 
     const hasKeysError = Boolean(keysError);
     const safeKeys = Array.isArray(keys) ? keys : [];
+    const sortedKeys = [...safeKeys].sort((a, b) => {
+        const order = sort.by === "size"
+            ? (a.size ?? 0) - (b.size ?? 0) || a.name.localeCompare(b.name)
+            : a.name.localeCompare(b.name);
+        return sort.direction === "asc" ? order : -order;
+    });
+    // A key gone is no longer checked.
+    const pickedKeys = picked.filter((name) => safeKeys.some((key) => key.name === name));
+    const togglePicked = (name) => setPicked((l) => (l.includes(name) ? l.filter((n) => n !== name) : [...l, name]));
 
     return (
         <section
@@ -542,9 +652,29 @@ const KeysSection = ({decodedObjectName, openSnackbar, refreshKey}) => {
                 <h2 id={titleId} className="font-semibold">
                     {t("keys.title", {total: safeKeys.length})}
                 </h2>
+                {/* Nothing checked, the help says how; the keys checked, their removal. */}
+                <div className="ml-auto flex items-center">
+                    {!keysLoading && !hasKeysError && safeKeys.length > 0 && (pickedKeys.length > 0 ? (
+                        <Button
+                            size="sm"
+                            variant="danger"
+                            icon={<TrashIcon/>}
+                            disabled={actionLoading}
+                            onClick={() => {
+                                setKeysToDelete(pickedKeys);
+                                setDeleteDialogOpen(true);
+                            }}
+                        >
+                            {t("keys.removeSelected", {count: pickedKeys.length})}
+                        </Button>
+                    ) : (
+                        <p className="text-data text-ink-muted">{t("keys.selectionHelp")}</p>
+                    ))}
+                </div>
                 <IconButton
                     label={t("keys.add")}
-                    className="ml-auto"
+                    text={t("common.add")}
+                    solid
                     onClick={() => setCreateDialogOpen(true)}
                     disabled={actionLoading}
                 >
@@ -565,48 +695,49 @@ const KeysSection = ({decodedObjectName, openSnackbar, refreshKey}) => {
                 <Table aria-label={t("keys.tableAria")} className="rounded-none border-0">
                     <thead>
                     <HeaderRow>
-                        <HeaderCell>{t("common.name")}</HeaderCell>
-                        <HeaderCell>{t("keys.size")}</HeaderCell>
-                        <HeaderCell>{t("common.actions")}</HeaderCell>
+                        <HeaderCell className="w-8">
+                            <SelectAll
+                                all={pickedKeys.length === safeKeys.length}
+                                some={pickedKeys.length > 0 && pickedKeys.length < safeKeys.length}
+                                onChange={(checked) => setPicked(checked ? safeKeys.map((key) => key.name) : [])}
+                                label={t("keys.selectAll")}
+                            />
+                        </HeaderCell>
+                        <SortHeaderCell
+                            label={t("common.name")}
+                            active={sort.by === "name"}
+                            direction={sort.direction}
+                            onSort={() => sortBy("name")}
+                        />
+                        <SortHeaderCell
+                            label={t("keys.size")}
+                            active={sort.by === "size"}
+                            direction={sort.direction}
+                            onSort={() => sortBy("size")}
+                        />
                     </HeaderRow>
                     </thead>
                     <tbody>
-                    {safeKeys.map((key) => (
-                        <Row key={key.name}>
+                    {sortedKeys.map((key) => (
+                        // The line shows the content of its key; its tools edit and delete it.
+                        <Row
+                            key={key.name}
+                            onActivate={actionLoading ? undefined : () => handleViewKey(key.name)}
+                            title={t("keys.view.action", {key: key.name})}
+                            selected={pickedKeys.includes(key.name)}
+                        >
+                            <Cell className="w-8">
+                                <Checkbox
+                                    checked={pickedKeys.includes(key.name)}
+                                    onChange={() => togglePicked(key.name)}
+                                    onClick={(e) => e.stopPropagation()}
+                                    aria-label={t("keys.selectKey", {key: key.name})}
+                                />
+                            </Cell>
                             <th scope="row" className="px-2 py-1 text-left font-normal">
                                 {key.name}
                             </th>
                             <Cell numeric className="whitespace-nowrap">{t("keys.bytes", {size: key.size})}</Cell>
-                            <Cell className="whitespace-nowrap">
-                                <IconButton
-                                    size="sm"
-                                    label={t("keys.view.action", {key: key.name})}
-                                    onClick={() => handleViewKey(key.name)}
-                                    disabled={actionLoading}
-                                >
-                                    <EyeIcon/>
-                                </IconButton>
-                                <IconButton
-                                    size="sm"
-                                    label={t("keys.editAction", {key: key.name})}
-                                    onClick={() => openUpdateDialog(key.name)}
-                                    disabled={actionLoading}
-                                >
-                                    <PencilIcon/>
-                                </IconButton>
-                                <IconButton
-                                    size="sm"
-                                    label={t("keys.deleteAction", {key: key.name})}
-                                    className="hover:text-state-down"
-                                    onClick={() => {
-                                        setKeyToDelete(key.name);
-                                        setDeleteDialogOpen(true);
-                                    }}
-                                    disabled={actionLoading}
-                                >
-                                    <TrashIcon/>
-                                </IconButton>
-                            </Cell>
                         </Row>
                     ))}
                     </tbody>
@@ -618,7 +749,35 @@ const KeysSection = ({decodedObjectName, openSnackbar, refreshKey}) => {
                 onClose={closeViewDialog}
                 title={t("keys.view.title", {key: keyToView ?? ""})}
                 size="lg"
-                footer={<Button onClick={closeViewDialog}>{t("common.close")}</Button>}
+                footer={
+                    // The key shown, edited or removed from here: its dialog then in the place of this one.
+                    <>
+                        <Button
+                            variant="danger"
+                            className="mr-auto"
+                            disabled={actionLoading || keyToView === null}
+                            onClick={() => {
+                                const name = keyToView;
+                                closeViewDialog();
+                                setKeysToDelete([name]);
+                                setDeleteDialogOpen(true);
+                            }}
+                        >
+                            {t("common.remove")}
+                        </Button>
+                        <Button
+                            disabled={actionLoading || keyToView === null}
+                            onClick={() => {
+                                const name = keyToView;
+                                closeViewDialog();
+                                openUpdateDialog(name);
+                            }}
+                        >
+                            {t("common.edit")}
+                        </Button>
+                        <Button onClick={closeViewDialog}>{t("common.close")}</Button>
+                    </>
+                }
             >
                 {keyViewLoading && (
                     <div className="flex justify-center p-6">
@@ -632,15 +791,30 @@ const KeysSection = ({decodedObjectName, openSnackbar, refreshKey}) => {
                                 {keyViewContent.type === "text" ? t("keys.view.typeText") : t("keys.view.typeBinary")}
                                 {isSecret && revealSecret && ` · ${t("keys.view.maskedAgain", {count: secondsLeft})}`}
                             </p>
-                            {isSecret && (
-                                <IconButton
-                                    size="sm"
-                                    label={revealSecret ? t("keys.view.hide") : t("keys.view.reveal")}
-                                    onClick={() => setRevealSecret(v => !v)}
-                                >
-                                    {revealSecret ? <EyeOffIcon/> : <EyeIcon/>}
-                                </IconButton>
-                            )}
+                            <div className="flex items-center gap-1">
+                                {/* A secret copied masked too: pasted where needed, never shown. */}
+                                {keyViewContent.type === "text" && (
+                                    <CopyButton text={keyViewContent.content} label={t("keys.view.copy")}/>
+                                )}
+                                {keyViewContent.blob && (
+                                    <IconButton
+                                        size="sm"
+                                        label={t("keys.view.download")}
+                                        onClick={() => downloadKey(keyToView, keyViewContent.blob)}
+                                    >
+                                        <DownloadIcon/>
+                                    </IconButton>
+                                )}
+                                {isSecret && (
+                                    <IconButton
+                                        size="sm"
+                                        label={revealSecret ? t("keys.view.hide") : t("keys.view.reveal")}
+                                        onClick={() => setRevealSecret(v => !v)}
+                                    >
+                                        {revealSecret ? <EyeOffIcon/> : <EyeIcon/>}
+                                    </IconButton>
+                                )}
+                            </div>
                         </div>
                         {isSecret && !revealSecret ? (
                             <div className="flex flex-col items-center gap-1 rounded-(--radius-control) border border-dashed border-line bg-surface-sunken p-6 text-center text-ink-muted">
@@ -681,8 +855,10 @@ const KeysSection = ({decodedObjectName, openSnackbar, refreshKey}) => {
             >
                 <p>
                     <Trans
-                        i18nKey="keys.deleteDialog.message"
-                        values={{key: keyToDelete}}
+                        i18nKey={keysToDelete.length > 1 ? "keys.deleteDialog.messageMany" : "keys.deleteDialog.message"}
+                        values={keysToDelete.length > 1
+                            ? {count: keysToDelete.length, list: keysToDelete.join(", ")}
+                            : {key: keysToDelete[0]}}
                         components={{strong: <strong className="font-mono"/>}}
                     />
                 </p>
@@ -694,8 +870,8 @@ const KeysSection = ({decodedObjectName, openSnackbar, refreshKey}) => {
                 onSubmit={handleCreateKey}
                 mode="create"
                 title={t("keys.form.createTitle")}
-                allowEmpty
                 loading={actionLoading}
+                maxSize={maxKeySize}
             />
 
             <KeyFormDialog
@@ -705,10 +881,16 @@ const KeysSection = ({decodedObjectName, openSnackbar, refreshKey}) => {
                 mode="update"
                 initialName={updateInitialName}
                 initialContent={updateInitialContent}
-                initialInputMode={updateInitialInputMode}
+                hidden={updateHidden}
                 title={t("keys.form.updateTitle")}
                 loading={actionLoading}
+                maxSize={maxKeySize}
                 initialLoading={updateContentLoading}
+                onRemove={() => {
+                    setUpdateDialogOpen(false);
+                    setKeysToDelete([updateInitialName]);
+                    setDeleteDialogOpen(true);
+                }}
             />
         </section>
     );

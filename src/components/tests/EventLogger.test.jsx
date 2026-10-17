@@ -1,5 +1,5 @@
 import React from 'react';
-import {act, fireEvent, render, screen, waitFor} from '@testing-library/react';
+import {act, fireEvent, render, screen, waitFor, within} from '@testing-library/react';
 import '@testing-library/jest-dom';
 import {vi, beforeAll, beforeEach, afterEach, describe, test, expect} from 'vitest';
 import EventLogger, {EventLog, OBJECT_EVENT_TYPES, hashCode} from '../EventLogger';
@@ -1540,5 +1540,62 @@ describe('EventLog', () => {
         expect(list).not.toHaveTextContent('InstanceStatusUpdated');
         // In place: no title, no close.
         expect(screen.queryByRole('button', {name: 'Close'})).not.toBeInTheDocument();
+    });
+
+    describe('as a feed, in a tab', () => {
+        const at = (seconds) => new Date(Date.UTC(2026, 9, 17, 10, 0, seconds)).toISOString();
+        const event = (id, seconds, path) => makeLog({id, eventType: 'ObjectStatusUpdated', timestamp: at(seconds), data: {path, node: 'n1'}});
+        const lines = () => [...screen.getByRole('region', {name: 'Event list'}).querySelectorAll('.event-line')];
+        const scrolledTo = (scrollTop) => {
+            const container = screen.getByRole('region', {name: 'Event list'});
+            Object.defineProperty(container, 'scrollHeight', {value: 1000, configurable: true});
+            Object.defineProperty(container, 'clientHeight', {value: 500, configurable: true});
+            container.scrollTop = scrollTop;
+            fireEvent.scroll(container);
+        };
+
+        test('the oldest at the top, the newest at the end; a line its time and type, its badges, its data', async () => {
+            useEventLogStore.mockReturnValue(mockStore({eventLogs: [event('2', 2, 'ns1/svc/b'), event('1', 1, 'ns1/svc/a')]}));
+            render(<EventLog eventTypes={OBJECT_EVENT_TYPES} label="Events"/>);
+            await waitFor(() => expect(lines()).toHaveLength(2));
+            expect(lines().map((line) => line.querySelector('[data-meta]').firstElementChild.textContent)).toEqual(['ns1/svc/a', 'ns1/svc/b']);
+            const first = lines()[0];
+            // The type under the time, in its tone; the badges, then the data.
+            expect(first.querySelector('[data-tone]').previousElementSibling.textContent).toMatch(/\d/);
+            expect([...first.querySelector('[data-meta]').children].map((b) => b.textContent)).toEqual(['ns1/svc/a', 'n1']);
+            expect(first.querySelector('[data-text]')).toHaveTextContent('"path":"ns1/svc/a"');
+            expect(first).toHaveClass('border-line/40');
+            // Opened by a click, its data in full.
+            const toggle = within(first).getByRole('button');
+            fireEvent.click(toggle);
+            expect(toggle).toHaveAttribute('aria-expanded', 'true');
+        });
+
+        test('followed at the end; scrolled up, the new events counted on a button back to the end', async () => {
+            useEventLogStore.mockReturnValue(mockStore({eventLogs: [event('1', 1, 'ns1/svc/a')]}));
+            const {rerender} = render(<EventLog eventTypes={OBJECT_EVENT_TYPES} label="Events"/>);
+            await waitFor(() => expect(lines()).toHaveLength(1));
+            expect(screen.getByRole('button', {name: 'Following'})).toHaveAttribute('aria-pressed', 'true');
+            scrolledTo(0);
+            expect(screen.getByRole('button', {name: 'Latest events'})).toBeInTheDocument();
+            useEventLogStore.mockReturnValue(mockStore({eventLogs: [event('3', 3, 'ns1/svc/c'), event('2', 2, 'ns1/svc/b'), event('1', 1, 'ns1/svc/a')]}));
+            rerender(<EventLog eventTypes={OBJECT_EVENT_TYPES} label="Events"/>);
+            const back = await screen.findByRole('button', {name: '2 new events'});
+            fireEvent.click(back);
+            expect(screen.getByRole('region', {name: 'Event list'}).scrollTop).toBe(1000);
+            expect(screen.getByRole('button', {name: 'Following'})).toBeInTheDocument();
+        });
+
+        test('the newest hundred shown; the older ones kept, on demand at the top', async () => {
+            const many = Array.from({length: 150}, (_, i) => event(String(150 - i), 150 - i, `ns1/svc/s${150 - i}`));
+            useEventLogStore.mockReturnValue(mockStore({eventLogs: many}));
+            render(<EventLog eventTypes={OBJECT_EVENT_TYPES} label="Events"/>);
+            await waitFor(() => expect(lines()).toHaveLength(100));
+            fireEvent.click(screen.getByRole('button', {name: 'Show older events'}));
+            expect(lines()).toHaveLength(150);
+            expect(screen.queryByRole('button', {name: 'Show older events'})).toBeNull();
+            // Read from the top: not following.
+            expect(screen.getByRole('button', {name: 'Follow'})).toBeInTheDocument();
+        });
     });
 });

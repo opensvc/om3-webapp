@@ -39,8 +39,10 @@ describe('HeartbeatMesh', () => {
         expect(card).toHaveTextContent('dev3n1 → dev3n2');
         expect(card).toHaveTextContent('1 of 2 beating');
         const rows = within(card).getAllByRole('row').slice(1).map((r) => within(r).getAllByRole('cell').map((c) => c.textContent));
+        // Relative to now, as the fixture ages: "… ago", "yesterday", "last week"…
+        const relative = expect.stringMatching(/ago|in |yesterday|last /);
         expect(rows).toEqual([
-            ['hb#1', 'tx · dev3n1', 'unicast', '→ dev3n2:10011', 'Beating', expect.stringMatching(/ago|in /)],
+            ['hb#1', 'tx · dev3n1', 'unicast', '→ dev3n2:10011', 'Beating', relative],
             ['hb#1', 'rx · dev3n2', 'unicast', ':10011 ← dev3n1', 'Stale', '–'],
         ]);
         fireEvent.mouseLeave(forward);

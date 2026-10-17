@@ -115,9 +115,11 @@ describe('NodeDetailPanel', () => {
     test('its actions stand in the title bar, a solid button the size of the close one, each confirmed then posted', async () => {
         renderPanel();
         const actions = within(panel()).getByRole('button', {name: 'Node actions'});
-        expect(actions).toHaveClass('w-7', 'bg-accent');
+        expect(actions).toHaveClass('max-md:w-7', 'bg-accent');
         expect(actions).not.toHaveClass('rounded-(--radius-pill)');
         expect(actions).toHaveAttribute('title', 'Node actions');
+        // "Actions" in a wide window, the bolt alone in a narrow one.
+        expect(actions).toHaveTextContent(/^Actions$/);
         fireEvent.click(actions);
         const menu = screen.getByRole('menu', {name: 'Node actions'});
         // Not frozen: freeze on offer, unfreeze not.

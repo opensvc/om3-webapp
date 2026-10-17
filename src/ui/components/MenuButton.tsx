@@ -44,8 +44,9 @@ const ITEM =
  * then its accessible name and tooltip.
  *
  * om3 additions: `icon` without `prominent` makes the trigger an icon alone, `label`
- * staying its accessible name and tooltip, of the accent fill with `solid`, as the
- * actions; `compact` makes it small and borderless, for a table
+ * staying its accessible name and tooltip; with `solid`, of the accent fill, as the
+ * actions, its `text` (the label without) shown in a wide window, its icon alone in a
+ * narrow one; `compact` makes it small and borderless, for a table
  * row; `align="end"` lines the menu up with the right edge of the trigger. The menu
  * is placed against the window, so that a scrolling container (a table) cannot cut
  * it, and closes when the page scrolls or resizes rather than drift from its button.
@@ -57,6 +58,7 @@ export function MenuButton({
   className = "",
   prominent = false,
   solid = false,
+  text,
   icon,
   compact = false,
   trigger,
@@ -72,8 +74,10 @@ export function MenuButton({
    * secondary menu, is muted. A primary button, filled, stays apart from both.
    */
   prominent?: boolean;
-  /** An icon alone of the accent fill, as the actions, rather than outlined and muted. */
+  /** The accent fill, as the actions: its text in a wide window, its icon alone in a narrow one. */
   solid?: boolean;
+  /** With `solid`, the word shown in a wide window, shorter than the label naming it. */
+  text?: string;
   /**
    * Icon alone in the trigger, instead of the label and the chevron; with
    * `prominent`, so only in a narrow window.
@@ -244,7 +248,7 @@ export function MenuButton({
             : compact
             ? "flex h-5 w-5 items-center justify-center rounded-(--radius-control) text-ink-muted hover:bg-surface-sunken hover:text-ink disabled:opacity-60 aria-expanded:bg-surface-sunken aria-expanded:text-ink"
             : iconOnly && solid
-            ? "flex h-7 w-7 items-center justify-center rounded-(--radius-control) border border-accent bg-accent text-accent-ink hover:brightness-110 disabled:opacity-60 disabled:hover:brightness-100 aria-expanded:brightness-110"
+            ? "flex h-7 items-center gap-1.5 rounded-(--radius-control) border border-accent bg-accent px-2.5 font-medium text-accent-ink hover:brightness-110 disabled:opacity-60 disabled:hover:brightness-100 aria-expanded:brightness-110 max-md:w-7 max-md:justify-center max-md:px-0"
             : `flex h-7 items-center gap-1.5 rounded-(--radius-control) border border-line text-ink-muted hover:border-line-strong hover:text-ink disabled:opacity-60 aria-expanded:text-ink ${
                 iconOnly ? "w-7 justify-center" : "px-2"
               }`
@@ -254,6 +258,17 @@ export function MenuButton({
           <>
             {trigger}
             <ChevronDownIcon aria-hidden="true" className="h-3 w-3 shrink-0 text-ink-muted" />
+          </>
+        ) : iconOnly && solid ? (
+          // Its text and chevron in a wide window, its icon alone in a narrow one.
+          <>
+            <span aria-hidden="true" className="hidden max-md:inline-flex">
+              {icon}
+            </span>
+            <span aria-hidden="true" className="max-md:hidden">
+              {text ?? label}
+            </span>
+            <ChevronDownIcon aria-hidden="true" className="h-3.5 w-3.5 max-md:hidden" />
           </>
         ) : iconOnly ? (
           icon

@@ -10,6 +10,7 @@ import {HoverCard} from "../ui/components/HoverCard";
 import {formatBytes} from "../ui/lib/format";
 import {AlertTriangleIcon} from "../ui/icons";
 import {Figures} from "./Figures";
+import {parseObjectPath} from "../utils/objectUtils.jsx";
 
 /*
  * The cells of an object row, shared by the objects table and the object lists of
@@ -95,30 +96,70 @@ export const FlexBadge = ({min, max, target}) => {
 };
 
 /** The property cells of an object row, each read on its own from the store. */
+/** The look of the small badge over a path, or over the name of a namespace. */
+export const BADGE = "inline-flex h-4 shrink-0 items-center rounded-sm border border-line-strong px-0.5 text-[0.6875rem] leading-none font-medium text-ink-muted";
+
+/** The kinds of the objects holding keys others install from. */
+const DATASTORE_KINDS = ["cfg", "sec"];
+
 /**
- * The orchestrate of an object as a small badge by its path, where the narrow list
- * has no column for it: "ha" or "start"; nothing for "no", as for no orchestrate.
+ * The orchestrate and the topology of an object as one small badge over its path,
+ * where the narrow list has no column for them: "ha · failover", "start · flex"; the
+ * topology alone for "no" orchestrate; the flex sizes left out. A cfg or a sec,
+ * which has neither, "datastore". None else.
  */
 export const OrchestrateBadge = ({objectName}) => {
     const {t} = useTranslation();
     const orchestrate = useEventStore((s) => s.objectStatus?.[objectName]?.orchestrate);
-    if (orchestrate !== "ha" && orchestrate !== "start") return null;
-    const label = `${t("objects.columns.orchestrate")}: ${orchestrate}`;
+    const topology = useEventStore((s) => s.objectStatus?.[objectName]?.topology);
+    const parts = [
+        (orchestrate === "ha" || orchestrate === "start") && [t("objects.columns.orchestrate"), orchestrate],
+        topology && [t("objects.columns.topology"), topology],
+    ].filter(Boolean);
+    if (parts.length === 0) {
+        if (!DATASTORE_KINDS.includes(parseObjectPath(objectName).kind)) return null;
+        const datastore = t("objects.badges.datastore");
+        return (
+            <span data-mark="datastore" className={BADGE}>{datastore}</span>
+        );
+    }
+    const label = parts.map(([name, value]) => `${name}: ${value}`).join(", ");
     return (
         <span
             role="img"
             aria-label={label}
             title={label}
             data-mark="orchestrate"
-            className="inline-flex h-4 shrink-0 items-center rounded-sm border border-line-strong px-0.5 text-[0.6875rem] leading-none font-medium text-ink-muted"
+            className={BADGE}
         >
-            <span aria-hidden="true">{orchestrate}</span>
+            <span aria-hidden="true">{parts.map(([, value]) => value).join(" · ")}</span>
         </span>
     );
 };
 
-/** The property cells of an object row; the orchestrate one left out when its badge stands by the path. */
-export const PropertyCells = ({objectName, withOrchestrate = true}) => {
+/**
+ * The instances of an object up out of its target: "1/1" for a failover, "2/3" for a
+ * flex of target 3, its count alone without a target. Short of it, in the warn tint.
+ */
+export const UpCell = ({objectName}) => {
+    const status = (s) => s.objectStatus?.[objectName];
+    const up = useEventStore((s) => status(s)?.up_instances_count);
+    const topology = useEventStore((s) => status(s)?.topology);
+    const flexTarget = useEventStore((s) => status(s)?.flex?.target);
+    const target = topology === "failover" ? 1 : topology === "flex" ? flexTarget : undefined;
+    const short = up !== undefined && target !== undefined && up < target;
+    return (
+        <Cell className={short ? "whitespace-nowrap tabular-nums text-state-warn" : "whitespace-nowrap tabular-nums"}>
+            {up === undefined ? "" : target === undefined ? up : `${up}/${target}`}
+        </Cell>
+    );
+};
+
+/**
+ * The property cells of an object row. `narrow`, the orchestrate and the topology in
+ * the badge by the path: the instances up out of the target alone in their place.
+ */
+export const PropertyCells = ({objectName, narrow = false}) => {
     const status = (s) => s.objectStatus?.[objectName];
     const orchestrate = useEventStore((s) => status(s)?.orchestrate);
     const topology = useEventStore((s) => status(s)?.topology);
@@ -127,9 +168,10 @@ export const PropertyCells = ({objectName, withOrchestrate = true}) => {
     const flexTarget = useEventStore((s) => status(s)?.flex?.target);
     const isFlex = topology === "flex" && flexMin !== undefined && flexMax !== undefined;
 
+    if (narrow) return <UpCell objectName={objectName}/>;
     return (
         <>
-            {withOrchestrate && <Cell className="whitespace-nowrap">{orchestrate}</Cell>}
+            <Cell className="whitespace-nowrap">{orchestrate}</Cell>
             <Cell className="whitespace-nowrap">
                 <span className="inline-flex items-center gap-1.5">
                     {topology}

@@ -3,6 +3,7 @@ import {act, fireEvent, render, screen, waitFor, within} from '@testing-library/
 import {vi} from 'vitest';
 import ObjectStatus from '../ObjectStatus';
 import {PanelHeaderContext} from '../../app/panel-header';
+import {MemoryRouter} from 'react-router-dom';
 import useEventStore from '../../hooks/useEventStore.js';
 import dns from '../../app/tests/fixtures/system-svc-dns.json';
 
@@ -128,8 +129,48 @@ describe('ObjectStatus', () => {
         expect(screen.getByTestId('body')).toContainElement(screen.getByLabelText('Policies'));
         expect(screen.getByTestId('bar-title')).toBeEmptyDOMElement();
         const actions = within(screen.getByTestId('bar-actions')).getByRole('button', {name: 'Actions'});
-        expect(actions).toHaveClass('w-7', 'bg-accent');
+        expect(actions).toHaveClass('max-md:w-7', 'bg-accent');
         expect(actions).not.toHaveClass('rounded-(--radius-pill)');
+    });
+
+    test('the datastores its instances use, once each, a badge each, in the summary after the instances up', async () => {
+        answer(dns);
+        useEventStore.setState({objectInstanceStatus: {'system/svc/dns': {
+            dev3n1: {resources: {'fs#1': {datastores: ['system/cfg/dns']}}},
+            dev3n2: {resources: {'fs#1': {datastores: ['system/cfg/dns', 'system/sec/dns']}}},
+        }}});
+        try {
+            render(<MemoryRouter><ObjectStatus path="system/svc/dns"/></MemoryRouter>);
+            await screen.findByRole('table');
+            const label = screen.getByText('Datastores');
+            expect(label.tagName).toBe('DT');
+            expect(label.previousElementSibling.previousElementSibling).toHaveTextContent('Instances up');
+            expect(within(label.nextElementSibling).getAllByRole('button').map((b) => b.textContent)).toEqual(['system/cfg/dns', 'system/sec/dns']);
+        } finally {
+            useEventStore.setState({objectInstanceStatus: {}});
+        }
+    });
+
+    test('the status of all its instances refreshed, a node refusing said', async () => {
+        answer(dns);
+        useEventStore.setState({objectInstanceStatus: {'system/svc/dns': {dev3n1: {}, dev3n2: {}}}});
+        const fetch = global.fetch;
+        global.fetch = vi.fn((url) => Promise.resolve(url.includes('/dev3n2/')
+            ? {ok: false, status: 409, json: () => Promise.resolve({detail: 'busy'}), headers: new Headers(), text: () => Promise.resolve('')}
+            : {ok: true, status: 200, json: () => Promise.resolve({})}));
+        try {
+            render(<ObjectStatus path="system/svc/dns"/>);
+            await screen.findByRole('table');
+            fireEvent.click(screen.getByRole('button', {name: 'Refresh the status of all the instances'}));
+            await waitFor(() => expect(global.fetch.mock.calls.map(([url]) => url)).toEqual([
+                '/api/node/name/dev3n1/instance/path/system/svc/dns/action/status',
+                '/api/node/name/dev3n2/instance/path/system/svc/dns/action/status',
+            ]));
+            expect(await screen.findByRole('alert')).toHaveTextContent(/Refresh refused: dev3n2: HTTP 409/);
+        } finally {
+            global.fetch = fetch;
+            useEventStore.setState({objectInstanceStatus: {}});
+        }
     });
 
     test('no issue, no issue line', async () => {
@@ -139,24 +180,26 @@ describe('ObjectStatus', () => {
         expect(screen.queryByRole('list', {name: 'Issues'})).not.toBeInTheDocument();
     });
 
-    test('the instances have a heading of their own, counted, their state under it', async () => {
+    test('the instances counted on the line of the nodes, their state under it', async () => {
         answer(dns);
         render(<ObjectStatus path="system/svc/dns"/>);
         const board = await screen.findByRole('table');
-        expect(within(board).getByRole('rowheader', {name: 'Instances (2)'})).toBeInTheDocument();
+        expect(within(board).getByRole('columnheader', {name: 'Instances (2)'})).toBeInTheDocument();
         const state = within(board).getByRole('rowheader', {name: 'State'}).closest('tr');
         expect(within(state).getAllByText('down')).toHaveLength(2);
         expect(within(board).getByRole('rowheader', {name: 'Resources (6)'})).toBeInTheDocument();
-        // A light border round the table, none between its rows.
+        // A light border round the table, a very light line between its rows.
         expect(board.parentElement).toHaveClass('border', 'border-line');
         expect(board.parentElement).not.toHaveClass('border-0');
-        expect(state).toHaveClass('border-b-0');
-        // The headings not bold, not on a grey band, a light line above each.
-        for (const heading of ['Instances (2)', 'Resources (6)']) {
-            const cell = within(board).getByRole('rowheader', {name: heading});
+        expect(state).toHaveClass('border-b', 'border-line/40');
+        // The headings not bold, on a grey band as the group lines of the lists, a line under each.
+        for (const cell of [
+            within(board).getByRole('columnheader', {name: 'Instances (2)'}),
+            within(board).getByRole('rowheader', {name: 'Resources (6)'}),
+        ]) {
             expect(cell).toHaveClass('font-normal');
-            expect(cell.closest('tr')).toHaveClass('border-t', 'border-line');
-            expect(cell.closest('tr')).not.toHaveClass('bg-surface-sunken');
+            expect(cell.closest('tr')).toHaveClass('border-b', 'border-line', 'bg-surface-sunken');
+            expect(cell.closest('tr')).not.toHaveClass('border-t');
         }
         // The nodes last, their names bold, a line before them.
         const headers = within(board).getAllByRole('columnheader');
@@ -491,18 +534,19 @@ describe('ObjectStatus', () => {
             await ready();
             const row = (label) => screen.getByRole('rowheader', {name: label}).closest('tr');
             const monitor = within(row('Monitor')).getAllByRole('cell')[3];
-            const heading = within(row('Instances (2)')).getAllByRole('cell')[2];
+            // The state, right under the header, in the middle of the block.
+            const state = within(row('State')).getAllByRole('cell')[3];
             fireEvent.click(monitor);
-            fireEvent.click(heading);
+            fireEvent.click(state);
             expect(screen.queryByRole('button', {name: /^Actions on/})).not.toBeInTheDocument();
             pickNode('dev3n2');
             expect(selectionButton()).toHaveAccessibleName('Actions on 1 instance');
             expect(header('dev3n2')).toHaveClass('bg-accent-soft');
-            expect(heading).toHaveClass('bg-accent-soft');
+            expect(state).toHaveClass('bg-accent-soft');
             expect(monitor).toHaveClass('bg-accent-soft');
             // One block from the header to the last row of the instances: edged on its outside only.
             expect(header('dev3n2').style.boxShadow).not.toMatch(/inset 0 -1px 0/);
-            expect(heading.style.boxShadow).not.toMatch(/inset 0 (-)?1px 0/);
+            expect(state.style.boxShadow).not.toMatch(/inset 0 (-)?1px 0/);
             expect(monitor.style.boxShadow).toMatch(/inset 0 -1px 0/);
             expect(monitor.style.boxShadow).not.toMatch(/inset 0 1px 0/);
             // The first resource, under the block, is not part of it.
@@ -580,8 +624,12 @@ describe('ObjectStatus', () => {
 
             test('a node picked is frozen as a node, not as an instance of the cluster object', async () => {
                 answer(dns, cluster(true));
+                useEventStore.setState({objectInstanceStatus: {cluster: {dev3n1: {}, dev3n2: {}}}});
                 render(<ObjectStatus path="cluster"/>);
                 await screen.findByRole('table');
+                // No status of its own to refresh.
+                expect(screen.queryByRole('button', {name: /Refresh the status/})).toBeNull();
+                useEventStore.setState({objectInstanceStatus: {}});
                 pickNode('dev3n2');
                 fireEvent.click(selectionButton());
                 // dev3n2 is not frozen: nothing to unfreeze, and no service action.

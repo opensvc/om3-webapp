@@ -237,7 +237,8 @@
     "notAvailable": "N/A",
     "error": "Error",
     "unknown": "Unknown",
-    "selected": "{{count}} selected"
+    "selected": "{{count}} selected",
+    "copied": "Copied"
   },
   "config": {
     "errors": {
@@ -299,7 +300,9 @@
       "noInstance": "No instance selected to view configuration.",
       "loadingForEdit": "Loading configuration for editing",
       "loading": "Loading configuration",
-      "empty": "No configuration available."
+      "empty": "No configuration available.",
+      "noSection": "No section [{{section}}] in the configuration.",
+      "copy": "Copy the configuration shown"
     },
     "feedback": {
       "tokenNotFound": "Auth token not found.",
@@ -389,7 +392,13 @@
       "received_other": "{{count}} events received",
       "noneSelected": "No event types selected. You won't receive any events.",
       "apply": "Apply Subscriptions ({{total}})"
-    }
+    },
+    "following": "Following",
+    "follow": "Follow",
+    "latest": "Latest events",
+    "newEvents_one": "1 new event",
+    "newEvents_other": "{{count}} new events",
+    "showOlder": "Show older events"
   },
   "heartbeats": {
     "columns": {
@@ -560,7 +569,11 @@
       "label": "Label",
       "noResource": "No resource.",
       "object": "Object",
-      "node": "Node"
+      "node": "Node",
+      "datastores": "Datastores",
+      "actions": "Instance actions",
+      "selectResource": "Select {{rid}}",
+      "selectionHelp": "Check resources to select them."
     },
     "on": "on {{node}}"
   },
@@ -586,11 +599,14 @@
       "reveal": "Reveal secret",
       "hidden": "The content of this secret is masked.",
       "revealHint": "Use the Reveal secret button to show it.",
-      "contentAria": "Key content"
+      "contentAria": "Key content",
+      "copy": "Copy the content",
+      "download": "Download the key"
     },
     "deleteDialog": {
       "title": "Confirm Key Deletion",
-      "message": "Are you sure you want to delete the key <strong>{{key}}</strong>?"
+      "message": "Are you sure you want to delete the key <strong>{{key}}</strong>?",
+      "messageMany": "Are you sure you want to delete the {{count}} keys <strong>{{list}}</strong>?"
     },
     "form": {
       "createTitle": "Create New Key",
@@ -598,16 +614,19 @@
       "create": "Create",
       "update": "Update",
       "name": "Key Name",
-      "inputMode": "Input Mode",
-      "modeEmpty": "Empty key (no content)",
-      "modeFile": "Upload from file",
-      "modeText": "Enter text directly",
       "fullScreen": "Full screen",
       "exitFullScreen": "Exit full screen",
-      "chooseFile": "Choose File",
-      "noFileSelected": "No file selected",
       "content": "Key Content",
-      "contentPlaceholder": "Enter the text content for this key..."
+      "contentPlaceholder": "Empty: the key is empty.",
+      "dropHint": "Type or paste the content, or drop a file here —",
+      "browse": "browse…",
+      "dropHere": "Drop to load the file",
+      "binary": "binary, sent as is",
+      "dropFile": "Drop the file, type the content",
+      "sizeOfMax": "{{size}} of up to {{max}}",
+      "tooLarge": "{{size}}: too large, a key holds up to {{max}}",
+      "hiddenSecret": "The content of a secret is hidden: type, paste or drop new content to replace it.",
+      "hiddenBinary": "The content is binary: drop or browse a file to replace it, or type new content."
     },
     "feedback": {
       "deleting": "Deleting key {{key}}…",
@@ -616,8 +635,8 @@
       "created": "Key '{{key}}' created successfully",
       "updating": "Updating key {{key}}…",
       "updated": "Key '{{key}}' updated successfully",
-      "secretHidden": "Secret content is hidden. Provide new content to update it.",
-      "binary": "Key is binary – please use file upload to update."
+      "deletingMany": "Deleting {{count}} keys…",
+      "deletedMany": "{{count}} keys deleted successfully"
     },
     "errors": {
       "noToken": "Auth token not found.",
@@ -627,7 +646,12 @@
       "create": "Failed to create key: {{status}}",
       "update": "Failed to update key: {{status}}",
       "generic": "Error: {{message}}"
-    }
+    },
+    "selectKey": "Select key {{key}}",
+    "selectionHelp": "Check keys to select them.",
+    "removeSelected_one": "Remove 1 key",
+    "removeSelected_other": "Remove {{count}} keys",
+    "selectAll": "Select all the keys"
   },
   "logs": {
     "subtitle": "{{instance}} on {{node}}",
@@ -649,7 +673,6 @@
     "lines": "Log lines",
     "empty": "No logs available",
     "noMatch": "No logs match current filters",
-    "goToBottom": "Go to bottom",
     "errors": {
       "instanceRequired": "Instance name is required for instance logs",
       "tokenNotFound": "Authentication token not found",
@@ -659,7 +682,15 @@
       "instanceNotFound": "Instance logs endpoint not found for {{instance}} on node {{node}}",
       "nodeNotFound": "Node logs endpoint not found for node {{node}}",
       "fetchFailed": "Failed to fetch logs: {{message}}"
-    }
+    },
+    "following": "Following",
+    "follow": "Follow",
+    "latest": "Latest lines",
+    "newLines_one": "1 new line",
+    "newLines_other": "{{count}} new lines",
+    "loadOlder": "Load older lines",
+    "loadingOlder": "Loading older lines…",
+    "noOlder": "No older lines"
   },
   "metrics": {
     "columns": {
@@ -762,7 +793,9 @@
       "noConfig": "The {{namespace}} namespace has no configuration object yet: its claims and pg settings are written there.",
       "create": "Create its configuration",
       "creating": "Creating…",
-      "createFailed": "The configuration could not be created: {{message}}"
+      "createFailed": "The configuration could not be created: {{message}}",
+      "actions": "Namespace actions",
+      "configOf": "the configuration of {{namespace}}"
     },
     "claims": {
       "actions": "Actions",
@@ -1166,7 +1199,8 @@
       "failed": "The object could not be created: {{message}}",
       "copyFailed": "The configuration of {{path}} could not be read: {{message}}",
       "readFailed": "The file could not be read: {{message}}"
-    }
+    },
+    "datastoreHint": "Created empty: its keys are added next, in its panel."
   },
   "objects": {
     "flex": {
@@ -1198,7 +1232,8 @@
       "topology": "Topology",
       "keys": "Keys",
       "keysSize": "Size",
-      "keysSizeHint": "The size of the keys as stored in the configuration, their encoding included"
+      "keysSizeHint": "The size of the keys as stored in the configuration, their encoding included",
+      "up": "Up"
     },
     "filters": {
       "show": "Show filters",
@@ -1232,7 +1267,16 @@
     "selectHint": "Select objects to act on them",
     "selectNamespace": "Select the objects of {{namespace}}",
     "openInstance": "Open the instance on {{node}}",
-    "openInstanceOf": "Open the instance of {{name}} on {{node}}"
+    "openInstanceOf": "Open the instance of {{name}} on {{node}}",
+    "badges": {
+      "datastore": "datastore",
+      "namespace": "namespace"
+    },
+    "openNamespaceConfig": "Open the configuration of {{namespace}}",
+    "createNamespaceConfig": "Create its configuration",
+    "createNamespaceConfigTitle": "Create the configuration of {{namespace}}",
+    "createNamespaceConfigText": "The namespace {{namespace}} gets its configuration object, empty: its claims are set next.",
+    "createNamespaceConfigConfirm": "Create"
   },
   "pools": {
     "columns": {
@@ -1450,7 +1494,11 @@
     "issues": "Issues",
     "details": {
       "status": "Status: {{status}}"
-    }
+    },
+    "datastores": "Datastores",
+    "refresh": "Refresh the status",
+    "refreshAll": "Refresh the status of all the instances",
+    "refreshFailed": "Refresh refused: {{detail}}"
   },
   "shortcuts": {
     "title": "Keyboard shortcuts",

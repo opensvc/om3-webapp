@@ -1,4 +1,5 @@
 import type { CSSProperties, ReactNode } from "react";
+import { Fragment } from "react";
 import { useTranslation } from "react-i18next";
 import { cn } from "../ui/cn";
 import { AlertTriangleIcon, DrpIcon, HistoryIcon, InfoIcon, PlayIcon, PauseIcon, SnowflakeIcon, TargetIcon } from "../ui/icons";
@@ -294,7 +295,8 @@ function SelectBox({
  * in its cell, on all its nodes by its name, an instance by the header of its
  * node. The caller acts on what is picked, from its `toolbar`. Every node has its
  * instance to pick, reported or not. The names are the caller's badges
- * (`linkNode`, `linkResource`): a click on one opens its record.
+ * (`linkNode`, `linkResource`): a click on one opens its record. `facts`, what the
+ * caller adds to the summary, a line each after the count of the instances up.
  */
 export function StatusBoard({
   board,
@@ -302,6 +304,7 @@ export function StatusBoard({
   toolbar,
   linkNode,
   linkResource,
+  facts = [],
 }: {
   board: Board;
   selection?: BoardSelection;
@@ -311,6 +314,8 @@ export function StatusBoard({
   linkNode?: (node: string) => ReactNode;
   /** The id of a resource as a badge opening its record; plain text without. */
   linkResource?: (rid: string) => ReactNode;
+  /** More lines of the summary, after the count of the instances up. */
+  facts?: { label: string; value: ReactNode }[];
 }) {
   const { t } = useTranslation();
   const details = useCellDetails();
@@ -329,11 +334,8 @@ export function StatusBoard({
    * the board; the column of the names first, then the nodes. Its neighbours tell
    * a selected cell where its edges go.
    */
-  /** The rows as drawn: the instances under a heading of their own, as the resources. */
-  type Shown = BoardRow | { kind: "instances" };
-  const shown: Shown[] = board.rows.flatMap((r): Shown[] =>
-    r.kind === "blank" ? [] : r.kind === "instance" ? [{ kind: "instances" }, r] : [r],
-  );
+  /** The rows as drawn: the instances under the header, which says them; the resources under a heading. */
+  const shown: BoardRow[] = board.rows.filter((r) => r.kind !== "blank");
   const instances = board.nodes.filter((_, j) =>
     (instanceRow?.cells[j] ?? []).some((s) => s.status !== undefined && s.status !== "undef"),
   ).length;
@@ -344,7 +346,7 @@ export function StatusBoard({
     return n === 0 ? "none" : n === nodes.length ? "all" : "some";
   };
   /** The rows of the instances: their heading, then the state, the monitor and the others. */
-  const INSTANCE_ROWS: ReadonlySet<string> = new Set(["instances", "instance", "monitor", "expect", "provisioned", "orchestration"]);
+  const INSTANCE_ROWS: ReadonlySet<string> = new Set(["instance", "monitor", "expect", "provisioned", "orchestration"]);
   const selectedAt = (v: number, c: number): boolean => {
     if (selection === undefined || c < 0 || c >= FIRST_NODE + board.nodes.length) return false;
     // The type and the description, between the names and the nodes, are never selected.
@@ -355,7 +357,7 @@ export function StatusBoard({
     if (r === undefined) return false;
     // A selected instance: its column, from its header down through the rows of the instances.
     if (INSTANCE_ROWS.has(r.kind)) return c >= FIRST_NODE && nodeSelected(node);
-    if (c === 0) return rowSelectState(r as BoardRow) === "all";
+    if (c === 0) return rowSelectState(r) === "all";
     return r.kind === "resource" && rowNodes(board, r).includes(node) && selection.isCell(r.name, node);
   };
   /** The look of a selected cell: its edges, and no line of the rows under it inside a block. */
@@ -386,6 +388,12 @@ export function StatusBoard({
             <dd className={cn("font-medium tabular-nums", count.tone === "error" && "text-state-down")}>{count.text}</dd>
           </>
         )}
+        {facts.map(({ label, value }) => (
+          <Fragment key={label}>
+            <dt className="text-ink-muted">{label}</dt>
+            <dd>{value}</dd>
+          </Fragment>
+        ))}
       </dl>
       {states.length > 0 && (
         <ul aria-label={t("statusBoard.issues")} className="flex flex-col items-start gap-y-1">
@@ -407,14 +415,17 @@ export function StatusBoard({
 
       {toolbar}
 
-      {/* A light border, no line between the rows: the tint and the edge of a selection stand out. */}
+      {/* A light border, a very light line between the rows; the headings on a grey band, as the group lines of the lists. */}
       {/* Its columns are its nodes: the board keeps them, never cards. */}
-      <Table aria-label={t("statusBoard.caption", { path: board.path })} className="bg-transparent" cards={false}>
+      <Table
+        aria-label={t("statusBoard.caption", { path: board.path })}
+        className="bg-transparent"
+        cards={false}
+      >
         <thead>
-          <HeaderRow className="border-b-0">
-            <HeaderCell>
-              <span className="sr-only">{t("statusBoard.item")}</span>
-            </HeaderCell>
+          {/* The heading of the instances on the line of the nodes, a line under them. */}
+          <HeaderRow className="border-b border-line bg-surface-sunken">
+            <HeaderCell className="font-normal text-ink">{t("statusBoard.rows.instances", { count: instances })}</HeaderCell>
             <HeaderCell>{t("common.type")}</HeaderCell>
             <HeaderCell>{t("statusBoard.description")}</HeaderCell>
             {board.nodes.map((n, j) => {
@@ -445,29 +456,10 @@ export function StatusBoard({
         </thead>
         <tbody>
           {shown.map((r, i) => {
-            if (r.kind === "instances")
-              return (
-                <tr key={i} className="border-t border-line">
-                  <th scope="rowgroup" className="h-[1.875rem] px-2 pt-3 text-left font-normal whitespace-nowrap text-ink">
-                    {t("statusBoard.rows.instances", { count: instances })}
-                  </th>
-                  <td colSpan={2} />
-                  {/* Under each node, its instance, tinted when selected. */}
-                  {board.nodes.map((n, j) => {
-                    const look = selectedLook(i + 1, j + FIRST_NODE);
-                    return (
-                      <td
-                        key={n.name}
-                        style={look.style}
-                        className={cn("pt-3", j === 0 && NODES_START, look.className)}
-                      />
-                    );
-                  })}
-                </tr>
-              );
             if (r.kind === "resources")
               return (
-                <tr key={i} className="border-t border-line">
+                // A line under the heading of the resources, as under the one of the instances.
+                <tr key={i} className="border-b border-line bg-surface-sunken">
                   <th scope="rowgroup" colSpan={FIRST_NODE} className="h-[1.875rem] px-2 pt-3 text-left font-normal text-ink">
                     {t("statusBoard.rows.resources", { count: resources })}
                   </th>
@@ -491,7 +483,7 @@ export function StatusBoard({
             const v = i + 1;
             const nameLook = selectedLook(v, 0);
             return (
-              <Row key={i} className="border-b-0">
+              <Row key={i} className="border-line/40">
                 <th
                   scope="row"
                   className={cn(

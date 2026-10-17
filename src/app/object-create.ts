@@ -5,6 +5,8 @@
  * `core/naming/path.go` and `core/oxcmd/object_create.go`.
  */
 
+import { URL_OBJECT as URL_OBJECT_PATH } from "../config/apiPath.js";
+
 /** The kinds one creates: the cluster object exists with the cluster. */
 export const CREATABLE_KINDS = ["svc", "vol", "cfg", "sec", "usr", "nscfg"] as const;
 export type CreatableKind = (typeof CREATABLE_KINDS)[number];
@@ -91,6 +93,30 @@ export function withId(config: string, id: string): string {
 }
 
 /** A random UUID, as om gives a new object; `randomUUID` wants a secure context. */
+/**
+ * Creates the configuration of a namespace, empty but for its id: null once created,
+ * else what the daemon said (`409`, it exists already).
+ */
+export async function createNamespaceConfig(namespace: string): Promise<{ status: number; message: string } | null> {
+  const response = await fetch(`${URL_OBJECT_PATH}/${encodeURIComponent(namespace)}/nscfg/${NSCFG_NAME}/config/file`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${localStorage.getItem("authToken") ?? ""}`,
+      "Content-Type": "application/octet-stream",
+    },
+    body: withId("", newId()),
+  });
+  if (response.ok) return null;
+  let message = `HTTP ${String(response.status)}`;
+  try {
+    const problem = (await response.json()) as { detail?: string };
+    if (problem.detail) message = problem.detail;
+  } catch {
+    // Not a problem document: the status says enough.
+  }
+  return { status: response.status, message };
+}
+
 export const newId = (): string => {
     if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
     const bytes = globalThis.crypto.getRandomValues(new Uint8Array(16));

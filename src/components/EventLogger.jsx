@@ -11,6 +11,8 @@ import logger from "../utils/logger.js";
 import {startLoggerReception, closeLoggerEventSource} from "../eventSourceManager";
 import {parseObjectPath} from "../utils/objectUtils.jsx";
 import {useTranslation} from "react-i18next";
+import {useFollowScroll} from "../hooks/useFollowScroll";
+import {FollowOverlay} from "../ui/components/FollowOverlay";
 
 const CONNECTION_EVENTS = [
     'CONNECTION_OPENED',
@@ -303,6 +305,63 @@ const LogRow = React.memo(({log, isOpen, onToggle}) => {
         prevProps.isOpen === nextProps.isOpen;
 });
 
+/** The events a feed shows at first, and more at once, of those kept. */
+const FEED_PAGE = 100;
+
+/**
+ * An event in a feed, as a log line: its time, its type under it in its tone; on
+ * the next column, what it is about, small badges (its object, its node), then its
+ * data in a line. A click opens its data in full under it.
+ */
+const FeedRow = React.memo(({log, isOpen, onToggle}) => {
+    const {i18n} = useTranslation();
+    const tone = getEventTone(log.eventType);
+    const preview = useMemo(() => (isOpen ? "" : toJSON(log.data, 0)), [isOpen, log.data]);
+    const meta = [logPath(log), log.data?.node ?? log.data?.labels?.node].filter(Boolean);
+    const id = log.id ?? `${log.timestamp}-${log.eventType}`;
+    return (
+        <div
+            id={`event-${id}`}
+            data-at={new Date(log.timestamp).getTime()}
+            className={cn("event-line col-span-full grid grid-cols-subgrid border-b border-line/40", isOpen && "bg-surface-sunken")}
+        >
+            <div
+                role="button"
+                tabIndex={0}
+                aria-expanded={isOpen}
+                onClick={onToggle}
+                onKeyDown={(event) => {
+                    if (event.key !== "Enter" && event.key !== " ") return;
+                    event.preventDefault();
+                    onToggle();
+                }}
+                className="col-span-full grid cursor-pointer grid-cols-subgrid items-baseline px-2 py-0.5 text-data hover:bg-surface-sunken"
+            >
+                <span className="flex flex-col">
+                    <span className="tabular-nums text-ink-muted">{formatTimestamp(log.timestamp, i18n.language)}</span>
+                    <span data-tone={tone} className={TONE_CLASSES[tone]}>{log.eventType}</span>
+                </span>
+                <span className="flex min-w-0 flex-col border-l border-line pl-2">
+                    {meta.length > 0 && (
+                        <span className="flex flex-wrap gap-1" data-meta="">
+                            {meta.map((m) => (
+                                <span key={m} className="rounded-full border border-line/60 px-1.5 text-[0.6875rem] leading-4 text-ink-muted">{m}</span>
+                            ))}
+                        </span>
+                    )}
+                    <span className="truncate font-mono text-ink-muted" data-text="">{preview}</span>
+                </span>
+                <ChevronDownIcon className={cn("self-center text-ink-muted transition-transform", isOpen && "rotate-180")}/>
+            </div>
+            {isOpen && (
+                <div className="col-span-full border-t border-line bg-surface px-3 py-2">
+                    <FullJSONView data={log.data}/>
+                </div>
+            )}
+        </div>
+    );
+}, (prev, next) => prev.log === next.log && prev.isOpen === next.isOpen);
+
 /** The path of the object an event is about, wherever the event carries it. */
 const logPath = (log) => {
     const data = log.data || {};
@@ -351,9 +410,10 @@ const EventDrawerContent = ({
                                 nodeName,
                                 namespace,
                                 onClose,
-                                title
+                                title,
+                                feed = false,
                             }) => {
-    const {t} = useTranslation();
+    const {t, i18n} = useTranslation();
     const [selectedEventTypes, setSelectedEventTypes] = useState([]);
     const [expandedLogIds, setExpandedLogIds] = useState([]);
     const [visibleCount, setVisibleCount] = useState(20);
@@ -489,9 +549,44 @@ const EventDrawerContent = ({
         return () => clearTimeout(timer);
     }, []);
 
+    // A feed, read as a log: the newest at the end, followed there; scrolled up, the
+    // events shown kept from the oldest of them, the new ones counted.
+    const [showCount, setShowCount] = useState(FEED_PAGE);
+    const feedKey = useMemo(() => ({}), [filteredLogs, showCount]);
+    const {following, follow, newCount, countNew, handleScroll: feedScroll, toEnd, scrollAge} = useFollowScroll({
+        containerRef: logsContainerRef,
+        items: feed ? feedKey : null,
+        lineSelector: ".event-line",
+        locale: i18n.language,
+    });
+    const oldestShownRef = useRef(null);
+    const shown = useMemo(() => {
+        if (!feed) return [];
+        const kept = following || oldestShownRef.current === null
+            ? 0
+            : filteredLogs.findIndex((log) => log.id === oldestShownRef.current) + 1;
+        return filteredLogs.slice(0, Math.max(showCount, kept)).reverse();
+    }, [feed, filteredLogs, showCount, following]);
+    useEffect(() => {
+        oldestShownRef.current = shown[0]?.id ?? null;
+    }, [shown]);
+    const newestRef = useRef(null);
+    useEffect(() => {
+        if (!feed) return;
+        const newest = filteredLogs[0]?.id ?? null;
+        const previous = newestRef.current;
+        newestRef.current = newest;
+        if (previous === null || newest === previous) return;
+        countNew(Math.max(0, filteredLogs.findIndex((log) => log.id === previous)));
+    }, [feed, filteredLogs, countNew]);
+    const showOlder = () => {
+        follow(false);
+        setShowCount((count) => Math.max(count, shown.length) + FEED_PAGE);
+    };
+
     const handleScroll = useCallback(() => {
         /* istanbul ignore next */
-        if (loadingMore) return;
+        if (feed || loadingMore) return;
         /* istanbul ignore next */
         const container = logsContainerRef.current;
         if (!container) return;
@@ -504,7 +599,7 @@ const EventDrawerContent = ({
                 setLoadingMore(false);
             }, 100);
         }
-    }, [loadingMore, visibleCount, filteredLogs.length, initialLoading]);
+    }, [feed, loadingMore, visibleCount, filteredLogs.length, initialLoading]);
 
     useEffect(() => {
         const container = logsContainerRef.current;
@@ -544,7 +639,7 @@ const EventDrawerContent = ({
             <div className="flex items-center gap-2 border-b border-line px-3 py-1.5">
                 {title && <h2 className="truncate font-semibold">{title}</h2>}
                 <span className="shrink-0 rounded-full border border-line px-2 text-data text-ink-muted tabular-nums">
-                    {t("events.count", {visible: visibleLogs.length, total: filteredLogs.length})}
+                    {t("events.count", {visible: feed ? shown.length : visibleLogs.length, total: filteredLogs.length})}
                 </span>
                 {isPaused && (
                     <span
@@ -554,6 +649,17 @@ const EventDrawerContent = ({
                     </span>
                 )}
                 <div className="ml-auto flex shrink-0 items-center gap-1">
+                    {/* Following is about the view, the pause about the stream. */}
+                    {feed && (
+                        <Button
+                            size="sm"
+                            variant={following ? "primary" : "secondary"}
+                            aria-pressed={following}
+                            onClick={() => (following ? follow(false) : toEnd())}
+                        >
+                            {following ? t("events.following") : t("events.follow")}
+                        </Button>
+                    )}
                     <IconButton
                         label={t("events.manageSubscriptions")}
                         className={TOOL}
@@ -620,48 +726,100 @@ const EventDrawerContent = ({
                 </div>
             )}
 
-            <div
-                ref={logsContainerRef}
-                onScroll={handleScroll}
-                role="region"
-                aria-label={t("events.list")}
-                tabIndex={0}
-                className="relative min-h-0 flex-1 overflow-auto bg-surface outline-none"
-            >
-                {initialLoading ? (
-                    <div className="flex h-full items-center justify-center">
-                        <Spinner label={t("events.loading")}/>
-                    </div>
-                ) : visibleLogs.length === 0 ? (
-                    <p className="p-8 text-center text-ink-muted">
-                        {eventLogs.length === 0
-                            ? t("events.empty")
-                            : t("events.noMatch")}
-                    </p>
-                ) : (
-                    <>
-                        <ul>
-                            {visibleLogs.map((log) => {
-                                const safeId = log.id ?? `log-${log.timestamp}-${log.eventType}`;
-                                const isOpen = expandedLogIds.includes(safeId);
-                                return (
-                                    <LogRow
-                                        key={safeId}
-                                        log={log}
-                                        isOpen={isOpen}
-                                        onToggle={() => toggleExpand(safeId)}
-                                    />
-                                );
-                            })}
-                        </ul>
-                        {loadingMore && (
-                            <div className="flex justify-center py-1">
-                                <Spinner label={t("events.loadingMore")}/>
+            {feed ? (
+                <div className="relative flex min-h-0 flex-1 flex-col">
+                    <div
+                        ref={logsContainerRef}
+                        onScroll={feedScroll}
+                        role="region"
+                        aria-label={t("events.list")}
+                        tabIndex={0}
+                        className="relative min-h-0 flex-1 overflow-auto py-1 outline-none"
+                    >
+                        {initialLoading ? (
+                            <div className="flex h-full items-center justify-center">
+                                <Spinner label={t("events.loading")}/>
                             </div>
+                        ) : shown.length === 0 ? (
+                            <p className="p-8 text-center text-ink-muted">
+                                {eventLogs.length === 0 ? t("events.empty") : t("events.noMatch")}
+                            </p>
+                        ) : (
+                            <>
+                                {/* The older events kept, shown on demand at the top. */}
+                                {filteredLogs.length > shown.length && (
+                                    <div className="flex justify-center py-1">
+                                        <Button size="sm" variant="ghost" onClick={showOlder}>{t("events.showOlder")}</Button>
+                                    </div>
+                                )}
+                                <div className="grid gap-x-2" style={{gridTemplateColumns: "max-content minmax(0, 1fr) max-content"}}>
+                                    {shown.map((log) => {
+                                        const safeId = log.id ?? `log-${log.timestamp}-${log.eventType}`;
+                                        return (
+                                            <FeedRow
+                                                key={safeId}
+                                                log={log}
+                                                isOpen={expandedLogIds.includes(safeId)}
+                                                onToggle={() => toggleExpand(safeId)}
+                                            />
+                                        );
+                                    })}
+                                </div>
+                            </>
                         )}
-                    </>
-                )}
-            </div>
+                    </div>
+                    <FollowOverlay
+                        scrollAge={scrollAge}
+                        following={following}
+                        shown={shown.length > 0}
+                        onEnd={toEnd}
+                        label={newCount > 0 ? t("events.newEvents", {count: newCount}) : t("events.latest")}
+                    />
+                </div>
+            ) : (
+                <div
+                    ref={logsContainerRef}
+                    onScroll={handleScroll}
+                    role="region"
+                    aria-label={t("events.list")}
+                    tabIndex={0}
+                    className="relative min-h-0 flex-1 overflow-auto bg-surface outline-none"
+                >
+                    {initialLoading ? (
+                        <div className="flex h-full items-center justify-center">
+                            <Spinner label={t("events.loading")}/>
+                        </div>
+                    ) : visibleLogs.length === 0 ? (
+                        <p className="p-8 text-center text-ink-muted">
+                            {eventLogs.length === 0
+                                ? t("events.empty")
+                                : t("events.noMatch")}
+                        </p>
+                    ) : (
+                        <>
+                            <ul>
+                                {visibleLogs.map((log) => {
+                                    const safeId = log.id ?? `log-${log.timestamp}-${log.eventType}`;
+                                    const isOpen = expandedLogIds.includes(safeId);
+                                    return (
+                                        <LogRow
+                                            key={safeId}
+                                            log={log}
+                                            isOpen={isOpen}
+                                            onToggle={() => toggleExpand(safeId)}
+                                        />
+                                    );
+                                })}
+                            </ul>
+                            {loadingMore && (
+                                <div className="flex justify-center py-1">
+                                    <Spinner label={t("events.loadingMore")}/>
+                                </div>
+                            )}
+                        </>
+                    )}
+                </div>
+            )}
 
             <SubscriptionDialog
                 open={subscriptionDialogOpen}
@@ -822,11 +980,8 @@ const EventLogger = React.memo(({
  */
 export function EventLog({eventTypes = [], nodeName = null, objectName = null, namespace = null, label}) {
     return (
-        <section
-            aria-label={label}
-            className="flex h-full flex-col overflow-hidden rounded-(--radius-panel) border border-line bg-surface-raised text-ink"
-        >
-            <EventDrawerContent eventTypes={eventTypes} nodeName={nodeName} objectName={objectName} namespace={namespace}/>
+        <section aria-label={label} className="flex h-full flex-col overflow-hidden text-ink">
+            <EventDrawerContent eventTypes={eventTypes} nodeName={nodeName} objectName={objectName} namespace={namespace} feed/>
         </section>
     );
 }

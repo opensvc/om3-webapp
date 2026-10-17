@@ -15,9 +15,10 @@ const TONES = ["error", "warning", "info", "success"];
  * The configuration of an object, in a tab of its panel: the file as a node holding
  * an instance has it, its tools in place (ConfigSection, inline), read again when
  * an event says it changed. `statusPath` is the key the cluster status lists the
- * object under, when it is not its path: "ns1/" for ns1/nscfg/namespace.
+ * object under, when it is not its path: "ns1/" for ns1/nscfg/namespace. `section`,
+ * the section of a resource alone, shown and edited in place in the file.
  */
-const ObjectConfig = ({path, statusPath = path}) => {
+const ObjectConfig = ({path, statusPath = path, section = null}) => {
     const {t} = useTranslation();
     const instances = useEventStore((s) => s.objectInstanceStatus?.[statusPath]);
     const configs = useEventStore((s) => s.instanceConfig?.[statusPath]);
@@ -72,6 +73,7 @@ const ObjectConfig = ({path, statusPath = path}) => {
                 setConfigDialogOpen={() => {}}
                 configRefreshTrigger={refresh}
                 inline
+                section={section}
             />
         </div>
     );

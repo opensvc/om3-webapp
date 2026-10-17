@@ -1,4 +1,5 @@
-import React, {useEffect, useMemo, useRef} from "react";
+import React, {useEffect, useMemo, useRef, useState} from "react";
+import {createPortal} from "react-dom";
 import {useTranslation} from "react-i18next";
 import useEventStore from "../hooks/useEventStore.js";
 import {parseInstanceId, parseResourceId} from "../app/peek";
@@ -17,6 +18,15 @@ import {ReadErrors, TotalTile, cpuText} from "./NamespaceMetrics";
 import {ObjectResources} from "./ObjectTabs";
 import {InstanceLink, ResourceLink} from "./RecordLinks";
 import {ObjectLogs} from "./ObjectLogs";
+import ObjectConfig from "./ObjectConfig";
+import {DatastoreLinks, RefreshStatusButton, actionIcon, datastoresOf, useActionRunner} from "./InstanceActions";
+import {CLEAR_ACTION, resourceActions} from "./objectActions";
+import {usePanelHeader} from "../app/panel-header";
+import {MenuButton} from "../ui/components/MenuButton";
+import {Button} from "../ui/components/Button";
+import {Checkbox} from "../ui/components/Field";
+import {BoltIcon, CloseIcon} from "../ui/icons";
+import {INSTANCE_ACTIONS, RESOURCE_ACTIONS, actionLabel} from "../constants/actions";
 
 const ZERO_TIME = "0001-01-01T00:00:00Z";
 const EMPTY = {};
@@ -134,7 +144,9 @@ const StatusWord = ({status, notProvisioned = false}) => {
 /**
  * The status of an instance, as its node reports it: its object and its node, a
  * badge each, its availability, overall state, provisioning, freeze and monitor
- * state, then its resources, each a badge opening its own panel.
+ * state, the datastores its resources use, a badge each, then its resources, each
+ * a badge opening its own panel. Its actions in the title bar of its panel; the
+ * resources checked, the actions on them over their table.
  */
 export function InstanceStatus({path, node}) {
     const {t} = useTranslation();
@@ -143,30 +155,97 @@ export function InstanceStatus({path, node}) {
     const resources = Object.entries(status.resources ?? {}).sort(([a], [b]) => a.localeCompare(b));
     const frozen = !!status.frozen_at && status.frozen_at !== ZERO_TIME;
     const notProvisioned = status.provisioned === "false" || status.provisioned === false;
+    const datastores = datastoresOf(resources.map(([, r]) => r));
+    const header = usePanelHeader();
+    const {ask, running, feedback, dialogs} = useActionRunner(path);
+    const [picked, setPicked] = useState([]);
+    // A resource gone is no longer picked.
+    const rids = resources.map(([rid]) => rid);
+    const pickedRids = picked.filter((rid) => rids.includes(rid));
+    const toggle = (rid) => setPicked((l) => (l.includes(rid) ? l.filter((r) => r !== rid) : [...l, rid]));
+
+    // The instance: freeze or unfreeze as it is, clear its monitor once failed.
+    const failed = (monitor.state ?? "").endsWith("failed");
+    const onInstance = {targets: [{node}], subject: t("statusBoard.subjects.instance", {path, where: node})};
+    const instanceItems = [...(failed ? [CLEAR_ACTION] : []), ...INSTANCE_ACTIONS.filter((a) => (a.name === "freeze"
+        ? !frozen
+        : a.name === "unfreeze" ? frozen : true))]
+        .map((a) => ({key: a.name, label: actionLabel(a.name), icon: actionIcon(a), onSelect: () => ask(a.name, onInstance)}));
+    const instanceMenu = (
+        <MenuButton
+            solid
+            text={t("statusBoard.actions.object")}
+            icon={<BoltIcon className="h-3.5 w-3.5"/>}
+            label={t("instance.panel.actions")}
+            align="end"
+            disabled={running}
+            items={instanceItems}
+        />
+    );
+
+    // The resources checked: the actions every one of them takes; a console on one alone.
+    const onResources = {
+        targets: [{node, rid: pickedRids.join(",")}],
+        subject: t("statusBoard.subjects.resource", {rid: pickedRids.join(", "), path, where: node}),
+        onDone: () => setPicked([]),
+    };
+    const resourceItems = RESOURCE_ACTIONS
+        .filter((a) => (a.name === "console" ? pickedRids.length === 1 : true)
+            && pickedRids.every((rid) => resourceActions(rid).some((b) => b.name === a.name)))
+        .map((a) => ({key: a.name, label: actionLabel(a.name), icon: actionIcon(a), onSelect: () => ask(a.name, onResources)}));
+
     return (
         <div className="space-y-4" data-testid="instance-status">
-            <dl className="grid w-max grid-cols-[auto_auto] items-center gap-x-3 gap-y-1">
-                <Fact label={t("instance.panel.object")}><CrossLink kind="object" id={path}>{path}</CrossLink></Fact>
-                <Fact label={t("instance.panel.node")}><CrossLink kind="node" id={node}>{node}</CrossLink></Fact>
-                <Fact label={t("instance.panel.avail")}><StatusWord status={status.avail}/></Fact>
-                <Fact label={t("instance.panel.overall")}>{status.overall || "-"}</Fact>
-                <Fact label={t("instance.panel.provisioned")}>
-                    <span className="inline-flex items-center gap-1.5">
-                        {String(status.provisioned ?? "-")}
-                        {notProvisioned && <NotProvisionedMark/>}
-                    </span>
-                </Fact>
-                <Fact label={t("instance.panel.frozen")}>
-                    <span className="inline-flex items-center gap-1.5">
-                        {frozen ? t("instance.panel.yes") : t("instance.panel.no")}
-                        <FrozenMark frozen={frozen}/>
-                    </span>
-                </Fact>
-                <Fact label={t("instance.panel.monitor")}>{monitor.state || "-"}</Fact>
-            </dl>
+            {feedback}
+            {header.actions !== null ? createPortal(instanceMenu, header.actions) : <div className="flex justify-end">{instanceMenu}</div>}
+            <div className="flex items-start justify-between gap-2">
+                <dl className="grid w-max grid-cols-[auto_auto] items-center gap-x-3 gap-y-1">
+                    <Fact label={t("instance.panel.object")}><CrossLink kind="object" id={path}>{path}</CrossLink></Fact>
+                    <Fact label={t("instance.panel.node")}><CrossLink kind="node" id={node}>{node}</CrossLink></Fact>
+                    <Fact label={t("instance.panel.avail")}><StatusWord status={status.avail}/></Fact>
+                    <Fact label={t("instance.panel.overall")}>{status.overall || "-"}</Fact>
+                    <Fact label={t("instance.panel.provisioned")}>
+                        <span className="inline-flex items-center gap-1.5">
+                            {String(status.provisioned ?? "-")}
+                            {notProvisioned && <NotProvisionedMark/>}
+                        </span>
+                    </Fact>
+                    <Fact label={t("instance.panel.frozen")}>
+                        <span className="inline-flex items-center gap-1.5">
+                            {frozen ? t("instance.panel.yes") : t("instance.panel.no")}
+                            <FrozenMark frozen={frozen}/>
+                        </span>
+                    </Fact>
+                    <Fact label={t("instance.panel.monitor")}>{monitor.state || "-"}</Fact>
+                    {datastores.length > 0 && (
+                        <Fact label={t("instance.panel.datastores")}><DatastoreLinks paths={datastores}/></Fact>
+                    )}
+                </dl>
+                <RefreshStatusButton path={path} nodes={[node]}/>
+            </div>
+            {/* Nothing checked, the help says how; both as high as the buttons, the table kept in place. */}
+            <div className="flex min-h-7 flex-wrap items-center gap-3">
+                {pickedRids.length > 0 ? (
+                    <>
+                        <MenuButton
+                            prominent
+                            icon={<BoltIcon className="h-3.5 w-3.5"/>}
+                            label={t("statusBoard.actions.selectionResources", {count: pickedRids.length})}
+                            disabled={running || resourceItems.length === 0}
+                            items={resourceItems}
+                        />
+                        <Button size="sm" variant="secondary" icon={<CloseIcon/>} onClick={() => setPicked([])}>
+                            {t("statusBoard.actions.clearSelection")}
+                        </Button>
+                    </>
+                ) : (
+                    <p className="text-ink-muted">{t("instance.panel.selectionHelp")}</p>
+                )}
+            </div>
             <Table aria-label={t("instance.panel.resources")}>
                 <thead>
                     <HeaderRow>
+                        <HeaderCell className="w-8"/>
                         <HeaderCell>{t("instance.panel.rid")}</HeaderCell>
                         <HeaderCell>{t("common.status")}</HeaderCell>
                         <HeaderCell>{t("common.type")}</HeaderCell>
@@ -175,16 +254,24 @@ export function InstanceStatus({path, node}) {
                 </thead>
                 <tbody>
                     {resources.map(([rid, r]) => (
-                        <Row key={rid}>
+                        <Row key={rid} selected={pickedRids.includes(rid)}>
+                            <Cell className="w-8">
+                                <Checkbox
+                                    checked={pickedRids.includes(rid)}
+                                    onChange={() => toggle(rid)}
+                                    aria-label={t("instance.panel.selectResource", {rid})}
+                                />
+                            </Cell>
                             <Cell className="whitespace-nowrap"><ResourceLink path={path} rid={rid}/></Cell>
                             <Cell><StatusWord status={r.status} notProvisioned={r.provisioned?.state === "false"}/></Cell>
                             <Cell className="text-ink-muted">{r.type}</Cell>
                             <Cell className="break-all">{r.label}</Cell>
                         </Row>
                     ))}
-                    {resources.length === 0 && <EmptyRow colSpan={4}>{t("instance.panel.noResource")}</EmptyRow>}
+                    {resources.length === 0 && <EmptyRow colSpan={5}>{t("instance.panel.noResource")}</EmptyRow>}
                 </tbody>
             </Table>
+            {dialogs}
         </div>
     );
 }
@@ -193,9 +280,10 @@ export function InstanceStatus({path, node}) {
 const FLAGS = ["disable", "monitor", "optional", "standby", "encap"];
 
 /**
- * A resource of an object on all its nodes: its object, a badge, its type, then
- * its state node by node, each node the badge of the instance there: its status,
- * provisioning, flags, label and its last log message.
+ * A resource of an object on all its nodes: its object, a badge, its type, the
+ * datastores it uses, a badge each, then its state node by node, each node the
+ * badge of the instance there: its status, provisioning, flags, label and its last
+ * log message.
  */
 export function ResourceStatus({path, rid}) {
     const {t} = useTranslation();
@@ -205,13 +293,21 @@ export function ResourceStatus({path, rid}) {
         .sort(([a], [b]) => a.localeCompare(b))
         .map(([node, status]) => ({node, r: status.resources[rid]}));
     const type = rows.find(({r}) => r.type)?.r.type;
+    const datastores = datastoresOf(rows.map(({r}) => r));
     return (
         <div className="space-y-4" data-testid="resource-status">
-            <dl className="grid w-max grid-cols-[auto_auto] items-center gap-x-3 gap-y-1">
-                <Fact label={t("instance.panel.object")}><CrossLink kind="object" id={path}>{path}</CrossLink></Fact>
-                <Fact label={t("instance.panel.rid")}><span className="font-medium">{rid}</span></Fact>
-                <Fact label={t("common.type")}>{type ?? "-"}</Fact>
-            </dl>
+            <div className="flex items-start justify-between gap-2">
+                <dl className="grid w-max grid-cols-[auto_auto] items-center gap-x-3 gap-y-1">
+                    <Fact label={t("instance.panel.object")}><CrossLink kind="object" id={path}>{path}</CrossLink></Fact>
+                    <Fact label={t("instance.panel.rid")}><span className="font-medium">{rid}</span></Fact>
+                    <Fact label={t("common.type")}>{type ?? "-"}</Fact>
+                    {datastores.length > 0 && (
+                        <Fact label={t("instance.panel.datastores")}><DatastoreLinks paths={datastores}/></Fact>
+                    )}
+                </dl>
+                {/* A resource has no status of its own: the instances holding it refreshed whole. */}
+                <RefreshStatusButton path={path} nodes={rows.map(({node}) => node)}/>
+            </div>
             <Table aria-label={t("resource.panel.nodes")}>
                 <thead>
                     <HeaderRow>
@@ -303,7 +399,8 @@ export function InstanceDetailPanel({id, tab, onTabChange, onClose}) {
 /**
  * A resource of an object, by `path:rid`: its state on each node of the object,
  * then what it reports on each (`om <path> resource info list`, ObjectResources),
- * then its logs on all of them, merged. It closes once the object is gone.
+ * then its logs on all of them, merged, then its section of the configuration of
+ * the object. It closes once the object is gone.
  */
 export function ResourceDetailPanel({id, tab, onTabChange, onClose}) {
     const {t} = useTranslation();
@@ -316,6 +413,7 @@ export function ResourceDetailPanel({id, tab, onTabChange, onClose}) {
         {key: "status", label: t("panel.tabs.status")},
         {key: "info", label: t("panel.tabs.info")},
         {key: "logs", label: t("panel.tabs.logs")},
+        {key: "config", label: t("panel.tabs.config")},
     ];
     return (
         <RecordPanel
@@ -329,7 +427,9 @@ export function ResourceDetailPanel({id, tab, onTabChange, onClose}) {
             onTabChange={onTabChange}
             closeOnOutsideClick={false}
         >
-            {(active) => (parsed === null ? null : active === "logs"
+            {(active) => (parsed === null ? null : active === "config"
+                ? <ObjectConfig key={id} path={parsed.path} section={parsed.rid}/>
+                : active === "logs"
                 ? <ObjectLogs key={id} path={parsed.path} nodes={nodes} filters={[`RID=${parsed.rid}`]}/>
                 : active === "info"
                 ? <ObjectResources key={id} path={parsed.path} rid={parsed.rid}/>

@@ -16,6 +16,14 @@ import {CrossLink} from "../app/CrossLink";
 import {NAMESPACE_LISTS, NamespaceObjects, useNamespaceObjectTabs} from "./NamespaceObjects";
 import {ObjectLogs} from "./ObjectLogs";
 import {EventLog, OBJECT_EVENT_TYPES} from "./EventLogger";
+import {createPortal} from "react-dom";
+import {usePanelHeader} from "../app/panel-header";
+import {MenuButton} from "../ui/components/MenuButton";
+import {BoltIcon, TrashIcon} from "../ui/icons";
+import {actionIcon, useActionRunner} from "./InstanceActions";
+import {useGrants} from "../hooks/useGrants";
+import {canWriteClaims} from "../app/namespace-claims";
+import {actionLabel} from "../constants/actions";
 import {KEY_KINDS} from "../constants/actions";
 
 /*
@@ -78,17 +86,17 @@ export function ObjectDetailPanel({path, tab, onTabChange, onClose}) {
     const tabs = keysOnly
         ? [
             {key: "keys", label: t("panel.tabs.keys")},
-            {key: "events", label: t("panel.tabs.events")},
-            {key: "logs", label: t("panel.tabs.logs")},
             {key: "config", label: t("panel.tabs.config")},
+            {key: "logs", label: t("panel.tabs.logs")},
+            {key: "events", label: t("panel.tabs.events")},
         ]
         : [
             {key: "status", label: t("panel.tabs.status")},
             {key: "usage", label: t("panel.tabs.usage")},
             {key: "schedules", label: t("panel.tabs.schedules")},
-            {key: "events", label: t("panel.tabs.events")},
-            {key: "logs", label: t("panel.tabs.logs")},
             {key: "config", label: t("panel.tabs.config")},
+            {key: "logs", label: t("panel.tabs.logs")},
+            {key: "events", label: t("panel.tabs.events")},
         ];
 
     return (
@@ -140,8 +148,50 @@ export function NetworkDetailPanel({name, onClose}) {
 }
 
 /**
+ * The actions on a namespace, in the title bar of its panel: the delete of its
+ * configuration, by those who may write it (root, a squatter), confirmed first. Its
+ * objects stay: a namespace is no object to delete, its configuration is.
+ */
+function NamespaceActions({namespace}) {
+    const {t} = useTranslation();
+    const header = usePanelHeader();
+    const path = namespace === "root" ? "/" : `${namespace}/`;
+    const exists = useEventStore((s) => s.objectStatus?.[path] !== undefined);
+    const mayWrite = canWriteClaims(useGrants());
+    const {ask, running, feedback, dialogs} = useActionRunner(path);
+    const menu = (
+        <MenuButton
+            solid
+            text={t("statusBoard.actions.object")}
+            icon={<BoltIcon className="h-3.5 w-3.5"/>}
+            label={t("namespaces.panel.actions")}
+            align="end"
+            disabled={running}
+            items={[{
+                key: "delete",
+                label: actionLabel("delete"),
+                icon: actionIcon({icon: <TrashIcon className="h-4 w-4"/>, color: exists && mayWrite ? "red" : undefined}),
+                disabled: !exists || !mayWrite,
+                onSelect: () => ask("delete", {
+                    targets: [{}],
+                    subject: t("namespaces.panel.configOf", {namespace}),
+                }),
+            }]}
+        />
+    );
+    return (
+        <>
+            {header.actions !== null && createPortal(menu, header.actions)}
+            {feedback}
+            {dialogs}
+        </>
+    );
+}
+
+/**
  * A namespace: what it claims and its objects use, then its configuration object,
- * a tab each. The tab in the URL, as for the other records.
+ * a tab each. The tab in the URL, as for the other records. Its actions in the title
+ * bar (NamespaceActions).
  */
 export function NamespaceDetailPanel({name, tab, onTabChange, onClose}) {
     const {t} = useTranslation();
@@ -167,7 +217,10 @@ export function NamespaceDetailPanel({name, tab, onTabChange, onClose}) {
             size="wide"
             closeOnOutsideClick={false}
         >
-            {(active) => (active === "config"
+            {(active) => (
+                <>
+                <NamespaceActions key={`actions:${name}`} namespace={name}/>
+                {active === "config"
                 ? <NamespaceConfig key={name} namespace={name}/>
                 : active === "events"
                     ? (
@@ -179,7 +232,9 @@ export function NamespaceDetailPanel({name, tab, onTabChange, onClose}) {
                     ? <NamespaceClaims key={name} namespace={name}/>
                     : NAMESPACE_LISTS.includes(active)
                         ? <NamespaceObjects key={`${name}:${active}`} namespace={name} list={active}/>
-                        : <NamespaceUsage key={name} namespace={name}/>)}
+                        : <NamespaceUsage key={name} namespace={name}/>}
+                </>
+            )}
         </RecordPanel>
     );
 }

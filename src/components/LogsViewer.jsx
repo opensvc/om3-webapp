@@ -1,4 +1,4 @@
-import React, {useEffect, useLayoutEffect, useState, useRef, useCallback, useMemo, useId} from "react";
+import React, {useEffect, useState, useRef, useCallback, useMemo, useId} from "react";
 import {Button, IconButton} from "../ui/components/Button";
 import {StateGlyph} from "../ui/components/StateGlyph";
 import {Input, Checkbox} from "../ui/components/Field";
@@ -6,7 +6,8 @@ import {Alert} from "../ui/components/Alert";
 import {Spinner} from "../ui/components/Spinner";
 import {CaretRightIcon, ChevronDownIcon, CloseIcon, DownloadIcon, PauseIcon, SearchIcon, TrashIcon} from "../ui/icons";
 import {cn} from "../ui/cn";
-import {formatRelativeInstant} from "../ui/lib/format";
+import {useFollowScroll} from "../hooks/useFollowScroll";
+import {FollowOverlay} from "../ui/components/FollowOverlay";
 import {NodeMarker} from "../ui/components/NodeMarker";
 import {useClusterNodeOrder} from "../hooks/useClusterNodeOrder";
 import {splitPrefixes} from "./logPrefixes";
@@ -18,12 +19,6 @@ import {useTranslation} from "react-i18next";
 const STREAM_LINES = 50;
 /** The older lines asked for at once, on demand. */
 const BACKLOG_STEP = 200;
-/** How close to the end, in pixels, the view still counts as at the end. */
-const BOTTOM_SLACK = 24;
-/** How long the age stays by the scroll handle once the scrolling stops. */
-const AGE_SHOWN_MS = 1200;
-/** The height of the age label, in pixels, kept within the view. */
-const AGE_HEIGHT = 22;
 /** Past this many nodes, the marker would be wider than it helps: their names alone. */
 const MARKER_MAX_NODES = 8;
 
@@ -58,20 +53,11 @@ const LogsViewer = ({
     const [isPaused, setIsPaused] = useState(false);
     const [searchTerm, setSearchTerm] = useState("");
     const [levelFilter, setLevelFilter] = useState([]);
-    // Following the new lines: the view at the end, kept there; scrolled up, not.
-    const [following, setFollowing] = useState(true);
-    const followingRef = useRef(true);
-    const [newCount, setNewCount] = useState(0);
-    // The line at the top of the view and its distance to it, kept in place when not following.
-    const anchorRef = useRef(null);
     // The lines asked for of each journal, more as older ones are read; the lines kept, as many more.
     const backlogRef = useRef(STREAM_LINES);
     const keepRef = useRef(maxLogs);
     const [loadingOlder, setLoadingOlder] = useState(false);
     const [noOlder, setNoOlder] = useState(false);
-    // While scrolled, the age of the line in the middle of the view, by the scroll handle.
-    const [scrollAge, setScrollAge] = useState(null);
-    const ageTimerRef = useRef(null);
     const [isConnected, setIsConnected] = useState(false);
     const [errorMessage, setErrorMessage] = useState("");
     const [isLoading, setIsLoading] = useState(false);
@@ -87,6 +73,14 @@ const LogsViewer = ({
     const highlightTimeoutRef = useRef(null);
     const [highlightedLogId, setHighlightedLogId] = useState(null);
     const levelsLabelId = useId();
+    // Read as a terminal: followed at the end; scrolled up, kept in place, the new lines counted.
+    const shownKey = useMemo(() => ({}), [logs, searchTerm, levelFilter]);
+    const {following, follow, newCount, countNew, resetNew, handleScroll, toEnd, scrollAge} = useFollowScroll({
+        containerRef: logsContainerRef,
+        items: shownKey,
+        lineSelector: ".log-line",
+        locale: i18n.language,
+    });
     const nodesKey = (nodenames?.length ? nodenames : nodename ? [nodename] : []).join(",");
     const nodes = useMemo(() => (nodesKey === "" ? [] : nodesKey.split(",")), [nodesKey]);
     const merged = nodes.length > 1;
@@ -116,21 +110,13 @@ const LogsViewer = ({
 
     useEffect(() => {
         // Other logs: followed from their end, none older read yet.
-        followingRef.current = true;
-        setFollowing(true);
-        setNewCount(0);
+        follow(true);
         backlogRef.current = STREAM_LINES;
         keepRef.current = maxLogs;
         setNoOlder(false);
         setSelectedLogId(null);
         setShouldScrollToLog(false);
-    }, [nodesKey, type, namespace, kind, instanceName, maxLogs]);
-
-    const follow = useCallback((on) => {
-        followingRef.current = on;
-        setFollowing(on);
-        if (on) setNewCount(0);
-    }, []);
+    }, [nodesKey, type, namespace, kind, instanceName, maxLogs, follow]);
 
     /** The address of the logs of a node: followed, or `lines` of them read once. */
     const buildLogUrl = useCallback((node, {lines} = {}) => {
@@ -214,14 +200,14 @@ const LogsViewer = ({
         const fresh = logBufferRef.current;
         logBufferRef.current = [];
         // Scrolled up: the new lines counted, for the button taking back to the end.
-        if (!followingRef.current) setNewCount((count) => count + fresh.length);
+        countNew(fresh.length);
         setLogs((prev) => {
             const all = [...prev, ...fresh];
             // The streams of several nodes, merged in the order of their time.
             if (merged) all.sort(byTime);
             return all.slice(-keepRef.current);
         });
-    }, [merged]);
+    }, [merged, countNew]);
 
     const fetchLogs = useCallback(
         async (signal, nodename) => {
@@ -399,19 +385,6 @@ const LogsViewer = ({
         return filtered;
     }, [logs, searchTerm, levelFilter]);
 
-    // Following, the view at the end; not, on the line it showed at its top, where it was.
-    useLayoutEffect(() => {
-        const container = logsContainerRef.current;
-        if (!container) return;
-        if (followingRef.current) {
-            container.scrollTop = container.scrollHeight;
-            return;
-        }
-        const anchor = anchorRef.current;
-        const element = anchor && document.getElementById(anchor.id);
-        if (element) container.scrollTop = element.offsetTop - anchor.offset;
-    }, [filteredLogs]);
-
     useEffect(() => {
         if (shouldScrollToLog && selectedLogId) {
             if (scrollToLogTimeoutRef.current) {
@@ -464,45 +437,6 @@ const LogsViewer = ({
             startStreaming();
         }
     }, [isPaused, startStreaming]);
-
-    // At the end, following; scrolled up, not, the line at the top of the view noted.
-    const handleScroll = useCallback(() => {
-        const container = logsContainerRef.current;
-        if (!container) return;
-        const {scrollTop, scrollHeight, clientHeight} = container;
-        const atEnd = scrollHeight - scrollTop - clientHeight < BOTTOM_SLACK;
-        if (atEnd !== followingRef.current) follow(atEnd);
-        const lines = [...container.querySelectorAll(".log-line")];
-        const top = lines.find((line) => line.offsetTop + line.offsetHeight > scrollTop);
-        anchorRef.current = top ? {id: top.id, offset: top.offsetTop - scrollTop} : null;
-        // Scrolled up, the age of the line in the middle of the view, where the handle is.
-        if (ageTimerRef.current) clearTimeout(ageTimerRef.current);
-        const middle = scrollTop + clientHeight / 2;
-        const line = lines.find((l) => l.offsetTop + l.offsetHeight > middle) ?? lines.at(-1);
-        const at = Number(line?.dataset.at);
-        if (atEnd || !Number.isFinite(at)) {
-            setScrollAge(null);
-            return;
-        }
-        const range = scrollHeight - clientHeight;
-        const ratio = range > 0 ? scrollTop / range : 0;
-        setScrollAge({
-            text: formatRelativeInstant(at, i18n.language),
-            top: Math.round(ratio * Math.max(0, clientHeight - AGE_HEIGHT)),
-        });
-        ageTimerRef.current = setTimeout(() => setScrollAge(null), AGE_SHOWN_MS);
-    }, [follow, i18n.language]);
-
-    useEffect(() => () => {
-        if (ageTimerRef.current) clearTimeout(ageTimerRef.current);
-    }, []);
-
-    /** Back to the end, the new lines followed again. */
-    const toEnd = () => {
-        follow(true);
-        const container = logsContainerRef.current;
-        if (container) container.scrollTop = container.scrollHeight;
-    };
 
     const formatTime = (timestamp) =>
         timestamp.toLocaleTimeString(i18n.language, {
@@ -564,7 +498,7 @@ const LogsViewer = ({
         setLogs([]);
         logBufferRef.current = [];
         seenLogsRef.current.clear();
-        setNewCount(0);
+        resetNew();
     };
 
     const levelSummary = levelFilter.length === 0 ? t("logs.allLevels") : levelFilter.join(", ");
@@ -776,29 +710,13 @@ const LogsViewer = ({
                     )}
                     <div ref={logsEndRef} style={{height: bottomSpacing}}/>
                 </div>
-                {/* While scrolling, the age of the lines shown, by the scroll handle. */}
-                {scrollAge !== null && (
-                    <span
-                        aria-hidden="true"
-                        data-scroll-age=""
-                        style={{top: scrollAge.top}}
-                        className="pointer-events-none absolute right-4 rounded-(--radius-control) bg-accent px-1.5 font-sans text-data font-medium whitespace-nowrap text-accent-ink shadow"
-                    >
-                        {scrollAge.text}
-                    </span>
-                )}
-                {/* Scrolled up: what came since, and the way back to the end. */}
-                {!following && filteredLogs.length > 0 && (
-                    <Button
-                        size="sm"
-                        variant="primary"
-                        className="absolute bottom-3 left-1/2 -translate-x-1/2 shadow-lg"
-                        icon={<ChevronDownIcon className="h-3.5 w-3.5"/>}
-                        onClick={toEnd}
-                    >
-                        {newCount > 0 ? t("logs.newLines", {count: newCount}) : t("logs.latest")}
-                    </Button>
-                )}
+                <FollowOverlay
+                    scrollAge={scrollAge}
+                    following={following}
+                    shown={filteredLogs.length > 0}
+                    onEnd={toEnd}
+                    label={newCount > 0 ? t("logs.newLines", {count: newCount}) : t("logs.latest")}
+                />
             </div>
         </div>
     );

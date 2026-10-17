@@ -392,7 +392,13 @@
       "received_other": "{{count}} events received",
       "noneSelected": "No event types selected. You won't receive any events.",
       "apply": "Apply Subscriptions ({{total}})"
-    }
+    },
+    "following": "Following",
+    "follow": "Follow",
+    "latest": "Latest events",
+    "newEvents_one": "1 new event",
+    "newEvents_other": "{{count}} new events",
+    "showOlder": "Show older events"
   },
   "heartbeats": {
     "columns": {

@@ -392,7 +392,13 @@
       "received_other": "{{count}} événements reçus",
       "noneSelected": "Aucun type d'événement sélectionné. Vous ne recevrez aucun événement.",
       "apply": "Appliquer les abonnements ({{total}})"
-    }
+    },
+    "following": "Suivi",
+    "follow": "Suivre",
+    "latest": "Derniers événements",
+    "newEvents_one": "1 nouvel événement",
+    "newEvents_other": "{{count}} nouveaux événements",
+    "showOlder": "Afficher les événements plus anciens"
   },
   "heartbeats": {
     "columns": {

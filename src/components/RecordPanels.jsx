@@ -94,9 +94,9 @@ export function ObjectDetailPanel({path, tab, onTabChange, onClose}) {
             {key: "status", label: t("panel.tabs.status")},
             {key: "usage", label: t("panel.tabs.usage")},
             {key: "schedules", label: t("panel.tabs.schedules")},
-            {key: "events", label: t("panel.tabs.events")},
-            {key: "logs", label: t("panel.tabs.logs")},
             {key: "config", label: t("panel.tabs.config")},
+            {key: "logs", label: t("panel.tabs.logs")},
+            {key: "events", label: t("panel.tabs.events")},
         ];
 
     return (

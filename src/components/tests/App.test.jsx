@@ -24,7 +24,7 @@ vi.mock('../../app/record-history', async (importOriginal) => ({
     ...(await importOriginal()),
     useRecordHistory: () => mockHistory,
 }));
-vi.mock('../NavBar', () => ({default: () => <div data-testid="navbar">NavBar</div>}));
+vi.mock('../NavBar', () => ({default: ({anchor}) => <div data-testid="navbar">NavBar{anchor}</div>}));
 vi.mock('../../hooks/useSidebarAlerts', () => ({default: () => ({})}));
 vi.mock('../NodesTable', () => ({default: () => <div data-testid="nodes">NodesTable</div>}));
 vi.mock('../Heartbeats', () => ({default: () => <div data-testid="heartbeats">Heartbeats</div>}));
@@ -34,12 +34,16 @@ vi.mock('../Objects', async () => {
     const {useLocation} = await vi.importActual('react-router-dom');
     return {default: () => <div data-testid="objects">{useLocation().search}</div>};
 });
+vi.mock('../Namespaces', async () => {
+    const {useLocation} = await vi.importActual('react-router-dom');
+    return {default: () => <div data-testid="namespaces">{useLocation().search}</div>};
+});
 vi.mock('../Network', async () => {
     const {useLocation} = await vi.importActual('react-router-dom');
     return {default: () => <div data-testid="network">{useLocation().search}</div>};
 });
 vi.mock('../PeekPanel', () => ({PeekPanel: () => <div data-testid="peek-panel"/>}));
-vi.mock('../../app/PanelAnchor', () => ({PanelAnchor: () => <div data-testid="panel-anchor"/>}));
+vi.mock('../../app/PanelAnchor', () => ({PanelAnchor: ({inBar}) => <div data-testid="panel-anchor" data-in-bar={String(!!inBar)}/>}));
 vi.mock('../../app/ShortcutsHelp', () => ({ShortcutsHelp: () => <div data-testid="shortcuts-help"/>}));
 vi.mock('../WhoAmI', () => ({default: () => <div data-testid="whoami">WhoAmI</div>}));
 vi.mock('../SilentRenew.jsx', () => ({default: () => <div data-testid="silent-renew">SilentRenew</div>}));
@@ -226,6 +230,7 @@ describe('App Component', () => {
         ['/pools', 'pools'],
         ['/network', 'network'],
         ['/objects', 'objects'],
+        ['/namespaces', 'namespaces'],
         ['/whoami', 'whoami'],
     ])('protected route %s renders %s', async (path, testId) => {
         setupBasicAuth();
@@ -239,9 +244,10 @@ describe('App Component', () => {
         ['/objects/ns1%2Fsvc%2Fweb', 'objects', '?sel=ns1%2Fsvc%2Fweb'],
         ['/network/test-network', 'network', '?sel=test-network'],
         ['/nodes/node1/objects/ns1%2Fsvc%2Fweb', 'objects', '?sel=ns1%2Fsvc%2Fweb'],
-        // The kinds and namespaces pages are tabs of the Objects page, their filter kept.
+        // The kinds page is the All tab of the Objects page, its filter kept.
         ['/kinds?kind=sec', 'objects', '?kind=sec&list=any'],
-        ['/namespaces', 'objects', '?list=namespaces'],
+        // The former namespaces tab is the Namespaces view, the namespace open in it kept.
+        ['/objects?list=namespaces&sel=prod&tab=claims', 'namespaces', '?sel=prod&tab=claims'],
     ])('old record address %s opens the panel over %s', async (path, testId, search) => {
         setupBasicAuth();
         const {unmount} = renderApp([path]);
@@ -902,6 +908,29 @@ describe('App Component', () => {
             renderApp(['/nodes']);
             await screen.findByTestId('nodes');
             expect(document.getElementById('app-scroll-container').style.paddingRight).toBe('2.5rem');
+            expect(screen.getByTestId('panel-anchor')).toHaveAttribute('data-in-bar', 'false');
+        });
+
+        test('none in a narrow window: the anchor is a button of the header bar', async () => {
+            const matchMedia = window.matchMedia;
+            window.matchMedia = (query) => ({
+                matches: query === '(max-width: 47.95rem)',
+                addEventListener: () => {},
+                removeEventListener: () => {},
+            });
+            try {
+                mockHistory.entries = [{kind: 'node', id: 'dev3n1', at: Date.now()}];
+                setupBasicAuth();
+                renderApp(['/nodes']);
+                await screen.findByTestId('nodes');
+                expect(document.getElementById('app-scroll-container').style.paddingRight).toBe('');
+                const anchors = screen.getAllByTestId('panel-anchor');
+                expect(anchors).toHaveLength(1);
+                expect(screen.getByTestId('navbar')).toContainElement(anchors[0]);
+                expect(anchors[0]).toHaveAttribute('data-in-bar', 'true');
+            } finally {
+                window.matchMedia = matchMedia;
+            }
         });
     });
 });

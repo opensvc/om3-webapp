@@ -1,5 +1,5 @@
 import React from 'react';
-import {render, screen, fireEvent, waitFor} from '@testing-library/react';
+import {render, screen, fireEvent, waitFor, within} from '@testing-library/react';
 import {MemoryRouter} from 'react-router-dom';
 import {vi, describe, test, expect, beforeEach, afterEach} from 'vitest';
 import NavBar from '../NavBar';
@@ -116,10 +116,10 @@ function setupMocks(overrides = {}) {
     localStorage.clear();
 }
 
-function renderNavBar() {
+function renderNavBar(props = {}) {
     return render(
         <MemoryRouter>
-            <NavBar/>
+            <NavBar {...props}/>
         </MemoryRouter>
     );
 }
@@ -133,6 +133,25 @@ describe('NavBar', () => {
 
     afterEach(() => {
         vi.useRealTimers?.();
+    });
+
+    test('the product name and its cluster tag left out of the bar short of room, below 1200px as the menu folds', () => {
+        renderNavBar();
+        const brand = screen.getByTestId('brand');
+        expect(brand).toHaveClass('hidden', 'min-[1200px]:flex');
+        expect(brand).toHaveTextContent('OpenSVC');
+    });
+
+    test('folded, the menu button carries the alert of its entries; open, none', () => {
+        const alert = {level: 'down', text: '1 object down'};
+        const {unmount} = renderNavBar({showSidebarToggle: true, sidebarOpen: false, menuAlert: alert});
+        const button = screen.getByRole('button', {name: 'Show menu'});
+        const badge = within(button).getByTestId('menu-alert');
+        expect(badge).toHaveAttribute('data-level', 'down');
+        expect(badge).toHaveAttribute('title', '1 object down');
+        unmount();
+        renderNavBar({showSidebarToggle: true, sidebarOpen: true, menuAlert: null});
+        expect(screen.queryByTestId('menu-alert')).not.toBeInTheDocument();
     });
 
     test('renders cluster breadcrumb and WhoAmI link on /cluster', () => {

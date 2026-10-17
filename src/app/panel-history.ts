@@ -28,15 +28,17 @@ export function sectionOf(age: number): HistorySection {
 
 /**
  * The types of record, in the order the history groups them by type: the nodes,
- * the object kinds as om3 lists them, then the networks and the namespaces.
+ * the object kinds as om3 lists them, the instances, the resources, then the networks and the namespaces.
  */
-const TYPES = ["node", "svc", "vol", "cfg", "sec", "usr", "nscfg", "ccfg", "network", "namespace"] as const;
+const TYPES = ["node", "svc", "vol", "cfg", "sec", "usr", "nscfg", "ccfg", "instance", "resource", "network", "namespace"] as const;
 
 export type HistoryType = (typeof TYPES)[number];
 
 /** The type of a record: its object kind for an object, a root service by its bare name. */
 export function typeOf(step: PeekStep): HistoryType {
-  if (step.kind === "node" || step.kind === "network" || step.kind === "namespace") return step.kind;
+  if (step.kind === "node" || step.kind === "network" || step.kind === "namespace" || step.kind === "instance" || step.kind === "resource") {
+    return step.kind;
+  }
   if (step.kind !== "object") return "namespace";
   const kind = pathKind(step.id) ?? (step.id === "cluster" ? "ccfg" : "svc");
   return (TYPES as readonly string[]).includes(kind) ? (kind as HistoryType) : "svc";

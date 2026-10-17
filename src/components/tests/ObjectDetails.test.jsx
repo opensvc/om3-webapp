@@ -1307,7 +1307,7 @@ describe('ObjectDetail Component', () => {
             act(() => vi.advanceTimersByTime(5000));
             await waitFor(() => expect(screen.queryByText(/Loading object data.../i)).not.toBeInTheDocument());
             expect(screen.queryByText(/Network failure/i)).not.toBeInTheDocument();
-            expect(screen.getByRole('button', {name: /Object Events/i})).toBeInTheDocument();
+            expect(screen.getByRole('button', {name: 'View Configuration'})).toBeInTheDocument();
         });
 
         test('sets error and stops loading when auth token is missing', async () => {

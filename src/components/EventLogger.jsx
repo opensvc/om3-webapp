@@ -9,6 +9,7 @@ import {cn} from "../ui/cn";
 import useEventLogStore from "../hooks/useEventLogStore";
 import logger from "../utils/logger.js";
 import {startLoggerReception, closeLoggerEventSource} from "../eventSourceManager";
+import {parseObjectPath} from "../utils/objectUtils.jsx";
 import {useTranslation} from "react-i18next";
 
 const CONNECTION_EVENTS = [
@@ -302,9 +303,53 @@ const LogRow = React.memo(({log, isOpen, onToggle}) => {
         prevProps.isOpen === nextProps.isOpen;
 });
 
+/** The path of the object an event is about, wherever the event carries it. */
+const logPath = (log) => {
+    const data = log.data || {};
+    if (log.eventType === "ObjectDeleted" && data._rawEvent) {
+        try {
+            const raw = JSON.parse(data._rawEvent);
+            const path = raw.path ?? raw.labels?.path;
+            if (path) return path;
+        } catch {
+        }
+    }
+    return data.path ?? data.labels?.path ?? data.data?.path ?? data.data?.labels?.path;
+};
+
+const STREAM_EVENT_TYPES = [
+    "CONNECTION_OPENED",
+    "CONNECTION_ERROR",
+    "RECONNECTION_ATTEMPT",
+    "MAX_RECONNECTIONS_REACHED",
+    "CONNECTION_CLOSED",
+];
+
+/** The events of a node: its own, its heartbeats', and the connection of their stream. */
+export const NODE_EVENT_TYPES = [
+    "NodeStatusUpdated",
+    "NodeMonitorUpdated",
+    "NodeStatsUpdated",
+    "DaemonHeartbeatUpdated",
+    ...STREAM_EVENT_TYPES,
+];
+
+/** The events of an object, or of the objects of a namespace, and the connection of their stream. */
+export const OBJECT_EVENT_TYPES = [
+    "ObjectStatusUpdated",
+    "InstanceStatusUpdated",
+    "ObjectDeleted",
+    "InstanceMonitorUpdated",
+    "InstanceConfigUpdated",
+    "InstanceConfigDeleted",
+    ...STREAM_EVENT_TYPES,
+];
+
 const EventDrawerContent = ({
                                 eventTypes,
                                 objectName,
+                                nodeName,
+                                namespace,
                                 onClose,
                                 title
                             }) => {
@@ -323,11 +368,11 @@ const EventDrawerContent = ({
     }, [eventTypes]);
 
     const pageKey = useMemo(() => {
-        const baseKey = objectName || 'global';
+        const baseKey = objectName || (nodeName ? `node:${nodeName}` : namespace ? `namespace:${namespace}` : 'global');
         const eventTypesKey = filteredEventTypes.sort().join(',');
         const hash = hashCode(eventTypesKey);
         return `eventLogger_${baseKey}_${hash}`;
-    }, [objectName, filteredEventTypes]);
+    }, [objectName, nodeName, namespace, filteredEventTypes]);
 
     useEffect(() => {
         setManualSubscriptions([...filteredEventTypes]);
@@ -348,7 +393,7 @@ const EventDrawerContent = ({
                     objectName
                 });
                 try {
-                    startLoggerReception(token, uniqueEvents, objectName);
+                    startLoggerReception(token, uniqueEvents, objectName, nodeName);
                 } catch (error) {
                     logger.warn("Failed to start logger reception:", error);
                 }
@@ -361,7 +406,7 @@ const EventDrawerContent = ({
             logger.log("Closing logger reception (drawer closing)");
             closeLoggerEventSource();
         };
-    }, [manualSubscriptions, objectName, eventTypes, pageKey]);
+    }, [manualSubscriptions, objectName, nodeName, eventTypes, pageKey]);
 
     const {eventLogs = [], isPaused, setPaused, clearLogs} = useEventLogStore();
 
@@ -396,8 +441,22 @@ const EventDrawerContent = ({
                 return data.data?.labels?.path === objectName;
             });
         }
+        if (nodeName) {
+            filtered = filtered.filter(log => {
+                const data = log.data || {};
+                if (log.eventType?.includes?.("CONNECTION")) return true;
+                return data.node === nodeName || data.labels?.node === nodeName;
+            });
+        }
+        if (namespace) {
+            filtered = filtered.filter(log => {
+                if (log.eventType?.includes?.("CONNECTION")) return true;
+                const path = logPath(log);
+                return path !== undefined && parseObjectPath(path).namespace === namespace;
+            });
+        }
         return filtered;
-    }, [eventLogs, manualSubscriptions, objectName, eventTypes, filteredEventTypes]);
+    }, [eventLogs, manualSubscriptions, objectName, nodeName, namespace, eventTypes, filteredEventTypes]);
 
     const availableEventTypes = useMemo(() => {
         const types = new Set();
@@ -483,7 +542,7 @@ const EventDrawerContent = ({
     return (
         <>
             <div className="flex items-center gap-2 border-b border-line px-3 py-1.5">
-                <h2 className="truncate font-semibold">{title}</h2>
+                {title && <h2 className="truncate font-semibold">{title}</h2>}
                 <span className="shrink-0 rounded-full border border-line px-2 text-data text-ink-muted tabular-nums">
                     {t("events.count", {visible: visibleLogs.length, total: filteredLogs.length})}
                 </span>
@@ -517,9 +576,11 @@ const EventDrawerContent = ({
                     >
                         <TrashIcon/>
                     </IconButton>
-                    <IconButton label={t("common.close")} className={TOOL} onClick={onClose}>
-                        <CloseIcon/>
-                    </IconButton>
+                    {onClose && (
+                        <IconButton label={t("common.close")} className={TOOL} onClick={onClose}>
+                            <CloseIcon/>
+                        </IconButton>
+                    )}
                 </div>
             </div>
 
@@ -753,5 +814,21 @@ const EventLogger = React.memo(({
         </>
     );
 });
+
+/**
+ * The events of a node, an object or a namespace, in place: the list the drawer shows,
+ * without its title and close button, for a tab of their panel. An object's are read
+ * for its path alone, a node's for its name; a namespace's are those whose path is in it.
+ */
+export function EventLog({eventTypes = [], nodeName = null, objectName = null, namespace = null, label}) {
+    return (
+        <section
+            aria-label={label}
+            className="flex h-full flex-col overflow-hidden rounded-(--radius-panel) border border-line bg-surface-raised text-ink"
+        >
+            <EventDrawerContent eventTypes={eventTypes} nodeName={nodeName} objectName={objectName} namespace={namespace}/>
+        </section>
+    );
+}
 
 export default EventLogger;

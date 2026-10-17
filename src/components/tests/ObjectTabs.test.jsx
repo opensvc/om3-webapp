@@ -1,7 +1,12 @@
 import React from 'react';
-import {fireEvent, render, screen, within} from '@testing-library/react';
+import {fireEvent, render as renderInDom, screen, within} from '@testing-library/react';
+import {MemoryRouter, useLocation} from 'react-router-dom';
 import {vi} from 'vitest';
 import {ObjectResources, ObjectSchedules} from '../ObjectTabs';
+
+const Search = () => <span data-testid="search">{useLocation().search}</span>;
+/** Rendered in a router: its badges open their records over the view. */
+const render = (ui) => renderInDom(<MemoryRouter>{ui}<Search/></MemoryRouter>);
 
 const NEVER = '0001-01-01T00:00:00Z';
 
@@ -65,7 +70,7 @@ describe('ObjectTabs', () => {
             expect(read[0].options.headers).toEqual({Authorization: 'Bearer tok'});
             const rows = within(table).getAllByRole('row').slice(1);
             expect(rows.map((r) => within(r).getAllByRole('cell').slice(0, 2).map((c) => c.textContent)))
-                .toEqual([['status', 'n1'], ['status', 'n2'], ['sync_all', 'n1']]);
+                .toEqual([['status', 'on n1'], ['status', 'on n2'], ['sync_all', 'on n1']]);
             expect(rows[2]).toHaveTextContent('not scheduled');
             expect(rows[2]).toHaveTextContent('provisioned');
         });
@@ -103,29 +108,61 @@ describe('ObjectTabs', () => {
             info('n1', 'ip#0', 'netmask', '24'),
         ];
 
-        test('a table per resource, a line per key, a column per node', async () => {
+        /** The table read back: each resource, the line opening it, then its key lines. */
+        const groups = () => {
+            const table = screen.getByRole('table', {name: 'Resource information'});
+            const out = [];
+            for (const row of within(table).getAllByRole('row').slice(1)) {
+                if (row.hasAttribute('data-resource-row')) out.push([row.textContent, []]);
+                else out.at(-1)[1].push(within(row).getAllByRole('cell').map((c) => c.textContent).join(' '));
+            }
+            return out;
+        };
+
+        test('one plain table, a line per key, a column per node, a line opening each resource', async () => {
             answer({kind: 'ResourceInfoList', items});
             render(<ObjectResources path="ns1/svc/web"/>);
-            const ip = await screen.findByRole('table', {name: 'ip#0'});
+            const table = await screen.findByRole('table', {name: 'Resource information'});
             expect(read[0].url).toBe('/api/object/path/ns1/svc/web/resource/info');
-            expect(within(ip).getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['Key', 'n1', 'n2']);
-            expect(within(ip).getByRole('row', {name: /ipaddr/})).toHaveTextContent('ipaddr10.0.0.1110.0.0.12');
-            // A key a node does not report is marked missing there.
-            expect(within(ip).getByRole('row', {name: /netmask/})).toHaveTextContent('netmask24–');
-            // The resources in order.
-            expect(screen.getAllByRole('table').map((t) => t.getAttribute('aria-label'))).toEqual(['container#0', 'ip#0']);
+            expect(screen.getAllByRole('table')).toHaveLength(1);
+            expect(within(table).getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['Key', 'on n1', 'on n2']);
+            // The resources in order, a key a node does not report marked missing there.
+            expect(groups()).toEqual([
+                ['container#0', ['id abc123 –']],
+                ['ip#0', ['ipaddr 10.0.0.11 10.0.0.12', 'netmask 24 –']],
+            ]);
+            // The line of a resource across the row.
+            const line = within(table).getByRole('rowheader', {name: 'ip#0'});
+            expect(line).toHaveAttribute('colspan', '3');
+            // The resource and the nodes, badges opening the resource and its instances.
+            fireEvent.click(within(line).getByRole('button', {name: 'ip#0'}));
+            expect(screen.getByTestId('search')).toHaveTextContent('peek=resource%3Ans1%2Fsvc%2Fweb%3Aip%230');
+            fireEvent.click(within(table).getByRole('button', {name: 'on n2'}));
+            expect(screen.getByTestId('search')).toHaveTextContent('peek=instance%3Ans1%2Fsvc%2Fweb%40n2');
+        });
+
+        test('a node or a resource alone: its columns or its lines only, the filter kept', async () => {
+            answer({kind: 'ResourceInfoList', items});
+            const {unmount} = render(<ObjectResources path="ns1/svc/web" node="n1"/>);
+            await screen.findByRole('table', {name: 'Resource information'});
+            expect(within(screen.getByRole('table')).getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['Key', 'on n1']);
+            expect(groups().map(([rid]) => rid)).toEqual(['container#0', 'ip#0']);
+            unmount();
+            render(<ObjectResources path="ns1/svc/web" rid="ip#0"/>);
+            await screen.findByRole('table', {name: 'Resource information'});
+            expect(groups()).toEqual([['ip#0', ['ipaddr 10.0.0.11 10.0.0.12', 'netmask 24 –']]]);
+            expect(screen.getByRole('searchbox', {name: 'Filter the resources'})).toBeInTheDocument();
         });
 
         test('the filter keeps a resource by its name, or the keys and values that match', async () => {
             answer({kind: 'ResourceInfoList', items});
             render(<ObjectResources path="ns1/svc/web"/>);
-            await screen.findByRole('table', {name: 'ip#0'});
+            await screen.findByRole('table', {name: 'Resource information'});
             const filter = screen.getByRole('searchbox', {name: 'Filter the resources'});
             fireEvent.change(filter, {target: {value: 'container'}});
-            expect(screen.getAllByRole('table').map((t) => t.getAttribute('aria-label'))).toEqual(['container#0']);
+            expect(groups()).toEqual([['container#0', ['id abc123 –']]]);
             fireEvent.change(filter, {target: {value: '10.0.0.12'}});
-            const ip = screen.getByRole('table', {name: 'ip#0'});
-            expect(within(ip).getAllByRole('row')).toHaveLength(2);
+            expect(groups()).toEqual([['ip#0', ['ipaddr 10.0.0.11 10.0.0.12']]]);
             fireEvent.change(filter, {target: {value: 'nothing'}});
             expect(screen.getByText('No resource matches the filter')).toBeInTheDocument();
         });

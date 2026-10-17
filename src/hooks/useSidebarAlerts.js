@@ -75,10 +75,12 @@ export function applySidebarEvent(state, type, data) {
  * an event stream of its own: the views open and close the shared one with their
  * own filters, the sidebar stays live whatever the view.
  */
-function useSidebarEventState() {
+function useSidebarEventState(enabled) {
     const [state, setState] = useState(emptyState);
 
     useEffect(() => {
+        // No menu, the sign-in screens: nothing to read.
+        if (!enabled) return undefined;
         let source = null;
         let reconnectTimer = null;
         let flushTimer = null;
@@ -152,17 +154,19 @@ function useSidebarEventState() {
             clearTimeout(flushTimer);
             source?.close();
         };
-    }, []);
+    }, [enabled]);
 
     return state;
 }
 
 /** Pool and network lists, polled; a failed request keeps the last known lists. */
-function useUsageLists() {
+function useUsageLists(enabled) {
     const [pools, setPools] = useState([]);
     const [networks, setNetworks] = useState([]);
 
     useEffect(() => {
+        // No menu, the sign-in screens: nothing to read.
+        if (!enabled) return undefined;
         let cancelled = false;
         const refresh = async () => {
             const token = localStorage.getItem("authToken");
@@ -182,7 +186,7 @@ function useUsageLists() {
             cancelled = true;
             clearInterval(timer);
         };
-    }, []);
+    }, [enabled]);
 
     return {pools, networks};
 }
@@ -278,24 +282,31 @@ export function usageDetails(items, word) {
     return lines;
 }
 
+/** The objects of one kind, out of the objects by path. */
+const ofKind = (objects, kind) =>
+    Object.fromEntries(Object.entries(objects || {}).filter(([path]) => kindOf(path) === kind));
+
 /**
  * State of the sidebar entries, kept up to date without any user action. For each
- * entry path, `alert`: what calls for attention, orange or red, `null` when all is
- * well (pools and networks raise none); and for some entries the `details` lines
- * of their mouseover.
+ * entry id (`NAV_SECTIONS`), `alert`: what calls for attention, orange or red,
+ * `null` when all is well (pools, networks and the lists of keys raise none); and
+ * for some entries the `details` lines of their mouseover. All the objects raise
+ * the alert of all of them; the services and the volumes, each of theirs only.
  */
-export default function useSidebarAlerts() {
-    const {objects, nodeStatus, heartbeatStatus} = useSidebarEventState();
-    const {pools, networks} = useUsageLists();
+export default function useSidebarAlerts({enabled = true} = {}) {
+    const {objects, nodeStatus, heartbeatStatus} = useSidebarEventState(enabled);
+    const {pools, networks} = useUsageLists(enabled);
     // The alerts and details are text: computed again when the language changes.
     const {i18n: {language}} = useTranslation();
 
     return useMemo(() => ({
-        "/objects": {alert: objectsAlert(objects)},
-        "/heartbeats": {alert: heartbeatAlert(heartbeatStatus)},
-        "/pools": {alert: null, details: usageDetails(pools, "pool")},
-        "/network": {alert: null, details: usageDetails(networks, "network")},
-        "/nodes": {alert: nodesAlert(nodeStatus), details: nodesDetails(nodeStatus)},
+        "objects-any": {alert: objectsAlert(objects)},
+        "objects-services": {alert: objectsAlert(ofKind(objects, "svc"))},
+        "objects-volumes": {alert: objectsAlert(ofKind(objects, "vol"))},
+        links: {alert: heartbeatAlert(heartbeatStatus)},
+        pools: {alert: null, details: usageDetails(pools, "pool")},
+        networks: {alert: null, details: usageDetails(networks, "network")},
+        nodes: {alert: nodesAlert(nodeStatus), details: nodesDetails(nodeStatus)},
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }), [objects, nodeStatus, heartbeatStatus, pools, networks, language]);
 }

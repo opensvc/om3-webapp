@@ -6,7 +6,9 @@ import type {
   TdHTMLAttributes,
   ThHTMLAttributes,
 } from "react";
+import { useLayoutEffect, useRef } from "react";
 import { cn } from "../cn";
+import { CARDS, labelCells, useTableCards } from "./table-cards";
 
 /**
  * The list table of oc3 (`CollectorList`): a raised panel with a line border,
@@ -19,11 +21,16 @@ import { cn } from "../cn";
  * in it.
  *
  * `aria-label` names the table itself, not its wrapper.
+ *
+ * `cards` stacks its rows as cards in a narrow window, each value after the title
+ * of its column (`table-cards`); by default, as its place says: on in a record panel.
+ * A table whose layout carries meaning, as a status board, keeps its columns.
  */
 export function Table({
   sticky = false,
   className,
   tableClassName,
+  cards: cardsProp,
   "aria-label": label,
   ref,
   children,
@@ -33,8 +40,25 @@ export function Table({
   ref?: Ref<HTMLDivElement>;
   sticky?: boolean;
   tableClassName?: string;
+  cards?: boolean;
   children: ReactNode;
 }) {
+  const cardsInPlace = useTableCards();
+  const cards = cardsProp ?? cardsInPlace;
+  const table = useRef<HTMLTableElement>(null);
+  // The cells named after their columns, as the rows come and go.
+  useLayoutEffect(() => {
+    const element = table.current;
+    if (!cards || element === null) return;
+    labelCells(element);
+    const observer = new MutationObserver(() => {
+      labelCells(element);
+    });
+    observer.observe(element, { childList: true, subtree: true, characterData: true });
+    return () => {
+      observer.disconnect();
+    };
+  }, [cards]);
   return (
     <div
       ref={ref}
@@ -46,11 +70,14 @@ export function Table({
       {...props}
     >
       <table
+        ref={table}
         aria-label={label}
         data-sticky={sticky ? "" : undefined}
+        data-cards={cards ? "" : undefined}
         className={cn(
           "w-full border-collapse text-data",
           sticky && "[&_thead_th]:sticky [&_thead_th]:top-0 [&_thead_th]:z-10 [&_thead_th]:bg-surface-raised",
+          cards && CARDS,
           tableClassName,
         )}
       >

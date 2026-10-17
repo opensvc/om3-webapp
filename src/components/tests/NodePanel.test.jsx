@@ -4,17 +4,20 @@ import {MemoryRouter, useLocation} from 'react-router-dom';
 import {vi} from 'vitest';
 import {PeekPanel} from '../PeekPanel';
 import useEventStore from '../../hooks/useEventStore.js';
+import useEventLogStore from '../../hooks/useEventLogStore';
 import {reloadRecordHistory} from '../../app/record-history';
 import node from './fixtures/node-dev3n1.json';
 import daemon from './fixtures/daemon-dev3n1.json';
 
-const {mockRetain, mockRelease} = vi.hoisted(() => ({mockRetain: vi.fn(), mockRelease: vi.fn()}));
+const {mockRetain, mockRelease, mockStartLogger} = vi.hoisted(() => ({mockRetain: vi.fn(), mockRelease: vi.fn(), mockStartLogger: vi.fn()}));
 
 vi.mock('../../eventSourceManager', () => ({
     retainEventReception: (...args) => {
         mockRetain(...args);
         return mockRelease;
     },
+    startLoggerReception: (...args) => mockStartLogger(...args),
+    closeLoggerEventSource: () => {},
 }));
 // The logs stream is tested on its own: here, which node and which kind it reads.
 vi.mock('../LogsViewer', () => ({
@@ -31,7 +34,7 @@ vi.mock('../ActionDialogManager', () => ({
     )),
 }));
 
-const CONFIG = '[DEFAULT]\nid = 802efbd1\n\n[node]\nenv = TST\n';
+const CONFIG = '[DEFAULT]\nid = 802efbd1\n\n[node]\nuuid = 5b5c-secret\nenv = TST\n';
 
 function Location() {
     const location = useLocation();
@@ -63,10 +66,12 @@ describe('NodeDetailPanel', () => {
         global.fetch = vi.fn(async (url, options = {}) => {
             const method = options.method ?? 'GET';
             requests.push({method, url, body: options.body});
-            const path = url.replace('/api/node/name/dev3n1/', '').replace(/^\/api\//, '');
+            const [path, query = ''] = url.replace('/api/node/name/dev3n1/', '').replace(/^\/api\//, '').split('?');
             if (path === 'config/file') {
                 if (method === 'PUT') config = options.body;
-                return new Response(method === 'PUT' ? null : config, {status: method === 'PUT' ? 204 : 200});
+                // The secrets redacted on demand, as the daemon does: node.uuid.
+                const shown = query.includes('redact-secrets=true') ? config.replace(/^uuid = .*$/m, 'uuid = ********') : config;
+                return new Response(method === 'PUT' ? null : shown, {status: method === 'PUT' ? 204 : 200});
             }
             if (method === 'POST' || method === 'DELETE') return new Response(null, {status: 200});
             const body = api[path];
@@ -93,7 +98,7 @@ describe('NodeDetailPanel', () => {
     test('opens on its state, kept current by the node events, and its properties', async () => {
         renderPanel();
         expect(within(panel()).getAllByRole('tab').map((tab) => tab.textContent))
-            .toEqual(['Status', 'Inventory', 'Configuration', 'Schedules', 'Drivers', 'Daemon', 'Logs']);
+            .toEqual(['Status', 'Inventory', 'Configuration', 'Schedules', 'Drivers', 'Daemon', 'Events', 'Logs']);
         const facts = within(panel()).getByLabelText('Node state');
         expect(facts).toHaveTextContent('Stateidle');
         expect(facts).toHaveTextContent('Agentv3.0.0-rc46');
@@ -107,10 +112,12 @@ describe('NodeDetailPanel', () => {
         expect(within(properties).getByRole('row', {name: /enclosure not implemented/})).toBeInTheDocument();
     });
 
-    test('its actions stand in the title bar, an oc3 pill, each confirmed then posted', async () => {
+    test('its actions stand in the title bar, a solid button the size of the close one, each confirmed then posted', async () => {
         renderPanel();
         const actions = within(panel()).getByRole('button', {name: 'Node actions'});
-        expect(actions).toHaveClass('rounded-(--radius-pill)');
+        expect(actions).toHaveClass('w-7', 'bg-accent');
+        expect(actions).not.toHaveClass('rounded-(--radius-pill)');
+        expect(actions).toHaveAttribute('title', 'Node actions');
         fireEvent.click(actions);
         const menu = screen.getByRole('menu', {name: 'Node actions'});
         // Not frozen: freeze on offer, unfreeze not.
@@ -172,26 +179,63 @@ describe('NodeDetailPanel', () => {
         expect(within(panel()).getByTestId('logs')).toHaveTextContent(/^node logs of dev3n1$/);
     });
 
-    test('its inventory, a section each, sizes in bytes made readable', async () => {
+    /** The chip of an inventory view. */
+    const inventoryChip = (name) => within(within(panel()).getByRole('tablist', {name: 'Inventory views'})).getByRole('tab', {name: new RegExp(`^${name}`)});
+
+    test('its inventory, a view at a time from chips counting each, the hardware first, sizes in bytes made readable', async () => {
         renderPanel('?peek=node:dev3n1&peektab=inventory');
+        expect(inventoryChip('Hardware')).toHaveAttribute('aria-selected', 'true');
+        expect(await within(panel()).findByRole('table', {name: 'Hardware'})).toBeInTheDocument();
+        await waitFor(() => expect(inventoryChip('Hardware')).toHaveTextContent('3'));
+        // One view at a time.
+        expect(within(panel()).queryByRole('table', {name: 'Disks'})).not.toBeInTheDocument();
+        fireEvent.click(inventoryChip('Disks'));
+        expect(screen.getByTestId('location')).toHaveTextContent('view=disks');
         const disks = await within(panel()).findByRole('table', {name: 'Disks'});
         expect(within(disks).getByRole('row', {name: /\/dev\/vda disk 0x1af4 30 GiB/})).toBeInTheDocument();
         expect(within(disks).getByRole('row', {name: /\/dev\/sr0 rom QEMU QEMU DVD-ROM 374 KiB/})).toBeInTheDocument();
-        expect(within(panel()).getByRole('table', {name: 'IP addresses'})).toHaveTextContent('10.44.0.11/24');
-        expect(within(panel()).getByRole('table', {name: 'SAN paths'})).toHaveTextContent('dev3n1.storage.target.2');
-        expect(within(panel()).getByRole('heading', {name: 'Hardware 3'})).toBeInTheDocument();
-        expect(within(panel()).getByRole('table', {name: 'Users'})).toHaveTextContent('root');
+        fireEvent.click(inventoryChip('Addresses'));
+        expect(await within(panel()).findByRole('table', {name: 'IP addresses'})).toHaveTextContent('10.44.0.11/24');
+        fireEvent.click(inventoryChip('SAN'));
+        expect(await within(panel()).findByRole('table', {name: 'SAN paths'})).toHaveTextContent('dev3n1.storage.target.2');
+        fireEvent.click(inventoryChip('Accounts'));
+        expect(await within(panel()).findByRole('table', {name: 'Users'})).toHaveTextContent('root');
+        expect(within(panel()).getByRole('table', {name: 'Groups'})).toBeInTheDocument();
     });
 
-    test('packages are filtered, and the first ones only shown of a long list', async () => {
+    test('the addresses grouped by interface, a line opening each, filtered', async () => {
+        renderPanel('?peek=node:dev3n1&peektab=inventory&view=addresses');
+        const table = await within(panel()).findByRole('table', {name: 'IP addresses'});
+        const interfaces = () => [...table.querySelectorAll('[data-interface-row]')].map((row) => row.textContent);
+        expect(interfaces().length).toBeGreaterThan(0);
+        expect([...interfaces()].sort((a, b) => a.localeCompare(b))).toEqual(interfaces());
+        fireEvent.change(within(panel()).getByRole('searchbox', {name: 'Filter the addresses'}), {target: {value: '10.44.0.11'}});
+        const rows = within(table).getAllByRole('row').slice(1).filter((row) => !row.hasAttribute('data-interface-row'));
+        expect(rows.every((row) => row.textContent.includes('10.44.0.11'))).toBe(true);
+    });
+
+    test('the objects on a disk, each the badge of its instance on the node, named by its path', async () => {
+        const vda = api['system/disk'].items.find((item) => item.data.id === 'vda');
+        vda.data.regions[0].object = 'ns1/svc/web';
+        renderPanel('?peek=node:dev3n1&peektab=inventory&view=disks');
+        const disks = await within(panel()).findByRole('table', {name: 'Disks'});
+        const badge = within(disks).getByRole('button', {name: 'ns1/svc/web'});
+        fireEvent.click(badge);
+        expect(screen.getByTestId('location')).toHaveTextContent('peek=instance:ns1/svc/web@dev3n1');
+    });
+
+    test('packages are filtered and paged, 50 a page', async () => {
         api['system/package'] = {
             kind: 'PackageList',
             items: Array.from({length: 250}, (_, i) => ({kind: 'PackageItem', meta: {node: 'dev3n1'}, data: {name: `pkg${String(i).padStart(3, '0')}`, version: '1', arch: 'all', type: 'deb'}})),
         };
-        renderPanel('?peek=node:dev3n1&peektab=inventory');
+        renderPanel('?peek=node:dev3n1&peektab=inventory&view=packages');
         const packages = await within(panel()).findByRole('table', {name: 'Packages'});
-        expect(within(packages).getAllByRole('row')).toHaveLength(1 + 200);
-        expect(within(panel()).getByText('50 more packages: refine the filter.')).toBeInTheDocument();
+        expect(within(packages).getAllByRole('row')).toHaveLength(1 + 50);
+        expect(within(panel()).getByText('1–50 of 250')).toBeInTheDocument();
+        fireEvent.click(within(panel()).getByRole('button', {name: 'Next'}));
+        expect(within(packages).getAllByRole('row')[1].cells[0].textContent).toBe('pkg050');
+        // Filtered: from the first page again.
         fireEvent.change(within(panel()).getByRole('searchbox', {name: 'Filter the packages'}), {target: {value: 'pkg24'}});
         expect(within(packages).getAllByRole('row').slice(1).map((row) => row.cells[0].textContent))
             .toEqual(['pkg240', 'pkg241', 'pkg242', 'pkg243', 'pkg244', 'pkg245', 'pkg246', 'pkg247', 'pkg248', 'pkg249']);
@@ -209,6 +253,28 @@ describe('NodeDetailPanel', () => {
         }));
         expect(await within(panel()).findByText('Configuration updated successfully')).toBeInTheDocument();
         expect(within(panel()).getByLabelText('Node configuration file')).toHaveTextContent('max_parallel = 4');
+    });
+
+    test('its secrets redacted, node.uuid, until shown for a while; edited, the file read whole', async () => {
+        renderPanel('?peek=node:dev3n1&peektab=config');
+        const file = await within(panel()).findByLabelText('Node configuration file');
+        expect(file).toHaveTextContent('uuid = ********');
+        expect(file).not.toHaveTextContent('5b5c-secret');
+        expect(requests).toContainEqual(expect.objectContaining({url: '/api/node/name/dev3n1/config/file?redact-secrets=true'}));
+        expect(within(panel()).getByText('Secret values are shown as ********.')).toBeInTheDocument();
+        fireEvent.click(within(panel()).getByRole('button', {name: /^Show/}));
+        await waitFor(() => expect(within(panel()).getByLabelText('Node configuration file')).toHaveTextContent('uuid = 5b5c-secret'));
+        fireEvent.click(within(panel()).getByRole('button', {name: /^Hide/}));
+        await waitFor(() => expect(within(panel()).getByLabelText('Node configuration file')).toHaveTextContent('uuid = ********'));
+        // Edited, the file as stored: the uuid in clear, written back so.
+        fireEvent.click(within(panel()).getByRole('button', {name: 'Edit the configuration file'}));
+        const editor = await within(panel()).findByRole('textbox', {name: 'Node configuration file'});
+        expect(editor.value).toContain('uuid = 5b5c-secret');
+        fireEvent.change(editor, {target: {value: `${CONFIG}max_parallel = 4\n`}});
+        fireEvent.click(within(panel()).getByRole('button', {name: 'Save'}));
+        await waitFor(() => expect(requests).toContainEqual({
+            method: 'PUT', url: '/api/node/name/dev3n1/config/file', body: `${CONFIG}max_parallel = 4\n`,
+        }));
     });
 
     test('a file changed since the edit started is not overwritten', async () => {
@@ -239,6 +305,23 @@ describe('NodeDetailPanel', () => {
 
         openTab('Logs');
         expect(within(panel()).getByTestId('logs')).toHaveTextContent('node logs of dev3n1');
+    });
+
+    test('its events, read for the node alone, in a tab', async () => {
+        localStorage.setItem('authToken', 'token');
+        useEventLogStore.getState().clearLogs();
+        useEventLogStore.getState().addEventLog('NodeMonitorUpdated', {node: 'dev3n2', labels: {node: 'dev3n2'}});
+        useEventLogStore.getState().addEventLog('NodeStatusUpdated', {node: 'dev3n1', labels: {node: 'dev3n1'}});
+        renderPanel('?peek=node:dev3n1&peektab=events');
+        const events = await within(panel()).findByRole('region', {name: 'Events'});
+        expect(mockStartLogger).toHaveBeenCalledWith('token', expect.arrayContaining(['NodeStatusUpdated', 'NodeMonitorUpdated', 'DaemonHeartbeatUpdated']), null, 'dev3n1');
+        const list = within(events).getByRole('region', {name: 'Event list'});
+        expect(await within(list).findByText('NodeStatusUpdated')).toBeInTheDocument();
+        expect(within(list).queryByText('NodeMonitorUpdated')).not.toBeInTheDocument();
+        // In place: no close of its own.
+        expect(within(events).queryByRole('button', {name: 'Close'})).not.toBeInTheDocument();
+        useEventLogStore.getState().clearLogs();
+        localStorage.removeItem('authToken');
     });
 
     test('a read refused is said in its section', async () => {
@@ -273,23 +356,57 @@ describe('NodeDetailPanel', () => {
             await within(panel()).findByRole('table', {name: 'Components'});
         };
 
-        test('the daemon as om daemon shows it: its components, listener, heartbeats, orchestrations, executions and DNS zone', async () => {
+        /** The chip of a view, the switch of the tab. */
+        const chip = (name) => within(within(panel()).getByRole('tablist', {name: 'Daemon views'})).getByRole('tab', {name: new RegExp(`^${name}`)});
+
+        test('the overview first: its components, the listener among them, and its heartbeats; each view summed up on its chip', async () => {
             await openDaemon();
             expect(within(panel()).getByText(`PID ${daemon['cluster/status'].cluster.node.dev3n1.daemon.pid}`, {exact: false})).toBeInTheDocument();
+            expect(chip('Overview')).toHaveAttribute('aria-selected', 'true');
             const components = within(panel()).getByRole('table', {name: 'Components'});
             expect(within(components).getByRole('row', {name: /API listener.*running.*:::1215/})).toBeInTheDocument();
             expect(within(components).getByRole('row', {name: /Collector.*speaker/})).toBeInTheDocument();
+            // The listener, a line of the components, its actions on it: no section of its own.
+            expect(within(components).getByRole('button', {name: 'Actions on the listener api.inet'})).toBeInTheDocument();
+            expect(within(panel()).queryByRole('region', {name: /^Listener/})).not.toBeInTheDocument();
             expect(within(panel()).queryByRole('region', {name: /^Log level/})).not.toBeInTheDocument();
             expect(requests.some((req) => req.url.includes('daemon/log/control'))).toBe(false);
-            expect(within(section('Listener')).getByText('api.inet')).toBeInTheDocument();
             const heartbeats = await within(panel()).findByRole('table', {name: 'Heartbeats'});
             expect(within(heartbeats).getAllByRole('row').slice(1)).toHaveLength(8);
-            expect(within(panel()).getByRole('table', {name: 'Orchestrations'})).toHaveTextContent('foo002');
+            // The long lists on views of their own, their counts on their chips.
+            expect(within(panel()).queryByRole('table', {name: 'Executions'})).not.toBeInTheDocument();
+            expect(within(panel()).queryByRole('table', {name: 'DNS zone'})).not.toBeInTheDocument();
+            await waitFor(() => expect(chip('DNS')).toHaveTextContent('8'));
+            expect(chip('Executions')).toHaveTextContent(String(api['daemon/exec'].items.length));
+        });
+
+        test('a view at a time, from its chip, in the URL: orchestrations, executions, the DNS zone grouped by name', async () => {
+            await openDaemon();
+            fireEvent.click(chip('Orchestrations'));
+            expect(screen.getByTestId('location')).toHaveTextContent('view=orchestrations');
+            expect(await within(panel()).findByRole('table', {name: 'Orchestrations'})).toHaveTextContent('foo002');
+            expect(within(panel()).queryByRole('table', {name: 'Components'})).not.toBeInTheDocument();
+            fireEvent.click(chip('Executions'));
             expect(await within(panel()).findByRole('table', {name: 'Executions'})).toHaveTextContent('instance status');
+            fireEvent.click(chip('DNS'));
             const zone = await within(panel()).findByRole('table', {name: 'DNS zone'});
-            expect(within(zone).getAllByRole('row').slice(1)).toHaveLength(8);
+            const records = () => within(zone).getAllByRole('row').slice(1).filter((row) => !row.hasAttribute('data-name-row'));
+            const names = () => [...zone.querySelectorAll('[data-name-row]')].map((row) => row.textContent);
+            expect(records()).toHaveLength(8);
+            // A line opening the records of each name, the names in order.
+            expect(names().length).toBeGreaterThan(0);
+            expect([...names()].sort((x, y) => x.localeCompare(y))).toEqual(names());
             fireEvent.change(within(panel()).getByLabelText('Filter records'), {target: {value: 'ns1.dev3'}});
-            expect(within(zone).getAllByRole('row').slice(1).every((row) => row.textContent.includes('ns1.dev3'))).toBe(true);
+            // Each record kept matches, by its name or its own content.
+            let name = '';
+            for (const row of within(zone).getAllByRole('row').slice(1)) {
+                if (row.hasAttribute('data-name-row')) name = row.textContent;
+                else expect(`${name} ${row.textContent}`).toContain('ns1.dev3');
+            }
+            // Back to the overview: its view the first, out of the URL.
+            fireEvent.click(chip('Overview'));
+            expect(screen.getByTestId('location')).not.toHaveTextContent('view=');
+            expect(await within(panel()).findByRole('table', {name: 'Components'})).toBeInTheDocument();
         });
 
         test('the heartbeats kept current by their events, without a reload', async () => {
@@ -339,9 +456,9 @@ describe('NodeDetailPanel', () => {
             })));
         });
 
-        test('the listener stopped, warned that the API stops answering', async () => {
+        test('the listener stopped, from its line of the components, warned that the API stops answering', async () => {
             await openDaemon();
-            fireEvent.click(within(section('Listener')).getByRole('button', {name: 'Actions'}));
+            fireEvent.click(within(panel()).getByRole('button', {name: 'Actions on the listener api.inet'}));
             fireEvent.click(within(screen.getByRole('menu')).getByRole('menuitem', {name: 'Stop'}));
             expect(confirmDialog()).toHaveTextContent('Its API stops answering over the network');
             confirm();
@@ -355,7 +472,7 @@ describe('NodeDetailPanel', () => {
                 exec_id: 'e1', path: 'ns1/svc/web', command: '/usr/bin/om ns1/svc/web instance start', origin: 'api',
                 state: 'running', node: 'dev3n1', started_at: '2026-10-15T10:00:00+02:00',
             });
-            await openDaemon();
+            renderPanel('?peek=node:dev3n1&peektab=daemon&view=executions');
             const execs = await within(panel()).findByRole('table', {name: 'Executions'});
             const first = within(execs).getAllByRole('row')[1];
             expect(first).toHaveTextContent('ns1/svc/web');
@@ -372,10 +489,10 @@ describe('NodeDetailPanel', () => {
         test('a request refused says why, in the section it was asked from', async () => {
             await openDaemon();
             global.fetch.mockImplementationOnce(async () => new Response(JSON.stringify({detail: 'listener busy'}), {status: 409}));
-            fireEvent.click(within(section('Listener')).getByRole('button', {name: 'Actions'}));
+            fireEvent.click(within(panel()).getByRole('button', {name: 'Actions on the listener api.inet'}));
             fireEvent.click(within(screen.getByRole('menu')).getByRole('menuitem', {name: 'Restart'}));
             confirm();
-            expect(await within(section('Listener')).findByText(/Restart api.inet could not be requested: .*listener busy/)).toBeInTheDocument();
+            expect(await within(section('Components')).findByText(/Restart api.inet could not be requested: .*listener busy/)).toBeInTheDocument();
         });
     });
 });

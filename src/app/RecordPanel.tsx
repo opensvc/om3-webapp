@@ -10,6 +10,7 @@ import { openedFromHistory, recordKey } from "./panel-history";
 import { isPeekStep, stepIcon, type PeekKind } from "./peek";
 import { rememberLastRecord, useRecordHistory } from "./record-history";
 import { PanelHeaderContext } from "./panel-header";
+import { TableCardsContext } from "../ui/components/table-cards";
 
 /**
  * Title of a record panel: the icon of its kind and its name. Where the window leaves
@@ -24,14 +25,12 @@ export function PanelTitle({
   title,
   recordId,
   open,
-  size,
   slotRef,
 }: {
   kind: PeekKind;
   title: string;
   recordId: string | undefined;
   open: boolean;
-  size: SlideOverSize;
   /** The place by the name where the content of the panel qualifies the record. */
   slotRef?: (element: HTMLElement | null) => void;
 }) {
@@ -56,11 +55,6 @@ export function PanelTitle({
       <ObjectIcon kind={icon} />
       <h2 className="truncate text-title font-semibold">{title}</h2>
       {slotRef !== undefined && <div ref={slotRef} className="flex shrink-0 items-center gap-1" />}
-      {open && (
-        <div className={RAIL_FALLBACK[size]}>
-          <PanelHistoryMenu currentKey={currentKey} />
-        </div>
-      )}
     </div>
   );
 }
@@ -117,9 +111,20 @@ export function RecordPanel({
       closeLabel={t("common.close")}
       resizeLabel={t("panel.resize")}
       closeOnOutsideClick={closeOnOutsideClick}
-      heading={<PanelTitle kind={kind} title={title} recordId={recordId} open={open} size={size} slotRef={setTitleSlot} />}
+      heading={<PanelTitle kind={kind} title={title} recordId={recordId} open={open} slotRef={setTitleSlot} />}
       rail={<PanelHistoryRail currentKey={recordKey(kind, recordId)} />}
-      actions={<div ref={setActionsSlot} className="flex items-center gap-2" />}
+      actions={
+        <>
+          <div ref={setActionsSlot} className="flex items-center gap-2" />
+          {/* The history, where the window leaves no room for its rail: between the
+              actions and the close button, buttons alike. */}
+          {open && (
+            <div className={RAIL_FALLBACK[size]}>
+              <PanelHistoryMenu currentKey={recordKey(kind, recordId)} />
+            </div>
+          )}
+        </>
+      }
       subheader={
         open && items.length > 1 ? (
           <TabList
@@ -136,9 +141,12 @@ export function RecordPanel({
     >
       {open && (
         <PanelHeaderContext.Provider value={{ title: titleSlot, actions: actionsSlot }}>
-          <div {...(items.length > 1 ? tabPanelProps(tabsId, active) : {})} className="outline-none">
-            {children(active)}
-          </div>
+          {/* Short of room, the tables of a panel stack their rows as cards. */}
+          <TableCardsContext.Provider value>
+            <div {...(items.length > 1 ? tabPanelProps(tabsId, active) : {})} className="outline-none">
+              {children(active)}
+            </div>
+          </TableCardsContext.Provider>
         </PanelHeaderContext.Provider>
       )}
     </SlideOver>

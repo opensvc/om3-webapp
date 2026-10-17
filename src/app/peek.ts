@@ -17,16 +17,40 @@ export interface PeekStep {
  * - `object`: an object, by its path (`ns/kind/name`), its instances shown by
  *   its status board;
  * - `network`: a network, by its name;
- * - `namespace`: the usage of a namespace, by its name.
+ * - `namespace`: the usage of a namespace, by its name;
+ * - `instance`: the instance of an object on a node, by `path@node` (`instanceId`);
+ * - `resource`: a resource of an object on all its nodes, by `path:rid` (`resourceId`).
  */
-export type PeekKind = "node" | "object" | "network" | "namespace";
+export type PeekKind = "node" | "object" | "network" | "namespace" | "instance" | "resource";
 
 const PEEK_KINDS: ReadonlySet<string> = new Set<PeekKind>([
   "node",
   "object",
   "network",
   "namespace",
+  "instance",
+  "resource",
 ]);
+
+/** The id of a resource of an object: "path:rid"; an object path holds no colon. */
+export const resourceId = (path: string, rid: string) => `${path}:${rid}`;
+
+/** The object and the resource of a resource id. */
+export function parseResourceId(id: string): { path: string; rid: string } | null {
+  const cut = id.indexOf(":");
+  if (cut <= 0 || cut === id.length - 1) return null;
+  return { path: id.slice(0, cut), rid: id.slice(cut + 1) };
+}
+
+/** The id of the instance of an object on a node: "path@node". */
+export const instanceId = (path: string, node: string) => `${path}@${node}`;
+
+/** The object and the node of an instance id; a path holds no "@", a node name neither. */
+export function parseInstanceId(id: string): { path: string; node: string } | null {
+  const at = id.lastIndexOf("@");
+  if (at <= 0 || at === id.length - 1) return null;
+  return { path: id.slice(0, at), node: id.slice(at + 1) };
+}
 
 /** A step of another kind, from a hand-written URL or an old history, is dropped. */
 export function isPeekStep(step: PeekStep): step is PeekStep & { kind: PeekKind } {
@@ -63,6 +87,10 @@ export function stepIcon(step: PeekStep): ObjectKind {
       return "network";
     case "namespace":
       return "namespace";
+    case "instance":
+      return "instance";
+    case "resource":
+      return "app";
     default:
       return "service";
   }

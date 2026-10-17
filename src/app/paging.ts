@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 /**
@@ -96,5 +96,28 @@ export function usePaging(view: string, total: number): Paging {
 
   const page = useCallback(<T>(rows: T[]) => rows.slice(offset, offset + limit), [offset, limit]);
 
+  return { offset, limit, total, page, setOffset, setLimit };
+}
+
+/**
+ * The page of a list in a panel: as `usePaging`, but held by the panel, not the
+ * URL, whose `offset` and `limit` are the view's under the panel. The size kept
+ * for `view` as the views keep theirs.
+ */
+export function useLocalPaging(view: string, total: number): Paging {
+  const [limit, setLimitState] = useState(() => savedLimit(view) ?? DEFAULT_LIMIT);
+  const [asked, setAsked] = useState(0);
+  const lastOffset = total > 0 ? Math.floor((total - 1) / limit) * limit : 0;
+  const offset = Math.min(asked - (asked % limit), lastOffset);
+  const setOffset = useCallback((next: number) => setAsked(Math.max(0, next)), []);
+  const setLimit = useCallback(
+    (next: number) => {
+      saveLimit(view, next);
+      setLimitState(next);
+      setAsked(0);
+    },
+    [view],
+  );
+  const page = useCallback(<T>(rows: T[]) => rows.slice(offset, offset + limit), [offset, limit]);
   return { offset, limit, total, page, setOffset, setLimit };
 }

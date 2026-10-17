@@ -418,8 +418,6 @@
       "stale": "Périmé"
     },
     "empty": "Aucun heartbeat ne correspond aux filtres actuels.",
-    "eventsLogger": "Journal des événements heartbeat",
-    "events": "Événements heartbeat",
     "mesh": {
       "title": "Maillage",
       "desc": "Description",
@@ -547,7 +545,24 @@
       "title": "Journaux de l'instance - {{node}}/{{name}}",
       "close": "Fermer les journaux de l'instance",
       "resize": "Redimensionner le panneau"
-    }
+    },
+    "panel": {
+      "title": "{{path}} @ {{node}}",
+      "avail": "Disponibilité",
+      "overall": "Global",
+      "provisioned": "Provisionné",
+      "frozen": "Gelé",
+      "monitor": "Moniteur",
+      "yes": "oui",
+      "no": "non",
+      "resources": "Ressources de l'instance",
+      "rid": "Ressource",
+      "label": "Libellé",
+      "noResource": "Aucune ressource.",
+      "object": "Objet",
+      "node": "Nœud"
+    },
+    "on": "sur {{node}}"
   },
   "keys": {
     "title": "Clés de l'objet ({{total}})",
@@ -649,6 +664,8 @@
   "metrics": {
     "columns": {
       "object": "Objet",
+      "node": "Nœud",
+      "instances": "Instances",
       "cpu": "CPU",
       "memory": "Mémoire",
       "limit": "Limite"
@@ -661,7 +678,19 @@
     "fetchError": "Échec de la récupération des métriques : {{error}}",
     "loading": "Chargement des métriques",
     "empty": "Aucune métrique cgroup pour les objets de {{namespace}}",
-    "footer": "Utilisation sur le nœud qui sert cette page, rafraîchie toutes les {{seconds}} secondes. Le CPU est en pourcentage d'un CPU."
+    "footer": "Additionné sur les nœuds du cluster, rafraîchi toutes les {{seconds}} secondes. Le CPU est en pourcentage d'un CPU.",
+    "object": {
+      "total": "Usage de l'objet",
+      "instances": "Usage par instance",
+      "openInstance": "Ouvrir l'instance sur {{node}}",
+      "none": "Aucune instance.",
+      "footer": "Additionné sur ses instances, rafraîchi toutes les {{seconds}} secondes. Le CPU est en pourcentage d'un CPU ; les limites s'additionnent, illimitées si l'une l'est."
+    },
+    "instance": {
+      "total": "Usage de l'instance",
+      "none": "Aucun cgroup pour cette instance sur {{node}}.",
+      "footer": "Sur {{node}}, rafraîchi toutes les {{seconds}} secondes. Le CPU est en pourcentage d'un CPU."
+    }
   },
   "namespaces": {
     "columns": {
@@ -676,8 +705,6 @@
       "memory": "Mémoire"
     },
     "empty": "Aucun namespace disponible",
-    "eventsLogger": "Journal des événements des namespaces",
-    "events": "Événements des namespaces",
     "tableLabel": "Namespaces",
     "show": {
       "svc_one": "Afficher le service {{status}} de {{namespace}}",
@@ -702,23 +729,20 @@
       "share": "Part",
       "barLabel": "{{title}} : {{parts}}"
     },
-    "cpu": {
-      "trend": "CPU de {{namespace}}, 5 dernières minutes"
-    },
     "memory": {
-      "used": "{{used}} utilisé",
-      "trend": "Mémoire de {{namespace}}, 5 dernières minutes"
+      "used": "{{used}} utilisé"
     },
     "panel": {
       "tabs": {
         "usage": "Usage",
+        "claims": "Réclamations",
+        "events": "Événements",
         "config": "Configuration"
       },
       "claims": "Réclamations et usage",
       "resource": "Ressource",
       "limit": "Limite",
       "share": "Part",
-      "trend": "5 dernières minutes",
       "shareOf": "Part de {{name}} utilisée",
       "types": {
         "pool": "Pool",
@@ -739,12 +763,135 @@
       "create": "Créer sa configuration",
       "creating": "Création…",
       "createFailed": "La configuration n'a pas pu être créée : {{message}}"
+    },
+    "claims": {
+      "actions": "Actions",
+      "add": "Ajouter une réclamation",
+      "edit": "Modifier",
+      "editOf": "Modifier la réclamation de {{name}}",
+      "remove": "Supprimer",
+      "removeOf": "Supprimer la réclamation de {{name}}",
+      "claim": "Réclamer",
+      "claimOf": "Réclamer {{name}}",
+      "readOnly": "Seuls root et les squatters peuvent modifier les réclamations d'un namespace.",
+      "saveFailed": "La réclamation n'a pas pu être écrite : {{message}}",
+      "removeFailed": "La réclamation n'a pas pu être supprimée : {{message}}",
+      "removeTitle": "Supprimer la réclamation de {{name}}",
+      "removeText": "{{namespace}} ne sera plus limité à {{limit}} de {{name}}.",
+      "removeEffect": {
+        "pool": "Ses volumes ne seront alors limités que par la taille du pool.",
+        "network": "Ses objets ne seront alors limités que par les adresses du réseau.",
+        "cpu": "Ses objets utiliseront alors autant de cpu que les nœuds leur en donnent.",
+        "memory": "Ses objets utiliseront alors autant de mémoire que les nœuds leur en donnent."
+      },
+      "units": {
+        "m": "Mio",
+        "g": "Gio",
+        "t": "Tio"
+      },
+      "errors": {
+        "positive": "Saisissez un nombre supérieur à 0.",
+        "integer": "Saisissez un nombre entier d'adresses.",
+        "cpuMin": "Saisissez au moins 0,01 cpu."
+      },
+      "types": {
+        "pool": {
+          "label": "Stockage d'un pool",
+          "help": "Ce que ses volumes peuvent prendre d'un pool.",
+          "taken": "Tous les pools sont déjà réclamés : modifiez leur réclamation."
+        },
+        "network": {
+          "label": "Adresses d'un réseau",
+          "help": "Combien d'adresses ses objets peuvent tenir dans un réseau.",
+          "taken": "Tous les réseaux sont déjà réclamés : modifiez leur réclamation."
+        },
+        "cpu": {
+          "label": "CPU",
+          "help": "Combien de cpus ses objets peuvent utiliser ensemble.",
+          "taken": "Déjà réclamé : modifiez sa réclamation."
+        },
+        "memory": {
+          "label": "Mémoire",
+          "help": "Combien de mémoire ses objets peuvent utiliser ensemble.",
+          "taken": "Déjà réclamée : modifiez sa réclamation."
+        }
+      },
+      "wizard": {
+        "addTitle": "Nouvelle réclamation de {{namespace}}",
+        "editTitle": "Réclamation de {{name}} par {{namespace}}",
+        "steps": "Étapes",
+        "step": {
+          "type": "Quoi",
+          "target": "Lequel",
+          "limit": "Combien",
+          "review": "Vérification"
+        },
+        "back": "Précédent",
+        "next": "Suivant",
+        "save": "Enregistrer la réclamation",
+        "saving": "Enregistrement…",
+        "typeQuestion": "Que réclame le namespace ?",
+        "targetQuestion": {
+          "pool": "De quel pool ?",
+          "network": "De quel réseau ?"
+        },
+        "noTarget": {
+          "pool": "Tous les pools sont déjà réclamés.",
+          "network": "Tous les réseaux sont déjà réclamés."
+        },
+        "targetFigures": "{{used}} utilisés sur {{size}}",
+        "limitLabel": {
+          "pool": "Le plus qu'il peut prendre de {{name}}",
+          "network": "Le plus d'adresses qu'il peut tenir dans {{name}}",
+          "cpu": "Le plus de cpus qu'il peut utiliser",
+          "memory": "Le plus de mémoire qu'il peut utiliser"
+        },
+        "defaultLabel": {
+          "cpu": "Cpus d'un conteneur n'en fixant pas",
+          "memory": "Mémoire d'un conteneur n'en fixant pas"
+        },
+        "defaultHint": "La limite de chaque conteneur du namespace qui n'en fixe pas lui-même.",
+        "optional": "{{label}} (facultatif)",
+        "unit": "Unité",
+        "unitOf": {
+          "network": "adresses",
+          "cpu": "cpus"
+        },
+        "usedNow": "Utilisé maintenant : {{used}}.",
+        "sizeOf": {
+          "pool": "Taille du pool : {{size}}.",
+          "network": "Taille du réseau : {{size}}."
+        },
+        "cpuHint": "0,5 est un demi cpu.",
+        "belowUsage": "En dessous des {{used}} utilisés maintenant : ce qui grandit au-delà sera refusé jusqu'à ce que l'usage repasse sous la réclamation.",
+        "aboveSize": {
+          "pool": "Plus que les {{size}} du pool : le pool limite d'abord.",
+          "network": "Plus que les {{size}} adresses du réseau : le réseau limite d'abord."
+        },
+        "summary": {
+          "pool": "{{namespace}} pourra prendre jusqu'à {{limit}} du pool {{name}}.",
+          "network": "{{namespace}} pourra tenir jusqu'à {{limit}} adresses dans le réseau {{name}}.",
+          "cpu": "{{namespace}} pourra utiliser jusqu'à {{limit}}.",
+          "memory": "{{namespace}} pourra utiliser jusqu'à {{limit}} de mémoire."
+        },
+        "summaryDefault": {
+          "cpu": "Un conteneur sans limite propre reçoit {{value}}.",
+          "memory": "Un conteneur sans limite propre reçoit {{value}}."
+        },
+        "createsConfig": "{{namespace}} n'a pas encore d'objet de configuration : il est créé avec cette réclamation.",
+        "written": "Écrit dans la configuration du namespace :"
+      }
+    },
+    "objects": {
+      "tableLabel": "{{list}} de {{namespace}}",
+      "empty": "Aucun objet de type {{list}} dans {{namespace}}.",
+      "selectAll": "Sélectionner tous les objets de type {{list}}"
     }
   },
   "nav": {
     "openCluster": "Ouvrir le cluster",
     "routes": {
-      "heartbeats": "Heartbeats",
+      "heartbeats": "Liens",
       "networks": "Réseaux",
       "nodes": "Nœuds",
       "objects": "Objets",
@@ -767,7 +914,7 @@
       "cluster": "Cluster",
       "loading": "Chargement...",
       "segments": {
-        "heartbeats": "heartbeats",
+        "heartbeats": "liens",
         "kinds": "kinds",
         "namespaces": "namespaces",
         "network": "réseaux",
@@ -776,6 +923,10 @@
         "pools": "pools",
         "whoami": "utilisateur"
       }
+    },
+    "sections": {
+      "cluster": "Cluster",
+      "objects": "Objets"
     }
   },
   "networks": {
@@ -813,8 +964,6 @@
     "bulkActions": "Actions",
     "selectAll": "Sélectionner tous les nœuds",
     "loading": "Chargement des nœuds",
-    "eventsLogger": "Journal des événements des nœuds",
-    "events": "Événements des nœuds",
     "target": {
       "node": "le nœud {{node}}",
       "selected_one": "{{count}} nœud",
@@ -851,7 +1000,9 @@
       "filter": "Filtrer les ressources",
       "none": "Aucune ressource ne remonte d’information",
       "noMatch": "Aucune ressource ne correspond au filtre",
-      "key": "Clé"
+      "key": "Clé",
+      "noneOf": "{{rid}} ne signale aucune information.",
+      "table": "Informations des ressources"
     }
   },
   "nodePanel": {
@@ -866,8 +1017,9 @@
       "config": "Configuration",
       "schedules": "Planifications",
       "drivers": "Pilotes",
-      "logs": "Journaux",
-      "daemon": "Démon"
+      "daemon": "Démon",
+      "events": "Événements",
+      "logs": "Journaux"
     },
     "status": {
       "title": "État du nœud",
@@ -888,15 +1040,22 @@
       "hardware": "Matériel",
       "disks": "Disques",
       "addresses": "Adresses IP",
-      "san": "SAN",
       "initiators": "Initiateurs SAN",
       "paths": "Chemins SAN",
       "packages": "Paquets",
       "filterPackages": "Filtrer les paquets",
-      "morePackages_one": "{{count}} paquet de plus : précisez le filtre.",
-      "morePackages_other": "{{count}} paquets de plus : précisez le filtre.",
       "users": "Utilisateurs",
-      "groups": "Groupes"
+      "groups": "Groupes",
+      "views": {
+        "label": "Vues de l'inventaire",
+        "hardware": "Matériel",
+        "disks": "Disques",
+        "addresses": "Adresses",
+        "san": "SAN",
+        "packages": "Paquets",
+        "accounts": "Comptes"
+      },
+      "filterAddresses": "Filtrer les adresses"
     },
     "config": {
       "file": "Fichier de configuration du nœud",
@@ -966,10 +1125,6 @@
       "title": "Journaux",
       "close": "Fermer les journaux",
       "resize": "Redimensionner le panneau"
-    },
-    "events": {
-      "title": "Événements - {{name}}",
-      "button": "Événements de l'objet"
     }
   },
   "createObject": {
@@ -1014,6 +1169,13 @@
     }
   },
   "objects": {
+    "flex": {
+      "title": "Flex",
+      "min": "Instances min",
+      "max": "Instances max",
+      "target": "Instances visées"
+    },
+    "degraded": "Dégradé",
     "notProvisioned": "Non provisionné",
     "tableLabel": "Objets",
     "selectAll": "Sélectionner tous les objets",
@@ -1060,10 +1222,6 @@
       "objects_one": "{{count}} objet",
       "objects_other": "{{count}} objets"
     },
-    "events": {
-      "title": "Journal des événements des objets",
-      "button": "Événements des objets"
-    },
     "header": {
       "statusTitle": "Statut de l'objet : {{status}}",
       "unknown": "inconnu",
@@ -1071,7 +1229,10 @@
       "notProvisionedLabel": "L'objet n'est pas provisionné",
       "actionsMenu": "Actions sur l'objet"
     },
-    "selectHint": "Sélectionnez des objets pour agir dessus"
+    "selectHint": "Sélectionnez des objets pour agir dessus",
+    "selectNamespace": "Sélectionner les objets de {{namespace}}",
+    "openInstance": "Ouvrir l'instance sur {{node}}",
+    "openInstanceOf": "Ouvrir l'instance de {{name}} sur {{node}}"
   },
   "pools": {
     "columns": {
@@ -1103,6 +1264,7 @@
       "unknown": "inconnu"
     },
     "stateMarks": {
+      "notProvisioned": "Non provisionné",
       "stopped": "Arrêté",
       "stoppedTitle": "arrêté",
       "stoppedAt": "arrêté le {{date}}",
@@ -1135,17 +1297,23 @@
     "resize": "Redimensionner le panneau",
     "tabs": {
       "status": "État",
+      "usage": "Usage",
+      "events": "Événements",
       "logs": "Journaux",
       "resources": "Ressources",
       "schedules": "Planifications",
       "keys": "Clés",
-      "config": "Configuration"
+      "config": "Configuration",
+      "info": "Infos"
     },
     "crossLink": "Afficher la fiche ici ({{kind}})",
     "kinds": {
       "object": "objet",
       "network": "réseau",
-      "namespace": "espace de noms"
+      "namespace": "espace de noms",
+      "node": "nœud",
+      "instance": "instance",
+      "resource": "ressource"
     },
     "logs": {
       "noNode": "Aucune instance dont lire les journaux."
@@ -1184,12 +1352,10 @@
       "nscfg": "Configurations de namespace",
       "ccfg": "Cluster",
       "network": "Réseaux",
-      "namespace": "Namespaces"
+      "namespace": "Namespaces",
+      "instance": "Instances",
+      "resource": "Ressources"
     }
-  },
-  "panelSide": {
-    "toLeft": "Déplacer les panneaux à gauche",
-    "toRight": "Déplacer les panneaux à droite"
   },
   "statusBoard": {
     "caption": "État de {{path}} par nœud",
@@ -1259,7 +1425,7 @@
       "object": "Actions",
       "allNodes": "tous les nœuds",
       "clearSelection": "Vider la sélection",
-      "selectionHelp": "Cliquez sur des ressources ou sur des instances pour les sélectionner.",
+      "selectionHelp": "Cochez des ressources ou des instances pour les sélectionner.",
       "selectionResources_one": "Actions sur 1 ressource",
       "selectionResources_other": "Actions sur {{count}} ressources",
       "selectionInstances_one": "Actions sur 1 instance",
@@ -1383,12 +1549,12 @@
       "daemondata": "Données du démon"
     },
     "listener": {
-      "title": "Listener",
       "confirm": {
         "start": "Démarrer le listener {{listener}} de {{node}} ?",
         "stop": "Arrêter le listener {{listener}} de {{node}} ? Son API ne répond plus par le réseau, cette page comprise si elle passe par {{node}}.",
         "restart": "Redémarrer le listener {{listener}} de {{node}} ? Son API ne répond plus un instant."
-      }
+      },
+      "actionsOf": "Actions sur le listener {{listener}}"
     },
     "heartbeats": {
       "title": "Heartbeats",
@@ -1410,13 +1576,43 @@
     "execs": {
       "title": "Exécutions",
       "filter": "Filtrer les exécutions",
-      "shown": "Les {{shown}} dernières sur {{count}} affichées.",
       "terminate": "Terminer",
       "confirm": "Envoyer TERM à « {{command}} » sur {{node}} ?"
     },
     "dns": {
       "title": "Zone DNS",
       "filter": "Filtrer les enregistrements"
+    },
+    "views": {
+      "label": "Vues du démon",
+      "overview": "Vue d'ensemble",
+      "executions": "Exécutions",
+      "orchestrations": "Orchestrations",
+      "dns": "DNS"
+    },
+    "summary": {
+      "overview": "{{up}} composants sur {{components}} actifs, {{beating}} flux de heartbeat sur {{streams}} battent",
+      "executions": "{{count}} exécutions, {{running}} en cours",
+      "orchestrations": "{{count}} orchestrations, {{running}} en cours",
+      "dns": "{{count}} enregistrements de {{names}} noms",
+      "running_one": "{{count}} en cours",
+      "running_other": "{{count}} en cours"
+    }
+  },
+  "resource": {
+    "panel": {
+      "title": "{{rid}} de {{path}}",
+      "nodes": "La ressource sur chaque nœud",
+      "flags": "Options",
+      "log": "Dernier message",
+      "none": "Aucun nœud ne signale cette ressource.",
+      "flag": {
+        "disable": "désactivée",
+        "monitor": "surveillée",
+        "optional": "facultative",
+        "standby": "standby",
+        "encap": "encapsulée"
+      }
     }
   }
 }

@@ -21,9 +21,16 @@ vi.mock('../NamespacePanel', () => ({
     NamespaceUsage: ({namespace}) => <div data-testid="namespace-usage">{namespace}</div>,
     NamespaceConfig: ({namespace}) => <div data-testid="namespace-config">{namespace}</div>,
 }));
+vi.mock('../NamespaceClaims', () => ({
+    NamespaceClaims: ({namespace}) => <div data-testid="namespace-claims">{namespace}</div>,
+}));
+vi.mock('../EventLogger', () => ({
+    OBJECT_EVENT_TYPES: ['ObjectStatusUpdated'],
+    EventLog: ({objectName, namespace}) => <div data-testid="events">{objectName ? `events of ${objectName}` : `events in ${namespace}`}</div>,
+}));
 vi.mock('../LogsViewer', () => ({
-    default: ({nodename, type, namespace, kind, instanceName}) => (
-        <div data-testid="logs">{`${type} ${namespace}/${kind}/${instanceName} on ${nodename}`}</div>
+    default: ({nodenames = [], type, namespace, kind, instanceName}) => (
+        <div data-testid="logs">{`${type} ${namespace}/${kind}/${instanceName} on ${nodenames.join('+')}`}</div>
     ),
 }));
 /** The event store, as small as the panels need: a state, changed by the tests. */
@@ -86,11 +93,11 @@ describe('record panels', () => {
         expect(openDialogs()).toHaveLength(1);
     });
 
-    test('a service opens on its status board, its resources, schedules, logs and configuration on tabs of their own', () => {
+    test('a service opens on its status board, its usage, schedules, logs and configuration on tabs of their own', () => {
         renderPeek('/nodes?peek=object:ns1/svc/web');
         const panel = screen.getByRole('dialog', {name: 'ns1/svc/web'});
         expect(within(panel).getAllByRole('tab').map((tab) => tab.textContent))
-            .toEqual(['Status', 'Resources', 'Schedules', 'Logs', 'Configuration']);
+            .toEqual(['Status', 'Usage', 'Schedules', 'Events', 'Logs', 'Configuration']);
         expect(within(panel).getByRole('tab', {name: 'Status'})).toHaveAttribute('aria-selected', 'true');
         expect(within(panel).getByTestId('object-status')).toBeVisible();
         expect(within(panel).queryByTestId('object-details')).not.toBeInTheDocument();
@@ -102,36 +109,28 @@ describe('record panels', () => {
         expect(within(panel).getByTestId('object-status')).not.toBeVisible();
     });
 
-    test.each([['ns1/svc/web', 5], ['ns1/sec/key', 3]])('each tab of %s marked by an icon of its own, as oc3 marks its tabs', (path, count) => {
+    test.each([['ns1/svc/web', 6], ['ns1/sec/key', 4]])('the %s tabs are titled by their name alone, no icon', (path, count) => {
         renderPeek(`/nodes?peek=object:${path}`);
         const panel = screen.getByRole('dialog', {name: path});
-        const icons = within(panel).getAllByRole('tab').map((tab) => tab.querySelector('svg[aria-hidden="true"]'));
-        expect(icons.filter(Boolean)).toHaveLength(count);
-        expect(new Set(icons.map((svg) => svg.innerHTML)).size).toBe(count);
+        const tabs = within(panel).getAllByRole('tab');
+        expect(tabs).toHaveLength(count);
+        for (const tab of tabs) expect(tab.querySelector('svg')).toBeNull();
     });
 
-    test('the resources tab marked by the hashtag of the resources, in the service tint', () => {
+    test('the schedules of the object on a tab; what its resources report, in the panels of its instances and resources', () => {
         renderPeek('/nodes?peek=object:ns1/svc/web');
         const panel = screen.getByRole('dialog', {name: 'ns1/svc/web'});
-        expect(within(panel).getByRole('tab', {name: 'Resources'}).querySelector('svg')).toHaveClass('text-icon-service');
-    });
-
-    test('the resources and the schedules of the object, a tab each', () => {
-        renderPeek('/nodes?peek=object:ns1/svc/web');
-        const panel = screen.getByRole('dialog', {name: 'ns1/svc/web'});
-        fireEvent.click(within(panel).getByRole('tab', {name: 'Resources'}));
-        expect(screen.getByTestId('search')).toHaveTextContent('peektab=resources');
-        expect(within(panel).getByTestId('object-resources')).toHaveTextContent('ns1/svc/web');
+        expect(within(panel).queryByRole('tab', {name: 'Resources'})).not.toBeInTheDocument();
         fireEvent.click(within(panel).getByRole('tab', {name: 'Schedules'}));
+        expect(screen.getByTestId('search')).toHaveTextContent('peektab=schedules');
         expect(within(panel).getByTestId('object-schedules')).toHaveTextContent('ns1/svc/web');
         expect(within(panel).queryByTestId('object-resources')).not.toBeInTheDocument();
     });
 
-    test('the logs tab reads the logs of an instance, on the node chosen', () => {
+    test('the logs tab reads the logs of the object on all its nodes, merged: no node to choose', () => {
         renderPeek('/nodes?peek=object:ns1/svc/web&peektab=logs');
-        expect(screen.getByTestId('logs')).toHaveTextContent('instance ns1/svc/web on node1');
-        fireEvent.change(screen.getByRole('combobox'), {target: {value: 'node2'}});
-        expect(screen.getByTestId('logs')).toHaveTextContent('on node2');
+        expect(screen.getByTestId('logs')).toHaveTextContent('instance ns1/svc/web on node1+node2');
+        expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
         // The status stays mounted under the logs: its stream holds.
         expect(screen.getByTestId('object-status')).not.toBeVisible();
     });
@@ -139,7 +138,7 @@ describe('record panels', () => {
     test.each(['ns1/sec/key', 'ns1/cfg/settings'])('%s, which om shows no status of, shows its keys, its configuration on a tab', (path) => {
         renderPeek(`/nodes?peek=object:${path}`);
         const panel = screen.getByRole('dialog', {name: path});
-        expect(within(panel).getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Keys', 'Logs', 'Configuration']);
+        expect(within(panel).getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Keys', 'Events', 'Logs', 'Configuration']);
         expect(within(panel).getByRole('tab', {name: 'Keys'})).toHaveAttribute('aria-selected', 'true');
         expect(within(panel).queryByTestId('object-status')).not.toBeInTheDocument();
         expect(within(panel).getByTestId('object-details')).toHaveAttribute('data-embedded', 'true');
@@ -163,11 +162,22 @@ describe('record panels', () => {
     test('a namespace opens on its usage, its configuration on a tab of its own', () => {
         renderPeek('/objects?peek=namespace:ns1');
         const panel = screen.getByRole('dialog', {name: 'ns1'});
-        expect(within(panel).getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Usage', 'Configuration']);
+        expect(within(panel).getAllByRole('tab').map((tab) => tab.textContent.replace(/\d+!?$/, '')))
+            .toEqual(['Usage', 'Claims', 'Services', 'Volumes', 'Configurations', 'Secrets', 'Events', 'Configuration']);
         fireEvent.click(within(panel).getByRole('tab', {name: 'Configuration'}));
         expect(screen.getByTestId('search')).toHaveTextContent('peektab=config');
         expect(within(panel).getByTestId('namespace-config')).toHaveTextContent('ns1');
         expect(within(panel).queryByTestId('namespace-usage')).not.toBeInTheDocument();
+    });
+
+    test('an object has its events on a tab', () => {
+        renderPeek('/nodes?peek=object:ns1/svc/web&peektab=events');
+        expect(within(screen.getByRole('dialog', {name: 'ns1/svc/web'})).getByTestId('events')).toHaveTextContent('events of ns1/svc/web');
+    });
+
+    test('a namespace has the events of its objects on a tab', () => {
+        renderPeek('/objects?peek=namespace:ns1&peektab=events');
+        expect(within(screen.getByRole('dialog', {name: 'ns1'})).getByTestId('events')).toHaveTextContent('events in ns1');
     });
 
     test('closing the panel leaves the view as it was', () => {

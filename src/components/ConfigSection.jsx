@@ -5,7 +5,7 @@ import {Field, Input, Checkbox, Textarea} from "../ui/components/Field";
 import {Table, HeaderRow, HeaderCell, Row, Cell} from "../ui/components/Table";
 import {Alert} from "../ui/components/Alert";
 import {Spinner} from "../ui/components/Spinner";
-import {CodeIcon, EyeIcon, EyeOffIcon, FileIcon, PencilIcon, PlusIcon, TrashIcon, UploadIcon} from "../ui/icons";
+import {EyeIcon, EyeOffIcon, FileIcon, PencilIcon, PlusIcon, SlidersIcon, TrashIcon, UploadIcon} from "../ui/icons";
 import {formatSeconds, useAutoHide} from "../ui/lib/reveal";
 import {URL_OBJECT} from "../config/apiPath.js";
 import {parseObjectPath} from "../utils/objectUtils";
@@ -1034,7 +1034,8 @@ const ConfigSection = ({
                                 onClick={startEdit}
                                 disabled={actionLoading || editLoading || !configNode}
                             >
-                                <CodeIcon/>
+                                {/* The file edited: the pencil. */}
+                                <PencilIcon/>
                             </IconButton>
                             <IconButton
                                 label={t("config.view.uploadFile")}
@@ -1048,7 +1049,8 @@ const ConfigSection = ({
                                 onClick={handleOpenManageParamsDialog}
                                 disabled={actionLoading}
                             >
-                                <PencilIcon/>
+                                {/* The parameters set one by one, in the wizard: the sliders. */}
+                                <SlidersIcon/>
                             </IconButton>
                         </div>
                         {!configNode && !configLoading && !configError && (

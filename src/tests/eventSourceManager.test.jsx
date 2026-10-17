@@ -1213,6 +1213,13 @@ describe('eventSourceManager', () => {
             expect(EventSourcePolyfill.mock.calls[0][0]).toContain('path');
         });
 
+        test('should start logger for one node, filtering its events by node label', () => {
+            eventSourceManager.startLoggerReception('fake-token', ['NodeStatusUpdated'], null, 'dev3n1');
+            const url = EventSourcePolyfill.mock.calls[0][0];
+            expect(url).toContain('filter=NodeStatusUpdated,node=dev3n1');
+            expect(url).not.toContain('path=');
+        });
+
         test('should reconnect logger EventSource after timeout with valid token', () => {
             // reset global reconnectAttempts
             eventSourceManager.createEventSource(URL_NODE_EVENT, 'temp-token');

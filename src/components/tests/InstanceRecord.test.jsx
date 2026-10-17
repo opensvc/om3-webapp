@@ -1,0 +1,243 @@
+import React from 'react';
+import {render, screen, within, act, fireEvent} from '@testing-library/react';
+import {MemoryRouter, useLocation} from 'react-router-dom';
+import {vi} from 'vitest';
+import {InstanceDetailPanel, InstanceStatus, InstanceUsage, ObjectUsage, ResourceDetailPanel, ResourceStatus} from '../InstanceRecord';
+import useEventStore from '../../hooks/useEventStore';
+import {PG_POLL_MS, resetPgUsage} from '../../hooks/usePgUsage';
+
+// The logs stream is tested on its own: here, the nodes, the instance and the matches it reads.
+vi.mock('../LogsViewer', () => ({
+    default: ({nodenames = [], namespace, kind, instanceName, filters = []}) => (
+        <div data-testid="logs">{`${namespace}/${kind}/${instanceName} on ${nodenames.join('+')}${filters.length ? ` where ${filters.join(', ')}` : ''}`}</div>
+    ),
+}));
+vi.mock('../../utils/logger.js', () => ({
+    default: {error: vi.fn(), info: vi.fn(), warn: vi.fn(), debug: vi.fn()},
+}));
+
+const MiB = 1024 * 1024;
+
+const page = (usec, memory, max = '+Inf') => [
+    `opensvc_pg_cgroup_cpu_usage_usec{namespace="prod",path="prod/svc/web"} ${usec}`,
+    `opensvc_pg_cgroup_memory_current_bytes{namespace="prod",path="prod/svc/web"} ${memory}`,
+    `opensvc_pg_cgroup_memory_max_bytes{namespace="prod",path="prod/svc/web"} ${max}`,
+].join('\n');
+
+let pages;
+
+const Search = () => <span data-testid="search">{useLocation().search}</span>;
+const inRouter = (element) => render(<MemoryRouter initialEntries={['/objects']}>{element}<Search/></MemoryRouter>);
+const nextReading = () => act(async () => {
+    await vi.advanceTimersByTimeAsync(PG_POLL_MS);
+});
+const tile = (label) => screen.getByText(label, {selector: 'dt'}).nextElementSibling;
+
+beforeEach(() => {
+    vi.useFakeTimers({shouldAdvanceTime: true});
+    resetPgUsage();
+    localStorage.setItem('authToken', 'tok');
+    useEventStore.setState({
+        objectInstanceStatus: {
+            'prod/svc/web': {
+                n1: {
+                    avail: 'up', overall: 'warn', provisioned: 'true', frozen_at: '0001-01-01T00:00:00Z',
+                    resources: {
+                        'fs#1': {status: 'up', type: 'fs.flag', label: 'flag'},
+                        'app#1': {status: 'down', type: 'app.simple', label: 'run', provisioned: {state: 'false'}, optional: true,
+                            log: [{level: 'info', message: 'started'}, {level: 'error', message: 'exit 1'}]},
+                    },
+                },
+                n2: {avail: 'down', overall: 'down', provisioned: 'false', frozen_at: '2026-10-16T10:00:00Z', resources: {}},
+                n3: {avail: 'down', resources: {}},
+            },
+        },
+        instanceMonitor: {'n1:prod/svc/web': {state: 'idle'}},
+        nodeStatus: {},
+    });
+    pages = {n1: [page(0, MiB, 64 * MiB)], n2: [page(0, 2 * MiB)], n3: ['']};
+    global.fetch = vi.fn((url) => {
+        if (url === '/api/object/path/prod/svc/web/resource/info') {
+            const item = (node, rid, key, value) => ({node, rid, key, value});
+            return Promise.resolve({ok: true, status: 200, json: () => Promise.resolve({kind: 'ResourceInfoList', items: [
+                item('n1', 'app#1', 'pid', '42'),
+                item('n2', 'app#1', 'pid', '43'),
+                item('n1', 'fs#1', 'mnt', '/srv'),
+            ]})});
+        }
+        const node = /\/api\/node\/name\/([^/]+)\/metrics\/pg$/.exec(url)?.[1];
+        const list = pages[node];
+        if (!list) return Promise.resolve({ok: false, status: 404, text: () => Promise.resolve('')});
+        if (list.length > 1) list.shift();
+        return Promise.resolve({ok: true, status: 200, text: () => Promise.resolve(list[0])});
+    });
+});
+
+afterEach(() => {
+    resetPgUsage();
+    vi.useRealTimers();
+    localStorage.clear();
+});
+
+describe('ObjectUsage', () => {
+    test('the object summed over its instances, then each instance by node', async () => {
+        inRouter(<ObjectUsage path="prod/svc/web"/>);
+        const table = await screen.findByRole('table', {name: 'Usage by instance'});
+        // Its instance nodes only are read.
+        expect(global.fetch.mock.calls.map(([url]) => url).sort()).toEqual([
+            '/api/node/name/n1/metrics/pg', '/api/node/name/n2/metrics/pg', '/api/node/name/n3/metrics/pg',
+        ]);
+        const rows = within(table).getAllByRole('row').slice(1).map((row) => within(row).getAllByRole('cell').map((c) => c.textContent));
+        // n3 has no cgroup for it: dashes.
+        expect(rows).toEqual([
+            ['on n1', '-', '1.0 MiB', '64.0 MiB'],
+            ['on n2', '-', '2.0 MiB', 'unlimited'],
+            ['on n3', '-', '-', '-'],
+        ]);
+        expect(tile('Memory')).toHaveTextContent('3.0 MiB');
+        expect(tile('Limit')).toHaveTextContent('unlimited');
+        // Half a cpu on n1, a quarter on n2.
+        pages.n1.push(page(PG_POLL_MS * 500, MiB, 64 * MiB));
+        pages.n2.push(page(PG_POLL_MS * 250, 2 * MiB));
+        await nextReading();
+        expect(Math.abs(parseFloat(tile('CPU').textContent) - 75)).toBeLessThan(3);
+    });
+
+    test('each node the badge of its instance, opening it over the view', async () => {
+        inRouter(<ObjectUsage path="prod/svc/web"/>);
+        await screen.findByRole('table', {name: 'Usage by instance'});
+        fireEvent.click(screen.getByRole('button', {name: 'on n2'}));
+        expect(screen.getByTestId('search')).toHaveTextContent('peek=instance%3Aprod%2Fsvc%2Fweb%40n2');
+    });
+});
+
+describe('InstanceUsage', () => {
+    test('the cgroup of the instance on its node alone', async () => {
+        inRouter(<InstanceUsage path="prod/svc/web" node="n2"/>);
+        expect(await screen.findByText('2.0 MiB')).toBeInTheDocument();
+        expect(global.fetch.mock.calls.map(([url]) => url)).toEqual(['/api/node/name/n2/metrics/pg']);
+        expect(tile('Limit')).toHaveTextContent('unlimited');
+    });
+
+    test('no cgroup for it on its node: said so', async () => {
+        inRouter(<InstanceUsage path="prod/svc/web" node="n3"/>);
+        expect(await screen.findByText('No cgroup for this instance on n3.')).toBeInTheDocument();
+    });
+});
+
+describe('InstanceStatus', () => {
+    test('the state of the instance as its node reports it, then its resources', () => {
+        inRouter(<InstanceStatus path="prod/svc/web" node="n1"/>);
+        const fact = (label) => screen.getByText(label, {selector: 'dt'}).nextElementSibling;
+        expect(fact('Avail')).toHaveTextContent('up');
+        expect(fact('Overall')).toHaveTextContent('warn');
+        expect(fact('Frozen')).toHaveTextContent('no');
+        expect(fact('Monitor')).toHaveTextContent('idle');
+        const rows = within(screen.getByRole('table', {name: 'Resources of the instance'})).getAllByRole('row').slice(1);
+        expect(rows.map((row) => within(row).getAllByRole('cell')[0].textContent)).toEqual(['app#1', 'fs#1']);
+        expect(within(rows[0]).getByRole('img', {name: 'Not provisioned'})).toBeInTheDocument();
+        // Its object, its node and its resources, badges opening their records.
+        fireEvent.click(within(fact('Object')).getByRole('button', {name: 'prod/svc/web'}));
+        expect(screen.getByTestId('search')).toHaveTextContent('peek=object%3Aprod%2Fsvc%2Fweb');
+        fireEvent.click(within(fact('Node')).getByRole('button', {name: 'n1'}));
+        expect(screen.getByTestId('search')).toHaveTextContent('peek=node%3An1');
+        fireEvent.click(within(rows[0]).getByRole('button', {name: 'app#1'}));
+        expect(screen.getByTestId('search')).toHaveTextContent('peek=resource%3Aprod%2Fsvc%2Fweb%3Aapp%231');
+    });
+
+    test('frozen, not provisioned', () => {
+        inRouter(<InstanceStatus path="prod/svc/web" node="n2"/>);
+        const fact = (label) => screen.getByText(label, {selector: 'dt'}).nextElementSibling;
+        expect(fact('Frozen')).toHaveTextContent('yes');
+        expect(within(fact('Provisioned')).getByRole('img', {name: 'Not provisioned'})).toBeInTheDocument();
+        expect(screen.getByText('No resource.')).toBeInTheDocument();
+    });
+});
+
+describe('InstanceDetailPanel', () => {
+    test('titled by its object and its node, its status then its usage', () => {
+        const onTabChange = vi.fn();
+        render(<MemoryRouter><InstanceDetailPanel id="prod/svc/web@n1" tab={undefined} onTabChange={onTabChange} onClose={vi.fn()}/></MemoryRouter>);
+        const panel = screen.getByRole('dialog', {name: 'prod/svc/web @ n1'});
+        expect(within(panel).getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Status', 'Resources', 'Usage', 'Logs']);
+        expect(within(panel).getByTestId('instance-status')).toBeInTheDocument();
+        fireEvent.click(within(panel).getByRole('tab', {name: 'Usage'}));
+        expect(onTabChange).toHaveBeenCalledWith('usage');
+    });
+
+    test('its resources tab: what its resources report on its node alone, a table each', async () => {
+        render(<MemoryRouter><InstanceDetailPanel id="prod/svc/web@n1" tab="resources" onTabChange={vi.fn()} onClose={vi.fn()}/></MemoryRouter>);
+        const panel = screen.getByRole('dialog', {name: 'prod/svc/web @ n1'});
+        expect(within(panel).getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Status', 'Resources', 'Usage', 'Logs']);
+        const table = await within(panel).findByRole('table', {name: 'Resource information'});
+        expect(within(panel).getAllByRole('table')).toHaveLength(1);
+        // A line opening each resource, its badge.
+        expect([...table.querySelectorAll('[data-resource-row]')].map((row) => row.textContent)).toEqual(['app#1', 'fs#1']);
+        expect(within(table).getByRole('button', {name: 'fs#1'})).toBeInTheDocument();
+        // n1 alone: n2's value of app#1 left out.
+        expect(within(table).getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['Key', 'on n1']);
+        expect(within(table).getByRole('row', {name: /pid/})).toHaveTextContent('pid42');
+    });
+
+    test('its logs tab: the logs of the instance on its node alone', () => {
+        render(<MemoryRouter><InstanceDetailPanel id="prod/svc/web@n1" tab="logs" onTabChange={vi.fn()} onClose={vi.fn()}/></MemoryRouter>);
+        expect(screen.getByTestId('logs')).toHaveTextContent(/^prod\/svc\/web on n1$/);
+    });
+
+    test('closes once its instance is gone', () => {
+        const onClose = vi.fn();
+        render(<MemoryRouter><InstanceDetailPanel id="prod/svc/web@n1" onTabChange={vi.fn()} onClose={onClose}/></MemoryRouter>);
+        act(() => useEventStore.setState({objectInstanceStatus: {'prod/svc/web': {n2: {}}}}));
+        expect(onClose).toHaveBeenCalled();
+    });
+});
+
+describe('ResourceStatus', () => {
+    test('the resource on each node reporting it: status, flags, label, last message; badges to its object and instances', () => {
+        // On n4 too; not on n2 nor n3.
+        useEventStore.setState((state) => ({objectInstanceStatus: {'prod/svc/web': {
+            ...state.objectInstanceStatus['prod/svc/web'],
+            n4: {avail: 'up', resources: {'app#1': {status: 'up', type: 'app.simple', label: 'run'}}},
+        }}}));
+        inRouter(<ResourceStatus path="prod/svc/web" rid="app#1"/>);
+        const fact = (label) => screen.getByText(label, {selector: 'dt'}).nextElementSibling;
+        expect(fact('Type')).toHaveTextContent('app.simple');
+        const rows = within(screen.getByRole('table', {name: 'The resource on each node'})).getAllByRole('row').slice(1)
+            .map((row) => within(row).getAllByRole('cell').map((c) => c.textContent));
+        expect(rows).toEqual([
+            ['on n1', 'downdownP', 'optional', 'run', 'exit 1'],
+            ['on n4', 'upup', '-', 'run', '-'],
+        ]);
+        fireEvent.click(screen.getByRole('button', {name: 'on n4'}));
+        expect(screen.getByTestId('search')).toHaveTextContent('peek=instance%3Aprod%2Fsvc%2Fweb%40n4');
+        fireEvent.click(within(fact('Object')).getByRole('button', {name: 'prod/svc/web'}));
+        expect(screen.getByTestId('search')).toHaveTextContent('peek=object%3Aprod%2Fsvc%2Fweb');
+    });
+
+    test('its logs tab: the logs of the object on all its nodes, merged, of the resource alone', () => {
+        render(<MemoryRouter><ResourceDetailPanel id="prod/svc/web:app#1" tab="logs" onTabChange={vi.fn()} onClose={vi.fn()}/></MemoryRouter>);
+        expect(screen.getByTestId('logs')).toHaveTextContent(/^prod\/svc\/web on n1\+n2\+n3 where RID=app#1$/);
+    });
+
+    test('its info tab: what the resource alone reports on each node, its table without title nor filter', async () => {
+        render(<MemoryRouter><ResourceDetailPanel id="prod/svc/web:app#1" tab="info" onTabChange={vi.fn()} onClose={vi.fn()}/></MemoryRouter>);
+        const panel = screen.getByRole('dialog', {name: 'app#1 of prod/svc/web'});
+        expect(within(panel).getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Status', 'Info', 'Logs']);
+        const table = await within(panel).findByRole('table', {name: 'Resource information'});
+        expect(within(panel).getAllByRole('table')).toHaveLength(1);
+        expect(within(table).getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['Key', 'on n1', 'on n2']);
+        // Its line, then its keys; fs#1 left out.
+        expect([...table.querySelectorAll('[data-resource-row]')].map((row) => row.textContent)).toEqual(['app#1']);
+        expect(within(table).getByRole('row', {name: /pid/})).toHaveTextContent('pid4243');
+        // The full text filter kept.
+        expect(within(panel).getByRole('searchbox', {name: 'Filter the resources'})).toBeInTheDocument();
+    });
+
+    test('its panel titled by the resource and its object, closed once the object is gone', () => {
+        const onClose = vi.fn();
+        render(<MemoryRouter><ResourceDetailPanel id="prod/svc/web:app#1" onClose={onClose}/></MemoryRouter>);
+        expect(screen.getByRole('dialog', {name: 'app#1 of prod/svc/web'})).toBeInTheDocument();
+        act(() => useEventStore.setState({objectInstanceStatus: {}}));
+        expect(onClose).toHaveBeenCalled();
+    });
+});

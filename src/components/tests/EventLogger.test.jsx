@@ -2,7 +2,7 @@ import React from 'react';
 import {act, fireEvent, render, screen, waitFor} from '@testing-library/react';
 import '@testing-library/jest-dom';
 import {vi, beforeAll, beforeEach, afterEach, describe, test, expect} from 'vitest';
-import EventLogger, {hashCode} from '../EventLogger';
+import EventLogger, {EventLog, OBJECT_EVENT_TYPES, hashCode} from '../EventLogger';
 import useEventLogStore from '../../hooks/useEventLogStore';
 import {panelOpened} from '../../ui/components/slide-over-open';
 import logger from '../../utils/logger.js';
@@ -1520,5 +1520,25 @@ describe('EventLogger Component', () => {
             expect(tone('ITEM_DELETED')).toBe('warning');
             expect(tone('PLAIN')).toBe('default');
         });
+    });
+});
+
+describe('EventLog', () => {
+    test('a namespace keeps the events of the objects in it, from any node', async () => {
+        useEventLogStore.mockReturnValue(mockStore({
+            eventLogs: [
+                makeLog({id: '1', eventType: 'ObjectStatusUpdated', data: {path: 'ns1/svc/web'}}),
+                makeLog({id: '2', eventType: 'InstanceStatusUpdated', data: {labels: {path: 'ns2/svc/db'}}}),
+                makeLog({id: '3', eventType: 'InstanceMonitorUpdated', data: {data: {path: 'ns1/vol/data'}}}),
+                makeLog({id: '4', eventType: 'CONNECTION_OPENED', data: {}}),
+            ],
+        }));
+        render(<EventLog eventTypes={OBJECT_EVENT_TYPES} namespace="ns1" label="Events"/>);
+        const list = await screen.findByRole('region', {name: 'Event list'});
+        await waitFor(() => expect(list).toHaveTextContent('ObjectStatusUpdated'));
+        expect(list).toHaveTextContent('InstanceMonitorUpdated');
+        expect(list).not.toHaveTextContent('InstanceStatusUpdated');
+        // In place: no title, no close.
+        expect(screen.queryByRole('button', {name: 'Close'})).not.toBeInTheDocument();
     });
 });

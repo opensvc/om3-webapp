@@ -201,7 +201,7 @@ describe('useSidebarAlerts', () => {
 
     test('updates the alerts from the events, without any user action', async () => {
         const {result} = renderHook(() => useSidebarAlerts());
-        expect(result.current['/objects'].alert).toBeNull();
+        expect(result.current['objects-any'].alert).toBeNull();
 
         act(() => {
             sources[0].emit('ObjectStatusUpdated', {path: 'a', object_status: {avail: 'up'}});
@@ -211,22 +211,25 @@ describe('useSidebarAlerts', () => {
             });
         });
         await flush();
-        expect(result.current['/objects'].alert).toBeNull();
-        expect(result.current['/nodes'].details).toEqual(['1 node', 'frozen: 1']);
-        expect(result.current['/nodes'].alert).toEqual({level: 'down', text: '1 of 1 nodes overloaded'});
-        expect(result.current['/heartbeats'].alert).toEqual({level: 'down', text: '1 of 1 heartbeat links down'});
+        expect(result.current['objects-any'].alert).toBeNull();
+        expect(result.current.nodes.details).toEqual(['1 node', 'frozen: 1']);
+        expect(result.current.nodes.alert).toEqual({level: 'down', text: '1 of 1 nodes overloaded'});
+        expect(result.current.links.alert).toEqual({level: 'down', text: '1 of 1 heartbeat links down'});
 
         act(() => {
             sources[0].emit('ObjectStatusUpdated', {path: 'b', object_status: {avail: 'down'}});
         });
         await flush();
-        expect(result.current['/objects'].alert).toEqual({level: 'down', text: '1 object down'});
+        expect(result.current['objects-any'].alert).toEqual({level: 'down', text: '1 object down'});
+        // A service: the services' alert, not the volumes'.
+        expect(result.current['objects-services'].alert).toEqual({level: 'down', text: '1 object down'});
+        expect(result.current['objects-volumes'].alert).toBeNull();
 
         act(() => {
             sources[0].emit('ObjectDeleted', {path: 'b'});
         });
         await flush();
-        expect(result.current['/objects'].alert).toBeNull();
+        expect(result.current['objects-any'].alert).toBeNull();
     });
 
     test('ignores an event whose data is not JSON', async () => {
@@ -235,7 +238,7 @@ describe('useSidebarAlerts', () => {
             sources[0].listeners.ObjectStatusUpdated({data: 'not json'});
         });
         await flush();
-        expect(result.current['/objects'].alert).toBeNull();
+        expect(result.current['objects-any'].alert).toBeNull();
     });
 
     test('reconnects after an error with the current token, and replaces the state', async () => {
@@ -244,7 +247,7 @@ describe('useSidebarAlerts', () => {
             sources[0].emit('ObjectStatusUpdated', {path: 'a', object_status: {avail: 'down'}});
         });
         await flush();
-        expect(result.current['/objects'].alert?.level).toBe('down');
+        expect(result.current['objects-any'].alert?.level).toBe('down');
 
         localStorage.setItem('authToken', 'tok2');
         act(() => {
@@ -252,7 +255,7 @@ describe('useSidebarAlerts', () => {
         });
         expect(sources[0].closed).toBe(true);
         // The last known alert stays until the new stream replays the state.
-        expect(result.current['/objects'].alert?.level).toBe('down');
+        expect(result.current['objects-any'].alert?.level).toBe('down');
 
         await act(async () => {
             vi.advanceTimersByTime(SIDEBAR_RECONNECT_MS);
@@ -264,7 +267,7 @@ describe('useSidebarAlerts', () => {
             sources[1].emit('ObjectStatusUpdated', {path: 'c', object_status: {avail: 'up'}});
         });
         await flush();
-        expect(result.current['/objects'].alert).toBeNull();
+        expect(result.current['objects-any'].alert).toBeNull();
     });
 
     test('waits for a token before opening the stream', async () => {
@@ -290,9 +293,9 @@ describe('useSidebarAlerts', () => {
             await Promise.resolve();
         });
         // Pools and networks raise no alert: their details only.
-        expect(result.current['/pools'].alert).toBeNull();
-        expect(result.current['/network'].alert).toBeNull();
-        expect(result.current['/pools'].details).toContain('full: 1');
+        expect(result.current.pools.alert).toBeNull();
+        expect(result.current.networks.alert).toBeNull();
+        expect(result.current.pools.details).toContain('full: 1');
         expect(axios.get).toHaveBeenCalledWith(URL_POOL, {headers: {Authorization: 'Bearer tok'}});
         expect(axios.get).toHaveBeenCalledWith(URL_NETWORK, {headers: {Authorization: 'Bearer tok'}});
         expect(axios.get).toHaveBeenCalledTimes(2);
@@ -302,7 +305,7 @@ describe('useSidebarAlerts', () => {
             vi.advanceTimersByTime(SIDEBAR_USAGE_REFRESH_MS);
         });
         expect(axios.get).toHaveBeenCalledTimes(4);
-        expect(result.current['/pools'].details).toContain('full: 0');
+        expect(result.current.pools.details).toContain('full: 0');
     });
 
     test('keeps the last lists when a poll fails', async () => {
@@ -310,11 +313,11 @@ describe('useSidebarAlerts', () => {
         await act(async () => {
             await Promise.resolve();
         });
-        expect(result.current['/pools'].details).toContain('full: 1');
+        expect(result.current.pools.details).toContain('full: 1');
         axios.get.mockRejectedValue(new Error('down'));
         await act(async () => {
             vi.advanceTimersByTime(SIDEBAR_USAGE_REFRESH_MS);
         });
-        expect(result.current['/pools'].details).toContain('full: 1');
+        expect(result.current.pools.details).toContain('full: 1');
     });
 });

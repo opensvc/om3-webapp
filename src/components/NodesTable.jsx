@@ -8,7 +8,6 @@ import {URL_NODE} from "../config/apiPath.js";
 import {NODE_ACTIONS, actionLabel} from "../constants/actions";
 import {useTranslation} from "react-i18next";
 import ActionDialogManager from "./ActionDialogManager";
-import EventLogger from "../components/EventLogger";
 import {Table, HeaderRow, HeaderCell, SortHeaderCell} from "../ui/components/Table";
 import {Checkbox} from "../ui/components/Field";
 import {IconButton} from "../ui/components/Button";
@@ -17,7 +16,7 @@ import {usePanelSearch} from "../app/panel-search";
 import {NodeDetailPanel} from "./NodePanel";
 import {Alert} from "../ui/components/Alert";
 import {Spinner} from "../ui/components/Spinner";
-import {CloseIcon, GearIcon} from "../ui/icons";
+import {BoltIcon, CloseIcon} from "../ui/icons";
 
 const ZERO_DATE = "0001-01-01T00:00:00Z";
 
@@ -255,9 +254,9 @@ const NodesTable = () => {
                     <>
                         <span className="whitespace-nowrap text-ink-muted">{t("common.selected", {count: selectedNodes.length})}</span>
                         <MenuButton
-                            // The actions, as in oc3: a pill tinted with the accent, the gear of the actions.
+                            // The actions: a solid pill.
                             prominent
-                            icon={<GearIcon className="h-3.5 w-3.5"/>}
+                            icon={<BoltIcon className="h-3.5 w-3.5"/>}
                             label={t("nodes.bulkActions")}
                             align="end"
                             items={filteredMenuItems.map(({name, icon, color}) => ({
@@ -352,7 +351,6 @@ const NodesTable = () => {
                 onClose={() => panel.select(undefined)}
             />
 
-            <EventLogger eventTypes={nodeEventTypes} title={t("nodes.eventsLogger")} buttonLabel={t("nodes.events")}/>
         </div>
     );
 };

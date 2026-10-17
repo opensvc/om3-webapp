@@ -63,7 +63,6 @@ vi.mock('../../eventSourceManager', () => ({
 
 // The panel of an object, on its own tested elsewhere: here, which object it is given.
 // The views of the group tabs are tested on their own: here, which one the tab shows.
-vi.mock('../Namespaces', () => ({default: ({embedded}) => <div data-testid="namespaces-view">{String(embedded)}</div>}));
 vi.mock('../RecordPanels', () => ({
     ObjectDetailPanel: ({path}) => (path ? <div data-testid="object-panel">{path}</div> : null),
 }));
@@ -207,11 +206,11 @@ const selectFilter = async (label, optionText) => {
 const objectRow = (name) => screen.getByRole('row', {name: new RegExp(name, 'i')});
 const rowCells = (row) => within(row).getAllByRole('cell');
 /**
- * Cells: 0 selection, 1 status, 2 object, 3 and 4 the properties (orchestrate, topology),
+ * Cells: 0 selection, 1 object, 2 and 3 the properties (orchestrate, topology), 4 status,
  * then one per node (node1, node2) on a wide screen.
  */
-const statusCell = (row) => rowCells(row)[1];
-const propertyCell = (row, label) => rowCells(row)[3 + PROPERTY_COLUMNS.findIndex((c) => i18n.t(c.labelKey) === label)];
+const statusCell = (row) => rowCells(row)[2 + PROPERTY_COLUMNS.length];
+const propertyCell = (row, label) => rowCells(row)[2 + PROPERTY_COLUMNS.findIndex((c) => i18n.t(c.labelKey) === label)];
 const nodeCell = (row, index) => rowCells(row)[3 + PROPERTY_COLUMNS.length + index];
 
 const selectRow = (name) => {
@@ -245,15 +244,17 @@ const confirmDialog = async (buttonName = /Confirm|Stop|Delete/i) => {
 const getFeedback = () =>
     screen.getByRole('button', {name: 'Close'}).closest('[role="alert"], [role="status"]');
 
-const sortButton = (label) =>
-    within(screen.getByRole('columnheader', {name: new RegExp(`^${label}`)})).getByRole('button');
-const clickHeader = (label) => fireEvent.click(sortButton(label));
+/** The rows of the objects, past the header, the lines of the namespaces left out. */
+const objectRows = () => within(screen.getByRole('table', {name: 'Objects'})).getAllByRole('row').slice(1)
+    .filter((row) => !row.hasAttribute('data-namespace-row'));
+/** The lines opening the namespaces, in the order shown. */
+const namespaceRows = () => [...screen.getByRole('table', {name: 'Objects'}).querySelectorAll('[data-namespace-row]')];
 /** The names of the rows: the cell under the Object column, wherever the list puts it. */
 const objectNamesInOrder = () => {
     const table = screen.getByRole('table', {name: 'Objects'});
     const column = within(table).getAllByRole('columnheader')
         .findIndex((h) => h.textContent.replace(/[▲▼]/g, '').trim() === 'Object');
-    return within(table).getAllByRole('row').slice(1).map((row) => rowCells(row)[column].textContent);
+    return objectRows().map((row) => rowCells(row)[column].textContent);
 };
 
 const makeMany = (n) => {
@@ -316,7 +317,7 @@ describe('Objects Component', () => {
     });
 
     test('renders object data correctly (status labels)', async () => {
-        setup();
+        setup({}, '', {isWideScreen: true, isMobile: false});
         await waitForLoad();
         ['test-ns/svc/test1', 'test-ns/svc/test2', 'root/svc/test3'].forEach((name) =>
             expect(screen.getByRole('row', {name: new RegExp(name)})).toBeInTheDocument()
@@ -324,7 +325,8 @@ describe('Objects Component', () => {
         const row1 = objectRow('test-ns/svc/test1');
         const status1 = statusCell(row1);
         expect(status1.querySelector('[data-state]')).toHaveAttribute('data-state', 'up');
-        expect(within(status1).getByTitle('up')).toBeInTheDocument();
+        // The availability in a bold word, in its tint.
+        expect(within(status1).getByText('up')).toHaveClass('font-semibold', 'text-state-up');
         // The global expect of an instance, as small muted text.
         expect(within(status1).getByText('frozen')).toHaveClass('text-ink-muted', 'whitespace-nowrap');
         expect(within(status1).queryByTitle('frozen')).toHaveTextContent('frozen');
@@ -341,30 +343,32 @@ describe('Objects Component', () => {
 
         const row4 = objectRow('test-ns/svc/test4');
         expect(statusCell(row4).querySelector('[data-state]')).toHaveAttribute('data-state', 'na');
-        expect(within(statusCell(row4)).getByTitle('n/a')).toBeInTheDocument();
+        expect(within(statusCell(row4)).getByText('n/a')).toHaveClass('text-ink-muted');
 
-        // The object name in its own column, medium weight.
-        expect(rowCells(row1)[2]).toHaveTextContent('test-ns/svc/test1');
-        expect(rowCells(row1)[2]).toHaveClass('font-medium');
+        // The object name first, medium weight.
+        expect(rowCells(row1)[1]).toHaveTextContent('test-ns/svc/test1');
+        expect(rowCells(row1)[1]).toHaveClass('font-medium');
     });
 
     test('has no per-row actions column', async () => {
         setup({}, '', {isWideScreen: true, isMobile: false});
         await waitForLoad();
         expect(screen.queryByRole('columnheader', {name: 'Actions'})).not.toBeInTheDocument();
-        expect(within(objectRow('test-ns/svc/test1')).queryByRole('button')).not.toBeInTheDocument();
+        // No action button in a row: its only buttons open the instances of its nodes.
+        expect(within(objectRow('test-ns/svc/test1')).getAllByRole('button').map((b) => b.getAttribute('aria-label')))
+            .toEqual(['Open the instance of test-ns/svc/test1 on node1', 'Open the instance of test-ns/svc/test1 on node2']);
     });
 
     describe('object property columns', () => {
         const propertyState = {
             objectStatus: {
                 'test-ns/svc/fo': {
-                    avail: 'up', frozen: 'unfrozen', provisioned: 'true',
+                    avail: 'up', overall: 'up', frozen: 'unfrozen', provisioned: 'true',
                     orchestrate: 'ha', topology: 'failover', placement_policy: 'nodes order',
                     placement_state: 'optimal', up_instances_count: 1, scope: ['node1', 'node2'], priority: 10,
                 },
                 'test-ns/svc/fx': {
-                    avail: 'warn', frozen: 'unfrozen', provisioned: 'true',
+                    avail: 'up', overall: 'warn', frozen: 'unfrozen', provisioned: 'true',
                     orchestrate: 'start', topology: 'flex', flex: {min: 1, max: 3, target: 2},
                     placement_policy: 'spread', placement_state: 'non-optimal', up_instances_count: 2,
                     scope: ['node1', 'node2', 'node3'], priority: 50,
@@ -375,7 +379,7 @@ describe('Objects Component', () => {
         };
 
         test('show orchestrate and topology', async () => {
-            setup(propertyState);
+            setup(propertyState, '', {isWideScreen: true, isMobile: false});
             await waitForLoad();
             ['Placement', 'Up', 'Priority'].forEach((label) =>
                 expect(screen.queryByRole('columnheader', {name: new RegExp(`^${label}`)})).not.toBeInTheDocument()
@@ -385,40 +389,52 @@ describe('Objects Component', () => {
             );
 
             const failover = objectRow('test-ns/svc/fo');
-            // Tags: the icon of the policy, the policy named in the tooltip and for screen readers.
-            expect(propertyCell(failover, 'Orchestrate')).toHaveTextContent(/^Orchestrate: ha$/);
-            expect(propertyCell(failover, 'Topology')).toHaveTextContent(/^Topology: failover$/);
-            const orchestrate = propertyCell(failover, 'Orchestrate').querySelector('[data-policy="orchestrate"]');
-            expect(orchestrate).toHaveAttribute('title', 'Orchestrate: ha');
-            expect(orchestrate.querySelector('svg')).toBeInTheDocument();
+            // Plain words: no icon, no badge.
+            expect(propertyCell(failover, 'Orchestrate')).toHaveTextContent(/^ha$/);
+            expect(propertyCell(failover, 'Topology')).toHaveTextContent(/^failover$/);
+            expect(propertyCell(failover, 'Orchestrate').querySelector('svg, [data-policy]')).toBeNull();
 
-            const flex = objectRow('test-ns/svc/fx');
-            expect(propertyCell(flex, 'Topology')).toHaveTextContent('Topology: flex 1-3');
+            // Flex: its parameters in a badge, min-max then the target, each named in its card.
+            const flex = propertyCell(objectRow('test-ns/svc/fx'), 'Topology');
+            expect(flex).toHaveTextContent(/^flex1-3 · 2$/);
+            const badge = flex.querySelector('[data-flex]');
+            fireEvent.mouseEnter(badge.parentElement);
+            const card = await screen.findByRole('tooltip');
+            expect(within(card).getByText('Flex')).toBeInTheDocument();
+            expect(within(card).getByText('Min instances').nextSibling).toHaveTextContent('1');
+            expect(within(card).getByText('Max instances').nextSibling).toHaveTextContent('3');
+            expect(within(card).getByText('Target instances').nextSibling).toHaveTextContent('2');
+        });
+
+        test('the status marks a degraded object, its overall warn, whatever its availability', async () => {
+            setup(propertyState, '', {isWideScreen: true, isMobile: false});
+            await waitForLoad();
+            const degraded = within(statusCell(objectRow('test-ns/svc/fx'))).getByRole('img', {name: 'Degraded'});
+            expect(degraded).toHaveClass('text-state-warn');
+            expect(within(statusCell(objectRow('test-ns/svc/fx'))).getByText('up')).toHaveClass('text-state-up');
+            expect(within(statusCell(objectRow('test-ns/svc/fo'))).queryByRole('img', {name: 'Degraded'})).not.toBeInTheDocument();
+        });
+
+        test('narrow: no orchestrate column, ha and start a badge by the path, none for no orchestrate', async () => {
+            setup(propertyState, '', {isWideScreen: false, isMobile: true});
+            await waitFor(() => expect(screen.getByRole('table')).toBeInTheDocument());
+            expect(screen.queryByRole('columnheader', {name: /^Orchestrate/})).not.toBeInTheDocument();
+            expect(screen.getByRole('columnheader', {name: /^Topology/})).toBeInTheDocument();
+            const cells = (name) => rowCells(objectRow(name));
+            expect(within(cells('test-ns/svc/fo')[1]).getByRole('img', {name: 'Orchestrate: ha'})).toHaveTextContent('ha');
+            expect(within(cells('test-ns/svc/fx')[1]).getByRole('img', {name: 'Orchestrate: start'})).toHaveTextContent('start');
+            expect(cells('test-ns/nscfg/c')[1].querySelector('[data-mark="orchestrate"]')).toBeNull();
+            // The topology next to the path, then the status.
+            expect(cells('test-ns/svc/fo')[2]).toHaveTextContent(/^failover$/);
+            expect(cells('test-ns/svc/fo')).toHaveLength(4);
         });
 
         test('are empty for an object with no instances to place', async () => {
-            setup(propertyState);
+            setup(propertyState, '', {isWideScreen: true, isMobile: false});
             await waitForLoad();
             const cfg = objectRow('test-ns/nscfg/c');
             ['Orchestrate', 'Topology'].forEach((label) =>
                 expect(propertyCell(cfg, label)).toHaveTextContent(/^$/)
-            );
-        });
-
-        test('sort, objects without the property last', async () => {
-            setup(propertyState);
-            await waitForLoad();
-            clickHeader('Orchestrate');
-            await waitFor(() =>
-                expect(objectNamesInOrder()).toEqual(['test-ns/svc/fo', 'test-ns/svc/fx', 'test-ns/nscfg/c'])
-            );
-            clickHeader('Orchestrate');
-            await waitFor(() =>
-                expect(objectNamesInOrder()).toEqual(['test-ns/svc/fx', 'test-ns/svc/fo', 'test-ns/nscfg/c'])
-            );
-            clickHeader('Topology');
-            await waitFor(() =>
-                expect(objectNamesInOrder()).toEqual(['test-ns/svc/fo', 'test-ns/svc/fx', 'test-ns/nscfg/c'])
             );
         });
     });
@@ -431,11 +447,16 @@ describe('Objects Component', () => {
 
         const row1 = objectRow('test-ns/svc/test1');
         const node1 = nodeCell(row1, 0);
+        // The instance of a service on a node opens its own panel, a button of its own.
+        expect(within(node1).getByRole('button', {name: 'Open the instance of test-ns/svc/test1 on node1'})).toBeInTheDocument();
         expect(node1.querySelector('[data-state]')).toHaveAttribute('data-state', 'up');
         expect(within(node1).getByText('running')).toHaveClass('text-ink-muted', 'whitespace-nowrap');
         expect(within(node1).queryByTitle('frozen')).not.toBeInTheDocument();
         const node2 = nodeCell(row1, 1);
         expect(node2.querySelector('[data-state]')).toHaveAttribute('data-state', 'down');
+        // Its object up, the instance down is no issue: gray, not red.
+        expect(node2.querySelector('[data-state]')).toHaveClass('text-ink-muted');
+        expect(node2.querySelector('[data-state]')).not.toHaveClass('text-state-down');
         expect(within(node2).getByTitle('frozen')).toBeInTheDocument();
         // An idle instance shows no monitor state.
         expect(within(node2).queryByText('idle')).not.toBeInTheDocument();
@@ -449,6 +470,12 @@ describe('Objects Component', () => {
         const unprovisionedNode = nodeCell(unprovisioned, 0);
         expect(unprovisionedNode.querySelector('[data-state]')).toHaveAttribute('data-state', 'na');
         expect(within(unprovisionedNode).getByRole('img', {name: 'Not provisioned'})).toHaveClass('text-state-down');
+
+        // A line before the first node column, the per-node columns past it.
+        expect(screen.getByRole('columnheader', {name: /node1/})).toHaveClass('border-l');
+        expect(screen.getByRole('columnheader', {name: /node2/})).not.toHaveClass('border-l');
+        expect(nodeCell(row1, 0)).toHaveClass('border-l');
+        expect(nodeCell(row1, 1)).not.toHaveClass('border-l');
     });
 
     test('selection and select all', async () => {
@@ -520,37 +547,16 @@ describe('Objects Component', () => {
         };
         const configs = ['test-ns/cfg/conf1', 'cluster'];
 
-        test('all of them first, then the services, volumes, configurations, secrets and users in tabs of their own, then the namespaces', async () => {
+        test('no tab bar: the menu opens each list, the services by default, the namespaces a view of their own', async () => {
             setup(mixed);
             await waitForLoad();
-            expect(screen.getAllByRole('tab').map((tab) => tab.textContent.replace(/\d+$/, '')))
-                .toEqual(['Any', 'Services', 'Volumes', 'Configurations', 'Secrets', 'Users', 'Namespaces']);
-            // Services stays the tab shown by default, Any at its left.
-            expect(screen.getByRole('tab', {name: /^Services/})).toHaveAttribute('aria-selected', 'true');
-            // Each count a badge in the name of its tab.
-            const badge = within(screen.getByRole('tab', {name: /^Volumes/})).getByText('1');
-            expect(badge).toHaveClass('rounded-full', 'bg-surface-sunken');
-            expect(screen.getByRole('tab', {name: /^Services/})).toHaveTextContent('6');
-            expect(screen.getByRole('tab', {name: /^Volumes/})).toHaveTextContent('1');
-            expect(screen.getByRole('tab', {name: /^Configurations/})).toHaveTextContent('2');
-            expect(screen.getByRole('tab', {name: /^Secrets/})).toHaveTextContent('1');
-            expect(screen.getByRole('tab', {name: /^Users/})).toHaveTextContent('1');
-            expect(screen.getByRole('tab', {name: /^Any/})).toHaveTextContent('11');
-            // The group tab counts its groups.
-            expect(screen.getByRole('tab', {name: /^Namespaces/})).toHaveTextContent(/\d+$/);
-            expect(screen.getByRole('tabpanel')).toContainElement(screen.getByRole('table', {name: 'Objects'}));
+            expect(screen.queryByRole('tablist')).not.toBeInTheDocument();
+            expect(screen.queryByRole('tab')).not.toBeInTheDocument();
+            expect(screen.queryByRole('tabpanel')).not.toBeInTheDocument();
+            // The services, without a list in the address.
             expect(objectNamesInOrder()).not.toEqual(expect.arrayContaining([configs[0]]));
             expect(objectNamesInOrder()).not.toContain('test-ns/usr/usr1');
-        });
-
-        test('each tab marked by the icon of the kind it lists, Any by the shapes', async () => {
-            setup(mixed);
-            await waitForLoad();
-            const icons = screen.getAllByRole('tab').map((tab) => tab.querySelector('svg[aria-hidden="true"]'));
-            expect(icons.every(Boolean)).toBe(true);
-            expect(new Set(icons.map((svg) => svg.innerHTML)).size).toBe(icons.length);
-            expect(screen.getByRole('tab', {name: /^Services/}).querySelector('svg')).toHaveClass('text-icon-service');
-            expect(screen.getByRole('tab', {name: /^Secrets/}).querySelector('svg')).toHaveClass('text-icon-compliance');
+            expect(objectNamesInOrder()).not.toContain('test-ns/vol/data');
         });
 
         test.each(['configs', 'secrets', 'users'])('list=%s, held on all the nodes, shows their names and keys only: no status, placement nor node column', async (tab) => {
@@ -559,7 +565,7 @@ describe('Objects Component', () => {
             await waitForLoad();
             const table = screen.getByRole('table', {name: 'Objects'});
             expect(within(table).getAllByRole('columnheader').map((h) => h.textContent.replace(/[▲▼]/g, '').trim())).toEqual(['', 'Object', 'Keys', 'Size']);
-            for (const row of within(table).getAllByRole('row').slice(1)) {
+            for (const row of objectRows()) {
                 expect(within(row).getAllByRole('cell')).toHaveLength(4);
             }
         });
@@ -610,20 +616,18 @@ describe('Objects Component', () => {
             setup(mixed, '', {isWideScreen: true, isMobile: false});
             await waitForLoad();
             const headers = within(screen.getByRole('table', {name: 'Objects'})).getAllByRole('columnheader').map((h) => h.textContent.replace(/[▲▼]/g, '').trim());
-            expect(headers.slice(1, 5)).toEqual(['Status', 'Object', 'Orchestrate', 'Topology']);
+            expect(headers.slice(1, 5)).toEqual(['Object', 'Orchestrate', 'Topology', 'Status']);
         });
 
         test('list=users shows the users alone', async () => {
             setup(mixed, '?list=users');
             await waitForLoad();
-            expect(screen.getByRole('tab', {name: /^Users/})).toHaveAttribute('aria-selected', 'true');
             expect(objectNamesInOrder()).toEqual(['test-ns/usr/usr1']);
         });
 
-        test('list=configs shows the configurations alone, no Kind filter: the kind filter is Any\'s', async () => {
+        test('list=configs shows the configurations alone, no Kind filter: the kind filter is All\'s', async () => {
             setup(mixed, '?list=configs');
             await waitForLoad();
-            expect(screen.getByRole('tab', {name: /^Configurations/})).toHaveAttribute('aria-selected', 'true');
             expect([...objectNamesInOrder()].sort()).toEqual([...configs].sort());
             expect(queryFilterGroup('Kind')).not.toBeInTheDocument();
         });
@@ -637,40 +641,25 @@ describe('Objects Component', () => {
             expect(objectNamesInOrder()).toEqual(names);
         });
 
-        test('list=any shows the objects of all the tabs, with their status, placement and node columns', async () => {
+        test('list=any, All, shows the objects of all the lists, with their status, placement and node columns', async () => {
             setup(mixed, '?list=any', {isWideScreen: true, isMobile: false});
             await waitForLoad();
-            expect(screen.getByRole('tab', {name: /^Any/})).toHaveAttribute('aria-selected', 'true');
             expect([...objectNamesInOrder()].sort()).toEqual(Object.keys(mixed.objectStatus).sort());
             const headers = within(screen.getByRole('table', {name: 'Objects'})).getAllByRole('columnheader').map((h) => h.textContent.replace(/[▲▼]/g, '').trim());
-            expect(headers.slice(1, 5)).toEqual(['Status', 'Object', 'Orchestrate', 'Topology']);
+            expect(headers.slice(1, 5)).toEqual(['Object', 'Orchestrate', 'Topology', 'Status']);
             const kinds = within(filterGroup('Kind')).getAllByRole('checkbox').map(optionText);
             expect(kinds).toEqual(expect.arrayContaining(['ccfg', 'cfg', 'sec', 'svc', 'usr', 'vol']));
         });
 
-        test('list=namespaces shows the namespaces view in the tab, no object table', async () => {
-            setup(mixed, '?list=namespaces');
-            expect(await screen.findByTestId('namespaces-view')).toBeInTheDocument();
-            expect(screen.getByRole('tabpanel')).toContainElement(screen.getByTestId('namespaces-view'));
-            expect(screen.queryByRole('table', {name: 'Objects'})).not.toBeInTheDocument();
-            expect(screen.queryByRole('button', {name: 'New object'})).not.toBeInTheDocument();
-        });
-
-        test('a group tab drops the open object: its open row is a namespace', async () => {
-            setup(mixed, '?sel=test-ns%2Fsvc%2Ftest1');
-            await waitForLoad();
-            fireEvent.click(screen.getByRole('tab', {name: /^Namespaces/}));
-            expect(mockNavigate).toHaveBeenCalledWith('/objects?list=namespaces', {replace: true});
-        });
-
-        test('another tab drops the selection and the kinds picked, the panel kept', async () => {
-            setup(mixed, '?kind=svc&sel=test-ns%2Fsvc%2Ftest1&name=test');
+        test('another list, opened from the menu, drops the selection', async () => {
+            const {rerender} = setup(mixed);
             await waitForLoad();
             selectRow('test-ns/svc/test1');
             expect(screen.getByText('1 selected')).toBeInTheDocument();
-            fireEvent.click(screen.getByRole('tab', {name: /^Configurations/}));
-            expect(mockNavigate).toHaveBeenCalledWith('/objects?sel=test-ns%2Fsvc%2Ftest1&name=test&list=configs', {replace: true});
-            expect(screen.queryByText('1 selected')).not.toBeInTheDocument();
+            vi.mocked(useLocation).mockReturnValue({search: '?list=configs', pathname: '/objects'});
+            rerender(<MemoryRouter><Objects/></MemoryRouter>);
+            await waitFor(() => expect(screen.queryByText('1 selected')).not.toBeInTheDocument());
+            expect([...objectNamesInOrder()].sort()).toEqual([...configs].sort());
         });
     });
 
@@ -704,7 +693,7 @@ describe('Objects Component', () => {
             expect(screen.getByText('test-ns/sec/tls created.')).toBeInTheDocument();
         });
 
-        test('created from Any, the object opens over Any, which lists it too', async () => {
+        test('created from All, the object opens over All, which lists it too', async () => {
             setup({}, '?list=any');
             await waitForLoad();
             fireEvent.click(screen.getByRole('button', {name: 'New object'}));
@@ -829,7 +818,10 @@ describe('Objects Component', () => {
             // Each global state carries its mark.
             expect(filterOption('Global State', 'Up').closest('label').querySelector('[data-state="up"]')).not.toBeNull();
             expect(filterOption('Global State', 'N/a').closest('label').querySelector('[data-state="na"]')).not.toBeNull();
-            expect(filterOption('Global State', 'Unprovisioned').closest('label').querySelector('svg.text-state-down')).not.toBeNull();
+            // Unprovisioned: the P of the not-provisioned marks, decorative beside its word.
+            const p = filterOption('Global State', 'Unprovisioned').closest('label').querySelector('[data-mark="not-provisioned"]');
+            expect(p).toHaveTextContent(/^P$/);
+            expect(p).toHaveAttribute('aria-hidden', 'true');
         });
 
         test('filter popover opens from its summary and closes on Escape or a click outside', async () => {
@@ -859,7 +851,7 @@ describe('Objects Component', () => {
             expect(filterSummary('Namespace')).toHaveTextContent('Namespacetest-ns, root');
         });
 
-        test('no Kind filter on a tab of a kind; a kind in the URL, from Any, filters nothing there', async () => {
+        test('no Kind filter on a tab of a kind; a kind in the URL, from All, filters nothing there', async () => {
             setup(TWO_KINDS, '?kind=nscfg');
             await waitForLoad();
             expect(queryFilterGroup('Kind')).not.toBeInTheDocument();
@@ -1483,51 +1475,70 @@ describe('Objects Component', () => {
         expect(screen.getByRole('button', {name: /hide filters/i})).toBeInTheDocument();
     });
 
-    describe('sorting', () => {
-        test('Status sorting cycles the state put first', async () => {
-            setup();
-            await waitForLoad();
-            expect(screen.getByRole('columnheader', {name: /^Status/})).toHaveAttribute('aria-sort', 'none');
-            clickHeader('Status');
-            await waitFor(() =>
-                expect(screen.getByRole('columnheader', {name: /^Status/})).toHaveAttribute('aria-sort', 'ascending')
-            );
-            // First cycle: n/a first, then up, warn, down.
-            await waitFor(() => expect(objectNamesInOrder()[0]).toMatch(/test4|unprovisioned/));
-            expect(objectNamesInOrder().at(-1)).toBe('test-ns/svc/test2');
-            clickHeader('Status');
-            // Next cycle: up first.
-            await waitFor(() => expect(objectNamesInOrder()[0]).toBe('test-ns/svc/test1'));
-            expect(screen.getByRole('columnheader', {name: /^Status/})).toHaveAttribute('aria-sort', 'ascending');
-        });
-
-        test('Object sorting toggles the direction', async () => {
-            setup();
-            await waitForLoad();
-            expect(screen.getByRole('columnheader', {name: /^Object/})).toHaveAttribute('aria-sort', 'ascending');
-            expect(objectNamesInOrder()[0]).toBe('root/svc/test3');
-            clickHeader('Object');
-            await waitFor(() =>
-                expect(screen.getByRole('columnheader', {name: /^Object/})).toHaveAttribute('aria-sort', 'descending')
-            );
-            await waitFor(() => expect(objectNamesInOrder()[0]).toBe('test-ns/svc/unprovisioned-bool'));
-        });
-
-        test('node column sorting orders by the avail on that node', async () => {
+    describe('order', () => {
+        test('always in the order of the paths, namespace by namespace: the headers sort nothing', async () => {
             setup({}, '', {isWideScreen: true, isMobile: false});
             await waitForLoad();
-            clickHeader('node1');
-            await waitFor(() =>
-                expect(screen.getByRole('columnheader', {name: /^node1/})).toHaveAttribute('aria-sort', 'ascending')
-            );
-            await waitFor(() => expect(objectNamesInOrder().at(-1)).toBe('test-ns/svc/test2'));
-            clickHeader('node1');
-            await waitFor(() => expect(objectNamesInOrder()[0]).toBe('test-ns/svc/test1'));
+            expect(objectNamesInOrder()).toEqual([
+                'root/svc/test3',
+                'test-ns/svc/test1', 'test-ns/svc/test2', 'test-ns/svc/test4',
+                'test-ns/svc/unprovisioned', 'test-ns/svc/unprovisioned-bool',
+            ]);
+            for (const header of within(screen.getByRole('table', {name: 'Objects'})).getAllByRole('columnheader')) {
+                expect(within(header).queryByRole('button')).not.toBeInTheDocument();
+                expect(header).not.toHaveAttribute('aria-sort');
+            }
+        });
+
+        test('the short paths of the root namespace kept together under it', async () => {
+            setup({objectStatus: {
+                'b-ns/svc/x': {avail: 'up'}, 'cluster': {avail: 'n/a'}, 'svc/dns': {avail: 'up'}, 'a-ns/vol/v': {avail: 'up'},
+            }, objectInstanceStatus: {}}, '?list=any');
+            await waitForLoad();
+            expect(namespaceRows().map((row) => row.textContent)).toEqual(['a-ns', 'b-ns', 'root']);
+            expect(objectNamesInOrder()).toEqual(['a-ns/vol/v', 'b-ns/svc/x', 'cluster', 'svc/dns']);
+        });
+
+        test('a line opens each namespace, its name across the row; it opens nothing', async () => {
+            setup({objectStatus: {
+                'prod/svc/web': {avail: 'up'}, 'prod/svc/api': {avail: 'up'}, 'dev/svc/x': {avail: 'up'},
+            }, objectInstanceStatus: {}}, '', {isWideScreen: true, isMobile: false});
+            await waitForLoad();
+            const rows = within(screen.getByRole('table', {name: 'Objects'})).getAllByRole('row').slice(1);
+            expect(rows.map((row) => row.getAttribute('data-namespace-row') ?? 'object')).toEqual(['dev', 'object', 'prod', 'object', 'object']);
+            const line = namespaceRows()[1];
+            expect(within(line).getByRole('rowheader', {name: 'prod'})).toHaveAttribute('colspan', String(rowCells(objectRows()[0]).length - 1));
+            fireEvent.click(within(line).getByRole('rowheader'));
+            expect(mockNavigate).not.toHaveBeenCalled();
+        });
+
+        test('the checkbox of a namespace line selects all its objects the filters keep; mixed when some only are', async () => {
+            setup({objectStatus: {
+                'prod/svc/web': {avail: 'up'}, 'prod/svc/api': {avail: 'down'}, 'dev/svc/x': {avail: 'up'},
+            }, objectInstanceStatus: {}});
+            await waitForLoad();
+            const prod = screen.getByRole('checkbox', {name: 'Select the objects of prod'});
+            fireEvent.click(prod);
+            expect(screen.getByText('2 selected')).toBeInTheDocument();
+            expect(within(objectRow('prod/svc/web')).getByRole('checkbox')).toBeChecked();
+            expect(within(objectRow('dev/svc/x')).getByRole('checkbox')).not.toBeChecked();
+            expect(prod).toBeChecked();
+            // One of them unselected: mixed.
+            fireEvent.click(within(objectRow('prod/svc/api')).getByRole('checkbox'));
+            expect(prod).not.toBeChecked();
+            expect(prod.indeterminate).toBe(true);
+            // Checked again: all of them; unchecked: none, the others kept.
+            fireEvent.click(prod);
+            expect(screen.getByText('2 selected')).toBeInTheDocument();
+            fireEvent.click(screen.getByRole('checkbox', {name: 'Select the objects of dev'}));
+            fireEvent.click(prod);
+            expect(screen.getByText('1 selected')).toBeInTheDocument();
+            expect(within(objectRow('dev/svc/x')).getByRole('checkbox')).toBeChecked();
         });
     });
 
     describe('pages', () => {
-        const dataRows = () => screen.getAllByRole('row').slice(1);
+        const dataRows = objectRows;
 
         test('pages the objects, 50 a page, as oc3 does: the next page, another size', async () => {
             setup(makeMany(60), '', {isWideScreen: true, isMobile: false});
@@ -1545,20 +1556,14 @@ describe('Objects Component', () => {
             expect(screen.getByText('Page 1 of 3')).toBeInTheDocument();
         });
 
-        test('sorted again, the list starts over from its first page', async () => {
+        test('a page starting inside a namespace opens with its line; its checkbox selects the objects of every page', async () => {
             setup(makeMany(60), '', {isWideScreen: true, isMobile: false});
             await waitForLoad();
-            fireEvent.click(screen.getByRole('button', {name: 'Last'}));
-            expect(screen.getByText('51–60 of 60')).toBeInTheDocument();
-            clickHeader('Object');
-            expect(screen.getByText('1–50 of 60')).toBeInTheDocument();
-        });
-
-        test('another tab starts from its first page', async () => {
-            setup(makeMany(60), '?offset=50');
-            await waitForLoad();
-            fireEvent.click(screen.getByRole('tab', {name: /^Volumes/}));
-            expect(mockNavigate).toHaveBeenCalledWith('/objects?list=volumes', {replace: true});
+            expect(namespaceRows().map((row) => row.textContent)).toEqual(['test-ns']);
+            fireEvent.click(screen.getByRole('button', {name: 'Next'}));
+            expect(namespaceRows().map((row) => row.textContent)).toEqual(['test-ns']);
+            fireEvent.click(screen.getByRole('checkbox', {name: 'Select the objects of test-ns'}));
+            expect(screen.getByText('60 selected')).toBeInTheDocument();
         });
 
         test('a filter changed starts the list over from its first page', async () => {
@@ -1757,6 +1762,9 @@ describe('Objects Component', () => {
             const mark = within(statusCell(objectRow(name))).getByRole('img', {name: 'Not provisioned'});
             expect(mark).toHaveAttribute('title', 'Not provisioned');
             expect(mark).toHaveClass('text-state-down');
+            // The P of the unprovisioned resources of the status board, not a triangle.
+            expect(mark).toHaveTextContent(/^P$/);
+            expect(mark.querySelector('svg')).toBeNull();
         });
         expect(within(statusCell(objectRow('test-ns/svc/test1'))).queryByRole('img', {name: 'Not provisioned'}))
             .not.toBeInTheDocument();
@@ -1817,10 +1825,10 @@ describe('Objects Component', () => {
         expect(screen.getByRole('row', {name: /validObj/})).toBeInTheDocument();
     });
 
-    test('renders EventLogger component', async () => {
+    test('no floating events button: the events are a tab of the object panel', async () => {
         setup();
         await waitForLoad();
-        expect(screen.getByText('Object Events')).toBeInTheDocument();
+        expect(screen.queryByText('Object Events')).not.toBeInTheDocument();
     });
 
     describe('filter option toggle handlers (add branch coverage)', () => {

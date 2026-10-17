@@ -69,44 +69,12 @@ beforeEach(() => {
 
 afterEach(() => localStorage.clear());
 
-const claimsTable = () => screen.getByRole('table', {name: 'Claims and usage'});
-const line = (text) => within(claimsTable()).getAllByRole('row').find((r) => r.textContent.startsWith(text));
-const cells = (text) => within(line(text)).getAllByRole('cell').map((c) => c.textContent);
 
 describe('NamespaceUsage', () => {
-    test('each claim: what is used of it, its limit, the share and what is left', async () => {
-        render(<NamespaceUsage namespace="prod"/>);
-        await waitFor(() => expect(line('Pooldefault')).toBeDefined());
-        expect(cells('Pooldefault').slice(0, 3)).toEqual(['Pooldefault', '10 GiB', '20 GiB']);
-        expect(cells('Pooldefault')[4]).toBe('10 GiB');
-        expect(within(line('Pooldefault')).getByRole('progressbar')).toHaveAttribute('aria-valuenow', '50');
-        expect(cells('Networkdefault').slice(0, 3)).toEqual(['Networkdefault', '1', '10']);
-        await waitFor(() => expect(cells('Memory').slice(0, 3)).toEqual(['Memory', '1 GiB', '4 GiB']));
-        expect(cells('Memory')[4]).toBe('3 GiB');
-    });
-
-    test('the cpu claim in cpu, as the table shows it', async () => {
-        render(<NamespaceUsage namespace="prod"/>);
-        await waitFor(() => expect(line('CPU')).toBeDefined());
-        expect(cells('CPU')[2]).toBe('4 cpu');
-    });
-
-    test('a pool used without a claim: out of its size, said so', async () => {
-        render(<NamespaceUsage namespace="prod"/>);
-        await waitFor(() => expect(line('Poolshm')).toBeDefined());
-        expect(cells('Poolshm').slice(0, 3)).toEqual(['Poolshm', '1 GiB', '4 GiB (pool size, no claim)']);
-    });
-
-    test('a namespace claiming nothing is told it is capped by nothing but the pools and networks', async () => {
-        render(<NamespaceUsage namespace="dev"/>);
-        expect(await screen.findByText(/claims nothing/)).toBeInTheDocument();
-        expect(within(claimsTable()).getByText('No pool, network, cpu or memory used.')).toBeInTheDocument();
-    });
-
-    test('the usage of its objects, one by one, follows', async () => {
+    test('the usage of its objects, one by one; the claims are a tab of their own', () => {
         render(<NamespaceUsage namespace="prod"/>);
         expect(screen.getByRole('region', {name: 'CPU and memory by object'})).toContainElement(screen.getByTestId('namespace-metrics'));
-        await waitFor(() => expect(line('Pooldefault')).toBeDefined());
+        expect(screen.queryByRole('table', {name: 'Claims and usage'})).not.toBeInTheDocument();
     });
 });
 

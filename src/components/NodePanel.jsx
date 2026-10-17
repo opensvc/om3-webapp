@@ -1,4 +1,4 @@
-import React, {useEffect, useMemo, useState} from "react";
+import React, {useEffect, useId, useMemo, useState} from "react";
 import {createPortal} from "react-dom";
 import {useTranslation} from "react-i18next";
 import {RecordPanel} from "../app/RecordPanel";
@@ -10,6 +10,7 @@ import {getResponseErrorMessage} from "../services/api.jsx";
 import {NODE_ACTIONS, actionLabel} from "../constants/actions";
 import ActionDialogManager from "./ActionDialogManager";
 import LogsViewer from "./LogsViewer";
+import {EventLog, NODE_EVENT_TYPES} from "./EventLogger";
 import {ConfigText} from "./ConfigText";
 import {monitorMark} from "./NodeRow";
 import {MenuButton} from "../ui/components/MenuButton";
@@ -23,9 +24,16 @@ import {Table, HeaderRow, HeaderCell, Row, Cell, EmptyRow} from "../ui/component
 import {StatusMark} from "../ui/components/StatusMark";
 import {FrozenMark} from "../ui/components/FrozenMark";
 import {RelativeTime} from "../ui/components/RelativeTime";
-import {CloseIcon, CodeIcon, GearIcon, SearchIcon} from "../ui/icons";
+import {BoltIcon, CloseIcon, EyeIcon, EyeOffIcon, PencilIcon, SearchIcon} from "../ui/icons";
+import {formatSeconds, useAutoHide} from "../ui/lib/reveal";
 import {formatBytes, formatSizeMiB} from "../ui/lib/format";
 import {NodeDaemon} from "./NodeDaemon";
+import {InstanceLink} from "./RecordLinks";
+import {CategoryCount, CategoryTabs} from "../ui/components/CategoryTabs";
+import {tabPanelProps} from "../ui/components/tabs-ids";
+import {Pager} from "../ui/components/Pager";
+import {useLocalPaging} from "../app/paging";
+import {usePanelSearch} from "../app/panel-search";
 
 /*
  * The record panel of a cluster node, as oc3 gives its nodes one: its state and
@@ -38,9 +46,6 @@ export const isSet = (time) => !!time && time !== ZERO_TIME;
 
 /** The events that keep the state of the nodes current, the Nodes view's. */
 const NODE_EVENTS = ["NodeStatusUpdated", "NodeMonitorUpdated", "NodeStatsUpdated"];
-
-/** Packages shown at once: a node holds a thousand or more, the filter finds the rest. */
-const PACKAGES_SHOWN = 200;
 
 export const nodeUrl = (node, path) => `${URL_NODE}/${encodeURIComponent(node)}/${path}`;
 export const authHeaders = () => ({Authorization: `Bearer ${localStorage.getItem("authToken") || ""}`});
@@ -216,9 +221,9 @@ function NodeActions({node, frozen, monitor, onFeedback, onOrchestrationLogs}) {
                 onAbort={() => setPending({action: "abort", node})}
             />
             <MenuButton
-                // The actions, as in oc3: a pill tinted with the accent, the gear of the actions.
-                prominent
-                icon={<GearIcon className="h-3.5 w-3.5"/>}
+                // In the title bar, a button as the history and close ones, solid: the bolt alone.
+                solid
+                icon={<BoltIcon className="h-3.5 w-3.5"/>}
                 label={t("nodePanel.actions")}
                 align="end"
                 items={items}
@@ -343,9 +348,15 @@ function NodeStatusTab({node, onOrchestrationLogs}) {
     );
 }
 
+/** The views of the inventory, the hardware first. */
+const INVENTORY_VIEWS = ["hardware", "disks", "addresses", "san", "packages", "accounts"];
+
 /**
  * What the node is made of, as the agent pushes it to the collector (`om node
- * system …`): its hardware, disks, addresses, SAN, packages, users and groups.
+ * system …`): its hardware, disks, addresses, SAN, packages, users and groups. A
+ * view at a time, as the daemon tab shows its own, chosen from a strip of chips
+ * that count each; the long lists filtered and paged, the addresses grouped by
+ * interface. The view is in the URL (`view`), as the tab is.
  */
 function NodeInventory({node}) {
     const {t, i18n} = useTranslation();
@@ -358,6 +369,10 @@ function NodeInventory({node}) {
     const users = useNodeResource(node, "system/user");
     const groups = useNodeResource(node, "system/group");
     const [packageFilter, setPackageFilter] = useState("");
+    const [addressFilter, setAddressFilter] = useState("");
+    const panel = usePanelSearch();
+    const view = INVENTORY_VIEWS.includes(panel.view) ? panel.view : INVENTORY_VIEWS[0];
+    const viewsId = useId();
     const id = (key) => `node-${key}-${node}`;
     const count = (resource) => (resource.data ? itemsOf(resource).length : undefined);
 
@@ -367,83 +382,154 @@ function NodeInventory({node}) {
             .sort((a, b) => String(a.name).localeCompare(String(b.name))),
         [packages, packageFilter],
     );
+    // By interface, then address: the addresses of an interface together, under its line.
+    const addressRows = useMemo(
+        () => itemsOf(addresses)
+            .filter((a) => matches(addressFilter, a.intf, a.address, a.type, a.mac))
+            .sort((a, b) => String(a.intf).localeCompare(String(b.intf)) || String(a.address).localeCompare(String(b.address))),
+        [addresses, addressFilter],
+    );
+    const packagePaging = useLocalPaging("node-packages", packageRows.length);
+    const addressPaging = useLocalPaging("node-addresses", addressRows.length);
 
-    return (
-        <div className="space-y-6">
-            <Section id={id("hardware")} title={t("nodePanel.inventory.hardware")} count={count(hardware)}>
-                <Loaded resource={hardware}>
-                    <DataTable label={t("nodePanel.inventory.hardware")} rows={itemsOf(hardware)} columns={[
-                        {key: "type", label: t("common.type")},
-                        {key: "class", label: t("nodePanel.columns.class")},
-                        {key: "description", label: t("nodePanel.columns.description")},
-                        {key: "driver", label: t("nodePanel.columns.driver"), className: "text-ink-muted"},
-                        {key: "path", label: t("nodePanel.columns.path"), className: "font-mono text-data"},
-                    ]}/>
-                </Loaded>
-            </Section>
+    // Each view counted on its chip; red when it could not be read.
+    const chip = (key, resources, mark) => ({
+        key,
+        label: t(`nodePanel.inventory.views.${key}`),
+        mark,
+        tone: resources.some((r) => r.error) ? "error" : "muted",
+    });
+    const countOf = (resource) => (resource.data ? <CategoryCount count={itemsOf(resource).length}/> : null);
+    const chips = [
+        chip("hardware", [hardware], countOf(hardware)),
+        chip("disks", [disks], countOf(disks)),
+        chip("addresses", [addresses], countOf(addresses)),
+        chip("san", [initiators, paths], paths.data ? <CategoryCount count={itemsOf(paths).length}/> : null),
+        chip("packages", [packages], countOf(packages)),
+        chip("accounts", [users, groups], users.data || groups.data
+            ? <CategoryCount count={itemsOf(users).length + itemsOf(groups).length}/> : null),
+    ];
 
-            <Section id={id("disks")} title={t("nodePanel.inventory.disks")} count={count(disks)}>
-                <Loaded resource={disks}>
-                    <DataTable label={t("nodePanel.inventory.disks")} rowKey={(d) => d.id} rows={itemsOf(disks)} columns={[
-                        {key: "devpath", label: t("nodePanel.columns.device"), className: "font-mono text-data"},
-                        {key: "type", label: t("common.type")},
-                        {key: "model", label: t("nodePanel.columns.model"), render: (d) => [String(d.vendor ?? "").trim(), d.model].filter(Boolean).join(" ")},
-                        {key: "size", label: t("nodePanel.columns.size"), numeric: true, render: (d) => formatBytes(d.size, i18n.language)},
-                        {
-                            key: "objects",
-                            label: t("nodePanel.columns.objects"),
-                            render: (d) => [...new Set((d.regions ?? []).map((r) => r.object).filter(Boolean))].join(", "),
-                        },
-                    ]}/>
-                </Loaded>
-            </Section>
-
-            <Section id={id("addresses")} title={t("nodePanel.inventory.addresses")} count={count(addresses)}>
+    const addressPage = addressPaging.page(addressRows);
+    const views = {
+        hardware: (
+            <Loaded resource={hardware}>
+                <DataTable label={t("nodePanel.inventory.hardware")} rows={itemsOf(hardware)} columns={[
+                    {key: "type", label: t("common.type")},
+                    {key: "class", label: t("nodePanel.columns.class")},
+                    {key: "description", label: t("nodePanel.columns.description")},
+                    {key: "driver", label: t("nodePanel.columns.driver"), className: "text-ink-muted"},
+                    {key: "path", label: t("nodePanel.columns.path"), className: "font-mono text-data"},
+                ]}/>
+            </Loaded>
+        ),
+        disks: (
+            <Loaded resource={disks}>
+                <DataTable label={t("nodePanel.inventory.disks")} rowKey={(d) => d.id} rows={itemsOf(disks)} columns={[
+                    {key: "devpath", label: t("nodePanel.columns.device"), className: "font-mono text-data"},
+                    {key: "type", label: t("common.type")},
+                    {key: "model", label: t("nodePanel.columns.model"), render: (d) => [String(d.vendor ?? "").trim(), d.model].filter(Boolean).join(" ")},
+                    {key: "size", label: t("nodePanel.columns.size"), numeric: true, render: (d) => formatBytes(d.size, i18n.language)},
+                    {
+                        key: "objects",
+                        label: t("nodePanel.columns.objects"),
+                        // Each the badge of its instance on this node.
+                        render: (d) => (
+                            <span className="inline-flex flex-wrap gap-1">
+                                {[...new Set((d.regions ?? []).map((r) => r.object).filter(Boolean))].map((path) => (
+                                    <InstanceLink key={path} path={path} node={node} label={path}/>
+                                ))}
+                            </span>
+                        ),
+                    },
+                ]}/>
+            </Loaded>
+        ),
+        addresses: (
+            <div className="space-y-3">
+                {addresses.data && (
+                    <div className="flex">
+                        <FilterField label={t("nodePanel.inventory.filterAddresses")} value={addressFilter} onChange={(value) => {
+                            setAddressFilter(value);
+                            addressPaging.setOffset(0);
+                        }}/>
+                    </div>
+                )}
                 <Loaded resource={addresses}>
-                    <DataTable label={t("nodePanel.inventory.addresses")} rows={itemsOf(addresses)} columns={[
-                        {key: "intf", label: t("nodePanel.columns.interface")},
-                        {key: "address", label: t("nodePanel.columns.address"), className: "font-mono text-data", render: (a) => (a.mask ? `${a.address}/${a.mask}` : a.address)},
-                        {key: "type", label: t("common.type")},
-                        {key: "mac", label: t("nodePanel.columns.mac"), className: "font-mono text-data text-ink-muted"},
-                    ]}/>
+                    <Pager paging={addressPaging}/>
+                    <Table aria-label={t("nodePanel.inventory.addresses")}>
+                        <thead>
+                            <HeaderRow>
+                                <HeaderCell>{t("nodePanel.columns.address")}</HeaderCell>
+                                <HeaderCell>{t("common.type")}</HeaderCell>
+                                <HeaderCell>{t("nodePanel.columns.mac")}</HeaderCell>
+                            </HeaderRow>
+                        </thead>
+                        <tbody>
+                            {addressPage.map((a, i) => (
+                                <React.Fragment key={`${a.intf} ${a.address} ${i}`}>
+                                    {/* A line opening the addresses of an interface, and the page, which may start inside them. */}
+                                    {(i === 0 || addressPage[i - 1].intf !== a.intf) && (
+                                        <tr data-interface-row={a.intf} className="h-[1.875rem] border-b border-line bg-surface-sunken">
+                                            <th scope="rowgroup" colSpan={3} className="px-2 py-1 text-left font-semibold text-ink">{a.intf}</th>
+                                        </tr>
+                                    )}
+                                    <Row>
+                                        <Cell className="font-mono text-data">{a.mask ? `${a.address}/${a.mask}` : a.address}</Cell>
+                                        <Cell>{a.type}</Cell>
+                                        <Cell className="font-mono text-data text-ink-muted">{a.mac}</Cell>
+                                    </Row>
+                                </React.Fragment>
+                            ))}
+                            {addressPage.length === 0 && <EmptyRow colSpan={3}>{t("nodePanel.none")}</EmptyRow>}
+                        </tbody>
+                    </Table>
                 </Loaded>
-            </Section>
-
-            <Section id={id("san")} title={t("nodePanel.inventory.san")}>
-                <Loaded resource={initiators}>
-                    <DataTable label={t("nodePanel.inventory.initiators")} rows={itemsOf(initiators)} columns={[
-                        {key: "name", label: t("nodePanel.columns.initiator"), className: "font-mono text-data"},
-                        {key: "type", label: t("common.type")},
-                    ]}/>
-                </Loaded>
-                <Loaded resource={paths}>
-                    <DataTable label={t("nodePanel.inventory.paths")} rows={itemsOf(paths)} columns={[
-                        {key: "initiator", label: t("nodePanel.columns.initiator"), className: "font-mono text-data", render: (p) => p.initiator?.name ?? ""},
-                        {key: "target", label: t("nodePanel.columns.target"), className: "font-mono text-data", render: (p) => p.target?.name ?? ""},
-                        {key: "type", label: t("common.type"), render: (p) => p.target?.type ?? p.initiator?.type ?? ""},
-                    ]}/>
-                </Loaded>
-            </Section>
-
-            <Section
-                id={id("packages")}
-                title={t("nodePanel.inventory.packages")}
-                count={count(packages)}
-                tools={packages.data && <FilterField label={t("nodePanel.inventory.filterPackages")} value={packageFilter} onChange={setPackageFilter}/>}
-            >
+            </div>
+        ),
+        san: (
+            <div className="space-y-6">
+                <Section id={id("initiators")} title={t("nodePanel.inventory.initiators")} count={count(initiators)}>
+                    <Loaded resource={initiators}>
+                        <DataTable label={t("nodePanel.inventory.initiators")} rows={itemsOf(initiators)} columns={[
+                            {key: "name", label: t("nodePanel.columns.initiator"), className: "font-mono text-data"},
+                            {key: "type", label: t("common.type")},
+                        ]}/>
+                    </Loaded>
+                </Section>
+                <Section id={id("paths")} title={t("nodePanel.inventory.paths")} count={count(paths)}>
+                    <Loaded resource={paths}>
+                        <DataTable label={t("nodePanel.inventory.paths")} rows={itemsOf(paths)} columns={[
+                            {key: "initiator", label: t("nodePanel.columns.initiator"), className: "font-mono text-data", render: (p) => p.initiator?.name ?? ""},
+                            {key: "target", label: t("nodePanel.columns.target"), className: "font-mono text-data", render: (p) => p.target?.name ?? ""},
+                            {key: "type", label: t("common.type"), render: (p) => p.target?.type ?? p.initiator?.type ?? ""},
+                        ]}/>
+                    </Loaded>
+                </Section>
+            </div>
+        ),
+        packages: (
+            <div className="space-y-3">
+                {packages.data && (
+                    <div className="flex">
+                        <FilterField label={t("nodePanel.inventory.filterPackages")} value={packageFilter} onChange={(value) => {
+                            setPackageFilter(value);
+                            packagePaging.setOffset(0);
+                        }}/>
+                    </div>
+                )}
                 <Loaded resource={packages}>
-                    <DataTable label={t("nodePanel.inventory.packages")} rows={packageRows.slice(0, PACKAGES_SHOWN)} columns={[
+                    <Pager paging={packagePaging}/>
+                    <DataTable label={t("nodePanel.inventory.packages")} rows={packagePaging.page(packageRows)} columns={[
                         {key: "name", label: t("common.name")},
                         {key: "version", label: t("nodePanel.columns.version"), className: "font-mono text-data"},
                         {key: "arch", label: t("nodePanel.columns.arch"), className: "text-ink-muted"},
                         {key: "type", label: t("common.type"), className: "text-ink-muted"},
                     ]}/>
-                    {packageRows.length > PACKAGES_SHOWN && (
-                        <p className="text-ink-muted">{t("nodePanel.inventory.morePackages", {count: packageRows.length - PACKAGES_SHOWN})}</p>
-                    )}
                 </Loaded>
-            </Section>
-
+            </div>
+        ),
+        accounts: (
             <div className="grid gap-6 md:grid-cols-2">
                 <Section id={id("users")} title={t("nodePanel.inventory.users")} count={count(users)}>
                     <Loaded resource={users}>
@@ -462,25 +548,45 @@ function NodeInventory({node}) {
                     </Loaded>
                 </Section>
             </div>
+        ),
+    };
+
+    return (
+        <div className="space-y-4">
+            <CategoryTabs
+                label={t("nodePanel.inventory.views.label")}
+                idPrefix={viewsId}
+                tabs={chips}
+                active={view}
+                onSelect={(next) => panel.setView(next === INVENTORY_VIEWS[0] ? undefined : next)}
+            />
+            <div {...tabPanelProps(viewsId, view)}>
+                {views[view]}
+            </div>
         </div>
     );
 }
 
 /**
- * The configuration file of the node (`om node config show` / `edit`): shown as
- * stored, edited in place. The daemon writes the whole file: one changed since the
- * edit started is not overwritten.
+ * The configuration file of the node (`om node config show` / `edit`), edited in
+ * place. Shown, its secrets are redacted, node.uuid say, as the object configuration
+ * shows its own: the daemon redacts them (`redact-secrets`), until the eye shows
+ * them for a while. Edited, it is read whole. The daemon writes the whole file: one
+ * changed since the edit started is not overwritten.
  */
 function NodeConfig({node}) {
     const {t} = useTranslation();
-    const file = useNodeResource(node, "config/file", {text: true});
+    const [showSecrets, setShowSecrets] = useState(false);
+    const secondsLeft = useAutoHide(showSecrets, () => setShowSecrets(false));
+    const file = useNodeResource(node, `config/file?redact-secrets=${!showSecrets}`, {text: true});
     const [edit, setEdit] = useState(null);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState(null);
     const [saved, setSaved] = useState(false);
 
+    // The file as stored, its secrets in clear: what an edit starts from and writes back.
     const read = async () => {
-        const response = await fetch(nodeUrl(node, "config/file"), {headers: authHeaders(), cache: "no-cache"});
+        const response = await fetch(nodeUrl(node, "config/file?redact-secrets=false"), {headers: authHeaders(), cache: "no-cache"});
         if (!response.ok) throw new Error((await getResponseErrorMessage(response)) || `HTTP ${response.status}`);
         return response.text();
     };
@@ -553,9 +659,24 @@ function NodeConfig({node}) {
 
     return (
         <div className="space-y-2">
-            <div className="flex items-center justify-end">
+            <div className="flex items-center justify-end gap-1">
+                {file.data !== null && !file.loading && (
+                    <p className="mr-auto text-data text-ink-muted">
+                        {showSecrets
+                            ? t("config.view.secretsMaskedIn", {time: formatSeconds(secondsLeft)})
+                            : t("config.view.secretsHidden")}
+                    </p>
+                )}
+                <IconButton
+                    label={showSecrets ? t("config.view.hideSecrets") : t("config.view.showSecrets")}
+                    aria-pressed={showSecrets}
+                    onClick={() => setShowSecrets((shown) => !shown)}
+                    disabled={file.loading}
+                >
+                    {showSecrets ? <EyeOffIcon/> : <EyeIcon/>}
+                </IconButton>
                 <IconButton label={t("nodePanel.config.edit")} onClick={startEdit} disabled={file.loading}>
-                    <CodeIcon/>
+                    <PencilIcon/>
                 </IconButton>
             </div>
             {saved && <Alert tone="success">{t("config.feedback.updated")}</Alert>}
@@ -624,7 +745,7 @@ function NodeDrivers({node}) {
 
 /**
  * A node: its state, properties and actions, then its inventory, configuration,
- * schedules, drivers, daemon and logs, a tab each, as oc3 gives a node its tabs. The state
+ * schedules, drivers, daemon, events and logs, a tab each, as oc3 gives a node its tabs. The state
  * tab stays mounted under the others: its event stream and its actions hold.
  */
 export function NodeDetailPanel({node, tab, onTabChange, onClose}) {
@@ -637,7 +758,7 @@ export function NodeDetailPanel({node, tab, onTabChange, onClose}) {
         setLogsOrchestration(id);
         onTabChange("logs");
     };
-    const tabs = ["status", "inventory", "config", "schedules", "drivers", "daemon", "logs"]
+    const tabs = ["status", "inventory", "config", "schedules", "drivers", "daemon", "events", "logs"]
         .map((key) => ({key, label: t(`nodePanel.tabs.${key}`)}));
     return (
         <RecordPanel
@@ -661,6 +782,11 @@ export function NodeDetailPanel({node, tab, onTabChange, onClose}) {
                     {active === "schedules" && <NodeSchedules key={node} node={node}/>}
                     {active === "drivers" && <NodeDrivers key={node} node={node}/>}
                     {active === "daemon" && <NodeDaemon key={node} node={node}/>}
+                    {active === "events" && (
+                        <div className="h-[calc(100dvh-10rem)]">
+                            <EventLog key={node} eventTypes={NODE_EVENT_TYPES} nodeName={node} label={t("nodePanel.tabs.events")}/>
+                        </div>
+                    )}
                     {active === "logs" && (
                         <div className="flex h-[calc(100dvh-10rem)] flex-col gap-2">
                             <OrchestrationLogsFilter id={logsOrchestration} onClear={() => setLogsOrchestration(null)}/>

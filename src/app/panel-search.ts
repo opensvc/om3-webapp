@@ -21,9 +21,11 @@ export interface PanelUpdate {
   tab?: string;
   peek?: string;
   peektab?: string;
+  /** A view within the tab shown: the part of a long tab on display. */
+  view?: string;
 }
 
-export const PANEL_KEYS = ["sel", "tab", "peek", "peektab"] as const;
+export const PANEL_KEYS = ["sel", "tab", "peek", "peektab", "view"] as const;
 
 /**
  * The URL parameters after an update. A key present with `undefined` clears it; an
@@ -42,6 +44,8 @@ export function applyPanelUpdate(previous: URLSearchParams, next: PanelUpdate): 
     values.tab = undefined;
     if (!("peektab" in next)) values.peektab = undefined;
   }
+  // The view within a tab, its daemon's executions say: another record or tab, its own.
+  if (["sel", "tab", "peek", "peektab"].some((key) => key in next) && !("view" in next)) values.view = undefined;
   for (const key of PANEL_KEYS) {
     if (!(key in values)) continue;
     const value = values[key];
@@ -68,6 +72,7 @@ export function usePanelSearch() {
   const tab = read(params, "tab");
   const rawPeek = read(params, "peek");
   const peektab = read(params, "peektab");
+  const view = read(params, "view");
   const peek = useMemo(
     () => (sel !== undefined ? null : parseStep(rawPeek)),
     [sel, rawPeek],
@@ -85,7 +90,12 @@ export function usePanelSearch() {
     tab,
     peek,
     peektab,
+    view,
     update,
+    /** Shows a view within the tab, `undefined` its first one: Back returns to the one before. */
+    setView: useCallback((next: string | undefined) => {
+      update({ view: next });
+    }, [update]),
     /** Opens the detail panel of a row of the view, on its first tab; `undefined` closes it. */
     select: useCallback((id: string | undefined, nextTab?: string) => {
       update({ sel: id, tab: nextTab });

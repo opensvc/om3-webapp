@@ -700,4 +700,34 @@ describe('LogsViewer', () => {
             await screen.findByText('[INFO]');
         });
     });
+
+    describe('several nodes', () => {
+        test('a stream a node, merged in the order of their time, each line saying its node', async () => {
+            const entry = (ts, message) => ({__REALTIME_TIMESTAMP: String(ts), MESSAGE: message});
+            const streams = {
+                n1: [entry(1000, 'first on n1'), entry(3000, 'third on n1')],
+                n2: [entry(2000, 'second on n2'), entry(3000, 'same instant on n2')],
+            };
+            global.fetch = vi.fn((url) => {
+                const node = Object.keys(streams).find((n) => url.includes(`/${n}/`));
+                return Promise.resolve({
+                    ok: true,
+                    status: 200,
+                    body: new MockReadableStream(streams[node].map((log) => `data: ${JSON.stringify(log)}\n\n`), 0),
+                });
+            });
+            render(<LogsViewer nodenames={['n1', 'n2']} type="instance" namespace="prod" kind="svc" instanceName="web" filters={['RID=app#1']}/>);
+            await waitFor(() => expect(findLogsContainer()).toHaveTextContent('same instant on n2'));
+            expect([...new Set(global.fetch.mock.calls.map(([url]) => url))]).toEqual([
+                'http://mock-api/n1/instance/path/prod/svc/web/log?follow=true&filter=RID%3Dapp%231',
+                'http://mock-api/n2/instance/path/prod/svc/web/log?follow=true&filter=RID%3Dapp%231',
+            ]);
+            await waitFor(() => expect(findLogsContainer()).toHaveTextContent('third on n1'));
+            const lines = [...findLogsContainer().querySelectorAll('.log-line')];
+            expect(lines.map((line) => line.querySelector('[data-node]').textContent)).toEqual(['n1', 'n2', 'n1', 'n2']);
+            expect(lines[0]).toHaveTextContent('first on n1');
+            expect(lines[1]).toHaveTextContent('second on n2');
+            expect(screen.getByText('web on n1, n2')).toBeInTheDocument();
+        });
+    });
 });

@@ -36,14 +36,15 @@ function useMenuEdge(active: boolean): number {
  * shown last, or on the first of the history when that one is no longer listed.
  * Nothing to reopen, no anchor. The "p" key does the same from the keyboard; with a
  * record panel open, it closes it (`SlideOver`). On the left, it stands against the
- * side menu, not over it.
+ * side menu, not over it. In a narrow window, where no gutter is spared for it, it is
+ * a button of the header bar (`inBar`).
  */
-export function PanelAnchor() {
+export function PanelAnchor({ inBar = false }: { inBar?: boolean }) {
   const { t } = useTranslation();
   const { side } = usePanelSide();
   const anyOpen = useAnyPanelOpen();
   // On the left, the anchor stands against the side menu rather than over it.
-  const menuEdge = useMenuEdge(side === "left" && !anyOpen);
+  const menuEdge = useMenuEdge(!inBar && side === "left" && !anyOpen);
   const history = useRecordHistory();
   const peek = usePeek();
   const steps = history.entries.filter(isPeekStep);
@@ -58,6 +59,31 @@ export function PanelAnchor() {
 
   if (anyOpen || target === undefined) return null;
   const label = `${t("panelHistory.reopen", { name: stepLabel(target), count: steps.length })} (p)`;
+  const content = (
+    <>
+      <HistoryIcon className="h-4 w-4" />
+      <span aria-hidden="true" className="text-data tabular-nums">
+        {steps.length}
+      </span>
+      <span className="sr-only">{label}</span>
+    </>
+  );
+
+  if (inBar) {
+    return (
+      <button
+        type="button"
+        title={label}
+        aria-keyshortcuts="p"
+        onClick={() => {
+          peek(target.kind, target.id);
+        }}
+        className="flex h-7 shrink-0 items-center gap-1 rounded-(--radius-control) px-1.5 text-ink-muted hover:bg-surface-sunken hover:text-ink"
+      >
+        {content}
+      </button>
+    );
+  }
 
   return (
     <button
@@ -75,11 +101,7 @@ export function PanelAnchor() {
           : "right-0 rounded-l-(--radius-panel) border-r-0 pr-1.5 pl-2"
       }`}
     >
-      <HistoryIcon className="h-4 w-4" />
-      <span aria-hidden="true" className="text-data tabular-nums">
-        {steps.length}
-      </span>
-      <span className="sr-only">{label}</span>
+      {content}
     </button>
   );
 }

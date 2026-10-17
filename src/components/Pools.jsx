@@ -30,10 +30,10 @@ const COLUMNS = [
 /** The usage percentage, a small bar beside it: the row keeps one line. */
 const Usage = ({pool}) => {
     const {t} = useTranslation();
-    if (!(pool.size && pool.used >= 0)) return t("common.notAvailable");
     return (
         <UsageBar
-            value={(pool.used / pool.size) * 100}
+            value={pool.size && pool.used >= 0 ? (pool.used / pool.size) * 100 : undefined}
+            missing={t("common.notAvailable")}
             title={`${pool.used}/${pool.size}`}
             label={t("pools.usageOf", {name: pool.name || t("common.notAvailable")})}
         />

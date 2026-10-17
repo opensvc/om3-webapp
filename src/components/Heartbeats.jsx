@@ -12,7 +12,6 @@ import {useTranslation} from "react-i18next";
 
 import useEventStore from "../hooks/useEventStore.js";
 import {retainEventReception} from "../eventSourceManager.jsx";
-import EventLogger from "../components/EventLogger";
 import {Table, HeaderRow, HeaderCell, SortHeaderCell, Row, Cell, EmptyRow} from "../ui/components/Table";
 import {Select} from "../ui/components/Field";
 import {Button, IconButton} from "../ui/components/Button";
@@ -674,9 +673,6 @@ const Heartbeats = () => {
             >
                 <p>{pendingStop && t("heartbeats.actions.confirmStop", {id: pendingStop.id, node: pendingStop.node})}</p>
             </Dialog>
-
-            <EventLogger eventTypes={heartbeatEventTypes} title={t("heartbeats.eventsLogger")}
-                         buttonLabel={t("heartbeats.events")}/>
         </div>
     );
 };

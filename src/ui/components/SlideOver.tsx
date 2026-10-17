@@ -8,7 +8,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
-import { CloseIcon, PanelSideIcon } from "../icons";
+import { CloseIcon } from "../icons";
 import { usePanelSide } from "./panel-side";
 import { RAIL_VISIBLE, RESIZE_VISIBLE, RESIZED_WIDTH } from "./slide-over-layout";
 import { useShortcut } from "../lib/shortcuts";
@@ -118,7 +118,7 @@ export function SlideOver({
   resizeLabel?: string;
   children: ReactNode;
 }) {
-  const { side, switchSide, switchLabel } = usePanelSide();
+  const { side } = usePanelSide();
   const left = side === "left";
   const panel = useRef<HTMLDivElement>(null);
   // The two zones of the panel: the record, and what stands on its right (`rail`).
@@ -332,18 +332,6 @@ export function SlideOver({
             </>
           )}
           <div className="ml-auto flex items-center gap-2">{actions}</div>
-          {switchSide !== undefined && switchLabel !== undefined && (
-            // Where the panel leaves room beside it: a narrower window fills with it.
-            <button
-              type="button"
-              onClick={switchSide}
-              title={switchLabel}
-              className={`h-7 w-7 items-center justify-center rounded-(--radius-control) border border-line text-ink-muted hover:text-ink ${RAIL_VISIBLE[size]}`}
-            >
-              <PanelSideIcon side={left ? "right" : "left"} />
-              <span className="sr-only">{switchLabel}</span>
-            </button>
-          )}
           <button
             type="button"
             onClick={onClose}

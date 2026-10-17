@@ -4,6 +4,7 @@ import {MemoryRouter} from 'react-router-dom';
 import {vi} from 'vitest';
 import Namespaces from '../Namespaces';
 import useEventStore from '../../hooks/useEventStore';
+import {PG_POLL_MS, resetPgUsage} from '../../hooks/usePgUsage';
 import i18n from '../../i18n';
 
 const {mockNavigate, mockRetain, mockRelease} = vi.hoisted(() => ({
@@ -29,6 +30,9 @@ vi.mock('../../eventSourceManager.jsx', () => ({
 vi.mock('../NamespacePanel', () => ({
     NamespaceUsage: ({namespace}) => <div data-testid="namespace-usage">{namespace}</div>,
     NamespaceConfig: ({namespace}) => <div data-testid="namespace-config">{namespace}</div>,
+}));
+vi.mock('../NamespaceClaims', () => ({
+    NamespaceClaims: ({namespace}) => <div data-testid="namespace-claims">{namespace}</div>,
 }));
 
 const GiB = 1024 ** 3;
@@ -102,11 +106,13 @@ beforeEach(() => {
     vi.clearAllMocks();
     localStorage.setItem('authToken', 'tok');
     pgReadings = 0;
-    useEventStore.setState({objectStatus: structuredClone(OBJECTS)});
+    resetPgUsage();
+    // One node, read through the API.
+    useEventStore.setState({objectStatus: structuredClone(OBJECTS), nodeStatus: {n1: {}}, objectInstanceStatus: {}});
     global.fetch = vi.fn(async (url) => {
-        if (url === '/metrics/pg') {
+        if (url === '/api/node/name/n1/metrics/pg') {
             pgReadings += 1;
-            // Five seconds of cpu between two readings ten seconds apart: about half a cpu.
+            // Five seconds of cpu between two readings a period apart: a third of a cpu.
             return new Response(pg(pgReadings * 5000000), {status: 200});
         }
         if (url === '/api/object/path/prod/nscfg/namespace/config/file') return new Response(PROD_NSCFG, {status: 200});
@@ -119,6 +125,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+    resetPgUsage();
     localStorage.clear();
     vi.useRealTimers();
 });
@@ -238,7 +245,7 @@ describe('Namespaces', () => {
         expect(cell('prod', 'CPU')).toHaveTextContent('– of 8 cpu');
         // The rate shows on the second reading, a couple of seconds after the first.
         await act(async () => {
-            await vi.advanceTimersByTimeAsync(2000);
+            await vi.advanceTimersByTimeAsync(PG_POLL_MS);
         });
         // About half a cpu of 8.
         // In cpu, mcpu or µcpu, three significant digits at most (formatCpu), of the 8 cpu cap.
@@ -246,8 +253,8 @@ describe('Namespaces', () => {
         // The trends are in the panel of the namespace, not in its line.
         expect(within(cell('prod', 'Memory')).queryByRole('img')).not.toBeInTheDocument();
         expect(within(cell('prod', 'CPU')).queryByRole('img')).not.toBeInTheDocument();
-        // No claim: the memory used alone, no cap (none reported for dev here).
-        expect(cell('dev', 'Memory')).toHaveTextContent('0 used');
+        // No claim: the memory used alone, no cap; dev's cgroup reports none: a dash, not a zero.
+        expect(cell('dev', 'Memory')).toHaveTextContent('– used');
         // No cpu cap: the cpu it uses now, however little, not a share of nothing.
         expect(cell('dev', 'CPU')).toHaveTextContent(/^\d+(\.\d+)? [mµ]?cpu$/);
         expect(cardOf(cell('dev', 'CPU').querySelector('[tabindex="0"]')).figures).toEqual({
@@ -260,21 +267,44 @@ describe('Namespaces', () => {
         await loaded();
         fireEvent.click(cell('prod', 'Name'));
         const panel = screen.getByRole('dialog', {name: 'prod'});
-        expect(within(panel).getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Usage', 'Configuration']);
+        // The claims second, between the usage and the configuration.
+        // Its objects by kind after them, each its count, a service down a red alert; its configuration last.
+        expect(within(panel).getAllByRole('tab').map((tab) => tab.textContent))
+            .toEqual(['Usage', 'Claims', 'Services3!', 'Volumes2', 'Configurations2', 'Secrets1', 'Events', 'Configuration']);
+        expect(within(panel).getByTestId('ns-tab-alert-services')).toHaveAttribute('data-level', 'down');
         expect(within(panel).getByTestId('namespace-usage')).toHaveTextContent('prod');
         expect(row('prod')).toHaveAttribute('aria-current', 'true');
         expect(mockNavigate).not.toHaveBeenCalled();
+        fireEvent.click(within(panel).getByRole('tab', {name: 'Claims'}));
+        expect(within(panel).getByTestId('namespace-claims')).toHaveTextContent('prod');
         fireEvent.click(within(panel).getByRole('tab', {name: 'Configuration'}));
         expect(within(panel).getByTestId('namespace-config')).toHaveTextContent('prod');
+        // Another row opens on the usage again, whatever tab was open.
+        fireEvent.click(cell('dev', 'Name'));
+        const next = screen.getByRole('dialog', {name: 'dev'});
+        expect(within(next).getByRole('tab', {name: 'Usage'})).toHaveAttribute('aria-selected', 'true');
+        expect(within(next).getByTestId('namespace-usage')).toHaveTextContent('dev');
     });
 
-    test('sorted by a column, ties in the order of the names', async () => {
+    test('sorted by a column, a figure from the largest, ties in the order of the names', async () => {
         renderNamespaces();
         await loaded();
         fireEvent.click(screen.getByRole('button', {name: 'Services'}));
-        expect(names()).toEqual(['dev', 'root', 'prod']);
-        fireEvent.click(screen.getByRole('button', {name: 'Services'}));
         expect(names()).toEqual(['prod', 'dev', 'root']);
+        fireEvent.click(screen.getByRole('button', {name: 'Services'}));
+        expect(names()).toEqual(['dev', 'root', 'prod']);
+        // A name reads from A.
+        fireEvent.click(screen.getByRole('button', {name: 'Name'}));
+        expect(names()).toEqual(['dev', 'prod', 'root']);
+        fireEvent.click(screen.getByRole('button', {name: 'Name'}));
+        expect(names()).toEqual(['root', 'prod', 'dev']);
+    });
+
+    test('sorted by name by default', async () => {
+        renderNamespaces();
+        await loaded();
+        expect(screen.getByRole('columnheader', {name: /^Name/})).toHaveAttribute('aria-sort', 'ascending');
+        expect(names()).toEqual(['dev', 'prod', 'root']);
     });
 
     test('reads the claims of each namespace, a namespace without nscfg claiming nothing', async () => {

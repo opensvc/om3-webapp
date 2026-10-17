@@ -1,4 +1,4 @@
-import React, {useEffect, useMemo, useState} from "react";
+import React, {useEffect, useId, useMemo, useState} from "react";
 import {useTranslation} from "react-i18next";
 import {URL_CLUSTER_STATUS} from "../config/apiPath.js";
 import useEventStore from "../hooks/useEventStore.js";
@@ -10,7 +10,14 @@ import {Dialog} from "../ui/components/Dialog";
 import {MenuButton} from "../ui/components/MenuButton";
 import {RelativeTime} from "../ui/components/RelativeTime";
 import {StatusMark} from "../ui/components/StatusMark";
-import {CloseIcon, GearIcon, RefreshIcon} from "../ui/icons";
+import {BoltIcon, CloseIcon, RefreshIcon} from "../ui/icons";
+import {CategoryCount, CategoryTabs} from "../ui/components/CategoryTabs";
+import {Pager} from "../ui/components/Pager";
+import {Table, HeaderRow, HeaderCell, Row, Cell, EmptyRow} from "../ui/components/Table";
+import {tabPanelProps} from "../ui/components/tabs-ids";
+import {useLocalPaging} from "../app/paging";
+import {usePanelSearch} from "../app/panel-search";
+import {CrossLink} from "../app/CrossLink";
 import {
     DataTable,
     FilterField,
@@ -29,7 +36,15 @@ import {
  * their state, its listener, its heartbeats, the orchestrations it
  * runs and the commands it executes, and the DNS zone it serves. Read from the API
  * of om3 main (daemon/*), each action confirmed first.
+ *
+ * A view at a time, chosen from a strip of chips that sums each up: the overview
+ * (the components, the listener among them, and the heartbeats), the executions,
+ * the orchestrations and the DNS records, the long lists paged. The view is in the
+ * URL (`view`), as the tab is.
  */
+
+/** The views of the tab, the overview first. */
+const VIEWS = ["overview", "executions", "orchestrations", "dns"];
 
 /** The components of the daemon the node status reports, in the order of `om daemon status`. */
 const COMPONENTS = ["listener", "dns", "scheduler", "runner_imon", "collector", "daemondata"];
@@ -55,9 +70,6 @@ function componentDetail(id, component) {
     return "";
 }
 
-/** How many executions are listed, the latest first: the scheduler runs many. */
-const EXECS_SHOWN = 100;
-
 /** The events that keep the heartbeats current, as on the Heartbeats view. */
 const HEARTBEAT_EVENTS = ["DaemonHeartbeatUpdated"];
 
@@ -76,6 +88,9 @@ export function NodeDaemon({node}) {
     const [busy, setBusy] = useState(false);
     const [execFilter, setExecFilter] = useState("");
     const [dnsFilter, setDnsFilter] = useState("");
+    const panel = usePanelSearch();
+    const view = VIEWS.includes(panel.view) ? panel.view : VIEWS[0];
+    const viewsId = useId();
 
     const daemon = status.data?.cluster?.node?.[node]?.daemon;
     // The heartbeats, kept current by their events once one came; the cluster status until then.
@@ -125,7 +140,6 @@ export function NodeDaemon({node}) {
     const streams = (liveHeartbeat ?? daemon?.heartbeat)?.streams ?? [];
     // Live, the heartbeats wait for nothing else: neither the cluster status nor its error.
     const heartbeatSource = liveHeartbeat ? {data: liveHeartbeat, loading: false, error: null} : status;
-    const listener = daemon?.listener;
 
     const execRows = useMemo(
         () => itemsOf(execs)
@@ -134,10 +148,28 @@ export function NodeDaemon({node}) {
             .sort((a, b) => (b.state === "running") - (a.state === "running") || byStartDesc(a, b)),
         [execs, execFilter]
     );
+    // By name, then type: the records of a name together, under the line of the name.
     const dnsRows = useMemo(
-        () => (Array.isArray(dns.data) ? dns.data : []).filter((r) => matches(dnsFilter, r.qname, r.qtype, r.content)),
+        () => (Array.isArray(dns.data) ? dns.data : [])
+            .filter((r) => matches(dnsFilter, r.qname, r.qtype, r.content))
+            .sort((a, b) => String(a.qname).localeCompare(String(b.qname)) || String(a.qtype).localeCompare(String(b.qtype))),
         [dns.data, dnsFilter]
     );
+    // In progress first, then the latest first.
+    const orchestrationRows = useMemo(
+        () => [...itemsOf(orchestrations)].sort((a, b) => (!isSet(b.ended_at)) - (!isSet(a.ended_at)) || byStartDesc(a, b)),
+        [orchestrations]
+    );
+    const execPaging = useLocalPaging("node-daemon-execs", execRows.length);
+    const dnsPaging = useLocalPaging("node-daemon-dns", dnsRows.length);
+    const filterExecs = (value) => {
+        setExecFilter(value);
+        execPaging.setOffset(0);
+    };
+    const filterDns = (value) => {
+        setDnsFilter(value);
+        dnsPaging.setOffset(0);
+    };
 
     const streamActions = (stream) => {
         const target = t("nodeDaemon.heartbeats.target", {id: stream.id, node});
@@ -196,31 +228,64 @@ export function NodeDaemon({node}) {
         </Alert>
     ) : null);
 
-    return (
+    // What each view sums up, on its chip.
+    const components = daemon ? COMPONENTS.filter((id) => daemon[id]).map((id) => ({...daemon[id], id})) : [];
+    const componentsUp = components.filter((c) => markOf(c.state) === "up").length;
+    const streamBeating = (s) => s.state === "running" && Object.values(s.peers ?? {}).every((p) => p.is_beating);
+    const beating = streams.filter(streamBeating).length;
+    const overviewState = components.length === 0 && streams.length === 0 ? "unknown"
+        : components.some((c) => markOf(c.state) === "down") || streams.some((s) => markOf(s.state) === "down") ? "down"
+            : componentsUp < components.length || beating < streams.length ? "warn" : "up";
+    const execRunning = itemsOf(execs).filter((e) => e.state === "running").length;
+    const orchestrationRunning = orchestrationRows.filter((o) => !isSet(o.ended_at)).length;
+    const dnsNames = new Set((Array.isArray(dns.data) ? dns.data : []).map((r) => r.qname)).size;
+    const running = (count) => (count > 0
+        ? <span className="text-data text-state-up">{t("nodeDaemon.summary.running", {count})}</span>
+        : null);
+    const chips = [
+        {
+            key: "overview",
+            label: t("nodeDaemon.views.overview"),
+            mark: <StatusMark state={overviewState} label={overviewState}/>,
+            description: t("nodeDaemon.summary.overview", {up: componentsUp, components: components.length, beating, streams: streams.length}),
+            tone: overviewState === "up" || overviewState === "unknown" ? "muted" : "strong",
+        },
+        {
+            key: "executions",
+            label: t("nodeDaemon.views.executions"),
+            mark: <span className="inline-flex items-center gap-1">{running(execRunning)}{execs.data && <CategoryCount count={itemsOf(execs).length}/>}</span>,
+            description: t("nodeDaemon.summary.executions", {count: itemsOf(execs).length, running: execRunning}),
+            tone: execs.error ? "error" : execRunning > 0 ? "strong" : "muted",
+        },
+        {
+            key: "orchestrations",
+            label: t("nodeDaemon.views.orchestrations"),
+            mark: <span className="inline-flex items-center gap-1">{running(orchestrationRunning)}{orchestrations.data && <CategoryCount count={orchestrationRows.length}/>}</span>,
+            description: t("nodeDaemon.summary.orchestrations", {count: orchestrationRows.length, running: orchestrationRunning}),
+            tone: orchestrations.error ? "error" : orchestrationRunning > 0 ? "strong" : "muted",
+        },
+        {
+            key: "dns",
+            label: t("nodeDaemon.views.dns"),
+            mark: dns.data ? <CategoryCount count={Array.isArray(dns.data) ? dns.data.length : 0}/> : null,
+            description: t("nodeDaemon.summary.dns", {count: Array.isArray(dns.data) ? dns.data.length : 0, names: dnsNames}),
+            tone: dns.error ? "error" : "muted",
+        },
+    ];
+
+    /** An object of the daemon's work, a badge opening it; the node's own, said so. */
+    const objectOf = (path) => (path ? <CrossLink kind="object" id={path}>{path}</CrossLink> : t("nodeDaemon.orchestrations.node"));
+
+    const overview = (
         <div className="space-y-6">
-            <div className="flex flex-wrap items-center gap-3">
-                <span className="text-ink-muted">
-                    {daemon ? (
-                        <>
-                            {t("nodeDaemon.pid", {pid: daemon.pid})}
-                            {" · "}
-                            {t("nodeDaemon.startedAt")} {when(daemon.started_at)}
-                        </>
-                    ) : null}
-                </span>
-                <Button size="sm" variant="ghost" className="ml-auto" icon={<RefreshIcon className="h-3.5 w-3.5"/>} onClick={reloadAll}>
-                    {t("nodeDaemon.refresh")}
-                </Button>
-            </div>
-
-
             <Section id={`daemon-components-${node}`} title={t("nodeDaemon.components.title")}>
+                {feedbackIn("listener")}
                 <Loaded resource={status}>
                     <DataTable
                         label={t("nodeDaemon.components.title")}
                         rowKey={(row) => row.id}
                         // Named by its key: the listener reports an empty id of its own.
-                        rows={daemon ? COMPONENTS.filter((id) => daemon[id]).map((id) => ({...daemon[id], id})) : []}
+                        rows={components}
                         columns={[
                             {key: "id", label: t("nodeDaemon.columns.component"), className: "font-medium", render: (c) => t(`nodeDaemon.components.${c.id}`, {defaultValue: c.id})},
                             {key: "state", label: t("common.status"), render: (c) => (
@@ -228,26 +293,18 @@ export function NodeDaemon({node}) {
                             )},
                             {key: "detail", label: t("nodeDaemon.columns.detail"), className: "font-mono text-data text-ink-muted", render: (c) => componentDetail(c.id, c)},
                             {key: "updated_at", label: t("nodeDaemon.columns.updated"), render: (c) => when(c.updated_at)},
+                            // The listener started, stopped and restarted from its line.
+                            {key: "actions", label: t("nodeDaemon.actions.label"), render: (c) => (c.id === "listener" ? (
+                                <MenuButton
+                                    solid
+                                    icon={<BoltIcon className="h-3.5 w-3.5"/>}
+                                    label={t("nodeDaemon.listener.actionsOf", {listener: LISTENER})}
+                                    align="end"
+                                    items={listenerItems}
+                                />
+                            ) : null)},
                         ]}
                     />
-                </Loaded>
-            </Section>
-
-            <Section
-                id={`daemon-listener-${node}`}
-                title={t("nodeDaemon.listener.title")}
-                tools={listener ? <MenuButton icon={<GearIcon className="h-3.5 w-3.5"/>} label={t("nodeDaemon.actions.label")} items={listenerItems}/> : null}
-            >
-                {feedbackIn("listener")}
-                <Loaded resource={status}>
-                    {listener ? (
-                        <p className="flex flex-wrap items-center gap-2">
-                            <StatusMark state={markOf(listener.state)} label={listener.state}/>
-                            <span className="font-mono text-data">{LISTENER}</span>
-                            <span className="font-mono text-data text-ink-muted">{componentDetail("listener", listener)}</span>
-                            <span className="text-ink-muted">{listener.state}</span>
-                        </p>
-                    ) : <p className="text-ink-muted">{t("nodePanel.none")}</p>}
                 </Loaded>
             </Section>
 
@@ -279,7 +336,8 @@ export function NodeDaemon({node}) {
                             )},
                             {key: "actions", label: t("nodeDaemon.actions.label"), render: (s) => (
                                 <MenuButton
-                                    icon={<GearIcon className="h-3.5 w-3.5"/>}
+                                    solid
+                                    icon={<BoltIcon className="h-3.5 w-3.5"/>}
                                     label={t("nodeDaemon.heartbeats.actionsOf", {id: s.id})}
                                     align="end"
                                     items={streamActions(s)}
@@ -289,89 +347,148 @@ export function NodeDaemon({node}) {
                     />
                 </Loaded>
             </Section>
+        </div>
+    );
 
-            <Section id={`daemon-orchestrations-${node}`} title={t("nodeDaemon.orchestrations.title")} count={orchestrations.data ? itemsOf(orchestrations).length : undefined}>
-                <Loaded resource={orchestrations}>
-                    <DataTable
-                        label={t("nodeDaemon.orchestrations.title")}
-                        rowKey={(o) => o.orchestration_id}
-                        rows={[...itemsOf(orchestrations)].sort(byStartDesc)}
-                        columns={[
-                            {key: "path", label: t("nodeDaemon.columns.object"), className: "font-medium", render: (o) => o.path || t("nodeDaemon.orchestrations.node")},
-                            {key: "expect", label: t("nodeDaemon.columns.expect")},
-                            {key: "state", label: t("common.status"), render: (o) => (o.error ? `${o.state}: ${o.error}` : o.state)},
-                            {key: "started_at", label: t("nodeDaemon.columns.started"), render: (o) => when(o.started_at)},
-                            {key: "ended_at", label: t("nodeDaemon.columns.ended"), render: (o) => when(o.ended_at)},
-                            {key: "orchestration_id", label: t("nodeDaemon.columns.id"), className: "font-mono text-data text-ink-muted"},
-                        ]}
-                    />
-                </Loaded>
-            </Section>
+    const executions = (
+        <div className="space-y-3">
+            <div className="flex flex-wrap items-center gap-3">
+                <FilterField label={t("nodeDaemon.execs.filter")} value={execFilter} onChange={filterExecs}/>
+            </div>
+            {feedbackIn("execs")}
+            <Loaded resource={execs}>
+                <Pager paging={execPaging}/>
+                <DataTable
+                    label={t("nodeDaemon.execs.title")}
+                    rowKey={(e) => e.exec_id}
+                    rows={execPaging.page(execRows)}
+                    columns={[
+                        {key: "path", label: t("nodeDaemon.columns.object"), className: "whitespace-nowrap", render: (e) => objectOf(e.path)},
+                        {key: "command", label: t("nodeDaemon.columns.command"), className: "font-mono text-data text-ink-muted"},
+                        {key: "origin", label: t("nodeDaemon.columns.origin")},
+                        // An exit in error said in red.
+                        {key: "state", label: t("common.status"), render: (e) => {
+                            const ended = e.exit_code !== undefined && e.state !== "running";
+                            return (
+                                <span className={ended && e.exit_code !== 0 ? "text-state-down" : undefined}>
+                                    {ended ? `${e.state} (${e.exit_code})` : e.state}
+                                </span>
+                            );
+                        }},
+                        {key: "started_at", label: t("nodeDaemon.columns.started"), render: (e) => when(e.started_at)},
+                        {key: "ended_at", label: t("nodeDaemon.columns.ended"), render: (e) => when(e.ended_at)},
+                        {key: "signal", label: t("nodeDaemon.actions.label"), render: (e) => (e.state === "running" ? (
+                            <Button
+                                size="sm"
+                                variant="secondary"
+                                disabled={busy}
+                                onClick={() => ask({
+                                    section: "execs",
+                                    label: t("nodeDaemon.execs.terminate"),
+                                    question: t("nodeDaemon.execs.confirm", {command: e.command, node}),
+                                    method: "DELETE",
+                                    path: `daemon/exec?exec_id=${encodeURIComponent(e.exec_id)}&signal=TERM`,
+                                    reload: [execs],
+                                })}
+                            >
+                                {t("nodeDaemon.execs.terminate")}
+                            </Button>
+                        ) : null)},
+                    ]}
+                />
+            </Loaded>
+        </div>
+    );
 
-            <Section
-                id={`daemon-execs-${node}`}
-                title={t("nodeDaemon.execs.title")}
-                count={execs.data ? execRows.length : undefined}
-                tools={<FilterField label={t("nodeDaemon.execs.filter")} value={execFilter} onChange={setExecFilter}/>}
-            >
-                {feedbackIn("execs")}
-                <Loaded resource={execs}>
-                    {execRows.length > EXECS_SHOWN && (
-                        <p className="text-ink-muted">{t("nodeDaemon.execs.shown", {shown: EXECS_SHOWN, count: execRows.length})}</p>
-                    )}
-                    <DataTable
-                        label={t("nodeDaemon.execs.title")}
-                        rowKey={(e) => e.exec_id}
-                        rows={execRows.slice(0, EXECS_SHOWN)}
-                        columns={[
-                            {key: "path", label: t("nodeDaemon.columns.object"), className: "font-medium"},
-                            {key: "command", label: t("nodeDaemon.columns.command"), className: "font-mono text-data text-ink-muted"},
-                            {key: "origin", label: t("nodeDaemon.columns.origin")},
-                            {key: "state", label: t("common.status"), render: (e) => (e.exit_code !== undefined && e.state !== "running" ? `${e.state} (${e.exit_code})` : e.state)},
-                            {key: "started_at", label: t("nodeDaemon.columns.started"), render: (e) => when(e.started_at)},
-                            {key: "ended_at", label: t("nodeDaemon.columns.ended"), render: (e) => when(e.ended_at)},
-                            {key: "signal", label: t("nodeDaemon.actions.label"), render: (e) => (e.state === "running" ? (
-                                <Button
-                                    size="sm"
-                                    variant="secondary"
-                                    disabled={busy}
-                                    onClick={() => ask({
-                                        section: "execs",
-                                        label: t("nodeDaemon.execs.terminate"),
-                                        question: t("nodeDaemon.execs.confirm", {command: e.command, node}),
-                                        method: "DELETE",
-                                        path: `daemon/exec?exec_id=${encodeURIComponent(e.exec_id)}&signal=TERM`,
-                                        reload: [execs],
-                                    })}
-                                >
-                                    {t("nodeDaemon.execs.terminate")}
-                                </Button>
-                            ) : null)},
-                        ]}
-                    />
-                </Loaded>
-            </Section>
+    const orchestrationsView = (
+        <Loaded resource={orchestrations}>
+            <DataTable
+                label={t("nodeDaemon.orchestrations.title")}
+                rowKey={(o) => o.orchestration_id}
+                rows={orchestrationRows}
+                columns={[
+                    {key: "path", label: t("nodeDaemon.columns.object"), className: "whitespace-nowrap", render: (o) => objectOf(o.path)},
+                    {key: "expect", label: t("nodeDaemon.columns.expect")},
+                    {key: "state", label: t("common.status"), render: (o) => (o.error ? `${o.state}: ${o.error}` : o.state)},
+                    {key: "started_at", label: t("nodeDaemon.columns.started"), render: (o) => when(o.started_at)},
+                    {key: "ended_at", label: t("nodeDaemon.columns.ended"), render: (o) => when(o.ended_at)},
+                    {key: "orchestration_id", label: t("nodeDaemon.columns.id"), className: "font-mono text-data text-ink-muted"},
+                ]}
+            />
+        </Loaded>
+    );
 
-            <Section
-                id={`daemon-dns-${node}`}
-                title={t("nodeDaemon.dns.title")}
-                count={dns.data ? dnsRows.length : undefined}
-                tools={<FilterField label={t("nodeDaemon.dns.filter")} value={dnsFilter} onChange={setDnsFilter}/>}
-            >
-                <Loaded resource={dns}>
-                    <DataTable
-                        label={t("nodeDaemon.dns.title")}
-                        rowKey={(r, index) => `${r.qname} ${r.qtype} ${r.content} ${index}`}
-                        rows={dnsRows}
-                        columns={[
-                            {key: "qname", label: t("common.name"), className: "font-mono text-data"},
-                            {key: "qtype", label: t("common.type")},
-                            {key: "ttl", label: t("nodeDaemon.columns.ttl"), numeric: true},
-                            {key: "content", label: t("nodeDaemon.columns.content"), className: "font-mono text-data"},
-                        ]}
-                    />
-                </Loaded>
-            </Section>
+    const dnsPage = dnsPaging.page(dnsRows);
+    const dnsView = (
+        <div className="space-y-3">
+            <div className="flex flex-wrap items-center gap-3">
+                <FilterField label={t("nodeDaemon.dns.filter")} value={dnsFilter} onChange={filterDns}/>
+            </div>
+            <Loaded resource={dns}>
+                <Pager paging={dnsPaging}/>
+                <Table aria-label={t("nodeDaemon.dns.title")}>
+                    <thead>
+                        <HeaderRow>
+                            <HeaderCell>{t("common.type")}</HeaderCell>
+                            <HeaderCell className="text-right">{t("nodeDaemon.columns.ttl")}</HeaderCell>
+                            <HeaderCell>{t("nodeDaemon.columns.content")}</HeaderCell>
+                        </HeaderRow>
+                    </thead>
+                    <tbody>
+                        {dnsPage.map((r, i) => (
+                            <React.Fragment key={`${r.qname} ${r.qtype} ${r.content} ${i}`}>
+                                {/* A line opening the records of a name, and the page, which may start inside them. */}
+                                {(i === 0 || dnsPage[i - 1].qname !== r.qname) && (
+                                    <tr data-name-row={r.qname} className="h-[1.875rem] border-b border-line bg-surface-sunken">
+                                        <th scope="rowgroup" colSpan={3} className="px-2 py-1 text-left font-mono text-data font-semibold text-ink">
+                                            {r.qname}
+                                        </th>
+                                    </tr>
+                                )}
+                                <Row>
+                                    <Cell>{r.qtype}</Cell>
+                                    <Cell numeric className="text-right">{r.ttl}</Cell>
+                                    <Cell className="font-mono text-data">{r.content}</Cell>
+                                </Row>
+                            </React.Fragment>
+                        ))}
+                        {dnsPage.length === 0 && <EmptyRow colSpan={3}>{t("nodePanel.none")}</EmptyRow>}
+                    </tbody>
+                </Table>
+            </Loaded>
+        </div>
+    );
+
+    const views = {overview, executions, orchestrations: orchestrationsView, dns: dnsView};
+
+    return (
+        <div className="space-y-4">
+            <div className="flex flex-wrap items-center gap-3">
+                <span className="text-ink-muted">
+                    {daemon ? (
+                        <>
+                            {t("nodeDaemon.pid", {pid: daemon.pid})}
+                            {" · "}
+                            {t("nodeDaemon.startedAt")} {when(daemon.started_at)}
+                        </>
+                    ) : null}
+                </span>
+                <Button size="sm" variant="ghost" className="ml-auto" icon={<RefreshIcon className="h-3.5 w-3.5"/>} onClick={reloadAll}>
+                    {t("nodeDaemon.refresh")}
+                </Button>
+            </div>
+
+            {/* Each view summed up on its chip: what runs, how many, what is wrong. */}
+            <CategoryTabs
+                label={t("nodeDaemon.views.label")}
+                idPrefix={viewsId}
+                tabs={chips}
+                active={view}
+                onSelect={(next) => panel.setView(next === VIEWS[0] ? undefined : next)}
+            />
+            <div {...tabPanelProps(viewsId, view)}>
+                {views[view]}
+            </div>
 
             <Dialog
                 open={pending !== null}

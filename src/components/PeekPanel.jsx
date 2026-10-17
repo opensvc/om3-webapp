@@ -2,6 +2,7 @@ import React from "react";
 import {usePanelSearch} from "../app/panel-search";
 import {NamespaceDetailPanel, NetworkDetailPanel, ObjectDetailPanel} from "./RecordPanels";
 import {NodeDetailPanel} from "./NodePanel";
+import {InstanceDetailPanel, ResourceDetailPanel} from "./InstanceRecord";
 
 /**
  * Record looked at from any view, as oc3 does it.
@@ -22,6 +23,8 @@ export function PeekPanel() {
             <ObjectDetailPanel path={id("object")} tab={peektab} onTabChange={setPeekTab} onClose={closePeek}/>
             <NetworkDetailPanel name={id("network")} onClose={closePeek}/>
             <NamespaceDetailPanel name={id("namespace")} tab={peektab} onTabChange={setPeekTab} onClose={closePeek}/>
+            <InstanceDetailPanel id={id("instance")} tab={peektab} onTabChange={setPeekTab} onClose={closePeek}/>
+            <ResourceDetailPanel id={id("resource")} tab={peektab} onTabChange={setPeekTab} onClose={closePeek}/>
         </>
     );
 }

@@ -7,7 +7,8 @@ import AuthChoice from "./AuthChoice.jsx";
 import Login from "./Login.jsx";
 import '../styles/main.css';
 import NavBar from './NavBar';
-import {Sidebar, useSidebarOpen} from './Sidebar';
+import {Sidebar, menuAlert, useSidebarOpen} from './Sidebar';
+import useSidebarAlerts from '../hooks/useSidebarAlerts';
 import {OidcProvider, useOidc} from "../context/OidcAuthContext.tsx";
 import {
     AuthProvider,
@@ -23,8 +24,7 @@ import logger from "../utils/logger.js";
 import {prepareForNavigation} from "../eventSourceManager";
 import {PeekPanel} from "./PeekPanel";
 import {PanelAnchor} from "../app/PanelAnchor";
-import {PanelSideProvider} from "../app/PanelSideProvider";
-import {usePanelSidePref} from "../app/panel-side-pref";
+import {useMediaQuery} from "../ui/lib/media";
 import {useRecordHistory} from "../app/record-history";
 import {ShortcutsHelp} from "../app/ShortcutsHelp";
 import {useShortcut} from "../ui/lib/shortcuts";
@@ -34,6 +34,7 @@ import {decodeToken as decodeTokenFromLogin} from "./Login.jsx";
 // Lazy load components for code splitting
 const NodesTable = lazy(() => import("./NodesTable"));
 const Objects = lazy(() => import("./Objects"));
+const Namespaces = lazy(() => import("./Namespaces"));
 const Heartbeats = lazy(() => import("./Heartbeats"));
 const Pools = lazy(() => import("./Pools"));
 const Network = lazy(() => import("./Network"));
@@ -59,6 +60,19 @@ const ObjectsTab = ({list}) => {
     const params = new URLSearchParams(search);
     params.set("list", list);
     return <Navigate to={`/objects?${params}`} replace/>;
+};
+
+/**
+ * The Objects page; its former namespaces tab is the Namespaces view now: a link
+ * to it lands there, the namespace open in it kept.
+ */
+const ObjectsRoute = () => {
+    const {search} = useLocation();
+    const params = new URLSearchParams(search);
+    if (params.get("list") !== "namespaces") return <Objects/>;
+    params.delete("list");
+    const query = params.toString();
+    return <Navigate to={`/namespaces${query ? `?${query}` : ""}`} replace/>;
 };
 
 // An instance is a column of the status board of its object.
@@ -306,15 +320,20 @@ const ProtectedRoute = ({children}) => {
 
 const AUTH_PATHS = ['/auth', '/login', '/silent-renew'];
 
+/** A narrow window, as Tailwind's max-md: the anchor in the header bar, no gutter for it. */
+const NARROW_QUERY = "(max-width: 47.95rem)";
+
 const App = () => {
     logger.info("App init");
     const location = useLocation();
     const mainRef = useRef(null);
 
     const authInfo = useAuthInfo();
-    const [sidebarOpen, toggleSidebar] = useSidebarOpen();
+    const [sidebarOpen, toggleSidebar, {compact: compactMenu, fold: foldSidebar}] = useSidebarOpen();
     // The sign-in screens have no view to navigate to: no menu there.
     const showSidebar = !AUTH_PATHS.some((path) => location.pathname.startsWith(path));
+    // The alerts of the menu, read once: on its entries, and on its button while folded.
+    const sidebarAlerts = useSidebarAlerts({enabled: showSidebar});
 
     // "n", for navigation, moves the focus to the menu, on the entry of the view on
     // display, unfolding the menu first when it is folded: the focus waits for it to
@@ -361,71 +380,74 @@ const App = () => {
         color: 'var(--ink)',
     };
 
-    // The anchor that brings the panels back stands on their edge of the window, over
-    // the views: while there is a record to bring back, the views keep a gutter as
-    // wide as it on that side, so that it covers nothing, an Actions menu at the end
-    // of a toolbar included.
-    const panelSide = usePanelSidePref().value;
+    // The anchor that brings the panels back stands on the right edge of the window,
+    // over the views: while there is a record to bring back, the views keep a gutter
+    // as wide as it there, so that it covers nothing, an Actions menu at the end of a
+    // toolbar included. A narrow window spares no such gutter: the anchor is a button
+    // of the header bar there.
     const historySize = useRecordHistory().entries.length;
-    const anchorShown = showSidebar && historySize > 0;
+    const narrow = useMediaQuery(NARROW_QUERY);
+    const anchorEnabled = showSidebar && !!localStorage.getItem("authToken");
+    const anchorShown = showSidebar && historySize > 0 && !narrow;
     const mainStyle = {
         flex: 1,
         minWidth: 0,
         overflowY: 'auto',
         WebkitOverflowScrolling: 'touch',
         width: '100%',
-        ...(anchorShown ? {[panelSide === 'left' ? 'paddingLeft' : 'paddingRight']: '2.5rem'} : {}),
+        ...(anchorShown ? {paddingRight: '2.5rem'} : {}),
     };
 
     return (
         <AuthProvider>
             <OidcProvider>
                 <OidcInitializer authInfo={authInfo}>
-                    <PanelSideProvider>
-                        <div id="app-root-container" style={appContainerStyle}>
-                            <NavBar
-                                sidebarOpen={sidebarOpen}
-                                onToggleSidebar={toggleSidebar}
-                                showSidebarToggle={showSidebar}
-                            />
-                            <div style={{display: 'flex', flex: 1, minHeight: 0}}>
-                                {showSidebar && <Sidebar open={sidebarOpen}/>}
-                                <main id="app-scroll-container" ref={mainRef} style={mainStyle}>
-                                    <Suspense fallback={<Loading/>}>
-                                        <Routes>
-                                            <Route path="/" element={<Navigate to="/objects" replace/>}/>
-                                            {/* Tabs of the Objects page now: an old link lands there. */}
-                                            <Route path="/namespaces" element={<ObjectsTab list="namespaces"/>}/>
-                                            <Route path="/kinds" element={<ObjectsTab list="any"/>}/>
-                                            <Route path="/heartbeats" element={<Heartbeats/>}/>
-                                            <Route path="/nodes" element={<ProtectedRoute><NodesTable/></ProtectedRoute>}/>
-                                            <Route path="/pools" element={<ProtectedRoute><Pools/></ProtectedRoute>}/>
-                                            <Route path="/network" element={<ProtectedRoute><Network/></ProtectedRoute>}/>
-                                            <Route path="/network/:networkName" element={<NetworkRedirect/>}/>
-                                            <Route path="/objects" element={<ProtectedRoute><Objects/></ProtectedRoute>}/>
-                                            <Route path="/objects/:objectName" element={<ObjectRedirect/>}/>
-                                            <Route path="/nodes/:node/objects/:objectName" element={<InstanceRedirect/>}/>
-                                            <Route path="/whoami" element={<ProtectedRoute><WhoAmI/></ProtectedRoute>}/>
-                                            <Route path="/silent-renew" element={<SilentRenew/>}/>
-                                            <Route path="/auth-callback" element={<OidcCallback/>}/>
-                                            <Route path="/auth-choice" element={<AuthChoice authInfo={authInfo}/>}/>
-                                            <Route path="/auth/login" element={<Login/>}/>
-                                            <Route path="*" element={<Navigate to="/"/>}/>
-                                        </Routes>
-                                        {/* The record opened from a badge or the history, whatever the
-                                            view, and what brings the panels back once closed. */}
-                                        {showSidebar && localStorage.getItem("authToken") && (
-                                            <>
-                                                <PeekPanel/>
-                                                <PanelAnchor/>
-                                                <ShortcutsHelp/>
-                                            </>
-                                        )}
-                                    </Suspense>
-                                </main>
-                            </div>
+                    <div id="app-root-container" style={appContainerStyle}>
+                        <NavBar
+                            sidebarOpen={sidebarOpen}
+                            onToggleSidebar={toggleSidebar}
+                            menuAlert={sidebarOpen ? null : menuAlert(sidebarAlerts)}
+                            showSidebarToggle={showSidebar}
+                            anchor={anchorEnabled && narrow ? <PanelAnchor inBar/> : null}
+                        />
+                        <div style={{display: 'flex', flex: 1, minHeight: 0}}>
+                            {/* Short of room, the menu folds once an entry is chosen. */}
+                            {showSidebar && <Sidebar open={sidebarOpen} alerts={sidebarAlerts} onNavigate={compactMenu ? foldSidebar : undefined}/>}
+                            <main id="app-scroll-container" ref={mainRef} style={mainStyle}>
+                                <Suspense fallback={<Loading/>}>
+                                    <Routes>
+                                        <Route path="/" element={<Navigate to="/objects" replace/>}/>
+                                        {/* Tabs of the Objects page now: an old link lands there. */}
+                                        <Route path="/namespaces" element={<ProtectedRoute><Namespaces/></ProtectedRoute>}/>
+                                        <Route path="/kinds" element={<ObjectsTab list="any"/>}/>
+                                        <Route path="/heartbeats" element={<Heartbeats/>}/>
+                                        <Route path="/nodes" element={<ProtectedRoute><NodesTable/></ProtectedRoute>}/>
+                                        <Route path="/pools" element={<ProtectedRoute><Pools/></ProtectedRoute>}/>
+                                        <Route path="/network" element={<ProtectedRoute><Network/></ProtectedRoute>}/>
+                                        <Route path="/network/:networkName" element={<NetworkRedirect/>}/>
+                                        <Route path="/objects" element={<ProtectedRoute><ObjectsRoute/></ProtectedRoute>}/>
+                                        <Route path="/objects/:objectName" element={<ObjectRedirect/>}/>
+                                        <Route path="/nodes/:node/objects/:objectName" element={<InstanceRedirect/>}/>
+                                        <Route path="/whoami" element={<ProtectedRoute><WhoAmI/></ProtectedRoute>}/>
+                                        <Route path="/silent-renew" element={<SilentRenew/>}/>
+                                        <Route path="/auth-callback" element={<OidcCallback/>}/>
+                                        <Route path="/auth-choice" element={<AuthChoice authInfo={authInfo}/>}/>
+                                        <Route path="/auth/login" element={<Login/>}/>
+                                        <Route path="*" element={<Navigate to="/"/>}/>
+                                    </Routes>
+                                    {/* The record opened from a badge or the history, whatever the
+                                        view, and what brings the panels back once closed. */}
+                                    {showSidebar && localStorage.getItem("authToken") && (
+                                        <>
+                                            <PeekPanel/>
+                                            {!narrow && <PanelAnchor/>}
+                                            <ShortcutsHelp/>
+                                        </>
+                                    )}
+                                </Suspense>
+                            </main>
                         </div>
-                    </PanelSideProvider>
+                    </div>
                 </OidcInitializer>
             </OidcProvider>
         </AuthProvider>

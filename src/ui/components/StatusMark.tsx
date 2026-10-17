@@ -21,10 +21,13 @@ const MARKS: Record<ObjectState, { ink: string }> = {
 export function StatusMark({
   state,
   label,
+  muted = false,
   className,
 }: {
   state: ObjectState;
   label?: string;
+  /** Gray whatever the state: a down that is no issue (`isQuietDown`). */
+  muted?: boolean;
   className?: string;
 }) {
   const { t } = useTranslation();
@@ -34,7 +37,8 @@ export function StatusMark({
     <span
       title={text}
       data-state={state}
-      className={cn("inline-flex w-4 shrink-0 items-center justify-center", mark.ink, className)}
+      data-muted={muted || undefined}
+      className={cn("inline-flex w-4 shrink-0 items-center justify-center", muted ? "text-ink-muted" : mark.ink, className)}
     >
       <StateGlyph state={state} />
       <span className="sr-only">{text}</span>

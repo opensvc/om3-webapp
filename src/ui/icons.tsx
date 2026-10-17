@@ -51,19 +51,6 @@ export function ServerIcon(props: IconProps) {
  * (fa-circle), but that glyph already stands for the "up" state in StatusBadge:
  * reusing it in the menu would make the two easy to confuse.
  */
-/** A window with a side panel against its left or right edge. */
-export function PanelSideIcon({ side, ...props }: IconProps & { side: "left" | "right" }) {
-  return (
-    <Svg {...props}>
-      <path
-        fillRule="evenodd"
-        d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6c0-1.1.9-2 2-2Zm0 2v12h16V6H4Z"
-      />
-      <path d={side === "left" ? "M5 7h6v10H5z" : "M13 7h6v10h-6z"} />
-    </Svg>
-  );
-}
-
 /** Kinds of things, a circle, a square and a triangle: the history grouped by kind (as oc3). */
 export function ShapesIcon(props: IconProps) {
   return (
@@ -465,11 +452,25 @@ export function StateIcon(props: IconProps) {
   );
 }
 
-/** Editing. */
+/** Editing, a configuration file say. */
 export function PencilIcon(props: IconProps) {
   return (
     <Svg {...props}>
       <path d="M17.6 2.6c.5 0 1 .2 1.4.6l1.8 1.8a2 2 0 0 1 0 2.8L9.2 19.4l-5.7 1.9a.7.7 0 0 1-.9-.9l1.9-5.7L16.2 3.2c.4-.4.9-.6 1.4-.6Zm-2.2 3.9L6 15.9l-1 3.1 3.1-1 9.4-9.4-2.1-2.1Z" />
+    </Svg>
+  );
+}
+
+/** Setting parameters one by one, as a wizard does: three sliders. */
+export function SlidersIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <rect x="3" y="5" width="18" height="2" rx="1" />
+      <rect x="3" y="11" width="18" height="2" rx="1" />
+      <rect x="3" y="17" width="18" height="2" rx="1" />
+      <circle cx="8" cy="6" r="2.6" />
+      <circle cx="16" cy="12" r="2.6" />
+      <circle cx="10" cy="18" r="2.6" />
     </Svg>
   );
 }
@@ -532,6 +533,15 @@ export function GearIcon(props: IconProps) {
         fillRule="evenodd"
         d="M10.3 2h3.4l.5 2.6 1.6.7 2.2-1.5 2.4 2.4-1.5 2.2.7 1.6 2.6.5v3.4l-2.6.5-.7 1.6 1.5 2.2-2.4 2.4-2.2-1.5-1.6.7-.5 2.6h-3.4l-.5-2.6-1.6-.7-2.2 1.5-2.4-2.4 1.5-2.2-.7-1.6L2 13.7v-3.4l2.6-.5.7-1.6-1.5-2.2 2.4-2.4 2.2 1.5 1.6-.7.5-2.6ZM12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z"
       />
+    </Svg>
+  );
+}
+
+/** Actions on a record or a selection: a bolt, apart from the gear of the settings. */
+export function BoltIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M13.5 2 4 13.5h6.5L9.5 22 20 9.5h-6.5L13.5 2Z" />
     </Svg>
   );
 }

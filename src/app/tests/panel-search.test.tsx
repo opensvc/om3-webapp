@@ -7,6 +7,14 @@ import { applyPanelUpdate, usePanelSearch, usePeek } from "../panel-search";
 const params = (query: string) => new URLSearchParams(query);
 
 describe("applyPanelUpdate", () => {
+  test("a view within the tab kept while it changes alone; another tab, record or panel drops it", () => {
+    expect(applyPanelUpdate(params("peek=node:n1&peektab=daemon"), { view: "dns" }).get("view")).toBe("dns");
+    expect(applyPanelUpdate(params("peek=node:n1&peektab=daemon&view=dns"), { peektab: "logs" }).get("view")).toBeNull();
+    expect(applyPanelUpdate(params("peek=node:n1&peektab=daemon&view=dns"), { peek: "node:n2" }).get("view")).toBeNull();
+    expect(applyPanelUpdate(params("sel=n1&tab=daemon&view=dns"), { sel: "n2" }).get("view")).toBeNull();
+    expect(applyPanelUpdate(params("peek=node:n1&view=dns"), { view: undefined }).get("view")).toBeNull();
+  });
+
   test("opening a row panel keeps the filters of the view and starts on its first tab", () => {
     const next = applyPanelUpdate(params("namespace=ns1&tab=logs"), { sel: "ns1/svc/web" });
     expect(next.get("namespace")).toBe("ns1");

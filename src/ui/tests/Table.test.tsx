@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, test, vi } from "vitest";
 import {
@@ -10,6 +10,7 @@ import {
   SortHeaderCell,
   Table,
 } from "../components/Table";
+import { TableCardsContext } from "../components/table-cards";
 import { StatusMark } from "../components/StatusMark";
 
 function renderTable(rows: React.ReactNode, sticky = false) {
@@ -200,5 +201,71 @@ describe("StatusMark", () => {
     render(<StatusMark state="down" label="stale" />);
     expect(screen.getByTitle("stale")).toHaveTextContent("stale");
     expect(screen.getByTitle("stale").querySelector("svg")).toHaveAttribute("data-glyph", "down");
+  });
+});
+
+describe("Table cards", () => {
+  function List({ rows, cards }: { rows: string[]; cards?: boolean }) {
+    return (
+      <Table aria-label="Disks" cards={cards}>
+        <thead>
+          <HeaderRow>
+            <HeaderCell />
+            <SortHeaderCell label="Device" active direction="asc" onSort={() => {}} />
+            <HeaderCell>Size</HeaderCell>
+          </HeaderRow>
+        </thead>
+        <tbody>
+          <tr>
+            <th colSpan={3}>vg0</th>
+          </tr>
+          {rows.map((name) => (
+            <Row key={name}>
+              <Cell>
+                <input type="checkbox" aria-label={`Select ${name}`} />
+              </Cell>
+              <Cell>{name}</Cell>
+              <Cell numeric>1 GiB</Cell>
+            </Row>
+          ))}
+        </tbody>
+      </Table>
+    );
+  }
+
+  test("a cell named after its column, the sort arrow left out; none for a cell without a title or across columns", async () => {
+    const { rerender } = render(<List rows={["sda"]} cards />);
+    expect(screen.getByRole("table", { name: "Disks" })).toHaveAttribute("data-cards");
+    const cells = screen.getByText("sda").closest("tr")!.querySelectorAll("td");
+    expect([...cells].map((cell) => cell.dataset.label)).toEqual([undefined, "Device", "Size"]);
+    expect(screen.getByText("vg0")).not.toHaveAttribute("data-label");
+    // A row come later, named as well.
+    rerender(<List rows={["sda", "sdb"]} cards />);
+    await waitFor(() => {
+      expect(screen.getByText("sdb")).toHaveAttribute("data-label", "Device");
+    });
+  });
+
+  test("off by default, out of a panel: no cards, no names", () => {
+    render(<List rows={["sda"]} />);
+    expect(screen.getByRole("table", { name: "Disks" })).not.toHaveAttribute("data-cards");
+    expect(screen.getByText("sda")).not.toHaveAttribute("data-label");
+  });
+
+  test("on in a panel, unless the table keeps its columns", () => {
+    render(
+      <TableCardsContext.Provider value>
+        <List rows={["sda"]} />
+        <Table aria-label="Board" cards={false}>
+          <tbody>
+            <tr>
+              <td>x</td>
+            </tr>
+          </tbody>
+        </Table>
+      </TableCardsContext.Provider>,
+    );
+    expect(screen.getByRole("table", { name: "Disks" })).toHaveAttribute("data-cards");
+    expect(screen.getByRole("table", { name: "Board" })).not.toHaveAttribute("data-cards");
   });
 });

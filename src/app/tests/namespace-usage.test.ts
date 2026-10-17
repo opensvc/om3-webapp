@@ -48,7 +48,7 @@ describe("parseCpuLimit", () => {
 });
 
 describe("parseClaims", () => {
-  test("the claim sections: type, name and limit in its unit; the scoped values and the other sections left out", () => {
+  test("the claim sections: section, type, name and limit in its unit, as written too; the scoped values and the other sections left out", () => {
     const claims = parseClaims(`[DEFAULT]
 limit = 1g
 
@@ -76,17 +76,17 @@ type = gpu
 limit = 2
 `);
     expect(claims).toEqual([
-      { type: "pool", name: "rpo0", limit: 200 * 2 ** 20 },
-      { type: "network", name: "default", limit: 10 },
-      { type: "cpu", name: undefined, limit: 4 },
-      { type: "memory", name: undefined, limit: 16 * 2 ** 30 },
+      { type: "pool", name: "rpo0", limit: 200 * 2 ** 20, section: "claim#1", raw: "200m" },
+      { type: "network", name: "default", limit: 10, section: "claim#2", raw: "10" },
+      { type: "cpu", name: undefined, limit: 4, section: "claim#3", raw: "400%" },
+      { type: "memory", name: undefined, limit: 16 * 2 ** 30, section: "claim#4", raw: "16g" },
     ]);
     expect(computeLimit(claims, "cpu")).toBe(4);
     expect(computeLimit([], "memory")).toBeUndefined();
   });
 
   test("a claim without a limit caps nothing", () => {
-    expect(parseClaims("[claim#1]\ntype = pool\nname = p\n")).toEqual([{ type: "pool", name: "p", limit: undefined }]);
+    expect(parseClaims("[claim#1]\ntype = pool\nname = p\n")).toEqual([{ type: "pool", name: "p", limit: undefined, section: "claim#1", raw: undefined }]);
   });
 });
 

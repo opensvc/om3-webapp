@@ -184,7 +184,7 @@ export function PanelHistoryMenu({ currentKey }: { currentKey: string }) {
         <span className="sr-only">{label}</span>
       </button>
       {open && (
-        <div className="absolute top-full left-0 z-20 mt-1 w-64 rounded-(--radius-panel) border border-line bg-surface-raised p-1 shadow-lg">
+        <div className="absolute top-full right-0 z-20 mt-1 w-64 rounded-(--radius-panel) border border-line bg-surface-raised p-1 shadow-lg">
           <div className="flex items-center justify-end px-1 pb-1">
             <GroupingSwitch value={grouping.value} onChange={grouping.set} />
           </div>

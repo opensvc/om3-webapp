@@ -20,7 +20,7 @@ import {PolicyTag} from "../ui/components/PolicyTag";
 import ActionDialogManager from "./ActionDialogManager";
 import ConsoleTerminal from "./ConsoleTerminal.jsx";
 import {CLEAR_ACTION, postAction, resourceActions} from "./objectActions";
-import {DatastoreLinks, datastoresOf} from "./InstanceActions";
+import {DatastoreLinks, RefreshStatusButton, datastoresOf} from "./InstanceActions";
 import logger from "../utils/logger.js";
 
 /** Icon of an action in a menu: the action icons are sized to the menu line. */
@@ -354,6 +354,9 @@ const ObjectStatus = ({path, onOrchestrationLogs, linkNode, linkResource}) => {
         />
     );
 
+    // The status of all its instances refreshed; the cluster object has none of its own.
+    const refreshTool = kind === "ccfg" ? null : <RefreshStatusButton path={path} nodes={Object.keys(instances ?? {}).sort()}/>;
+
     // The datastores its instances use, a badge each, in the summary after the instances up.
     const datastores = datastoresOf(Object.values(instances ?? {}).flatMap((i) => Object.values(i?.resources ?? {})));
     const facts = datastores.length > 0
@@ -446,11 +449,14 @@ const ObjectStatus = ({path, onOrchestrationLogs, linkNode, linkResource}) => {
             )}
             {inHeader ? (
                 <>
-                    {policies}
+                    <div className="flex items-start justify-between gap-2">
+                        {policies ?? <span/>}
+                        {refreshTool}
+                    </div>
                     {createPortal(<>{orchestrationBadge}{objectMenu}</>, header.actions)}
                 </>
             ) : (
-                <div className="flex items-center justify-between gap-2">{policies}<span className="flex items-center gap-2">{orchestrationBadge}{objectMenu}</span></div>
+                <div className="flex items-center justify-between gap-2">{policies}<span className="flex items-center gap-2">{refreshTool}{orchestrationBadge}{objectMenu}</span></div>
             )}
             <StatusBoard
                 board={board}

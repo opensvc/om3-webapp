@@ -204,6 +204,16 @@ describe('InstanceStatus', () => {
         await waitFor(() => expect(screen.getByRole('checkbox', {name: 'Select app#1'})).not.toBeChecked());
     });
 
+    test('its status refreshed on its node, no confirmation', async () => {
+        inRouter(<InstanceStatus path="prod/svc/web" node="n1"/>);
+        fireEvent.click(screen.getByRole('button', {name: 'Refresh the status'}));
+        await waitFor(() => expect(global.fetch).toHaveBeenCalledWith(
+            '/api/node/name/n1/instance/path/prod/svc/web/action/status',
+            expect.objectContaining({method: 'POST'}),
+        ));
+        expect(screen.queryByRole('alertdialog')).toBeNull();
+    });
+
     test('frozen, not provisioned', () => {
         inRouter(<InstanceStatus path="prod/svc/web" node="n2"/>);
         const fact = (label) => screen.getByText(label, {selector: 'dt'}).nextElementSibling;
@@ -271,6 +281,19 @@ describe('ResourceStatus', () => {
         expect(screen.getByTestId('search')).toHaveTextContent('peek=instance%3Aprod%2Fsvc%2Fweb%40n4');
         fireEvent.click(within(fact('Object')).getByRole('button', {name: 'prod/svc/web'}));
         expect(screen.getByTestId('search')).toHaveTextContent('peek=object%3Aprod%2Fsvc%2Fweb');
+    });
+
+    test('the instances holding the resource refreshed whole, each on its node', async () => {
+        useEventStore.setState((state) => ({objectInstanceStatus: {'prod/svc/web': {
+            ...state.objectInstanceStatus['prod/svc/web'],
+            n4: {avail: 'up', resources: {'app#1': {status: 'up', type: 'app.simple'}}},
+        }}}));
+        inRouter(<ResourceStatus path="prod/svc/web" rid="app#1"/>);
+        fireEvent.click(screen.getByRole('button', {name: 'Refresh the status of all the instances'}));
+        await waitFor(() => expect(global.fetch.mock.calls.map(([url]) => url).filter((url) => url.endsWith('/action/status'))).toEqual([
+            '/api/node/name/n1/instance/path/prod/svc/web/action/status',
+            '/api/node/name/n4/instance/path/prod/svc/web/action/status',
+        ]));
     });
 
     test('the datastores the resource uses on any node, a badge each', () => {

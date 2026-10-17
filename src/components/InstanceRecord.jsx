@@ -19,7 +19,7 @@ import {ObjectResources} from "./ObjectTabs";
 import {InstanceLink, ResourceLink} from "./RecordLinks";
 import {ObjectLogs} from "./ObjectLogs";
 import ObjectConfig from "./ObjectConfig";
-import {DatastoreLinks, actionIcon, datastoresOf, useActionRunner} from "./InstanceActions";
+import {DatastoreLinks, RefreshStatusButton, actionIcon, datastoresOf, useActionRunner} from "./InstanceActions";
 import {CLEAR_ACTION, resourceActions} from "./objectActions";
 import {usePanelHeader} from "../app/panel-header";
 import {MenuButton} from "../ui/components/MenuButton";
@@ -198,28 +198,31 @@ export function InstanceStatus({path, node}) {
         <div className="space-y-4" data-testid="instance-status">
             {feedback}
             {header.actions !== null ? createPortal(instanceMenu, header.actions) : <div className="flex justify-end">{instanceMenu}</div>}
-            <dl className="grid w-max grid-cols-[auto_auto] items-center gap-x-3 gap-y-1">
-                <Fact label={t("instance.panel.object")}><CrossLink kind="object" id={path}>{path}</CrossLink></Fact>
-                <Fact label={t("instance.panel.node")}><CrossLink kind="node" id={node}>{node}</CrossLink></Fact>
-                <Fact label={t("instance.panel.avail")}><StatusWord status={status.avail}/></Fact>
-                <Fact label={t("instance.panel.overall")}>{status.overall || "-"}</Fact>
-                <Fact label={t("instance.panel.provisioned")}>
-                    <span className="inline-flex items-center gap-1.5">
-                        {String(status.provisioned ?? "-")}
-                        {notProvisioned && <NotProvisionedMark/>}
-                    </span>
-                </Fact>
-                <Fact label={t("instance.panel.frozen")}>
-                    <span className="inline-flex items-center gap-1.5">
-                        {frozen ? t("instance.panel.yes") : t("instance.panel.no")}
-                        <FrozenMark frozen={frozen}/>
-                    </span>
-                </Fact>
-                <Fact label={t("instance.panel.monitor")}>{monitor.state || "-"}</Fact>
-                {datastores.length > 0 && (
-                    <Fact label={t("instance.panel.datastores")}><DatastoreLinks paths={datastores}/></Fact>
-                )}
-            </dl>
+            <div className="flex items-start justify-between gap-2">
+                <dl className="grid w-max grid-cols-[auto_auto] items-center gap-x-3 gap-y-1">
+                    <Fact label={t("instance.panel.object")}><CrossLink kind="object" id={path}>{path}</CrossLink></Fact>
+                    <Fact label={t("instance.panel.node")}><CrossLink kind="node" id={node}>{node}</CrossLink></Fact>
+                    <Fact label={t("instance.panel.avail")}><StatusWord status={status.avail}/></Fact>
+                    <Fact label={t("instance.panel.overall")}>{status.overall || "-"}</Fact>
+                    <Fact label={t("instance.panel.provisioned")}>
+                        <span className="inline-flex items-center gap-1.5">
+                            {String(status.provisioned ?? "-")}
+                            {notProvisioned && <NotProvisionedMark/>}
+                        </span>
+                    </Fact>
+                    <Fact label={t("instance.panel.frozen")}>
+                        <span className="inline-flex items-center gap-1.5">
+                            {frozen ? t("instance.panel.yes") : t("instance.panel.no")}
+                            <FrozenMark frozen={frozen}/>
+                        </span>
+                    </Fact>
+                    <Fact label={t("instance.panel.monitor")}>{monitor.state || "-"}</Fact>
+                    {datastores.length > 0 && (
+                        <Fact label={t("instance.panel.datastores")}><DatastoreLinks paths={datastores}/></Fact>
+                    )}
+                </dl>
+                <RefreshStatusButton path={path} nodes={[node]}/>
+            </div>
             {/* Nothing checked, the help says how; both as high as the buttons, the table kept in place. */}
             <div className="flex min-h-7 flex-wrap items-center gap-3">
                 {pickedRids.length > 0 ? (
@@ -293,14 +296,18 @@ export function ResourceStatus({path, rid}) {
     const datastores = datastoresOf(rows.map(({r}) => r));
     return (
         <div className="space-y-4" data-testid="resource-status">
-            <dl className="grid w-max grid-cols-[auto_auto] items-center gap-x-3 gap-y-1">
-                <Fact label={t("instance.panel.object")}><CrossLink kind="object" id={path}>{path}</CrossLink></Fact>
-                <Fact label={t("instance.panel.rid")}><span className="font-medium">{rid}</span></Fact>
-                <Fact label={t("common.type")}>{type ?? "-"}</Fact>
-                {datastores.length > 0 && (
-                    <Fact label={t("instance.panel.datastores")}><DatastoreLinks paths={datastores}/></Fact>
-                )}
-            </dl>
+            <div className="flex items-start justify-between gap-2">
+                <dl className="grid w-max grid-cols-[auto_auto] items-center gap-x-3 gap-y-1">
+                    <Fact label={t("instance.panel.object")}><CrossLink kind="object" id={path}>{path}</CrossLink></Fact>
+                    <Fact label={t("instance.panel.rid")}><span className="font-medium">{rid}</span></Fact>
+                    <Fact label={t("common.type")}>{type ?? "-"}</Fact>
+                    {datastores.length > 0 && (
+                        <Fact label={t("instance.panel.datastores")}><DatastoreLinks paths={datastores}/></Fact>
+                    )}
+                </dl>
+                {/* A resource has no status of its own: the instances holding it refreshed whole. */}
+                <RefreshStatusButton path={path} nodes={rows.map(({node}) => node)}/>
+            </div>
             <Table aria-label={t("resource.panel.nodes")}>
                 <thead>
                     <HeaderRow>

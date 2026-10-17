@@ -78,9 +78,9 @@ export function ObjectDetailPanel({path, tab, onTabChange, onClose}) {
     const tabs = keysOnly
         ? [
             {key: "keys", label: t("panel.tabs.keys")},
-            {key: "events", label: t("panel.tabs.events")},
-            {key: "logs", label: t("panel.tabs.logs")},
             {key: "config", label: t("panel.tabs.config")},
+            {key: "logs", label: t("panel.tabs.logs")},
+            {key: "events", label: t("panel.tabs.events")},
         ]
         : [
             {key: "status", label: t("panel.tabs.status")},

@@ -151,6 +151,28 @@ describe('ObjectStatus', () => {
         }
     });
 
+    test('the status of all its instances refreshed, a node refusing said', async () => {
+        answer(dns);
+        useEventStore.setState({objectInstanceStatus: {'system/svc/dns': {dev3n1: {}, dev3n2: {}}}});
+        const fetch = global.fetch;
+        global.fetch = vi.fn((url) => Promise.resolve(url.includes('/dev3n2/')
+            ? {ok: false, status: 409, json: () => Promise.resolve({detail: 'busy'}), headers: new Headers(), text: () => Promise.resolve('')}
+            : {ok: true, status: 200, json: () => Promise.resolve({})}));
+        try {
+            render(<ObjectStatus path="system/svc/dns"/>);
+            await screen.findByRole('table');
+            fireEvent.click(screen.getByRole('button', {name: 'Refresh the status of all the instances'}));
+            await waitFor(() => expect(global.fetch.mock.calls.map(([url]) => url)).toEqual([
+                '/api/node/name/dev3n1/instance/path/system/svc/dns/action/status',
+                '/api/node/name/dev3n2/instance/path/system/svc/dns/action/status',
+            ]));
+            expect(await screen.findByRole('alert')).toHaveTextContent(/Refresh refused: dev3n2: HTTP 409/);
+        } finally {
+            global.fetch = fetch;
+            useEventStore.setState({objectInstanceStatus: {}});
+        }
+    });
+
     test('no issue, no issue line', async () => {
         answer(dns);
         render(<ObjectStatus path="system/svc/dns"/>);
@@ -599,8 +621,12 @@ describe('ObjectStatus', () => {
 
             test('a node picked is frozen as a node, not as an instance of the cluster object', async () => {
                 answer(dns, cluster(true));
+                useEventStore.setState({objectInstanceStatus: {cluster: {dev3n1: {}, dev3n2: {}}}});
                 render(<ObjectStatus path="cluster"/>);
                 await screen.findByRole('table');
+                // No status of its own to refresh.
+                expect(screen.queryByRole('button', {name: /Refresh the status/})).toBeNull();
+                useEventStore.setState({objectInstanceStatus: {}});
                 pickNode('dev3n2');
                 fireEvent.click(selectionButton());
                 // dev3n2 is not frozen: nothing to unfreeze, and no service action.

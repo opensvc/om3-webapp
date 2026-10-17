@@ -2,7 +2,7 @@ import React, {useCallback, useEffect, useState} from "react";
 import {useTranslation} from "react-i18next";
 import {Alert} from "../ui/components/Alert";
 import {IconButton} from "../ui/components/Button";
-import {CloseIcon} from "../ui/icons";
+import {CloseIcon, RefreshIcon} from "../ui/icons";
 import {INSTANCE_ACTIONS, OBJECT_ACTIONS, RESOURCE_ACTIONS} from "../constants/actions";
 import {CrossLink} from "../app/CrossLink";
 import ActionDialogManager from "./ActionDialogManager";
@@ -96,6 +96,44 @@ export function useActionRunner(path) {
         </>
     );
     return {ask, running, feedback: feedbackAlert, dialogs};
+}
+
+/**
+ * Refreshes the status of the instances of an object on the nodes given, as `om
+ * <path> instance status -r` does on each: no confirmation, it changes nothing but the
+ * status, which the events then bring. Turning while asked; a node refusing, said.
+ */
+export function RefreshStatusButton({path, nodes}) {
+    const {t} = useTranslation();
+    const [refreshing, setRefreshing] = useState(false);
+    const [failure, setFailure] = useState(null);
+    if (nodes.length === 0) return null;
+    const refresh = async () => {
+        setRefreshing(true);
+        setFailure(null);
+        const results = await Promise.all(nodes.map((node) => postAction({path, action: "status", node})
+            .catch((err) => ({detail: err.message}))));
+        const failures = results
+            .map((r, i) => (r === null ? null : `${nodes[i]}: ${r.status ? `HTTP ${r.status}` : ""}${r.detail ? ` ${r.detail}` : ""}`.trim()))
+            .filter((r) => r !== null);
+        setFailure(failures.length > 0 ? failures.join("; ") : null);
+        setRefreshing(false);
+    };
+    return (
+        <span className="inline-flex shrink-0 items-center gap-2">
+            {failure && (
+                <span role="alert" className="text-data text-state-down">{t("statusBoard.refreshFailed", {detail: failure})}</span>
+            )}
+            <IconButton
+                label={nodes.length > 1 ? t("statusBoard.refreshAll") : t("statusBoard.refresh")}
+                onClick={refresh}
+                disabled={refreshing}
+                aria-busy={refreshing || undefined}
+            >
+                <RefreshIcon className={refreshing ? "animate-spin" : undefined}/>
+            </IconButton>
+        </span>
+    );
 }
 
 /** The datastores the resources given use — the cfg and sec objects they install from — once each, sorted. */

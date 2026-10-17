@@ -1469,7 +1469,10 @@
     "details": {
       "status": "Status: {{status}}"
     },
-    "datastores": "Datastores"
+    "datastores": "Datastores",
+    "refresh": "Refresh the status",
+    "refreshAll": "Refresh the status of all the instances",
+    "refreshFailed": "Refresh refused: {{detail}}"
   },
   "shortcuts": {
     "title": "Keyboard shortcuts",

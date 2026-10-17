@@ -1469,7 +1469,10 @@
     "details": {
       "status": "État : {{status}}"
     },
-    "datastores": "Magasins de données"
+    "datastores": "Magasins de données",
+    "refresh": "Rafraîchir l'état",
+    "refreshAll": "Rafraîchir l'état de toutes les instances",
+    "refreshFailed": "Rafraîchissement refusé : {{detail}}"
   },
   "shortcuts": {
     "title": "Raccourcis clavier",

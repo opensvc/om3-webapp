@@ -1,4 +1,5 @@
 import type { CSSProperties, ReactNode } from "react";
+import { Fragment } from "react";
 import { useTranslation } from "react-i18next";
 import { cn } from "../ui/cn";
 import { AlertTriangleIcon, DrpIcon, HistoryIcon, InfoIcon, PlayIcon, PauseIcon, SnowflakeIcon, TargetIcon } from "../ui/icons";
@@ -294,7 +295,8 @@ function SelectBox({
  * in its cell, on all its nodes by its name, an instance by the header of its
  * node. The caller acts on what is picked, from its `toolbar`. Every node has its
  * instance to pick, reported or not. The names are the caller's badges
- * (`linkNode`, `linkResource`): a click on one opens its record.
+ * (`linkNode`, `linkResource`): a click on one opens its record. `facts`, what the
+ * caller adds to the summary, a line each after the count of the instances up.
  */
 export function StatusBoard({
   board,
@@ -302,6 +304,7 @@ export function StatusBoard({
   toolbar,
   linkNode,
   linkResource,
+  facts = [],
 }: {
   board: Board;
   selection?: BoardSelection;
@@ -311,6 +314,8 @@ export function StatusBoard({
   linkNode?: (node: string) => ReactNode;
   /** The id of a resource as a badge opening its record; plain text without. */
   linkResource?: (rid: string) => ReactNode;
+  /** More lines of the summary, after the count of the instances up. */
+  facts?: { label: string; value: ReactNode }[];
 }) {
   const { t } = useTranslation();
   const details = useCellDetails();
@@ -386,6 +391,12 @@ export function StatusBoard({
             <dd className={cn("font-medium tabular-nums", count.tone === "error" && "text-state-down")}>{count.text}</dd>
           </>
         )}
+        {facts.map(({ label, value }) => (
+          <Fragment key={label}>
+            <dt className="text-ink-muted">{label}</dt>
+            <dd>{value}</dd>
+          </Fragment>
+        ))}
       </dl>
       {states.length > 0 && (
         <ul aria-label={t("statusBoard.issues")} className="flex flex-col items-start gap-y-1">

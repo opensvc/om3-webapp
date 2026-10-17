@@ -237,7 +237,8 @@
     "notAvailable": "N/D",
     "error": "Erreur",
     "unknown": "Inconnu",
-    "selected": "{{count}} sélectionné(s)"
+    "selected": "{{count}} sélectionné(s)",
+    "copied": "Copié"
   },
   "config": {
     "errors": {
@@ -299,7 +300,9 @@
       "noInstance": "Aucune instance sélectionnée pour afficher la configuration.",
       "loadingForEdit": "Chargement de la configuration pour l'édition",
       "loading": "Chargement de la configuration",
-      "empty": "Aucune configuration disponible."
+      "empty": "Aucune configuration disponible.",
+      "noSection": "Pas de section [{{section}}] dans la configuration.",
+      "copy": "Copier la configuration affichée"
     },
     "feedback": {
       "tokenNotFound": "Jeton d'authentification introuvable.",
@@ -560,7 +563,11 @@
       "label": "Libellé",
       "noResource": "Aucune ressource.",
       "object": "Objet",
-      "node": "Nœud"
+      "node": "Nœud",
+      "datastores": "Magasins de données",
+      "actions": "Actions sur l'instance",
+      "selectResource": "Sélectionner {{rid}}",
+      "selectionHelp": "Cochez des ressources pour les sélectionner."
     },
     "on": "sur {{node}}"
   },
@@ -586,11 +593,14 @@
       "reveal": "Afficher le secret",
       "hidden": "Le contenu de ce secret est masqué.",
       "revealHint": "Utilisez le bouton Afficher le secret pour le voir.",
-      "contentAria": "Contenu de la clé"
+      "contentAria": "Contenu de la clé",
+      "copy": "Copier le contenu",
+      "download": "Télécharger la clé"
     },
     "deleteDialog": {
       "title": "Confirmer la suppression de la clé",
-      "message": "Voulez-vous vraiment supprimer la clé <strong>{{key}}</strong> ?"
+      "message": "Voulez-vous vraiment supprimer la clé <strong>{{key}}</strong> ?",
+      "messageMany": "Voulez-vous vraiment supprimer les {{count}} clés <strong>{{list}}</strong> ?"
     },
     "form": {
       "createTitle": "Créer une clé",
@@ -598,16 +608,19 @@
       "create": "Créer",
       "update": "Mettre à jour",
       "name": "Nom de la clé",
-      "inputMode": "Mode de saisie",
-      "modeEmpty": "Clé vide (sans contenu)",
-      "modeFile": "Téléverser un fichier",
-      "modeText": "Saisir le texte directement",
       "fullScreen": "Plein écran",
       "exitFullScreen": "Quitter le plein écran",
-      "chooseFile": "Choisir un fichier",
-      "noFileSelected": "Aucun fichier sélectionné",
       "content": "Contenu de la clé",
-      "contentPlaceholder": "Saisissez le contenu texte de cette clé..."
+      "contentPlaceholder": "Vide : la clé est vide.",
+      "dropHint": "Saisissez ou collez le contenu, ou déposez un fichier ici —",
+      "browse": "parcourir…",
+      "dropHere": "Déposez pour charger le fichier",
+      "binary": "binaire, envoyé tel quel",
+      "dropFile": "Retirer le fichier, saisir le contenu",
+      "sizeOfMax": "{{size}} sur {{max}} au plus",
+      "tooLarge": "{{size}} : trop grand, une clé contient au plus {{max}}",
+      "hiddenSecret": "Le contenu d'un secret est masqué : saisissez, collez ou déposez un nouveau contenu pour le remplacer.",
+      "hiddenBinary": "Le contenu est binaire : déposez ou choisissez un fichier pour le remplacer, ou saisissez un nouveau contenu."
     },
     "feedback": {
       "deleting": "Suppression de la clé {{key}}…",
@@ -616,8 +629,8 @@
       "created": "Clé « {{key}} » créée",
       "updating": "Mise à jour de la clé {{key}}…",
       "updated": "Clé « {{key}} » mise à jour",
-      "secretHidden": "Le contenu du secret est masqué. Fournissez un nouveau contenu pour le mettre à jour.",
-      "binary": "La clé est binaire : utilisez le téléversement de fichier pour la mettre à jour."
+      "deletingMany": "Suppression de {{count}} clés…",
+      "deletedMany": "{{count}} clés supprimées"
     },
     "errors": {
       "noToken": "Jeton d'authentification introuvable.",
@@ -627,7 +640,12 @@
       "create": "Échec de la création de la clé : {{status}}",
       "update": "Échec de la mise à jour de la clé : {{status}}",
       "generic": "Erreur : {{message}}"
-    }
+    },
+    "selectKey": "Sélectionner la clé {{key}}",
+    "selectionHelp": "Cochez des clés pour les sélectionner.",
+    "removeSelected_one": "Supprimer 1 clé",
+    "removeSelected_other": "Supprimer {{count}} clés",
+    "selectAll": "Sélectionner toutes les clés"
   },
   "logs": {
     "subtitle": "{{instance}} sur {{node}}",
@@ -1450,7 +1468,8 @@
     "issues": "Problèmes",
     "details": {
       "status": "État : {{status}}"
-    }
+    },
+    "datastores": "Magasins de données"
   },
   "shortcuts": {
     "title": "Raccourcis clavier",

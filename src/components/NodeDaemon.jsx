@@ -297,6 +297,7 @@ export function NodeDaemon({node}) {
                             {key: "actions", label: t("nodeDaemon.actions.label"), render: (c) => (c.id === "listener" ? (
                                 <MenuButton
                                     solid
+                                    text={t("statusBoard.actions.object")}
                                     icon={<BoltIcon className="h-3.5 w-3.5"/>}
                                     label={t("nodeDaemon.listener.actionsOf", {listener: LISTENER})}
                                     align="end"
@@ -337,6 +338,7 @@ export function NodeDaemon({node}) {
                             {key: "actions", label: t("nodeDaemon.actions.label"), render: (s) => (
                                 <MenuButton
                                     solid
+                                    text={t("statusBoard.actions.object")}
                                     icon={<BoltIcon className="h-3.5 w-3.5"/>}
                                     label={t("nodeDaemon.heartbeats.actionsOf", {id: s.id})}
                                     align="end"

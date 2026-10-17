@@ -351,6 +351,22 @@ describe('ConfigSection Component', () => {
         await waitFor(() => expect(configFileGets()).toHaveLength(1));
     });
 
+    test('the configuration shown copied, its secrets as shown', async () => {
+        const writeText = vi.fn().mockResolvedValue(undefined);
+        Object.defineProperty(navigator, 'clipboard', {value: {writeText}, configurable: true});
+        try {
+            global.fetch.mockImplementation((url, options) => (url.includes('/config/file')
+                ? Promise.resolve({ok: true, status: 200, text: () => Promise.resolve('[DEFAULT]\nnodes = *\nsecret = ********\n')})
+                : defaultFetchMock(url, options)));
+            renderConfig({inline: true});
+            const copy = await screen.findByRole('button', {name: 'Copy the configuration shown'});
+            await act(() => user.click(copy));
+            expect(writeText).toHaveBeenCalledWith('[DEFAULT]\nnodes = *\nsecret = ********\n');
+        } finally {
+            Object.defineProperty(navigator, 'clipboard', {value: undefined, configurable: true});
+        }
+    });
+
     // ── Secrets ──────────────────────────────────────────────────────────
     describe('editing the file', () => {
         // The daemon file: `stored`, redacted on demand; a PUT answers `putResponse`.
@@ -415,6 +431,30 @@ describe('ConfigSection Component', () => {
             expect(await screen.findByText(/nodes = node1/)).toBeInTheDocument();
             expect(screen.queryByRole('textbox', {name: 'Configuration file'})).toBeNull();
             expect(screen.queryByText(/s3cr3t/)).toBeNull();
+        });
+
+        test('a section alone: shown, edited and put back in its place in the file; no upload nor wizard', async () => {
+            mockDaemon({stored: '[DEFAULT]\nnodes = *\n\n[fs#1]\ntype = flag\nsecret = s3cr3t\n\n[app#1]\ntype = forking\n'});
+            renderConfig({inline: true, section: 'fs#1'});
+            expect(await screen.findByText(/secret = \*{8}/)).toBeInTheDocument();
+            expect(screen.queryByText(/nodes = \*/)).toBeNull();
+            expect(screen.queryByText(/type = forking/)).toBeNull();
+            expect(screen.queryByRole('button', {name: 'Upload new configuration file'})).toBeNull();
+            expect(screen.queryByRole('button', {name: 'Manage configuration parameters'})).toBeNull();
+
+            const editor = await startEditing();
+            expect(editor).toHaveValue('[fs#1]\ntype = flag\nsecret = s3cr3t\n');
+            fireEvent.change(editor, {target: {value: '[fs#1]\ntype = flag\nsecret = s3cr3t\nsize = 1G\n'}});
+            await act(() => user.click(screen.getByRole('button', {name: 'Save'})));
+            await waitFor(() => expect(configPuts()).toHaveLength(1));
+            expect(configPuts()[0][1].body)
+                .toBe('[DEFAULT]\nnodes = *\n\n[fs#1]\ntype = flag\nsecret = s3cr3t\nsize = 1G\n\n[app#1]\ntype = forking\n');
+        });
+
+        test('a section the file does not hold: said', async () => {
+            mockDaemon({stored: '[DEFAULT]\nnodes = *\n'});
+            renderConfig({inline: true, section: 'fs#9'});
+            expect(await screen.findByText('No section [fs#9] in the configuration.')).toBeInTheDocument();
         });
 
         test('cancel drops the changes without uploading', async () => {

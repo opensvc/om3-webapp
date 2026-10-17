@@ -357,12 +357,15 @@ describe("MenuButton prominent", () => {
     expect(button).not.toHaveAttribute("title");
   });
 
-  test("solid, an icon alone of the accent fill, named by its label", () => {
-    render(<MenuButton label="Actions" items={items()} solid icon={<svg data-testid="bolt" />} />);
-    const button = screen.getByRole("button", { name: "Actions" });
-    expect(button).toHaveClass("w-7", "bg-accent", "text-accent-ink");
+  test("solid, of the accent fill: its text in a wide window, its icon alone in a narrow one, named by its label", () => {
+    render(<MenuButton label="Node actions" text="Actions" items={items()} solid icon={<svg data-testid="bolt" />} />);
+    const button = screen.getByRole("button", { name: "Node actions" });
+    expect(button).toHaveClass("max-md:w-7", "bg-accent", "text-accent-ink");
+    expect(button).toHaveTextContent(/^Actions$/);
+    expect(screen.getByText("Actions")).toHaveClass("max-md:hidden");
+    expect(screen.getByTestId("bolt").parentElement).toHaveClass("hidden", "max-md:inline-flex");
     expect(button).not.toHaveClass("border-line");
-    expect(button).toHaveAttribute("title", "Actions");
+    expect(button).toHaveAttribute("title", "Node actions");
   });
 
   test("its label in a wide window, its icon alone in a narrow one, the label then its name and tooltip", () => {

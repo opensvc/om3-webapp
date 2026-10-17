@@ -3,6 +3,7 @@ import {act, fireEvent, render, screen, waitFor, within} from '@testing-library/
 import {vi} from 'vitest';
 import ObjectStatus from '../ObjectStatus';
 import {PanelHeaderContext} from '../../app/panel-header';
+import {MemoryRouter} from 'react-router-dom';
 import useEventStore from '../../hooks/useEventStore.js';
 import dns from '../../app/tests/fixtures/system-svc-dns.json';
 
@@ -128,8 +129,26 @@ describe('ObjectStatus', () => {
         expect(screen.getByTestId('body')).toContainElement(screen.getByLabelText('Policies'));
         expect(screen.getByTestId('bar-title')).toBeEmptyDOMElement();
         const actions = within(screen.getByTestId('bar-actions')).getByRole('button', {name: 'Actions'});
-        expect(actions).toHaveClass('w-7', 'bg-accent');
+        expect(actions).toHaveClass('max-md:w-7', 'bg-accent');
         expect(actions).not.toHaveClass('rounded-(--radius-pill)');
+    });
+
+    test('the datastores its instances use, once each, a badge each, in the summary after the instances up', async () => {
+        answer(dns);
+        useEventStore.setState({objectInstanceStatus: {'system/svc/dns': {
+            dev3n1: {resources: {'fs#1': {datastores: ['system/cfg/dns']}}},
+            dev3n2: {resources: {'fs#1': {datastores: ['system/cfg/dns', 'system/sec/dns']}}},
+        }}});
+        try {
+            render(<MemoryRouter><ObjectStatus path="system/svc/dns"/></MemoryRouter>);
+            await screen.findByRole('table');
+            const label = screen.getByText('Datastores');
+            expect(label.tagName).toBe('DT');
+            expect(label.previousElementSibling.previousElementSibling).toHaveTextContent('Instances up');
+            expect(within(label.nextElementSibling).getAllByRole('button').map((b) => b.textContent)).toEqual(['system/cfg/dns', 'system/sec/dns']);
+        } finally {
+            useEventStore.setState({objectInstanceStatus: {}});
+        }
     });
 
     test('no issue, no issue line', async () => {

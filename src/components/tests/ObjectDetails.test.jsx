@@ -594,7 +594,7 @@ describe('ObjectDetail Component', () => {
 
     test('renders keys section for cfg', async () => {
         renderComponent('root/cfg/cfg1');
-        expect(await screen.findByText(/Keys/i)).toBeInTheDocument();
+        expect(await screen.findByRole('heading', {name: /Object Keys/})).toBeInTheDocument();
         expect(await screen.findByText('key1')).toBeInTheDocument();
         expect(screen.getByText('key2')).toBeInTheDocument();
     });

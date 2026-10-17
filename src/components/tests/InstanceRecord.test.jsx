@@ -1,5 +1,5 @@
 import React from 'react';
-import {render, screen, within, act, fireEvent} from '@testing-library/react';
+import {render, screen, within, act, fireEvent, waitFor} from '@testing-library/react';
 import {MemoryRouter, useLocation} from 'react-router-dom';
 import {vi} from 'vitest';
 import {InstanceDetailPanel, InstanceStatus, InstanceUsage, ObjectUsage, ResourceDetailPanel, ResourceStatus} from '../InstanceRecord';
@@ -11,6 +11,18 @@ vi.mock('../LogsViewer', () => ({
     default: ({nodenames = [], namespace, kind, instanceName, filters = []}) => (
         <div data-testid="logs">{`${namespace}/${kind}/${instanceName} on ${nodenames.join('+')}${filters.length ? ` where ${filters.join(', ')}` : ''}`}</div>
     ),
+}));
+// The configuration tab is tested on its own: here, the object and the section it shows.
+vi.mock('../ObjectConfig', () => ({
+    default: ({path, section}) => <div data-testid="config">{`${path} [${section}]`}</div>,
+}));
+// The confirmation dialogs are tested on their own: here, the action confirmed.
+vi.mock('../ActionDialogManager', () => ({
+    default: ({pendingAction, handleConfirm, target}) => (pendingAction === null ? null : (
+        <div role="alertdialog" aria-label={`${pendingAction.action} ${target}`}>
+            <button type="button" onClick={() => handleConfirm(pendingAction.action)}>Confirm</button>
+        </div>
+    )),
 }));
 vi.mock('../../utils/logger.js', () => ({
     default: {error: vi.fn(), info: vi.fn(), warn: vi.fn(), debug: vi.fn()},
@@ -43,9 +55,9 @@ beforeEach(() => {
                 n1: {
                     avail: 'up', overall: 'warn', provisioned: 'true', frozen_at: '0001-01-01T00:00:00Z',
                     resources: {
-                        'fs#1': {status: 'up', type: 'fs.flag', label: 'flag'},
+                        'fs#1': {status: 'up', type: 'fs.flag', label: 'flag', datastores: ['prod/sec/web', 'prod/cfg/web']},
                         'app#1': {status: 'down', type: 'app.simple', label: 'run', provisioned: {state: 'false'}, optional: true,
-                            log: [{level: 'info', message: 'started'}, {level: 'error', message: 'exit 1'}]},
+                            log: [{level: 'info', message: 'started'}, {level: 'error', message: 'exit 1'}], datastores: ['prod/cfg/web']},
                     },
                 },
                 n2: {avail: 'down', overall: 'down', provisioned: 'false', frozen_at: '2026-10-16T10:00:00Z', resources: {}},
@@ -134,7 +146,7 @@ describe('InstanceStatus', () => {
         expect(fact('Frozen')).toHaveTextContent('no');
         expect(fact('Monitor')).toHaveTextContent('idle');
         const rows = within(screen.getByRole('table', {name: 'Resources of the instance'})).getAllByRole('row').slice(1);
-        expect(rows.map((row) => within(row).getAllByRole('cell')[0].textContent)).toEqual(['app#1', 'fs#1']);
+        expect(rows.map((row) => within(row).getAllByRole('cell')[1].textContent)).toEqual(['app#1', 'fs#1']);
         expect(within(rows[0]).getByRole('img', {name: 'Not provisioned'})).toBeInTheDocument();
         // Its object, its node and its resources, badges opening their records.
         fireEvent.click(within(fact('Object')).getByRole('button', {name: 'prod/svc/web'}));
@@ -143,6 +155,53 @@ describe('InstanceStatus', () => {
         expect(screen.getByTestId('search')).toHaveTextContent('peek=node%3An1');
         fireEvent.click(within(rows[0]).getByRole('button', {name: 'app#1'}));
         expect(screen.getByTestId('search')).toHaveTextContent('peek=resource%3Aprod%2Fsvc%2Fweb%3Aapp%231');
+    });
+
+    test('the datastores its resources use, once each, a badge each opening its object', () => {
+        inRouter(<InstanceStatus path="prod/svc/web" node="n1"/>);
+        const fact = screen.getByText('Datastores', {selector: 'dt'}).nextElementSibling;
+        expect(within(fact).getAllByRole('button').map((b) => b.textContent)).toEqual(['prod/cfg/web', 'prod/sec/web']);
+        fireEvent.click(within(fact).getByRole('button', {name: 'prod/sec/web'}));
+        expect(screen.getByTestId('search')).toHaveTextContent('peek=object%3Aprod%2Fsec%2Fweb');
+    });
+
+    test('no datastore, no line', () => {
+        inRouter(<InstanceStatus path="prod/svc/web" node="n2"/>);
+        expect(screen.queryByText('Datastores', {selector: 'dt'})).toBeNull();
+    });
+
+    test('its actions: freeze as it is not frozen, each confirmed then posted to the instance', async () => {
+        inRouter(<InstanceStatus path="prod/svc/web" node="n1"/>);
+        fireEvent.click(screen.getByRole('button', {name: 'Instance actions'}));
+        const menu = screen.getByRole('menu', {name: 'Instance actions'});
+        expect(within(menu).getByRole('menuitem', {name: 'Freeze'})).toBeInTheDocument();
+        expect(within(menu).queryByRole('menuitem', {name: 'Unfreeze'})).toBeNull();
+        expect(within(menu).queryByRole('menuitem', {name: /Clear/})).toBeNull();
+        fireEvent.click(within(menu).getByRole('menuitem', {name: 'Start'}));
+        fireEvent.click(within(screen.getByRole('alertdialog', {name: 'start prod/svc/web on n1'})).getByRole('button', {name: 'Confirm'}));
+        await waitFor(() => expect(global.fetch).toHaveBeenCalledWith(
+            '/api/node/name/n1/instance/path/prod/svc/web/action/start',
+            expect.objectContaining({method: 'POST'}),
+        ));
+    });
+
+    test('the resources checked, the actions they all take, posted to the instance for them', async () => {
+        inRouter(<InstanceStatus path="prod/svc/web" node="n1"/>);
+        expect(screen.getByText('Check resources to select them.')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('checkbox', {name: 'Select app#1'}));
+        fireEvent.click(screen.getByRole('checkbox', {name: 'Select fs#1'}));
+        fireEvent.click(screen.getByRole('button', {name: 'Actions on 2 resources'}));
+        const menu = screen.getByRole('menu', {name: 'Actions on 2 resources'});
+        // No task among them: nothing to run; more than one: no console.
+        expect(within(menu).queryByRole('menuitem', {name: 'Run'})).toBeNull();
+        fireEvent.click(within(menu).getByRole('menuitem', {name: 'Stop'}));
+        fireEvent.click(within(screen.getByRole('alertdialog', {name: 'stop app#1, fs#1 of prod/svc/web on n1'})).getByRole('button', {name: 'Confirm'}));
+        await waitFor(() => expect(global.fetch).toHaveBeenCalledWith(
+            '/api/node/name/n1/instance/path/prod/svc/web/action/stop?rid=app%231%2Cfs%231',
+            expect.objectContaining({method: 'POST'}),
+        ));
+        // Done, the selection is cleared.
+        await waitFor(() => expect(screen.getByRole('checkbox', {name: 'Select app#1'})).not.toBeChecked());
     });
 
     test('frozen, not provisioned', () => {
@@ -214,6 +273,17 @@ describe('ResourceStatus', () => {
         expect(screen.getByTestId('search')).toHaveTextContent('peek=object%3Aprod%2Fsvc%2Fweb');
     });
 
+    test('the datastores the resource uses on any node, a badge each', () => {
+        inRouter(<ResourceStatus path="prod/svc/web" rid="app#1"/>);
+        const fact = screen.getByText('Datastores', {selector: 'dt'}).nextElementSibling;
+        expect(within(fact).getAllByRole('button').map((b) => b.textContent)).toEqual(['prod/cfg/web']);
+    });
+
+    test('its configuration tab: its section of the configuration of the object', () => {
+        render(<MemoryRouter><ResourceDetailPanel id="prod/svc/web:app#1" tab="config" onTabChange={vi.fn()} onClose={vi.fn()}/></MemoryRouter>);
+        expect(screen.getByTestId('config')).toHaveTextContent('prod/svc/web [app#1]');
+    });
+
     test('its logs tab: the logs of the object on all its nodes, merged, of the resource alone', () => {
         render(<MemoryRouter><ResourceDetailPanel id="prod/svc/web:app#1" tab="logs" onTabChange={vi.fn()} onClose={vi.fn()}/></MemoryRouter>);
         expect(screen.getByTestId('logs')).toHaveTextContent(/^prod\/svc\/web on n1\+n2\+n3 where RID=app#1$/);
@@ -222,7 +292,7 @@ describe('ResourceStatus', () => {
     test('its info tab: what the resource alone reports on each node, its table without title nor filter', async () => {
         render(<MemoryRouter><ResourceDetailPanel id="prod/svc/web:app#1" tab="info" onTabChange={vi.fn()} onClose={vi.fn()}/></MemoryRouter>);
         const panel = screen.getByRole('dialog', {name: 'app#1 of prod/svc/web'});
-        expect(within(panel).getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Status', 'Info', 'Logs']);
+        expect(within(panel).getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Status', 'Info', 'Logs', 'Configuration']);
         const table = await within(panel).findByRole('table', {name: 'Resource information'});
         expect(within(panel).getAllByRole('table')).toHaveLength(1);
         expect(within(table).getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['Key', 'on n1', 'on n2']);

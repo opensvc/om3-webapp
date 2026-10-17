@@ -221,8 +221,9 @@ function NodeActions({node, frozen, monitor, onFeedback, onOrchestrationLogs}) {
                 onAbort={() => setPending({action: "abort", node})}
             />
             <MenuButton
-                // In the title bar, a button as the history and close ones, solid: the bolt alone.
+                // In the title bar, solid: "Actions" in a wide window, the bolt alone in a narrow one.
                 solid
+                text={t("statusBoard.actions.object")}
                 icon={<BoltIcon className="h-3.5 w-3.5"/>}
                 label={t("nodePanel.actions")}
                 align="end"

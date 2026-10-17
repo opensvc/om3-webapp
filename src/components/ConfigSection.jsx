@@ -11,6 +11,8 @@ import {URL_OBJECT} from "../config/apiPath.js";
 import {parseObjectPath} from "../utils/objectUtils";
 import {useTranslation} from "react-i18next";
 import {ConfigText} from "./ConfigText";
+import {CopyButton} from "../ui/components/CopyButton";
+import {extractSection, replaceSection} from "../utils/configSections";
 
 /**
  * The object configuration file, its secrets redacted unless `showSecrets`: the
@@ -653,6 +655,7 @@ const ConfigSection = ({
                            setConfigDialogOpen,
                            configRefreshTrigger = 0,
                            inline = false,
+                           section = null,
                        }) => {
     const {t} = useTranslation();
     // Secrets stay hidden until asked for, and hidden again each time the dialog opens.
@@ -690,8 +693,9 @@ const ConfigSection = ({
     const [paramsToDelete, setParamsToDelete] = useState([]);
     const [actionLoading, setActionLoading] = useState(false);
 
-    // Direct edition of the file: `base` is the file the edit started from, `text`
-    // the edited one. Kept when the dialog closes, so an edit is not lost to Escape.
+    // Direct edition of the file: `file` is the file the edit started from, `base`
+    // the text edited as it started, `text` as edited: the whole file, or its
+    // `section` alone. Kept when the dialog closes, so an edit is not lost to Escape.
     const [edit, setEdit] = useState(null);
     const [editLoading, setEditLoading] = useState(false);
     const [editError, setEditError] = useState(null);
@@ -706,8 +710,9 @@ const ConfigSection = ({
         setEditConflict(false);
         setEditLoading(true);
         try {
-            const text = await fetchRawConfigFile(decodedObjectName);
-            setEdit({base: text, text});
+            const file = await fetchRawConfigFile(decodedObjectName);
+            const text = section === null ? file : extractSection(file, section) ?? `[${section}]\n`;
+            setEdit({file, base: text, text});
         } catch (err) {
             setEditError(t("config.errors.fetchConfig", {message: err.message}));
         } finally {
@@ -735,7 +740,7 @@ const ConfigSection = ({
             // The daemon writes the whole file: a change landed since the edit
             // started would be undone without a word.
             const current = await fetchRawConfigFile(decodedObjectName);
-            if (current !== edit.base) {
+            if (current !== edit.file) {
                 setEditConflict(true);
                 setEditError(t("config.feedback.conflict"));
                 return;
@@ -746,7 +751,8 @@ const ConfigSection = ({
                     Authorization: `Bearer ${token}`,
                     "Content-Type": "application/octet-stream",
                 },
-                body: edit.text,
+                // A section edited goes back in its place in the file as it was.
+                body: section === null ? edit.text : replaceSection(edit.file, section, edit.text),
             });
             if (!response.ok) {
                 if (response.status === 409) setEditConflict(true);
@@ -978,6 +984,8 @@ const ConfigSection = ({
     };
 
     const closeConfigDialog = () => setConfigDialogOpen(false);
+    // The file, or its section alone.
+    const shownText = configData === null || section === null ? configData : extractSection(configData, section);
     const keywordsPath = (() => {
         const {namespace, kind, name} = parseObjectPath(decodedObjectName);
         return [namespace, kind, name].map(encodeURIComponent).join("/");
@@ -1021,6 +1029,10 @@ const ConfigSection = ({
                                         : t("config.view.secretsHidden")}
                                 </p>
                             )}
+                            {/* The text shown copied: its secrets masked unless shown. */}
+                            {shownText !== null && !configLoading && (
+                                <CopyButton size="md" text={shownText} label={t("config.view.copy")}/>
+                            )}
                             <IconButton
                                 label={showSecrets ? t("config.view.hideSecrets") : t("config.view.showSecrets")}
                                 aria-pressed={showSecrets}
@@ -1037,21 +1049,26 @@ const ConfigSection = ({
                                 {/* The file edited: the pencil. */}
                                 <PencilIcon/>
                             </IconButton>
-                            <IconButton
-                                label={t("config.view.uploadFile")}
-                                onClick={() => setUpdateConfigDialogOpen(true)}
-                                disabled={actionLoading}
-                            >
-                                <UploadIcon/>
-                            </IconButton>
-                            <IconButton
-                                label={t("config.view.manageParams")}
-                                onClick={handleOpenManageParamsDialog}
-                                disabled={actionLoading}
-                            >
-                                {/* The parameters set one by one, in the wizard: the sliders. */}
-                                <SlidersIcon/>
-                            </IconButton>
+                            {/* The whole file uploaded, its parameters set: not from a section. */}
+                            {section === null && (
+                                <>
+                                    <IconButton
+                                        label={t("config.view.uploadFile")}
+                                        onClick={() => setUpdateConfigDialogOpen(true)}
+                                        disabled={actionLoading}
+                                    >
+                                        <UploadIcon/>
+                                    </IconButton>
+                                    <IconButton
+                                        label={t("config.view.manageParams")}
+                                        onClick={handleOpenManageParamsDialog}
+                                        disabled={actionLoading}
+                                    >
+                                        {/* The parameters set one by one, in the wizard: the sliders. */}
+                                        <SlidersIcon/>
+                                    </IconButton>
+                                </>
+                            )}
                         </div>
                         {!configNode && !configLoading && !configError && (
                             <p className="text-ink-muted">{t("config.view.noInstance")}</p>
@@ -1063,9 +1080,12 @@ const ConfigSection = ({
                         {!configLoading && !configError && configData === null && configNode && (
                             <p className="text-ink-muted">{t("config.view.empty")}</p>
                         )}
-                        {!configLoading && !configError && configData !== null && (
+                        {!configLoading && !configError && configData !== null && shownText === null && (
+                            <p className="text-ink-muted">{t("config.view.noSection", {section})}</p>
+                        )}
+                        {!configLoading && !configError && configData !== null && shownText !== null && (
                             <ConfigText
-                                text={configData}
+                                text={shownText}
                                 label={t("config.view.fileLabel")}
                                 keywordsUrl={`${URL_OBJECT}/${keywordsPath}/config/keywords`}
                                 // The keywords are those of the kind: read once for all its objects.

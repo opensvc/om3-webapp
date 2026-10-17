@@ -237,7 +237,8 @@
     "notAvailable": "N/A",
     "error": "Error",
     "unknown": "Unknown",
-    "selected": "{{count}} selected"
+    "selected": "{{count}} selected",
+    "copied": "Copied"
   },
   "config": {
     "errors": {
@@ -299,7 +300,9 @@
       "noInstance": "No instance selected to view configuration.",
       "loadingForEdit": "Loading configuration for editing",
       "loading": "Loading configuration",
-      "empty": "No configuration available."
+      "empty": "No configuration available.",
+      "noSection": "No section [{{section}}] in the configuration.",
+      "copy": "Copy the configuration shown"
     },
     "feedback": {
       "tokenNotFound": "Auth token not found.",
@@ -560,7 +563,11 @@
       "label": "Label",
       "noResource": "No resource.",
       "object": "Object",
-      "node": "Node"
+      "node": "Node",
+      "datastores": "Datastores",
+      "actions": "Instance actions",
+      "selectResource": "Select {{rid}}",
+      "selectionHelp": "Check resources to select them."
     },
     "on": "on {{node}}"
   },
@@ -586,11 +593,14 @@
       "reveal": "Reveal secret",
       "hidden": "The content of this secret is masked.",
       "revealHint": "Use the Reveal secret button to show it.",
-      "contentAria": "Key content"
+      "contentAria": "Key content",
+      "copy": "Copy the content",
+      "download": "Download the key"
     },
     "deleteDialog": {
       "title": "Confirm Key Deletion",
-      "message": "Are you sure you want to delete the key <strong>{{key}}</strong>?"
+      "message": "Are you sure you want to delete the key <strong>{{key}}</strong>?",
+      "messageMany": "Are you sure you want to delete the {{count}} keys <strong>{{list}}</strong>?"
     },
     "form": {
       "createTitle": "Create New Key",
@@ -598,16 +608,19 @@
       "create": "Create",
       "update": "Update",
       "name": "Key Name",
-      "inputMode": "Input Mode",
-      "modeEmpty": "Empty key (no content)",
-      "modeFile": "Upload from file",
-      "modeText": "Enter text directly",
       "fullScreen": "Full screen",
       "exitFullScreen": "Exit full screen",
-      "chooseFile": "Choose File",
-      "noFileSelected": "No file selected",
       "content": "Key Content",
-      "contentPlaceholder": "Enter the text content for this key..."
+      "contentPlaceholder": "Empty: the key is empty.",
+      "dropHint": "Type or paste the content, or drop a file here —",
+      "browse": "browse…",
+      "dropHere": "Drop to load the file",
+      "binary": "binary, sent as is",
+      "dropFile": "Drop the file, type the content",
+      "sizeOfMax": "{{size}} of up to {{max}}",
+      "tooLarge": "{{size}}: too large, a key holds up to {{max}}",
+      "hiddenSecret": "The content of a secret is hidden: type, paste or drop new content to replace it.",
+      "hiddenBinary": "The content is binary: drop or browse a file to replace it, or type new content."
     },
     "feedback": {
       "deleting": "Deleting key {{key}}…",
@@ -616,8 +629,8 @@
       "created": "Key '{{key}}' created successfully",
       "updating": "Updating key {{key}}…",
       "updated": "Key '{{key}}' updated successfully",
-      "secretHidden": "Secret content is hidden. Provide new content to update it.",
-      "binary": "Key is binary – please use file upload to update."
+      "deletingMany": "Deleting {{count}} keys…",
+      "deletedMany": "{{count}} keys deleted successfully"
     },
     "errors": {
       "noToken": "Auth token not found.",
@@ -627,7 +640,12 @@
       "create": "Failed to create key: {{status}}",
       "update": "Failed to update key: {{status}}",
       "generic": "Error: {{message}}"
-    }
+    },
+    "selectKey": "Select key {{key}}",
+    "selectionHelp": "Check keys to select them.",
+    "removeSelected_one": "Remove 1 key",
+    "removeSelected_other": "Remove {{count}} keys",
+    "selectAll": "Select all the keys"
   },
   "logs": {
     "subtitle": "{{instance}} on {{node}}",
@@ -1450,7 +1468,8 @@
     "issues": "Issues",
     "details": {
       "status": "Status: {{status}}"
-    }
+    },
+    "datastores": "Datastores"
   },
   "shortcuts": {
     "title": "Keyboard shortcuts",

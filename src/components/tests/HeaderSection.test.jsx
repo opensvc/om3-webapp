@@ -3,6 +3,7 @@ import {render, screen, within} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {vi} from 'vitest';
 import HeaderSection from '../HeaderSection';
+import {PanelHeaderContext} from '../../app/panel-header';
 
 // ── Hoisted mock functions ──────────────────────────────────────────────
 const {mockHandleObjectActionClick} = vi.hoisted(() => ({
@@ -53,6 +54,29 @@ describe('HeaderSection Component', () => {
             frozen: 'frozen',
             globalExpect: 'placed@node1',
         });
+    });
+
+    test('embedded in a panel, its actions and orchestration a solid button of the title bar, "Actions"', () => {
+        function InPanel() {
+            const [actions, setActions] = React.useState(null);
+            return (
+                <>
+                    <div data-testid="bar-actions" ref={setActions}/>
+                    <div data-testid="body">
+                        <PanelHeaderContext.Provider value={{title: null, actions}}>
+                            <HeaderSection {...defaultProps} decodedObjectName="root/cfg/cfg1" kind="cfg" embedded/>
+                        </PanelHeaderContext.Provider>
+                    </div>
+                </>
+            );
+        }
+        render(<InPanel/>);
+        const bar = screen.getByTestId('bar-actions');
+        const menu = within(bar).getByRole('button', {name: 'Actions'});
+        expect(menu).toHaveClass('max-md:w-7', 'bg-accent');
+        expect(menu).not.toHaveClass('rounded-(--radius-pill)');
+        expect(within(bar).getByText('placed@node1')).toBeInTheDocument();
+        expect(within(screen.getByTestId('body')).queryByRole('button', {name: /actions/i})).toBeNull();
     });
 
     test('renders object name as heading, status, frozen mark and global expect', () => {

@@ -20,6 +20,7 @@ import {PolicyTag} from "../ui/components/PolicyTag";
 import ActionDialogManager from "./ActionDialogManager";
 import ConsoleTerminal from "./ConsoleTerminal.jsx";
 import {CLEAR_ACTION, postAction, resourceActions} from "./objectActions";
+import {DatastoreLinks, datastoresOf} from "./InstanceActions";
 import logger from "../utils/logger.js";
 
 /** Icon of an action in a menu: the action icons are sized to the menu line. */
@@ -320,8 +321,8 @@ const ObjectStatus = ({path, onOrchestrationLogs, linkNode, linkResource}) => {
     const clusterIdle = (action) => kind === "ccfg" && (
         (action === "freeze" && board.nodes.every((n) => n.frozen))
         || (action === "unfreeze" && !board.nodes.some((n) => n.frozen)));
-    // In the title bar of the panel, a solid button as the history and close ones,
-    // the bolt alone; elsewhere, a solid pill.
+    // In the title bar of the panel, solid: "Actions" in a wide window, the bolt alone
+    // in a narrow one; elsewhere, a solid pill.
     const inHeader = header.title !== null && header.actions !== null;
     const objectMenu = (
         <MenuButton
@@ -352,6 +353,12 @@ const ObjectStatus = ({path, onOrchestrationLogs, linkNode, linkResource}) => {
             disabled={running}
         />
     );
+
+    // The datastores its instances use, a badge each, in the summary after the instances up.
+    const datastores = datastoresOf(Object.values(instances ?? {}).flatMap((i) => Object.values(i?.resources ?? {})));
+    const facts = datastores.length > 0
+        ? [{label: t("statusBoard.datastores"), value: <DatastoreLinks paths={datastores}/>}]
+        : [];
 
     // The policies of the object over its status board, its actions at the right of the title of its panel.
     const policies = board.facts.length > 0 ? (
@@ -451,6 +458,7 @@ const ObjectStatus = ({path, onOrchestrationLogs, linkNode, linkResource}) => {
                 toolbar={toolbar}
                 linkNode={linkNode}
                 linkResource={linkResource}
+                facts={facts}
             />
             <ActionDialogManager
                 pendingAction={pending}

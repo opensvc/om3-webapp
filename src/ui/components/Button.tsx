@@ -62,11 +62,40 @@ export const IconButton = forwardRef<
     bare?: boolean;
     /** `sm`: 20px and borderless, to fit a table row. */
     size?: "sm" | "md";
+    /**
+     * The accent fill, for the action a section is for, as adding to it: its `text`
+     * (the label without) shown in a wide window, its icon alone in a narrow one.
+     */
+    solid?: boolean;
+    /** With `solid`, the word shown in a wide window, shorter than the label naming it. */
+    text?: string;
   }
 >(function IconButton(
-  { label, bare = false, size = "md", className, children, type = "button", ...props },
+  { label, bare = false, size = "md", solid = false, text, className, children, type = "button", ...props },
   ref,
 ) {
+  if (solid) {
+    return (
+      <button
+        ref={ref}
+        type={type}
+        title={label}
+        aria-label={label}
+        className={cn(
+          "inline-flex h-7 shrink-0 items-center justify-center rounded-(--radius-control) border border-accent bg-accent px-2.5 font-medium text-accent-ink hover:brightness-110 disabled:pointer-events-none disabled:opacity-60 max-md:w-7 max-md:px-0",
+          className,
+        )}
+        {...props}
+      >
+        <span aria-hidden="true" className="hidden max-md:inline-flex">
+          {children}
+        </span>
+        <span aria-hidden="true" className="max-md:hidden">
+          {text ?? label}
+        </span>
+      </button>
+    );
+  }
   return (
     <button
       ref={ref}

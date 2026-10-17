@@ -20,7 +20,8 @@ import {
 } from "../app/namespace-claims";
 import {newId, withId} from "../app/object-create";
 import {Alert} from "../ui/components/Alert";
-import {Button} from "../ui/components/Button";
+import {Button, IconButton} from "../ui/components/Button";
+import {PlusIcon} from "../ui/icons";
 import {Dialog} from "../ui/components/Dialog";
 import {Field, Input, Select} from "../ui/components/Field";
 import {UsageBar} from "../ui/components/UsageBar";
@@ -158,9 +159,9 @@ export function NamespaceClaims({namespace}) {
                 id={`namespace-claims-${namespace}`}
                 title={t("namespaces.panel.claims")}
                 tools={canWrite && claims.loaded ? (
-                    <Button size="sm" variant="primary" className="ml-auto" onClick={() => setWizard({mode: "add"})}>
-                        {t("namespaces.claims.add")}
-                    </Button>
+                    <IconButton solid label={t("namespaces.claims.add")} className="ml-auto" onClick={() => setWizard({mode: "add"})}>
+                        <PlusIcon/>
+                    </IconButton>
                 ) : null}
             >
                 {claims.error && <Alert tone="error">{t("namespaces.usage.error", {message: claims.error})}</Alert>}

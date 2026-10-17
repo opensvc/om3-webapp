@@ -787,7 +787,9 @@
       "noConfig": "Le namespace {{namespace}} n'a pas encore d'objet de configuration : ses réclamations et ses réglages pg s'y écrivent.",
       "create": "Créer sa configuration",
       "creating": "Création…",
-      "createFailed": "La configuration n'a pas pu être créée : {{message}}"
+      "createFailed": "La configuration n'a pas pu être créée : {{message}}",
+      "actions": "Actions sur le namespace",
+      "configOf": "la configuration de {{namespace}}"
     },
     "claims": {
       "actions": "Actions",
@@ -1191,7 +1193,8 @@
       "failed": "L'objet n'a pas pu être créé : {{message}}",
       "copyFailed": "La configuration de {{path}} n'a pas pu être lue : {{message}}",
       "readFailed": "Le fichier n'a pas pu être lu : {{message}}"
-    }
+    },
+    "datastoreHint": "Créé vide : ses clés s’ajoutent ensuite, dans son panneau."
   },
   "objects": {
     "flex": {
@@ -1223,7 +1226,8 @@
       "topology": "Topologie",
       "keys": "Clés",
       "keysSize": "Taille",
-      "keysSizeHint": "La taille des clés telles que stockées dans la configuration, encodage compris"
+      "keysSizeHint": "La taille des clés telles que stockées dans la configuration, encodage compris",
+      "up": "Démarrées"
     },
     "filters": {
       "show": "Afficher les filtres",
@@ -1257,7 +1261,16 @@
     "selectHint": "Sélectionnez des objets pour agir dessus",
     "selectNamespace": "Sélectionner les objets de {{namespace}}",
     "openInstance": "Ouvrir l'instance sur {{node}}",
-    "openInstanceOf": "Ouvrir l'instance de {{name}} sur {{node}}"
+    "openInstanceOf": "Ouvrir l'instance de {{name}} sur {{node}}",
+    "badges": {
+      "datastore": "magasin",
+      "namespace": "namespace"
+    },
+    "openNamespaceConfig": "Ouvrir la configuration de {{namespace}}",
+    "createNamespaceConfig": "Créer sa configuration",
+    "createNamespaceConfigTitle": "Créer la configuration de {{namespace}}",
+    "createNamespaceConfigText": "Le namespace {{namespace}} reçoit son objet de configuration, vide : ses réclamations se règlent ensuite.",
+    "createNamespaceConfigConfirm": "Créer"
   },
   "pools": {
     "columns": {

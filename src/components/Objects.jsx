@@ -19,9 +19,15 @@ import {isQuietDown} from "../ui/components/status";
 import {FrozenMark} from "../ui/components/FrozenMark";
 import {MenuButton} from "../ui/components/MenuButton";
 import {Button} from "../ui/components/Button";
+import {cn} from "../ui/cn";
+import {Dialog} from "../ui/components/Dialog";
+import {Alert} from "../ui/components/Alert";
+import {createNamespaceConfig} from "../app/object-create";
 import {Checkbox, Input} from "../ui/components/Field";
 import {useMediaQuery} from "../ui/lib/media";
-import {KeyCells, NotProvisionedMark, OrchestrateBadge, PropertyCells, SideText, StatusMarks, markState} from "./ObjectCells";
+import {BADGE, KeyCells, NotProvisionedMark, OrchestrateBadge, PropertyCells, SideText, StatusMarks, markState} from "./ObjectCells";
+import {useGrants} from "../hooks/useGrants";
+import {canWriteClaims} from "../app/namespace-claims";
 import {Pager} from "../ui/components/Pager";
 import {usePaging} from "../app/paging";
 import {ALL_LIST, OBJECT_LISTS, OBJECTS_TABS, listOfKind} from "../utils/objectLists";
@@ -125,36 +131,85 @@ export const PROPERTY_COLUMNS = [
     {key: "topology", labelKey: "objects.columns.topology", value: (status) => status?.topology},
 ];
 
-/** The property columns of a narrow list: the orchestrate a badge by the path there. */
-const NARROW_PROPERTY_COLUMNS = PROPERTY_COLUMNS.filter(({key}) => key !== "orchestrate");
+/**
+ * The property columns of a narrow list: the orchestrate and the topology a badge by
+ * the path there, the instances up out of the target in their place.
+ */
+const NARROW_PROPERTY_COLUMNS = [
+    {key: "up", labelKey: "objects.columns.up", value: (status) => status?.up_instances_count},
+];
 
 const stopPropagation = (e) => e.stopPropagation();
+
+/** The path of the configuration of a namespace, as om3 writes it: "<namespace>/", "/" for the root one. */
+const nscfgPath = (namespace) => (namespace === "root" ? "/" : `${namespace}/`);
+const isNscfg = (objectName) => parseObjectName(objectName).kind === "nscfg";
 
 /**
  * The line opening the objects of a namespace in the list: its name across the
  * row, and a checkbox selecting all its objects the filters keep, on every page;
- * mixed when some of them only are selected. No object itself: it opens nothing.
+ * mixed when some of them only are selected. It stands for the configuration of the
+ * namespace, which has no line of its own: a click opens it. None yet, those who may
+ * write it (root, a squatter) are offered to create it. Narrow, a small badge over
+ * the name, for the line to be as high as the others.
  */
-const NamespaceRow = ({namespace, colSpan, selectedCount, total, onToggle}) => {
+const NamespaceRow = ({namespace, colSpan, selectedCount, total, onToggle, onOpen, onCreate, narrow}) => {
     const {t} = useTranslation();
     const box = useRef(null);
+    const exists = useEventStore((s) => s.objectStatus?.[nscfgPath(namespace)] !== undefined);
     const all = total > 0 && selectedCount === total;
     const some = selectedCount > 0 && !all;
     useEffect(() => {
         if (box.current) box.current.indeterminate = some;
     }, [some]);
+    const open = () => onOpen(nscfgPath(namespace));
     return (
-        <tr data-namespace-row={namespace} className="h-[1.875rem] border-b border-line bg-surface-sunken">
+        <tr
+            data-namespace-row={namespace}
+            tabIndex={exists ? 0 : undefined}
+            title={exists ? t("objects.openNamespaceConfig", {namespace}) : undefined}
+            onClick={exists ? open : undefined}
+            onKeyDown={exists ? (event) => {
+                if (event.target !== event.currentTarget || (event.key !== "Enter" && event.key !== " ")) return;
+                event.preventDefault();
+                open();
+            } : undefined}
+            className={cn(
+                "h-[1.875rem] border-b border-line bg-surface-sunken",
+                exists && "cursor-pointer hover:bg-surface-raised focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-(--focus-ring)",
+            )}
+        >
             <td className="w-8 px-2 py-1">
                 <Checkbox
                     ref={box}
                     checked={all}
                     onChange={(e) => onToggle(namespace, e.target.checked)}
+                    onClick={stopPropagation}
                     aria-label={t("objects.selectNamespace", {namespace})}
                 />
             </td>
             <th scope="rowgroup" colSpan={colSpan} className="px-2 py-1 text-left font-semibold text-ink">
-                {namespace}
+                <span className="flex items-center gap-2">
+                    {narrow ? (
+                        <span className="flex flex-col items-start gap-0.5">
+                            <span className="flex h-4 items-center"><span className={cn(BADGE, "font-normal")}>{t("objects.badges.namespace")}</span></span>
+                            {namespace}
+                        </span>
+                    ) : namespace}
+                    {!exists && onCreate && (
+                        <Button
+                            size="sm"
+                            variant="ghost"
+                            className="ml-auto font-normal"
+                            onClick={(event) => {
+                                event.stopPropagation();
+                                onCreate(namespace);
+                            }}
+                        >
+                            {t("objects.createNamespaceConfig")}
+                        </Button>
+                    )}
+                </span>
             </th>
         </tr>
     );
@@ -194,15 +249,19 @@ const TableRowComponent = React.memo(({
             <Cell className="text-data font-medium whitespace-nowrap">
                 {isNarrow && !namesOnly
                     ? (
-                        <span className="inline-flex items-center gap-1">
+                        // Narrow, the badge on a line of its own over the path, kept empty
+                        // when there is none, for the rows to be as high as one another.
+                        <span className="flex flex-col items-start gap-0.5">
+                            <span className="flex h-4 items-center" data-badge-line="">
+                                <OrchestrateBadge objectName={objectName}/>
+                            </span>
                             {objectName}
-                            <OrchestrateBadge objectName={objectName}/>
                         </span>
                     )
                     : objectName}
             </Cell>
             {namesOnly && <KeyCells objectName={objectName}/>}
-            {!namesOnly && <PropertyCells objectName={objectName} withOrchestrate={!isNarrow}/>}
+            {!namesOnly && <PropertyCells objectName={objectName} narrow={isNarrow}/>}
             {!namesOnly && (
                 <Cell className="whitespace-nowrap">
                     <StatusMarks
@@ -358,6 +417,15 @@ const Objects = () => {
     const [selectedKinds, setSelectedKinds] = useState(rawKinds);
     const [selectedGlobalStates, setSelectedGlobalStates] = useState(rawGlobalStates);
     const [createOpen, setCreateOpen] = useState(false);
+    // The configuration of a namespace to create, confirmed first; then its claims.
+    const mayWriteNscfg = canWriteClaims(useGrants());
+    const [nscfgToCreate, setNscfgToCreate] = useState(null);
+    const [nscfgCreating, setNscfgCreating] = useState(false);
+    const [nscfgError, setNscfgError] = useState(null);
+    const createNscfg = useCallback((namespace) => {
+        setNscfgError(null);
+        setNscfgToCreate(namespace);
+    }, []);
     const [searchQuery, setSearchQuery] = useState(rawSearchQuery);
     const isWideScreen = useMediaQuery(WIDE_QUERY);
     const isMobile = useMediaQuery(MOBILE_QUERY);
@@ -498,10 +566,16 @@ const Objects = () => {
         return byNamespace;
     }, [sortedObjectNames]);
 
+    // The configuration of a namespace has no line of its own: the line of its
+    // namespace stands for it. Alone in its namespace, it stays, for the namespace to
+    // be listed, its line drawn alone.
+    const rowObjectNames = useMemo(() => sortedObjectNames.filter((name) => !isNscfg(name)
+        || (namespaceObjects.get(extractNamespace(name)) ?? []).every(isNscfg)), [sortedObjectNames, namespaceObjects]);
+
     // The rows of the page shown, as oc3 pages its lists.
-    const paging = usePaging("objects", sortedObjectNames.length);
+    const paging = usePaging("objects", rowObjectNames.length);
     const {page: pageOf} = paging;
-    const visibleObjectNames = useMemo(() => pageOf(sortedObjectNames), [pageOf, sortedObjectNames]);
+    const visibleObjectNames = useMemo(() => pageOf(rowObjectNames), [pageOf, rowObjectNames]);
 
     const handleSelectObject = useCallback((event, objectName) => {
         setSelectedObjects((prev) =>
@@ -669,6 +743,9 @@ const Objects = () => {
         else params.set("list", next);
         ["tab", "peek", "peektab"].forEach((key) => params.delete(key));
         params.set("sel", path);
+        // A datastore, created empty: on its keys, to add them.
+        const {kind} = parseObjectName(path);
+        if (kind === "cfg" || kind === "sec") params.set("tab", "keys");
         navigate(`${location.pathname}?${params.toString()}`);
     }, [list, location.pathname, location.search, navigate, notify, t]);
 
@@ -828,9 +905,13 @@ const Objects = () => {
                                         total={members.length}
                                         selectedCount={members.filter((name) => selectedObjects.includes(name)).length}
                                         onToggle={handleSelectNamespace}
+                                        onOpen={handleObjectClick}
+                                        onCreate={mayWriteNscfg ? createNscfg : undefined}
+                                        narrow={isMobile}
                                     />
                                 )}
-                                <TableRowComponent
+                                {/* A configuration alone in its namespace: its line, the namespace's, alone. */}
+                                {!isNscfg(objectName) && <TableRowComponent
                                     objectName={objectName}
                                     isSelected={selectedObjects.includes(objectName)}
                                     isOpen={panel.sel === objectName}
@@ -840,7 +921,7 @@ const Objects = () => {
                                     isWideScreen={isWideScreen}
                                     isNarrow={isMobile}
                                     namesOnly={namesOnly}
-                                />
+                                />}
                             </React.Fragment>
                         );
                     })}
@@ -862,6 +943,51 @@ const Objects = () => {
                 paths={allObjectNames}
                 onCreated={handleCreated}
             />
+
+            {/* The configuration of a namespace: nothing to choose, a confirmation, then its claims. */}
+            <Dialog
+                open={nscfgToCreate !== null}
+                onClose={() => setNscfgToCreate(null)}
+                title={t("objects.createNamespaceConfigTitle", {namespace: nscfgToCreate ?? ""})}
+                footer={
+                    <>
+                        <Button variant="secondary" onClick={() => setNscfgToCreate(null)} disabled={nscfgCreating}>
+                            {t("common.cancel")}
+                        </Button>
+                        <Button
+                            variant="primary"
+                            disabled={nscfgCreating}
+                            onClick={async () => {
+                                const namespace = nscfgToCreate;
+                                setNscfgCreating(true);
+                                setNscfgError(null);
+                                try {
+                                    const refused = await createNamespaceConfig(namespace);
+                                    if (refused === null) {
+                                        setNscfgToCreate(null);
+                                        panel.openPeek({kind: "namespace", id: namespace}, "claims");
+                                    } else {
+                                        setNscfgError(refused.status === 409
+                                            ? t("createObject.errors.exists", {path: nscfgPath(namespace)})
+                                            : t("createObject.feedback.failed", {message: refused.message}));
+                                    }
+                                } catch (err) {
+                                    setNscfgError(t("createObject.feedback.failed", {message: err.message}));
+                                } finally {
+                                    setNscfgCreating(false);
+                                }
+                            }}
+                        >
+                            {t("objects.createNamespaceConfigConfirm")}
+                        </Button>
+                    </>
+                }
+            >
+                <div className="space-y-2">
+                    <p>{t("objects.createNamespaceConfigText", {namespace: nscfgToCreate ?? ""})}</p>
+                    {nscfgError && <Alert>{nscfgError}</Alert>}
+                </div>
+            </Dialog>
 
             <ObjectDetailPanel
                 path={panel.sel}

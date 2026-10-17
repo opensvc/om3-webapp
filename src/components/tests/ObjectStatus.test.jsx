@@ -180,24 +180,26 @@ describe('ObjectStatus', () => {
         expect(screen.queryByRole('list', {name: 'Issues'})).not.toBeInTheDocument();
     });
 
-    test('the instances have a heading of their own, counted, their state under it', async () => {
+    test('the instances counted on the line of the nodes, their state under it', async () => {
         answer(dns);
         render(<ObjectStatus path="system/svc/dns"/>);
         const board = await screen.findByRole('table');
-        expect(within(board).getByRole('rowheader', {name: 'Instances (2)'})).toBeInTheDocument();
+        expect(within(board).getByRole('columnheader', {name: 'Instances (2)'})).toBeInTheDocument();
         const state = within(board).getByRole('rowheader', {name: 'State'}).closest('tr');
         expect(within(state).getAllByText('down')).toHaveLength(2);
         expect(within(board).getByRole('rowheader', {name: 'Resources (6)'})).toBeInTheDocument();
-        // A light border round the table, none between its rows.
+        // A light border round the table, a very light line between its rows.
         expect(board.parentElement).toHaveClass('border', 'border-line');
         expect(board.parentElement).not.toHaveClass('border-0');
-        expect(state).toHaveClass('border-b-0');
-        // The headings not bold, not on a grey band, a light line above each.
-        for (const heading of ['Instances (2)', 'Resources (6)']) {
-            const cell = within(board).getByRole('rowheader', {name: heading});
+        expect(state).toHaveClass('border-b', 'border-line/40');
+        // The headings not bold, on a grey band as the group lines of the lists, a line under each.
+        for (const cell of [
+            within(board).getByRole('columnheader', {name: 'Instances (2)'}),
+            within(board).getByRole('rowheader', {name: 'Resources (6)'}),
+        ]) {
             expect(cell).toHaveClass('font-normal');
-            expect(cell.closest('tr')).toHaveClass('border-t', 'border-line');
-            expect(cell.closest('tr')).not.toHaveClass('bg-surface-sunken');
+            expect(cell.closest('tr')).toHaveClass('border-b', 'border-line', 'bg-surface-sunken');
+            expect(cell.closest('tr')).not.toHaveClass('border-t');
         }
         // The nodes last, their names bold, a line before them.
         const headers = within(board).getAllByRole('columnheader');
@@ -532,18 +534,19 @@ describe('ObjectStatus', () => {
             await ready();
             const row = (label) => screen.getByRole('rowheader', {name: label}).closest('tr');
             const monitor = within(row('Monitor')).getAllByRole('cell')[3];
-            const heading = within(row('Instances (2)')).getAllByRole('cell')[2];
+            // The state, right under the header, in the middle of the block.
+            const state = within(row('State')).getAllByRole('cell')[3];
             fireEvent.click(monitor);
-            fireEvent.click(heading);
+            fireEvent.click(state);
             expect(screen.queryByRole('button', {name: /^Actions on/})).not.toBeInTheDocument();
             pickNode('dev3n2');
             expect(selectionButton()).toHaveAccessibleName('Actions on 1 instance');
             expect(header('dev3n2')).toHaveClass('bg-accent-soft');
-            expect(heading).toHaveClass('bg-accent-soft');
+            expect(state).toHaveClass('bg-accent-soft');
             expect(monitor).toHaveClass('bg-accent-soft');
             // One block from the header to the last row of the instances: edged on its outside only.
             expect(header('dev3n2').style.boxShadow).not.toMatch(/inset 0 -1px 0/);
-            expect(heading.style.boxShadow).not.toMatch(/inset 0 (-)?1px 0/);
+            expect(state.style.boxShadow).not.toMatch(/inset 0 (-)?1px 0/);
             expect(monitor.style.boxShadow).toMatch(/inset 0 -1px 0/);
             expect(monitor.style.boxShadow).not.toMatch(/inset 0 1px 0/);
             // The first resource, under the block, is not part of it.

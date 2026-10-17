@@ -342,6 +342,9 @@ describe('LogsViewer', () => {
             expect(screen.getByText('INFO')).toHaveClass('text-ink');
             // The level a word, not bold; the message apart from the metadata by a line.
             expect(screen.getByText('INFO')).not.toHaveClass('font-semibold');
+            // Under the time, in the same cell.
+            expect(screen.getByText('INFO').previousElementSibling.textContent).toMatch(/\d{2}:\d{2}:\d{2}/);
+            expect(screen.getByText('INFO').parentElement).toHaveClass('flex-col');
             expect(screen.getByText('Plain message').parentElement).toHaveClass('border-l', 'pl-2');
             // No prefix: the text alone, no line of badges.
             expect(screen.getByText('Plain message').parentElement.querySelector('[data-meta]')).toBeNull();

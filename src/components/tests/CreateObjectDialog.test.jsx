@@ -98,6 +98,18 @@ describe('CreateObjectDialog', () => {
         expect(posts()[0].url).toBe('/api/object/path/root/svc/db/config/file');
     });
 
+    test('a cfg or a sec, a datastore: its path alone, created empty, its keys added next', async () => {
+        open({defaultKind: 'sec', defaultNamespace: 'ns1'});
+        expect(screen.queryByRole('radio')).toBeNull();
+        expect(screen.queryByLabelText(/^Configuration/)).toBeNull();
+        expect(screen.getByText('Created empty: its keys are added next, in its panel.')).toBeInTheDocument();
+        type('Name', 'tls');
+        create();
+        await waitFor(() => expect(onCreated).toHaveBeenCalledWith('ns1/sec/tls', null));
+        expect(posts()[0].url).toBe('/api/object/path/ns1/sec/tls/config/file');
+        expect(posts()[0].body).toMatch(/^\[DEFAULT\]\nid = [0-9a-f-]+\n$/);
+    });
+
     test('a namespace configuration takes the name om gives it', async () => {
         open({defaultNamespace: 'ns2'});
         fireEvent.change(screen.getByLabelText('Kind'), {target: {value: 'nscfg'}});

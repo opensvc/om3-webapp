@@ -787,7 +787,9 @@
       "noConfig": "The {{namespace}} namespace has no configuration object yet: its claims and pg settings are written there.",
       "create": "Create its configuration",
       "creating": "Creating…",
-      "createFailed": "The configuration could not be created: {{message}}"
+      "createFailed": "The configuration could not be created: {{message}}",
+      "actions": "Namespace actions",
+      "configOf": "the configuration of {{namespace}}"
     },
     "claims": {
       "actions": "Actions",
@@ -1191,7 +1193,8 @@
       "failed": "The object could not be created: {{message}}",
       "copyFailed": "The configuration of {{path}} could not be read: {{message}}",
       "readFailed": "The file could not be read: {{message}}"
-    }
+    },
+    "datastoreHint": "Created empty: its keys are added next, in its panel."
   },
   "objects": {
     "flex": {
@@ -1223,7 +1226,8 @@
       "topology": "Topology",
       "keys": "Keys",
       "keysSize": "Size",
-      "keysSizeHint": "The size of the keys as stored in the configuration, their encoding included"
+      "keysSizeHint": "The size of the keys as stored in the configuration, their encoding included",
+      "up": "Up"
     },
     "filters": {
       "show": "Show filters",
@@ -1257,7 +1261,16 @@
     "selectHint": "Select objects to act on them",
     "selectNamespace": "Select the objects of {{namespace}}",
     "openInstance": "Open the instance on {{node}}",
-    "openInstanceOf": "Open the instance of {{name}} on {{node}}"
+    "openInstanceOf": "Open the instance of {{name}} on {{node}}",
+    "badges": {
+      "datastore": "datastore",
+      "namespace": "namespace"
+    },
+    "openNamespaceConfig": "Open the configuration of {{namespace}}",
+    "createNamespaceConfig": "Create its configuration",
+    "createNamespaceConfigTitle": "Create the configuration of {{namespace}}",
+    "createNamespaceConfigText": "The namespace {{namespace}} gets its configuration object, empty: its claims are set next.",
+    "createNamespaceConfigConfirm": "Create"
   },
   "pools": {
     "columns": {

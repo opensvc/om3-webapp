@@ -102,9 +102,8 @@ const LogsViewer = ({
     }, [nodes, clusterOrder]);
     const marked = merged && nodes.length <= MARKER_MAX_NODES;
     // The columns of the lines, shared, for their texts to start at the same place:
-    // the time, the level, the marker and the node merged, the text.
+    // the time with the level under it, the marker and the node merged, the text.
     const columns = [
-        "max-content",
         "max-content",
         ...(marked ? ["max-content"] : []),
         ...(merged ? ["max-content"] : []),
@@ -741,10 +740,10 @@ const LogsViewer = ({
                                     data-at={log.timestamp.getTime()}
                                     onClick={() => handleLogClick(log)}
                                 >
-                                    <span className="text-ink-muted">{formatTime(log.timestamp)}</span>
-                                    {/* The level in its colour, the word alone. */}
-                                    <span className={getLevelClass(log.level)}>
-                                        {log.level.toUpperCase()}
+                                    {/* The time, the level under it in its colour, the word alone. */}
+                                    <span className="flex flex-col">
+                                        <span className="text-ink-muted">{formatTime(log.timestamp)}</span>
+                                        <span className={getLevelClass(log.level)}>{log.level.toUpperCase()}</span>
                                     </span>
                                     {marked && <NodeMarker count={nodes.length} index={nodeIndex.get(node) ?? 0} faint={!opens}/>}
                                     {merged && (

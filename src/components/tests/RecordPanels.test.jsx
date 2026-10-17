@@ -58,6 +58,9 @@ vi.mock('../../hooks/useEventStore.js', async () => {
     return {default: (selector) => selector(useSyncExternalStore(store.subscribe, store.get))};
 });
 
+const mockGrants = vi.hoisted(() => ({value: {}}));
+vi.mock('../../hooks/useGrants', () => ({useGrants: () => mockGrants.value}));
+
 /** The panels open: a closed one stays mounted for its animation, inert. */
 const openDialogs = () => screen.queryAllByRole('dialog').filter((d) => !d.hasAttribute('inert'));
 
@@ -178,6 +181,29 @@ describe('record panels', () => {
     test('a namespace has the events of its objects on a tab', () => {
         renderPeek('/objects?peek=namespace:ns1&peektab=events');
         expect(within(screen.getByRole('dialog', {name: 'ns1'})).getByTestId('events')).toHaveTextContent('events in ns1');
+    });
+
+    test('a namespace: its actions in the title bar, the delete of its configuration for those who may write it', () => {
+        mockGrants.value = {squatter: null};
+        store.set({objectStatus: {'ns1/': {avail: 'n/a'}}});
+        try {
+            renderPeek('/objects?peek=namespace:ns1');
+            const panel = screen.getByRole('dialog', {name: 'ns1'});
+            const actions = within(panel).getByRole('button', {name: 'Namespace actions'});
+            expect(actions).toHaveTextContent(/^Actions$/);
+            fireEvent.click(actions);
+            const remove = within(screen.getByRole('menu', {name: 'Namespace actions'})).getByRole('menuitem', {name: 'Delete'});
+            expect(remove).toBeEnabled();
+        } finally {
+            mockGrants.value = {};
+            store.reset();
+        }
+    });
+
+    test('a namespace without its configuration, or a user who may not write it: nothing to delete', () => {
+        renderPeek('/objects?peek=namespace:ns1');
+        fireEvent.click(within(screen.getByRole('dialog', {name: 'ns1'})).getByRole('button', {name: 'Namespace actions'}));
+        expect(within(screen.getByRole('menu', {name: 'Namespace actions'})).getByRole('menuitem', {name: 'Delete'})).toBeDisabled();
     });
 
     test('closing the panel leaves the view as it was', () => {

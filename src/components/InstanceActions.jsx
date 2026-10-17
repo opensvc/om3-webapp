@@ -62,7 +62,7 @@ export function useActionRunner(path) {
         const posts = targets.map(({node, rid}) => ({path, action, node, rid}));
         const results = await Promise.all(posts.map((target) => postAction(target).catch((err) => ({detail: err.message}))));
         const failures = results
-            .map((r, i) => (r === null ? null : `${posts[i].node}: ${r.status ? `HTTP ${r.status}` : ""}${r.detail ? ` ${r.detail}` : ""}`.trim()))
+            .map((r, i) => (r === null ? null : `${posts[i].node ?? path}: ${r.status ? `HTTP ${r.status}` : ""}${r.detail ? ` ${r.detail}` : ""}`.trim()))
             .filter((r) => r !== null);
         setFeedback(failures.length === 0
             ? {tone: "success", message: t("statusBoard.feedback.accepted", {action, subject})}

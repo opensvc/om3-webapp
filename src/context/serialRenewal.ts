@@ -3,6 +3,14 @@ import type { User, UserManager } from "oidc-client-ts";
 /** How long a renewal that failed for want of an answer waits before it is tried again. */
 export const RENEW_RETRY_MS = 2000;
 
+/**
+ * Whether a renewal failed because the provider refused it, saying why (`error`):
+ * the session is over. A renewal failing for want of an answer, a network error or
+ * a timeout, leaves the session to the next attempt.
+ */
+export const isRenewalRefused = (error: unknown): boolean =>
+  Boolean((error as { error?: string } | null)?.error);
+
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
@@ -29,7 +37,7 @@ export function serializeSilentRenew(userManager: UserManager): UserManager {
     try {
       return await renew(args);
     } catch (error) {
-      if ((error as { error?: string })?.error) throw error;
+      if (isRenewalRefused(error)) throw error;
       await wait(RENEW_RETRY_MS);
       return await renew(args);
     }

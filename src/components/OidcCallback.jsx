@@ -1,4 +1,4 @@
-import React, {useEffect, useCallback, useRef} from 'react';
+import React, {useEffect, useCallback} from 'react';
 import {useNavigate} from 'react-router-dom';
 import {useTranslation} from 'react-i18next';
 import {useAuthDispatch, SetAccessToken, SetAuthChoice, Login} from "../context/AuthProvider.jsx";
@@ -13,7 +13,6 @@ const OidcCallback = () => {
     const authDispatch = useAuthDispatch();
     const authInfo = useAuthInfo();
     const navigate = useNavigate();
-    const eventHandlersSet = useRef(false);
     const {t} = useTranslation();
 
     const handleLogout = useCallback(() => {
@@ -48,26 +47,9 @@ const OidcCallback = () => {
         }
     }, [authDispatch]);
 
-    const handleTokenExpired = useCallback(() => {
-        logger.warn('Access token expired, redirecting to /auth-choice');
-        handleLogout();
-    }, [handleLogout]);
-
-    const handleSilentRenewError = useCallback((error) => {
-        logger.error('Silent renew failed:', error);
-        handleLogout();
-    }, [handleLogout]);
-
-    const setupEventHandlers = useCallback(() => {
-        if (eventHandlersSet.current || !userManager) return;
-        userManager.events.addUserLoaded(onUserRefreshed);
-        userManager.events.addAccessTokenExpiring(() => {
-            logger.debug('Access token is about to expire, attempting silent renew...');
-        });
-        userManager.events.addAccessTokenExpired(handleTokenExpired);
-        userManager.events.addSilentRenewError(handleSilentRenewError);
-        eventHandlersSet.current = true;
-    }, [userManager, onUserRefreshed, handleTokenExpired, handleSilentRenewError]);
+    // No listener on the UserManager events here: they outlived this page, the
+    // UserManager being the app's, and logged out at the first expiry of the access
+    // token, its renewal not waited for. OidcInitializer (App.jsx) handles them.
 
     const handleSigninRedirect = useCallback(() => {
         userManager.signinRedirectCallback()
@@ -77,14 +59,13 @@ const OidcCallback = () => {
                     authDispatch({type: SetAuthChoice, data: "openid"});
                     authDispatch({type: Login, data: user.profile.preferred_username});
                 }
-                setupEventHandlers();
                 navigate('/');
             })
             .catch((err) => {
                 logger.error("signinRedirectCallback failed:", err);
                 navigate('/auth-choice');
             });
-    }, [userManager, authDispatch, navigate, onUserRefreshed, setupEventHandlers]);
+    }, [userManager, authDispatch, navigate, onUserRefreshed]);
 
     useEffect(() => {
         const initializeUserManager = async () => {
@@ -114,7 +95,6 @@ const OidcCallback = () => {
                     if (user && !user.expired) {
                         logger.info("Existing user session found:", user.profile?.preferred_username);
                         onUserRefreshed(user);
-                        setupEventHandlers();
                         navigate('/');
                     } else {
                         handleSigninRedirect();
@@ -127,7 +107,7 @@ const OidcCallback = () => {
                 handleSigninRedirect();
             }
         }
-    }, [userManager, handleSigninRedirect, setupEventHandlers, onUserRefreshed, navigate]);
+    }, [userManager, handleSigninRedirect, onUserRefreshed, navigate]);
 
     useEffect(() => {
         if (typeof BroadcastChannel === 'undefined') return;

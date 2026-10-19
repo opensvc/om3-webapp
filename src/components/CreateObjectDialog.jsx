@@ -10,7 +10,8 @@ import {URL_OBJECT} from "../config/apiPath.js";
 import {getResponseErrorMessage} from "../services/api.jsx";
 import useEventStore from "../hooks/useEventStore.js";
 import {parseObjectPath} from "../utils/objectUtils.jsx";
-import {postAction} from "./objectActions";
+import {postAction, refusalReason} from "./objectActions";
+import {trackDone, trackRefused} from "../app/action-tracker";
 import {
     CREATABLE_KINDS,
     NSCFG_NAME,
@@ -70,8 +71,8 @@ const waitForObject = (path) => new Promise((resolve, reject) => {
  * once created.
  *
  * `paths` are the objects known, offered as sources and refused as new paths;
- * `namespaces` are offered for the new one. `onCreated` receives the path created
- * and what came of its provisioning: "requested", "failed", or null.
+ * `namespaces` are offered for the new one. `onCreated` receives the path created;
+ * the creation and the provisioning, the actions tray says.
  */
 const CreateObjectDialog = ({open, onClose, defaultKind = "svc", defaultNamespace = "root", namespaces = [], paths = [], onCreated}) => {
     const {t} = useTranslation();
@@ -164,6 +165,7 @@ const CreateObjectDialog = ({open, onClose, defaultKind = "svc", defaultNamespac
         setSubmitting(true);
         setError(null);
         const {namespace: ns, kind: k, name: n} = parseObjectPath(path);
+        const creation = {action: "create", label: t("actionTray.writes.objectCreate"), subject: path, path};
         try {
             const response = await fetch(`${URL_OBJECT}/${ns}/${k}/${n}/config/file`, {
                 method: "POST",
@@ -173,24 +175,28 @@ const CreateObjectDialog = ({open, onClose, defaultKind = "svc", defaultNamespac
                 },
                 body: withId(config, newId()),
             });
+            // What came of it, the actions tray says; refused, the dialog stays open and says why.
             if (!response.ok) {
-                const message = (await getResponseErrorMessage(response)) || `HTTP ${response.status}`;
+                const detail = await getResponseErrorMessage(response);
+                trackRefused({...creation, reason: refusalReason({status: response.status, detail})});
                 setError(response.status === 409
                     ? t("createObject.errors.exists", {path})
-                    : t("createObject.feedback.failed", {message}));
+                    : t("createObject.feedback.failed", {message: detail || `HTTP ${response.status}`}));
                 return;
             }
-            let provisioning = null;
+            trackDone(creation);
+            // Provisioned once the daemons know it: followed, or said refused, in the actions tray.
             if (provision && canProvision) {
                 try {
                     await waitForObject(path);
-                    provisioning = (await postAction({path, action: "provision"})) === null ? "requested" : "failed";
-                } catch {
-                    provisioning = "failed";
+                    await postAction({path, action: "provision"});
+                } catch (err) {
+                    trackRefused({action: "provision", subject: path, reason: err.message});
                 }
             }
-            onCreated?.(path, provisioning);
+            onCreated?.(path);
         } catch (err) {
+            trackRefused({...creation, reason: err.message});
             setError(t("createObject.feedback.failed", {message: err.message}));
         } finally {
             setSubmitting(false);

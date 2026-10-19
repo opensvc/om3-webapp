@@ -4,6 +4,10 @@ import {BrowserRouter} from 'react-router-dom';
 import {vi} from 'vitest';
 import NodesTable from '../NodesTable.jsx';
 import i18n from '../../i18n';
+import {useActionTracker} from '../../app/action-tracker';
+
+/** What the actions tray holds, the latest first: action, subject, state, reason. */
+const tray = () => useActionTracker.getState().tracked.map((e) => [e.action, e.subject, e.state, e.error ?? null]);
 
 // ── Hoisted mock variables ────────────────────────────────────────────────
 const {
@@ -165,6 +169,7 @@ describe('NodesTable', () => {
         });
 
         localStorage.setItem('authToken', 'test-token');
+        useActionTracker.setState({tracked: [], revealed: 0});
         vi.clearAllMocks();
     });
 
@@ -273,12 +278,15 @@ describe('NodesTable', () => {
             await waitFor(() => expect(screen.queryByTestId('dialog-freeze')).not.toBeInTheDocument());
         });
 
-        test('successful single-node action', async () => {
-            global.fetch = vi.fn().mockResolvedValue({ok: true, json: () => ({})});
+        test('a node action accepted is followed in the actions tray, no message of its own', async () => {
+            global.fetch = vi.fn((url) => (url.includes('/daemon/exec/')
+                ? new Promise(() => undefined)
+                : Promise.resolve({ok: true, clone: () => ({json: async () => ({exec_id: 'e1', session_id: 's1'})})})));
             renderWithRouter(<NodesTable/>);
             await actOnFirstNode('Freeze');
             fireEvent.click(await screen.findByRole('button', {name: 'Confirm'}));
-            expect(await screen.findByText(/'Freeze' requested on 1 node\./i)).toBeInTheDocument();
+            await waitFor(() => expect(tray()).toEqual([['freeze', 'node-1', 'running', null]]));
+            expect(screen.queryByRole('status', {name: /requested/i})).not.toBeInTheDocument();
         });
 
         test('shows error if token missing', async () => {
@@ -305,8 +313,11 @@ describe('NodesTable', () => {
             fireEvent.click(await screen.findByRole('menuitem', {name: /^Freeze$/i}));
             expect(screen.getByTestId('dialog-freeze')).toHaveTextContent('Confirm Freeze Action on 2 nodes');
             fireEvent.click(screen.getByRole('button', {name: 'Confirm'}));
-            const alert = await screen.findByRole('alert');
-            expect(alert).toHaveTextContent(/'Freeze' requested on 1 node\(s\), not on 1\./i);
+            await waitFor(() => expect(tray()).toHaveLength(2));
+            expect(tray()).toEqual(expect.arrayContaining([
+                ['freeze', 'node-1', 'succeeded', null],
+                ['freeze', 'node-2', 'refused', 'HTTP error'],
+            ]));
         });
 
         test('total failure', async () => {
@@ -314,7 +325,7 @@ describe('NodesTable', () => {
             renderWithRouter(<NodesTable/>);
             await actOnFirstNode('Freeze');
             fireEvent.click(await screen.findByRole('button', {name: 'Confirm'}));
-            expect(await screen.findByText(/'Freeze' could not be requested on the node\./i)).toBeInTheDocument();
+            await waitFor(() => expect(tray()).toEqual([['freeze', 'node-1', 'refused', 'fail']]));
         });
 
         test('a node already frozen in the selection is not frozen again, the others are', async () => {
@@ -329,7 +340,7 @@ describe('NodesTable', () => {
             fireEvent.click(await screen.findByRole('checkbox', {name: 'select node-2'}));
             await actOnFirstNode('Freeze');
             fireEvent.click(screen.getByRole('button', {name: 'Confirm'}));
-            expect(await screen.findByText(/'Freeze' requested on 1 node\(s\), not on 1\./i)).toBeInTheDocument();
+            await waitFor(() => expect(tray()).toEqual([['freeze', 'node-1', 'refused', 'already frozen']]));
             expect(global.fetch).toHaveBeenCalledTimes(1);
             expect(global.fetch.mock.calls[0][0]).toContain('/node-2/');
         });
@@ -344,7 +355,7 @@ describe('NodesTable', () => {
                     expect.stringContaining('Failed to execute freeze on node-1: HTTP error! status: 500')
                 );
             });
-            expect(await screen.findByText(/'Freeze' could not be requested on the node\./i)).toBeInTheDocument();
+            await waitFor(() => expect(tray()).toEqual([['freeze', 'node-1', 'refused', expect.stringMatching(/^HTTP 500/)]]));
         });
 
         test('correct URL for restart daemon', async () => {
@@ -435,37 +446,33 @@ describe('NodesTable', () => {
             expect(global.fetch).not.toHaveBeenCalled();
         });
 
-        test('snackbar onClose triggered by user click', async () => {
-            global.fetch = vi.fn().mockResolvedValue({ok: true});
+        test('the feedback closes with its Close button', async () => {
+            localStorage.removeItem('authToken');
             renderWithRouter(<NodesTable/>);
             await actOnFirstNode('Freeze');
             fireEvent.click(await screen.findByRole('button', {name: 'Confirm'}));
-            const successMsg = await screen.findByText(/'Freeze' requested on 1 node\./i);
-            expect(successMsg).toBeInTheDocument();
-            expect(successMsg.closest('[role="status"]')).not.toBeNull();
-            const closeButtons = screen.getAllByRole('button', {name: 'Close'});
-            const alertCloseButton = closeButtons.find(btn => btn.closest('[role="status"]'));
-            expect(alertCloseButton).toBeDefined();
-            fireEvent.click(alertCloseButton);
-            await waitFor(() => {
-                expect(screen.queryByText(/'Freeze' requested on 1 node\./i)).not.toBeInTheDocument();
-            });
+            const message = await screen.findByText(/Authentication token not found/i);
+            const close = screen.getAllByRole('button', {name: 'Close'}).find((btn) => btn.closest('[role="alert"]'));
+            expect(close).toBeDefined();
+            fireEvent.click(close);
+            await waitFor(() => expect(message).not.toBeInTheDocument());
         });
 
-        test('snackbar autoHide triggers onClose', async () => {
-            vi.useFakeTimers();
-            global.fetch = vi.fn().mockResolvedValue({ok: true});
+        test('the feedback hides itself after a while', async () => {
+            localStorage.removeItem('authToken');
             renderWithRouter(<NodesTable/>);
             await actOnFirstNode('Freeze');
-            fireEvent.click(await screen.findByRole('button', {name: 'Confirm'}));
-            await screen.findByText(/'Freeze' requested on 1 node\./i);
-            act(() => {
-                vi.advanceTimersByTime(5000);
-            });
-            await waitFor(() => {
-                expect(screen.queryByText(/'Freeze' requested on 1 node\./i)).not.toBeInTheDocument();
-            });
-            vi.useRealTimers();
+            vi.useFakeTimers();
+            try {
+                fireEvent.click(screen.getByRole('button', {name: 'Confirm'}));
+                expect(screen.getByText(/Authentication token not found/i)).toBeInTheDocument();
+                act(() => {
+                    vi.advanceTimersByTime(5000);
+                });
+                expect(screen.queryByText(/Authentication token not found/i)).not.toBeInTheDocument();
+            } finally {
+                vi.useRealTimers();
+            }
         });
     });
 

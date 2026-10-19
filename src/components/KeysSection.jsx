@@ -15,6 +15,8 @@ import {getResponseErrorMessage} from "../services/api.jsx";
 import logger from '../utils/logger.js';
 import {parseObjectPath} from '../utils/objectUtils';
 import {KEY_KINDS} from "../constants/actions";
+import {trackRefused, trackWrite} from "../app/action-tracker";
+import {refusalReason} from "./objectActions";
 import {hasPemCertificate} from "../utils/x509";
 import CertificateDetails from "./CertificateDetails";
 import {Trans, useTranslation} from "react-i18next";
@@ -32,6 +34,9 @@ const buildObjectUrl = (decodedObjectName) => {
     const {namespace, kind, name} = parseObjectPath(decodedObjectName);
     return `${URL_OBJECT}/${namespace}/${kind}/${name}`;
 };
+
+/** A refusal in words, for the actions tray: its status, and the detail the daemon gave. */
+const keyRefusal = async (response) => refusalReason({status: response.status, detail: await getResponseErrorMessage(response)});
 
 const formatResponseError = async (response, defaultMessage) => {
     const serverError = await getResponseErrorMessage(response);
@@ -461,7 +466,12 @@ const KeysSection = ({decodedObjectName, openSnackbar, refreshKey}) => {
         }
     }, [decodedObjectName, openSnackbar, t]);
 
-    /** Deletes the keys confirmed, one after the other: the first refused stops it, said. */
+    /** A key written, as the actions tray says it. */
+    const keyWrite = (kind, key) => ({
+        action: "config", label: t(`actionTray.writes.${kind}`, {key}), subject: decodedObjectName, path: decodedObjectName,
+    });
+
+    /** Deletes the keys confirmed, one after the other, each said in the actions tray: one refused, the others still go. */
     const handleDeleteKey = async () => {
         if (keysToDelete.length === 0) return;
         const token = getAuthToken();
@@ -471,33 +481,25 @@ const KeysSection = ({decodedObjectName, openSnackbar, refreshKey}) => {
             return;
         }
 
-        const one = keysToDelete.length === 1;
+        // What came of each key, the actions tray says.
         setActionLoading(true);
-        openSnackbar(one
-            ? t("keys.feedback.deleting", {key: keysToDelete[0]})
-            : t("keys.feedback.deletingMany", {count: keysToDelete.length}), "info");
         try {
             const baseUrl = buildObjectUrl(decodedObjectName);
+            const deleted = [];
             for (const name of keysToDelete) {
-                const url = `${baseUrl}/data/key?name=${encodeURIComponent(name)}`;
-                const response = await fetch(url, {
-                    method: "DELETE",
-                    headers: {Authorization: `Bearer ${token}`},
-                });
-                if (!response.ok) {
-                    const errorMessage = await formatResponseError(response, t("keys.errors.delete", {status: response.status}));
-                    openSnackbar(errorMessage, "error");
-                    await fetchKeys();
-                    return;
+                const write = keyWrite("keyDelete", name);
+                try {
+                    const response = await fetch(`${baseUrl}/data/key?name=${encodeURIComponent(name)}`, {
+                        method: "DELETE",
+                        headers: {Authorization: `Bearer ${token}`},
+                    });
+                    if (await trackWrite(response, write, keyRefusal)) deleted.push(name);
+                } catch (err) {
+                    trackRefused({...write, reason: err.message});
                 }
             }
-            openSnackbar(one
-                ? t("keys.feedback.deleted", {key: keysToDelete[0]})
-                : t("keys.feedback.deletedMany", {count: keysToDelete.length}));
-            setPicked((l) => l.filter((name) => !keysToDelete.includes(name)));
+            setPicked((l) => l.filter((name) => !deleted.includes(name)));
             await fetchKeys();
-        } catch (err) {
-            openSnackbar(t("keys.errors.generic", {message: err.message}), "error");
         } finally {
             setActionLoading(false);
             setDeleteDialogOpen(false);
@@ -513,12 +515,12 @@ const KeysSection = ({decodedObjectName, openSnackbar, refreshKey}) => {
             return;
         }
 
+        // What came of it, the actions tray says.
         setActionLoading(true);
-        openSnackbar(t("keys.feedback.creating", {key: name}), "info");
+        const write = keyWrite("keyCreate", name);
         try {
             const baseUrl = buildObjectUrl(decodedObjectName);
-            const url = `${baseUrl}/data/key?name=${encodeURIComponent(name)}`;
-            const response = await fetch(url, {
+            const response = await fetch(`${baseUrl}/data/key?name=${encodeURIComponent(name)}`, {
                 method: "POST",
                 headers: {
                     Authorization: `Bearer ${token}`,
@@ -526,15 +528,9 @@ const KeysSection = ({decodedObjectName, openSnackbar, refreshKey}) => {
                 },
                 body: contentBlob,
             });
-            if (!response.ok) {
-                const errorMessage = await formatResponseError(response, t("keys.errors.create", {status: response.status}));
-                openSnackbar(errorMessage, "error");
-                return;
-            }
-            openSnackbar(t("keys.feedback.created", {key: name}));
-            await fetchKeys();
+            if (await trackWrite(response, write, keyRefusal)) await fetchKeys();
         } catch (err) {
-            openSnackbar(t("keys.errors.generic", {message: err.message}), "error");
+            trackRefused({...write, reason: err.message});
         } finally {
             setActionLoading(false);
             setCreateDialogOpen(false);
@@ -549,12 +545,12 @@ const KeysSection = ({decodedObjectName, openSnackbar, refreshKey}) => {
             return;
         }
 
+        // What came of it, the actions tray says.
         setActionLoading(true);
-        openSnackbar(t("keys.feedback.updating", {key: name}), "info");
+        const write = keyWrite("keyUpdate", name);
         try {
             const baseUrl = buildObjectUrl(decodedObjectName);
-            const url = `${baseUrl}/data/key?name=${encodeURIComponent(name)}`;
-            const response = await fetch(url, {
+            const response = await fetch(`${baseUrl}/data/key?name=${encodeURIComponent(name)}`, {
                 method: "PUT",
                 headers: {
                     Authorization: `Bearer ${token}`,
@@ -562,15 +558,9 @@ const KeysSection = ({decodedObjectName, openSnackbar, refreshKey}) => {
                 },
                 body: contentBlob,
             });
-            if (!response.ok) {
-                const errorMessage = await formatResponseError(response, t("keys.errors.update", {status: response.status}));
-                openSnackbar(errorMessage, "error");
-                return;
-            }
-            openSnackbar(t("keys.feedback.updated", {key: name}));
-            await fetchKeys();
+            if (await trackWrite(response, write, keyRefusal)) await fetchKeys();
         } catch (err) {
-            openSnackbar(t("keys.errors.generic", {message: err.message}), "error");
+            trackRefused({...write, reason: err.message});
         } finally {
             setActionLoading(false);
             setUpdateDialogOpen(false);

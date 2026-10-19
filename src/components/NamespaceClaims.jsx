@@ -2,6 +2,9 @@ import React, {useMemo, useState} from "react";
 import {useTranslation} from "react-i18next";
 import {URL_OBJECT} from "../config/apiPath.js";
 import {getResponseErrorMessage} from "../services/api.jsx";
+import {trackDone, trackRefused} from "../app/action-tracker";
+import {refusalReason} from "./objectActions";
+import i18n from "../i18n";
 import {useNamespaceClaims, useNamespacePg} from "../hooks/useNamespaceUsage";
 import {useGrants} from "../hooks/useGrants";
 import {computeLimit, formatCpu, networkUsage, poolUsage} from "../app/namespace-usage";
@@ -196,17 +199,38 @@ export function NamespaceClaims({namespace}) {
     );
 }
 
-/** Writes keyword operations to the namespace configuration, creating it first if it has none. */
+/**
+ * Writes keyword operations to the namespace configuration, creating it first if it
+ * has none. What came of it, the actions tray says; refused, it throws the reason
+ * for the dialog to say it too.
+ */
 async function writeClaim(namespace, ops, configured) {
-    const response = configured
-        ? await fetch(`${configUrl(namespace)}?${opsQuery(ops)}`, {method: "PATCH", headers: authHeaders()})
+    const write = {action: "config", label: i18n.t("actionTray.writes.claimsUpdate"), subject: namespace};
+    let response;
+    try {
+        response = await requestClaim(namespace, ops, configured);
+    } catch (err) {
+        trackRefused({...write, reason: err.message});
+        throw err;
+    }
+    if (!response.ok) {
+        const detail = await getResponseErrorMessage(response);
+        trackRefused({...write, reason: refusalReason({status: response.status, detail})});
+        throw new Error(detail || `HTTP ${response.status}`);
+    }
+    trackDone(write);
+}
+
+/** The request of a claim: the keywords patched, or the configuration created with them. */
+function requestClaim(namespace, ops, configured) {
+    return configured
+        ? fetch(`${configUrl(namespace)}?${opsQuery(ops)}`, {method: "PATCH", headers: authHeaders()})
         // No configuration yet: created with its id, the claim written in it.
-        : await fetch(`${configUrl(namespace)}/file?${opsQuery({set: ops.set})}`, {
+        : fetch(`${configUrl(namespace)}/file?${opsQuery({set: ops.set})}`, {
             method: "POST",
             headers: {...authHeaders(), "Content-Type": "application/octet-stream"},
             body: withId("", newId()),
         });
-    if (!response.ok) throw new Error((await getResponseErrorMessage(response)) || `HTTP ${response.status}`);
 }
 
 /** The steps of the wizard, in order; the pool or network one for those only. */
@@ -466,14 +490,27 @@ function RemoveClaim({namespace, claim, onClose, onRemoved}) {
     const remove = async () => {
         setSaving(true);
         setError(null);
-        try {
-            const response = await fetch(`${configUrl(namespace)}?${opsQuery({delete: [claim.section]})}`, {method: "PATCH", headers: authHeaders()});
-            if (!response.ok) throw new Error((await getResponseErrorMessage(response)) || `HTTP ${response.status}`);
-            onRemoved();
-        } catch (err) {
-            setError(err.message);
+        const write = {action: "config", label: t("actionTray.writes.claimDelete", {section: claim.section}), subject: namespace};
+        // What came of it, the actions tray says; refused, the dialog stays open and says why.
+        const refuse = (reason, message) => {
+            trackRefused({...write, reason});
+            setError(message);
             setSaving(false);
+        };
+        let response;
+        try {
+            response = await fetch(`${configUrl(namespace)}?${opsQuery({delete: [claim.section]})}`, {method: "PATCH", headers: authHeaders()});
+        } catch (err) {
+            refuse(err.message, err.message);
+            return;
         }
+        if (!response.ok) {
+            const detail = await getResponseErrorMessage(response);
+            refuse(refusalReason({status: response.status, detail}), detail || `HTTP ${response.status}`);
+            return;
+        }
+        trackDone(write);
+        onRemoved();
     };
     return (
         <Dialog

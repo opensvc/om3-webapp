@@ -96,7 +96,8 @@ describe('NamespaceObjects', () => {
         fireEvent.click(within(dialog).getByRole('button', {name: /confirm/i}));
         await waitFor(() => expect(global.fetch).toHaveBeenCalledWith('/api/object/path/prod/svc/web/action/freeze', expect.any(Object)));
         expect(global.fetch).toHaveBeenCalledWith('/api/object/path/prod/svc/api/action/freeze', expect.any(Object));
-        expect(await screen.findByText(/'freeze' requested on 2 objects/)).toBeInTheDocument();
+        // What comes of it, the actions tray says: no message of the list's own.
+        expect(screen.queryByText(/requested on 2 objects/)).not.toBeInTheDocument();
         // Done, the selection is cleared.
         await waitFor(() => expect(screen.getByText('Select objects to act on them')).toBeInTheDocument());
     });

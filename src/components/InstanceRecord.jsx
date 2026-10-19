@@ -157,7 +157,7 @@ export function InstanceStatus({path, node}) {
     const notProvisioned = status.provisioned === "false" || status.provisioned === false;
     const datastores = datastoresOf(resources.map(([, r]) => r));
     const header = usePanelHeader();
-    const {ask, running, feedback, dialogs} = useActionRunner(path);
+    const {ask, running, dialogs} = useActionRunner(path);
     const [picked, setPicked] = useState([]);
     // A resource gone is no longer picked.
     const rids = resources.map(([rid]) => rid);
@@ -196,7 +196,6 @@ export function InstanceStatus({path, node}) {
 
     return (
         <div className="space-y-4" data-testid="instance-status">
-            {feedback}
             {header.actions !== null ? createPortal(instanceMenu, header.actions) : <div className="flex justify-end">{instanceMenu}</div>}
             <div className="flex items-start justify-between gap-2">
                 <dl className="grid w-max grid-cols-[auto_auto] items-center gap-x-3 gap-y-1">

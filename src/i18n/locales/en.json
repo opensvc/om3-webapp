@@ -308,27 +308,12 @@
       "tokenNotFound": "Auth token not found.",
       "conflict": "The configuration was changed by someone else since you started editing it. Your changes are not saved.",
       "updateFailed": "Failed to update config: {{message}}",
-      "updateFailedStatus": "Error: Failed to update config: {{status}}",
-      "updated": "Configuration updated successfully",
-      "updating": "Updating configuration…",
       "fileRequired": "Configuration file is required.",
-      "error": "Error: {{message}}",
       "paramRequired": "Parameter input is required.",
       "invalidParam": "Invalid parameter: {{name}}",
       "invalidList": "Invalid value for {{keyword}}: must be comma-separated lowercase strings",
-      "addError": "Error adding parameter {{keyword}}: {{message}}",
-      "added_one": "Successfully added {{count}} parameter(s)",
-      "added_other": "Successfully added {{count}} parameter(s)",
       "unknownParam": "unknown",
       "unsetErrorUnknown": "Error unsetting parameter {{keyword}}",
-      "unsetError": "Error unsetting parameter {{keyword}}: {{message}}",
-      "unsetFailedStatus": "Error unsetting parameter {{keyword}}: Failed to unset parameter {{keyword}}: {{status}}",
-      "unset_one": "Successfully unset {{count}} parameter(s)",
-      "unset_other": "Successfully unset {{count}} parameter(s)",
-      "deleteError": "Error deleting section {{section}}: {{message}}",
-      "deleteFailedStatus": "Error deleting section {{section}}: Failed to delete section {{section}}: {{status}}",
-      "deleted_one": "Successfully deleted {{count}} section(s)",
-      "deleted_other": "Successfully deleted {{count}} section(s)",
       "noSelection": "No selection made"
     },
     "keywordHelp": {
@@ -443,10 +428,26 @@
       "stop": "Stop",
       "start": "Start",
       "target": "the {{id}} stream of {{node}}",
-      "requested": "{{action}} of {{target}} requested.",
-      "failed": "{{action}} of {{target}} could not be requested: {{message}}",
-      "confirmTitle": "Stop a heartbeat stream",
-      "confirmStop": "Stop the {{id}} stream of {{node}}? The node stops sending or receiving on it until it is started again."
+      "restart": "Restart",
+      "menu": "Actions",
+      "selectHint": "Select streams to start, stop or restart them",
+      "selectStream": "Select the {{id}} stream of {{node}}",
+      "selectAll": "Select all the streams shown",
+      "clear": "Clear the selection",
+      "confirm": {
+        "stop": {
+          "title_one": "Stop a heartbeat stream",
+          "title_other": "Stop {{count}} heartbeat streams",
+          "text_one": "Stop this stream? The node stops sending or receiving on it until it is started again.",
+          "text_other": "Stop these streams? The nodes stop sending or receiving on them until they are started again."
+        },
+        "restart": {
+          "title_one": "Restart a heartbeat stream",
+          "title_other": "Restart {{count}} heartbeat streams",
+          "text_one": "Restart this stream? It stops, then starts again: the peer may be missed for a moment.",
+          "text_other": "Restart these streams? Each stops, then starts again: the peers may be missed for a moment."
+        }
+      }
     },
     "routine": {
       "running": "started",
@@ -659,23 +660,10 @@
       "hiddenSecret": "The content of a secret is hidden: type, paste or drop new content to replace it.",
       "hiddenBinary": "The content is binary: drop or browse a file to replace it, or type new content."
     },
-    "feedback": {
-      "deleting": "Deleting key {{key}}…",
-      "deleted": "Key '{{key}}' deleted successfully",
-      "creating": "Creating key {{key}}…",
-      "created": "Key '{{key}}' created successfully",
-      "updating": "Updating key {{key}}…",
-      "updated": "Key '{{key}}' updated successfully",
-      "deletingMany": "Deleting {{count}} keys…",
-      "deletedMany": "{{count}} keys deleted successfully"
-    },
     "errors": {
       "noToken": "Auth token not found.",
       "fetchKeys": "Failed to fetch keys: {{status}}",
       "fetchContent": "Failed to fetch key content: {{status}}",
-      "delete": "Failed to delete key: {{status}}",
-      "create": "Failed to create key: {{status}}",
-      "update": "Failed to update key: {{status}}",
       "generic": "Error: {{message}}"
     },
     "selectKey": "Select key {{key}}",
@@ -1034,13 +1022,7 @@
       "selected_other": "{{count}} nodes"
     },
     "feedback": {
-      "noToken": "Authentication token not found",
-      "executing": "Requesting '{{action}}'…",
-      "succeeded_one": "'{{action}}' requested on {{count}} node.",
-      "succeeded_other": "'{{action}}' requested on {{count}} nodes.",
-      "partial": "'{{action}}' requested on {{ok}} node(s), not on {{errors}}.",
-      "failed_one": "'{{action}}' could not be requested on the node.",
-      "failed_other": "'{{action}}' could not be requested on any of the {{count}} nodes."
+      "noToken": "Authentication token not found"
     },
     "row": {
       "lost": "No status: the node is gone or not heard from",
@@ -1075,7 +1057,6 @@
     "loadError": "Could not read it: {{message}}",
     "none": "None",
     "actions": "Node actions",
-    "actionFailed": "{{action}} failed: {{message}}",
     "tabs": {
       "status": "Status",
       "inventory": "Inventory",
@@ -1175,13 +1156,6 @@
     "dialogTarget": "object {{name}}",
     "feedback": {
       "authTokenNotFound": "Auth token not found.",
-      "executingOnObject": "Requesting {{action}} on the object…",
-      "executingOnNode": "Requesting {{action}} on node {{node}}…",
-      "failed": "{{action}} could not be requested: HTTP {{status}}",
-      "failedWithDetail": "{{action}} could not be requested: HTTP {{status}} - {{detail}}",
-      "succeededOnObject": "'{{action}}' requested on the object",
-      "succeededOnNode": "'{{action}}' requested on node '{{node}}'",
-      "error": "Error: {{message}}",
       "configUpdated": "Instance configuration updated"
     },
     "logs": {
@@ -1225,9 +1199,6 @@
       "exists": "{{path}} already exists."
     },
     "feedback": {
-      "created": "{{path}} created.",
-      "createdProvisioning": "{{path}} created; its provisioning is requested.",
-      "createdProvisionFailed": "{{path}} created, but its provisioning could not be requested.",
       "failed": "The object could not be created: {{message}}",
       "copyFailed": "The configuration of {{path}} could not be read: {{message}}",
       "readFailed": "The file could not be read: {{message}}"
@@ -1277,13 +1248,7 @@
       "unprovisioned": "Unprovisioned"
     },
     "feedback": {
-      "authTokenNotFound": "Authentication token not found",
-      "executing": "Requesting '{{action}}'…",
-      "succeeded_one": "'{{action}}' requested on {{count}} object.",
-      "succeeded_other": "'{{action}}' requested on {{count}} objects.",
-      "partial": "'{{action}}' requested on {{ok}} object(s), not on {{errors}}.",
-      "failed_one": "'{{action}}' could not be requested on the object.",
-      "failed_other": "'{{action}}' could not be requested on any of the {{count}} objects."
+      "authTokenNotFound": "Authentication token not found"
     },
     "dialogTarget": {
       "object": "object {{name}}",
@@ -1516,11 +1481,6 @@
       "cell": "{{rid}} on {{where}}",
       "cluster": "the cluster, on all its nodes"
     },
-    "feedback": {
-      "running": "Requesting {{action}} on {{subject}}…",
-      "accepted": "{{action}} on {{subject}}: requested",
-      "failed": "{{action}} on {{subject}} could not be requested: {{detail}}"
-    },
     "selectInstance": "Select the instance on {{node}}",
     "selectResource": "Select {{rid}} on all its nodes",
     "selectCell": "Select {{rid}} on {{node}}",
@@ -1592,11 +1552,6 @@
     "pid": "PID {{pid}}",
     "startedAt": "started",
     "confirmTitle": "Confirm: {{action}}",
-    "feedback": {
-      "requesting": "Requesting {{action}}…",
-      "requested": "{{action}} requested.",
-      "failed": "{{action}} could not be requested: {{message}}"
-    },
     "actions": {
       "label": "Actions",
       "start": "Start",
@@ -1636,7 +1591,8 @@
         "stop": "Stop the {{listener}} listener of {{node}}? Its API stops answering over the network, this page included if it goes through {{node}}.",
         "restart": "Restart the {{listener}} listener of {{node}}? Its API stops answering for a moment."
       },
-      "actionsOf": "Actions on the listener {{listener}}"
+      "actionsOf": "Actions on the listener {{listener}}",
+      "target": "the {{listener}} listener of {{node}}"
     },
     "heartbeats": {
       "title": "Heartbeats",
@@ -1659,7 +1615,8 @@
       "title": "Executions",
       "filter": "Filter executions",
       "terminate": "Terminate",
-      "confirm": "Send TERM to \"{{command}}\" on {{node}}?"
+      "confirm": "Send TERM to \"{{command}}\" on {{node}}?",
+      "target": "\"{{command}}\" on {{node}}"
     },
     "dns": {
       "title": "DNS zone",
@@ -1696,5 +1653,53 @@
         "encap": "encapsulated"
       }
     }
+  },
+  "actionTray": {
+    "label": "Actions asked",
+    "title": "Actions",
+    "running_one": "{{count}} running",
+    "running_other": "{{count}} running",
+    "ended_one": "{{count}} ended",
+    "ended_other": "{{count}} ended",
+    "clear": "Clear the ended actions",
+    "dismiss": "Dismiss {{action}} on {{subject}}",
+    "steps": "The runs of {{action}} on the nodes",
+    "acceptedBy": "accepted by {{node}}",
+    "noStep": "Waiting for the nodes to run it…",
+    "exitCode": "exit code {{code}}",
+    "gone": "the daemon no longer knows how it ended",
+    "reasons": {
+      "unknownObject": "the object is not known",
+      "alreadyFrozen": "already frozen",
+      "alreadyUnfrozen": "not frozen"
+    },
+    "monitor": "{{node}}: the monitor is {{state}}",
+    "subjects": {
+      "cluster": "the cluster",
+      "instance": "{{path}} on {{node}}",
+      "resource": "{{rid}} of {{path}} on {{node}}"
+    },
+    "states": {
+      "running": "Running",
+      "succeeded": "Succeeded",
+      "failed": "Failed",
+      "aborted": "Aborted",
+      "refused": "Refused",
+      "unknown": "Outcome unknown"
+    },
+    "writes": {
+      "configFile": "Update the configuration",
+      "set": "Set {{keyword}} = {{value}}",
+      "unset": "Unset {{keyword}}",
+      "deleteSection": "Delete section {{section}}",
+      "keyCreate": "Add key {{key}}",
+      "keyUpdate": "Update key {{key}}",
+      "keyDelete": "Delete key {{key}}",
+      "claimsUpdate": "Update the claims",
+      "claimDelete": "Remove claim {{section}}",
+      "objectCreate": "Create",
+      "namespaceConfigCreate": "Create the configuration of the namespace"
+    },
+    "noNews": "no news of it within {{seconds}} s"
   }
 }

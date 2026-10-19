@@ -6,6 +6,10 @@ import {vi} from 'vitest';
 import ObjectDetail, {getResourceType, parseProvisionedState} from '../ObjectDetails';
 import useEventStore from '../../hooks/useEventStore.js';
 import logger from '../../utils/logger';
+import {useActionTracker} from '../../app/action-tracker';
+
+/** What the actions tray holds, the latest first: action, state, reason. */
+const tray = () => useActionTracker.getState().tracked.map((e) => [e.action, e.state, e.error ?? null]);
 
 // ── Hoisted variables for use in vi.mock factories ──────────────────────
 const {
@@ -445,6 +449,7 @@ describe('ObjectDetail Component', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
+        useActionTracker.setState({tracked: [], revealed: 0});
         mockUseNavigate.mockReturnValue(mockNavigate);
         mockLocalStorage.getItem.mockReturnValue('mock-token');
         global.fetch = vi.fn(defaultFetchMock);
@@ -800,9 +805,7 @@ describe('ObjectDetail Component', () => {
             await openMenu();
             await userEvent.click(getMenuItemByLabel('Start'));
             await confirmDialog(await findActionDialog());
-            await waitFor(() =>
-                expect(screen.getAllByRole('alert').some((a) => a.textContent.includes('Network error'))).toBe(true)
-            );
+            await waitFor(() => expect(tray()).toEqual([['start', 'refused', expect.stringContaining('Network error')]]));
         });
 
         test.each([[403, 'Forbidden'], [500, 'Server error']])('HTTP %i', async (status, msg) => {
@@ -811,9 +814,7 @@ describe('ObjectDetail Component', () => {
             await openMenu();
             await userEvent.click(getMenuItemByLabel('Start'));
             await confirmDialog(await findActionDialog());
-            await waitFor(() =>
-                expect(screen.getAllByRole('alert').some((a) => a.textContent.includes(`could not be requested: HTTP ${status}`))).toBe(true)
-            );
+            await waitFor(() => expect(tray()).toEqual([['start', 'refused', expect.stringMatching(new RegExp(`^HTTP ${status}`))]]));
         });
 
         test('missing auth token', async () => {
@@ -911,13 +912,14 @@ describe('ObjectDetail Component', () => {
 
     test('closes snackbar via close button', async () => {
         await renderReadySvc();
+        mockLocalStorage.getItem.mockReturnValue(null);
         await userEvent.click(screen.getByRole('button', {name: /object actions/i}));
         await screen.findByRole('menu');
         await userEvent.click(getMenuItemByLabel('Start'));
         await confirmDialog(await findActionDialog());
-        await waitFor(() => expect(feedbackWith("'start' requested on the object")).toBeInTheDocument());
-        await user.click(within(feedbackWith("'start' requested on the object")).getByRole('button', {name: 'Close'}));
-        await waitFor(() => expect(feedbackWith("'start' requested on the object")).toBeUndefined());
+        await waitFor(() => expect(feedbackWith('Auth token not found')).toBeInTheDocument());
+        await user.click(within(feedbackWith('Auth token not found')).getByRole('button', {name: 'Close'}));
+        await waitFor(() => expect(feedbackWith('Auth token not found')).toBeUndefined());
     });
 
     // ── Logs drawer ──────────────────────────────────────────────────────

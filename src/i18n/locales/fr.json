@@ -308,27 +308,12 @@
       "tokenNotFound": "Jeton d'authentification introuvable.",
       "conflict": "La configuration a été modifiée par quelqu'un d'autre depuis le début de votre édition. Vos modifications ne sont pas enregistrées.",
       "updateFailed": "Échec de la mise à jour de la configuration : {{message}}",
-      "updateFailedStatus": "Erreur : échec de la mise à jour de la configuration : {{status}}",
-      "updated": "Configuration mise à jour",
-      "updating": "Mise à jour de la configuration…",
       "fileRequired": "Le fichier de configuration est requis.",
-      "error": "Erreur : {{message}}",
       "paramRequired": "Un paramètre est requis.",
       "invalidParam": "Paramètre invalide : {{name}}",
       "invalidList": "Valeur invalide pour {{keyword}} : une liste de chaînes en minuscules séparées par des virgules est attendue",
-      "addError": "Erreur lors de l'ajout du paramètre {{keyword}} : {{message}}",
-      "added_one": "{{count}} paramètre ajouté",
-      "added_other": "{{count}} paramètres ajoutés",
       "unknownParam": "inconnu",
       "unsetErrorUnknown": "Erreur lors de la désaffectation du paramètre {{keyword}}",
-      "unsetError": "Erreur lors de la désaffectation du paramètre {{keyword}} : {{message}}",
-      "unsetFailedStatus": "Erreur lors de la désaffectation du paramètre {{keyword}} : {{status}}",
-      "unset_one": "{{count}} paramètre désaffecté",
-      "unset_other": "{{count}} paramètres désaffectés",
-      "deleteError": "Erreur lors de la suppression de la section {{section}} : {{message}}",
-      "deleteFailedStatus": "Erreur lors de la suppression de la section {{section}} : {{status}}",
-      "deleted_one": "{{count}} section supprimée",
-      "deleted_other": "{{count}} sections supprimées",
       "noSelection": "Aucune sélection"
     },
     "keywordHelp": {
@@ -443,10 +428,26 @@
       "stop": "Arrêter",
       "start": "Démarrer",
       "target": "le flux {{id}} de {{node}}",
-      "requested": "{{action}} : demandé pour {{target}}.",
-      "failed": "{{action}} : n'a pas pu être demandé pour {{target}} : {{message}}",
-      "confirmTitle": "Arrêter un flux de heartbeat",
-      "confirmStop": "Arrêter le flux {{id}} de {{node}} ? Le nœud cesse d'y émettre ou d'y recevoir jusqu'à ce qu'il soit redémarré."
+      "restart": "Redémarrer",
+      "menu": "Actions",
+      "selectHint": "Sélectionnez des flux pour les démarrer, les arrêter ou les redémarrer",
+      "selectStream": "Sélectionner le flux {{id}} de {{node}}",
+      "selectAll": "Sélectionner tous les flux affichés",
+      "clear": "Vider la sélection",
+      "confirm": {
+        "stop": {
+          "title_one": "Arrêter un flux de heartbeat",
+          "title_other": "Arrêter {{count}} flux de heartbeat",
+          "text_one": "Arrêter ce flux ? Le nœud cesse d'y émettre ou d'y recevoir jusqu'à ce qu'il soit redémarré.",
+          "text_other": "Arrêter ces flux ? Les nœuds cessent d'y émettre ou d'y recevoir jusqu'à ce qu'ils soient redémarrés."
+        },
+        "restart": {
+          "title_one": "Redémarrer un flux de heartbeat",
+          "title_other": "Redémarrer {{count}} flux de heartbeat",
+          "text_one": "Redémarrer ce flux ? Il s'arrête puis redémarre : le pair peut manquer un instant.",
+          "text_other": "Redémarrer ces flux ? Chacun s'arrête puis redémarre : les pairs peuvent manquer un instant."
+        }
+      }
     },
     "routine": {
       "running": "démarrée",
@@ -659,23 +660,10 @@
       "hiddenSecret": "Le contenu d'un secret est masqué : saisissez, collez ou déposez un nouveau contenu pour le remplacer.",
       "hiddenBinary": "Le contenu est binaire : déposez ou choisissez un fichier pour le remplacer, ou saisissez un nouveau contenu."
     },
-    "feedback": {
-      "deleting": "Suppression de la clé {{key}}…",
-      "deleted": "Clé « {{key}} » supprimée",
-      "creating": "Création de la clé {{key}}…",
-      "created": "Clé « {{key}} » créée",
-      "updating": "Mise à jour de la clé {{key}}…",
-      "updated": "Clé « {{key}} » mise à jour",
-      "deletingMany": "Suppression de {{count}} clés…",
-      "deletedMany": "{{count}} clés supprimées"
-    },
     "errors": {
       "noToken": "Jeton d'authentification introuvable.",
       "fetchKeys": "Échec de la récupération des clés : {{status}}",
       "fetchContent": "Échec de la récupération du contenu de la clé : {{status}}",
-      "delete": "Échec de la suppression de la clé : {{status}}",
-      "create": "Échec de la création de la clé : {{status}}",
-      "update": "Échec de la mise à jour de la clé : {{status}}",
       "generic": "Erreur : {{message}}"
     },
     "selectKey": "Sélectionner la clé {{key}}",
@@ -1034,13 +1022,7 @@
       "selected_other": "{{count}} nœuds"
     },
     "feedback": {
-      "noToken": "Jeton d'authentification introuvable",
-      "executing": "Demande de « {{action}} »…",
-      "succeeded_one": "« {{action}} » demandé sur {{count}} nœud.",
-      "succeeded_other": "« {{action}} » demandé sur {{count}} nœuds.",
-      "partial": "« {{action}} » demandé sur {{ok}} nœud(s), pas sur {{errors}}.",
-      "failed_one": "« {{action}} » n'a pas pu être demandé sur le nœud.",
-      "failed_other": "« {{action}} » n'a pu être demandé sur aucun des {{count}} nœuds."
+      "noToken": "Jeton d'authentification introuvable"
     },
     "row": {
       "lost": "Aucun état : le nœud est perdu ou ne répond pas",
@@ -1075,7 +1057,6 @@
     "loadError": "Lecture impossible : {{message}}",
     "none": "Aucun",
     "actions": "Actions du nœud",
-    "actionFailed": "{{action}} a échoué : {{message}}",
     "tabs": {
       "status": "État",
       "inventory": "Inventaire",
@@ -1175,13 +1156,6 @@
     "dialogTarget": "l'objet {{name}}",
     "feedback": {
       "authTokenNotFound": "Jeton d'authentification introuvable.",
-      "executingOnObject": "Demande de {{action}} sur l'objet…",
-      "executingOnNode": "Demande de {{action}} sur le nœud {{node}}…",
-      "failed": "{{action}} n'a pas pu être demandé : HTTP {{status}}",
-      "failedWithDetail": "{{action}} n'a pas pu être demandé : HTTP {{status}} - {{detail}}",
-      "succeededOnObject": "« {{action}} » demandé sur l'objet",
-      "succeededOnNode": "« {{action}} » demandé sur le nœud « {{node}} »",
-      "error": "Erreur : {{message}}",
       "configUpdated": "Configuration de l'instance mise à jour"
     },
     "logs": {
@@ -1225,9 +1199,6 @@
       "exists": "{{path}} existe déjà."
     },
     "feedback": {
-      "created": "{{path}} créé.",
-      "createdProvisioning": "{{path}} créé ; son provisionnement est demandé.",
-      "createdProvisionFailed": "{{path}} créé, mais son provisionnement n'a pas pu être demandé.",
       "failed": "L'objet n'a pas pu être créé : {{message}}",
       "copyFailed": "La configuration de {{path}} n'a pas pu être lue : {{message}}",
       "readFailed": "Le fichier n'a pas pu être lu : {{message}}"
@@ -1277,13 +1248,7 @@
       "unprovisioned": "Non provisionné"
     },
     "feedback": {
-      "authTokenNotFound": "Jeton d'authentification introuvable",
-      "executing": "Demande de « {{action}} »…",
-      "succeeded_one": "« {{action}} » demandé sur {{count}} objet.",
-      "succeeded_other": "« {{action}} » demandé sur {{count}} objets.",
-      "partial": "« {{action}} » demandé sur {{ok}} objet(s), pas sur {{errors}}.",
-      "failed_one": "« {{action}} » n'a pas pu être demandé sur l'objet.",
-      "failed_other": "« {{action}} » n'a pu être demandé sur aucun des {{count}} objets."
+      "authTokenNotFound": "Jeton d'authentification introuvable"
     },
     "dialogTarget": {
       "object": "l'objet {{name}}",
@@ -1516,11 +1481,6 @@
       "cell": "{{rid}} sur {{where}}",
       "cluster": "le cluster, sur tous ses nœuds"
     },
-    "feedback": {
-      "running": "Demande de {{action}} sur {{subject}}…",
-      "accepted": "{{action}} sur {{subject}} : demandé",
-      "failed": "{{action}} sur {{subject}} n'a pas pu être demandé : {{detail}}"
-    },
     "selectInstance": "Sélectionner l'instance sur {{node}}",
     "selectResource": "Sélectionner {{rid}} sur tous ses nœuds",
     "selectCell": "Sélectionner {{rid}} sur {{node}}",
@@ -1592,11 +1552,6 @@
     "pid": "PID {{pid}}",
     "startedAt": "démarré",
     "confirmTitle": "Confirmer : {{action}}",
-    "feedback": {
-      "requesting": "Demande de {{action}}…",
-      "requested": "{{action}} demandé.",
-      "failed": "{{action}} n'a pas pu être demandé : {{message}}"
-    },
     "actions": {
       "label": "Actions",
       "start": "Démarrer",
@@ -1636,7 +1591,8 @@
         "stop": "Arrêter le listener {{listener}} de {{node}} ? Son API ne répond plus par le réseau, cette page comprise si elle passe par {{node}}.",
         "restart": "Redémarrer le listener {{listener}} de {{node}} ? Son API ne répond plus un instant."
       },
-      "actionsOf": "Actions sur le listener {{listener}}"
+      "actionsOf": "Actions sur le listener {{listener}}",
+      "target": "l'écouteur {{listener}} de {{node}}"
     },
     "heartbeats": {
       "title": "Heartbeats",
@@ -1659,7 +1615,8 @@
       "title": "Exécutions",
       "filter": "Filtrer les exécutions",
       "terminate": "Terminer",
-      "confirm": "Envoyer TERM à « {{command}} » sur {{node}} ?"
+      "confirm": "Envoyer TERM à « {{command}} » sur {{node}} ?",
+      "target": "« {{command}} » sur {{node}}"
     },
     "dns": {
       "title": "Zone DNS",
@@ -1696,5 +1653,53 @@
         "encap": "encapsulée"
       }
     }
+  },
+  "actionTray": {
+    "label": "Actions demandées",
+    "title": "Actions",
+    "running_one": "{{count}} en cours",
+    "running_other": "{{count}} en cours",
+    "ended_one": "{{count}} terminée",
+    "ended_other": "{{count}} terminées",
+    "clear": "Effacer les actions terminées",
+    "dismiss": "Retirer {{action}} sur {{subject}}",
+    "steps": "Les exécutions de {{action}} sur les nœuds",
+    "acceptedBy": "acceptée par {{node}}",
+    "noStep": "En attente de son exécution par les nœuds…",
+    "exitCode": "code de sortie {{code}}",
+    "gone": "le démon ne sait plus comment elle s'est terminée",
+    "reasons": {
+      "unknownObject": "l'objet est inconnu",
+      "alreadyFrozen": "déjà gelé",
+      "alreadyUnfrozen": "pas gelé"
+    },
+    "monitor": "{{node}} : le moniteur est {{state}}",
+    "subjects": {
+      "cluster": "le cluster",
+      "instance": "{{path}} sur {{node}}",
+      "resource": "{{rid}} de {{path}} sur {{node}}"
+    },
+    "states": {
+      "running": "En cours",
+      "succeeded": "Réussie",
+      "failed": "Échouée",
+      "aborted": "Abandonnée",
+      "refused": "Refusée",
+      "unknown": "Issue inconnue"
+    },
+    "writes": {
+      "configFile": "Mettre à jour la configuration",
+      "set": "Définir {{keyword}} = {{value}}",
+      "unset": "Retirer {{keyword}}",
+      "deleteSection": "Supprimer la section {{section}}",
+      "keyCreate": "Ajouter la clé {{key}}",
+      "keyUpdate": "Mettre à jour la clé {{key}}",
+      "keyDelete": "Supprimer la clé {{key}}",
+      "claimsUpdate": "Mettre à jour les réclamations",
+      "claimDelete": "Retirer la réclamation {{section}}",
+      "objectCreate": "Créer",
+      "namespaceConfigCreate": "Créer la configuration du namespace"
+    },
+    "noNews": "aucune nouvelle sous {{seconds}} s"
   }
 }

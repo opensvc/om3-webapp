@@ -87,6 +87,10 @@ import {clearKeyStats} from '../../hooks/useKeyStats';
 import useFetchDaemonStatus from '../../hooks/useFetchDaemonStatus';
 import {useMediaQuery} from '../../ui/lib/media';
 import {useLocation} from 'react-router-dom';
+import {useActionTracker} from '../../app/action-tracker';
+
+/** What the actions tray holds, the latest first: action, subject, state, reason. */
+const tray = () => useActionTracker.getState().tracked.map((e) => [e.action, e.subject, e.state, e.error ?? null]);
 
 // ---------- helpers ----------
 let originalConsoleError;
@@ -295,6 +299,7 @@ beforeEach(() => {
     mockRemoveObject.mockClear();
     mockSetObjectStatuses.mockClear();
     vi.mocked(useMediaQuery).mockReset();
+    useActionTracker.setState({tracked: [], revealed: 0});
     cleanup();
 });
 
@@ -775,7 +780,9 @@ describe('Objects Component', () => {
             await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/objects?name=t&list=secrets&sel=test-ns%2Fsec%2Ftls&tab=keys'));
             expect(global.fetch).toHaveBeenCalledWith('/api/object/path/test-ns/sec/tls/config/file', expect.objectContaining({method: 'POST'}));
             expect(screen.queryByRole('dialog', {name: 'New object'})).not.toBeInTheDocument();
-            expect(screen.getByText('test-ns/sec/tls created.')).toBeInTheDocument();
+            // Its creation, the actions tray says: no message of the list's own.
+            expect(tray()).toContainEqual(['create', 'test-ns/sec/tls', 'succeeded', null]);
+            expect(screen.queryByText('test-ns/sec/tls created.')).not.toBeInTheDocument();
         });
 
         test('created from All, the object opens over All, which lists it too', async () => {
@@ -1056,11 +1063,9 @@ describe('Objects Component', () => {
                     expect.any(Object)
                 )
             );
-            await waitFor(() =>
-                expect(screen.getByRole('status')).toHaveTextContent(/'restart' requested on 1 object\./i)
-            );
-            expect(getFeedback()).toHaveClass('text-state-up');
-            expect(mockForceFlush).toHaveBeenCalled();
+            // Its progress, the actions tray says: no message of its own.
+            await waitFor(() => expect(mockForceFlush).toHaveBeenCalled());
+            expect(screen.queryByRole('status', {name: /requested/i})).not.toBeInTheDocument();
             expect(screen.queryByRole('checkbox', {checked: true})).not.toBeInTheDocument();
         });
 
@@ -1104,7 +1109,7 @@ describe('Objects Component', () => {
             expect(callArg['test-ns/svc/test1'].frozen).toBe('frozen');
         });
 
-        test('freezing an already frozen object is counted as error', async () => {
+        test('an object already frozen is not frozen again, said so in the actions tray', async () => {
             setup();
             await waitForLoad();
             selectRow('test-ns/svc/test1');
@@ -1113,11 +1118,7 @@ describe('Objects Component', () => {
             await clickMenuItem('Freeze');
             await confirmDialog();
             expect(global.fetch).toHaveBeenCalledTimes(1);
-            await waitFor(() =>
-                expect(screen.getByRole('alert')).toHaveTextContent(
-                    /requested on 1 object\(s\), not on 1/i
-                )
-            );
+            await waitFor(() => expect(tray()).toContainEqual(['freeze', 'test-ns/svc/test2', 'refused', 'already frozen']));
             expect(mockSetObjectStatuses).toHaveBeenCalled();
         });
 
@@ -1142,7 +1143,7 @@ describe('Objects Component', () => {
             expect(mockForceFlush).toHaveBeenCalled();
         });
 
-        test('failed action shows error alert', async () => {
+        test('an action refused is said in the actions tray, with its status', async () => {
             setup();
             global.fetch = vi.fn(() => Promise.resolve({ok: false, status: 500}));
             await waitForLoad();
@@ -1150,27 +1151,26 @@ describe('Objects Component', () => {
             openActionsMenu();
             await clickMenuItem('Restart');
             await confirmDialog();
-            await waitFor(() =>
-                expect(screen.getByRole('alert')).toHaveTextContent(/could not be requested/i)
-            );
+            await waitFor(() => expect(tray()).toEqual([['restart', 'test-ns/svc/test1', 'refused', expect.stringMatching(/^HTTP 500/)]]));
         });
 
-        test('partial success shows warning', async () => {
+        test('of several objects, the one refused is said in the actions tray, the other followed', async () => {
             setup();
             await waitForLoad();
             selectRow('test-ns/svc/test1');
             selectRow('test-ns/svc/test2');
             global.fetch = vi.fn()
-                .mockResolvedValueOnce({ok: true})
-                .mockResolvedValueOnce({ok: false, status: 500});
+                .mockResolvedValueOnce({ok: true, clone: () => ({json: async () => ({orchestration_id: 'o1', node: 'node1'})})})
+                .mockResolvedValueOnce({ok: false, status: 500})
+                .mockImplementation(() => new Promise(() => undefined));
             openActionsMenu();
             await clickMenuItem('Restart');
             await confirmDialog();
-            await waitFor(() =>
-                expect(screen.getByRole('alert')).toHaveTextContent(
-                    /requested on 1 object\(s\), not on 1/i
-                )
-            );
+            await waitFor(() => expect(tray()).toHaveLength(2));
+            expect(tray()).toEqual(expect.arrayContaining([
+                ['restart', 'test-ns/svc/test1', 'running', null],
+                ['restart', 'test-ns/svc/test2', 'refused', expect.stringMatching(/^HTTP 500/)],
+            ]));
         });
 
         test('network error', async () => {
@@ -1181,11 +1181,7 @@ describe('Objects Component', () => {
             openActionsMenu();
             await clickMenuItem('Restart');
             await confirmDialog();
-            await waitFor(() =>
-                expect(screen.getByRole('alert')).toHaveTextContent(
-                    /could not be requested on the object/i
-                )
-            );
+            await waitFor(() => expect(tray()).toEqual([['restart', 'test-ns/svc/test1', 'refused', 'Network error']]));
         });
 
         test('token missing prevents action', async () => {
@@ -1201,7 +1197,7 @@ describe('Objects Component', () => {
             );
         });
 
-        test('action on an object missing from objectStatus is counted as an error', async () => {
+        test('the objects acted on are the ones the list holds, whatever getState says', async () => {
             setup();
             await waitForLoad();
             selectRow('test-ns/svc/test1');
@@ -1214,7 +1210,12 @@ describe('Objects Component', () => {
             openActionsMenu();
             await clickMenuItem('Restart');
             await confirmDialog();
-            await waitFor(() => expect(getFeedback()).toHaveTextContent(/'restart'/));
+            await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(2));
+            // Answered with nothing to follow: done.
+            await waitFor(() => expect(tray()).toEqual(expect.arrayContaining([
+                ['restart', 'test-ns/svc/test1', 'succeeded', null],
+                ['restart', 'test-ns/svc/test2', 'succeeded', null],
+            ])));
         });
 
         test('object removed from objectStatus after selection is treated as an error (rawObj missing)', async () => {
@@ -1241,11 +1242,7 @@ describe('Objects Component', () => {
             await clickMenuItem('Restart');
             await confirmDialog();
             await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(1));
-            await waitFor(() =>
-                expect(screen.getByRole('alert')).toHaveTextContent(
-                    /requested on 1 object\(s\), not on 1/i
-                )
-            );
+            await waitFor(() => expect(tray()).toContainEqual(['restart', 'test-ns/svc/test2', 'refused', 'the object is not known']));
         });
 
 
@@ -1295,6 +1292,8 @@ describe('Objects Component', () => {
                     expect.any(Object)
                 )
             );
+            // Done by the time the daemon answers (204): succeeded at once in the actions tray.
+            await waitFor(() => expect(tray()).toEqual([['enable', 'test-ns/svc/test1', 'succeeded', null]]));
         });
 
         test('Disable URL uses the object-path endpoint (no /action prefix)', async () => {
@@ -1823,12 +1822,13 @@ describe('Objects Component', () => {
         setup();
         await waitForLoad();
         selectRow('test-ns/svc/test1');
+        Storage.prototype.getItem = vi.fn().mockReturnValue(null);
         openActionsMenu();
         await clickMenuItem('Restart');
         await confirmDialog();
-        await waitFor(() => expect(getFeedback()).toHaveTextContent(/requested/i));
+        await waitFor(() => expect(getFeedback()).toHaveTextContent(/token not found/i));
         fireEvent.click(screen.getByRole('button', {name: 'Close'}));
-        await waitFor(() => expect(screen.queryByText(/requested/i)).not.toBeInTheDocument());
+        await waitFor(() => expect(screen.queryByText(/token not found/i)).not.toBeInTheDocument());
     });
 
     test('feedback hides itself after 4 seconds', async () => {
@@ -1837,21 +1837,22 @@ describe('Objects Component', () => {
         vi.useFakeTimers();
         try {
             selectRow('test-ns/svc/test1');
+            Storage.prototype.getItem = vi.fn().mockReturnValue(null);
             openActionsMenu();
             await clickMenuItem('Restart');
             fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', {name: /Confirm/i}));
             await act(async () => {
                 await vi.advanceTimersByTimeAsync(0);
             });
-            expect(getFeedback()).toHaveTextContent(/requested/i);
+            expect(getFeedback()).toHaveTextContent(/token not found/i);
             await act(async () => {
                 await vi.advanceTimersByTimeAsync(3900);
             });
-            expect(screen.getByText(/requested/i)).toBeInTheDocument();
+            expect(screen.getByText(/token not found/i)).toBeInTheDocument();
             await act(async () => {
                 await vi.advanceTimersByTimeAsync(200);
             });
-            expect(screen.queryByText(/requested/i)).not.toBeInTheDocument();
+            expect(screen.queryByText(/token not found/i)).not.toBeInTheDocument();
         } finally {
             vi.useRealTimers();
         }

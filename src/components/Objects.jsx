@@ -741,17 +741,10 @@ const Objects = () => {
         setSelectedObjects([]);
     }, [list]);
 
-    // Created, the object opens in its panel, over the tab it is listed in.
-    const handleCreated = useCallback((path, provisioning) => {
+    // Created, the object opens in its panel, over the tab it is listed in. Its
+    // creation and its provisioning, the actions tray says.
+    const handleCreated = useCallback((path) => {
         setCreateOpen(false);
-        notify(
-            provisioning === "requested"
-                ? t("createObject.feedback.createdProvisioning", {path})
-                : provisioning === "failed"
-                    ? t("createObject.feedback.createdProvisionFailed", {path})
-                    : t("createObject.feedback.created", {path}),
-            provisioning === "failed" ? "warning" : "success",
-        );
         // All lists it too: kept.
         const next = list === ALL_LIST ? ALL_LIST : listOf(path);
         const params = new URLSearchParams(location.search);
@@ -768,7 +761,7 @@ const Objects = () => {
         const {kind} = parseObjectName(path);
         if (kind === "cfg" || kind === "sec") params.set("tab", "keys");
         navigate(`${location.pathname}?${params.toString()}`);
-    }, [list, location.pathname, location.search, navigate, notify, t]);
+    }, [list, location.pathname, location.search, navigate]);
 
     const handleSelectAll = useCallback((e) => {
         setSelectedObjects(e.target.checked ? filteredObjectNames : []);

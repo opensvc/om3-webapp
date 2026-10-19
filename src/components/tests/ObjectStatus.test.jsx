@@ -5,6 +5,10 @@ import ObjectStatus from '../ObjectStatus';
 import {PanelHeaderContext} from '../../app/panel-header';
 import {MemoryRouter} from 'react-router-dom';
 import useEventStore from '../../hooks/useEventStore.js';
+import {useActionTracker} from '../../app/action-tracker';
+
+/** What the actions tray holds, the latest first: action, subject, state, reason. */
+const tray = () => useActionTracker.getState().tracked.map((e) => [e.action, e.subject, e.state, e.error ?? null]);
 import dns from '../../app/tests/fixtures/system-svc-dns.json';
 
 const {mockApiFetch, mockRetain, mockRelease} = vi.hoisted(() => ({
@@ -46,6 +50,7 @@ describe('ObjectStatus', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         localStorage.setItem('authToken', 'tok');
+        useActionTracker.setState({tracked: [], revealed: 0});
     });
 
     afterEach(() => {
@@ -301,7 +306,8 @@ describe('ObjectStatus', () => {
             expect(posted).toEqual([]);
             confirm('start');
             await waitFor(() => expect(posted).toEqual(['POST /api/object/path/system/svc/dns/action/start']));
-            expect(await screen.findByText('start on system/svc/dns: requested')).toBeInTheDocument();
+            // What comes of it, the actions tray says: no message on the board.
+            expect(screen.queryByText(/requested/)).not.toBeInTheDocument();
         });
 
         test('no abort in the menu: the orchestration in progress offers it, with its logs, by its global expect', async () => {
@@ -629,7 +635,7 @@ describe('ObjectStatus', () => {
                 fireEvent.click(within(dialog).getByRole('checkbox'));
                 fireEvent.click(within(dialog).getByRole('button', {name: 'Confirm freeze action'}));
                 await waitFor(() => expect(posted).toEqual(['POST /api/cluster/action/freeze']));
-                expect(await screen.findByText('freeze on the cluster, on all its nodes: requested')).toBeInTheDocument();
+                expect(screen.queryByText(/requested/)).not.toBeInTheDocument();
             });
 
             test('a node picked is frozen as a node, not as an instance of the cluster object', async () => {
@@ -650,7 +656,7 @@ describe('ObjectStatus', () => {
                 fireEvent.click(within(dialog).getByRole('checkbox'));
                 fireEvent.click(within(dialog).getByRole('button', {name: 'Confirm freeze action'}));
                 await waitFor(() => expect(posted).toEqual(['POST /api/node/name/dev3n2/action/freeze']));
-                expect(await screen.findByText('freeze on dev3n2: requested')).toBeInTheDocument();
+                expect(screen.queryByText(/requested/)).not.toBeInTheDocument();
             });
 
             test('the board follows the freeze of the nodes', async () => {
@@ -674,7 +680,7 @@ describe('ObjectStatus', () => {
             });
         });
 
-        test('says which node refused the action, and why', async () => {
+        test('says in the actions tray which node refused the action, and why', async () => {
             await ready();
             global.fetch = vi.fn((url) => Promise.resolve(url.includes('dev3n2')
                 ? {ok: false, status: 403, detail: 'forbidden'}
@@ -683,9 +689,11 @@ describe('ObjectStatus', () => {
             fireEvent.click(selectionButton());
             pick('Start');
             confirm('start');
-            expect(await screen.findByText(
-                'start on container#janitor of system/svc/dns on all nodes could not be requested: dev3n2: HTTP 403 forbidden',
-            )).toBeInTheDocument();
+            await waitFor(() => expect(tray()).toHaveLength(2));
+            expect(tray()).toEqual(expect.arrayContaining([
+                ['start', 'container#janitor of system/svc/dns on dev3n1', 'succeeded', null],
+                ['start', 'container#janitor of system/svc/dns on dev3n2', 'refused', 'HTTP 403 forbidden'],
+            ]));
         });
     });
 

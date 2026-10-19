@@ -6,6 +6,7 @@ import {vi} from 'vitest';
 import KeysSection from '../KeysSection';
 import {resetMaxKeySize} from '../../hooks/useMaxKeySize';
 import {CA_PEM, LEAF_PEM} from '../../utils/tests/certificates.fixture';
+import {useActionTracker} from '../../app/action-tracker';
 
 // ── Mocks ──────────────────────────────────────────────────────────────
 vi.mock('../../hooks/useEventStore.js', () => ({default: vi.fn()}));
@@ -23,6 +24,10 @@ Object.defineProperty(global, 'localStorage', {value: mockLocalStorage});
 
 const user = userEvent.setup();
 const openSnackbar = vi.fn();
+// The writes said in the actions tray, newest first.
+const tray = () => useActionTracker.getState().tracked.map((e) => [e.label, e.subject, e.state, e.error ?? null]);
+// No success nor progress said by snackbar: the tray says it.
+const noWriteSnackbar = () => expect(openSnackbar.mock.calls.filter(([, severity]) => severity !== 'error')).toEqual([]);
 const queryLoading = (container = screen) => container.queryByRole('status', {name: /^Loading/});
 const encodeText = (text) => new TextEncoder().encode(text);
 const makeMockBlob = (uint8Array) => ({
@@ -115,6 +120,7 @@ const fillNameAndSubmit = async (dialog, name, btnName) => {
 beforeEach(() => {
     vi.clearAllMocks();
     mockLocalStorage.getItem.mockReturnValue('mock-token');
+    useActionTracker.setState({tracked: [], revealed: 0});
 });
 
 // ── Tests ──────────────────────────────────────────────────────────────
@@ -173,6 +179,37 @@ describe('KeysSection', () => {
         expect(screen.queryByRole('dialog', {name: 'View Key: k'})).not.toBeInTheDocument();
     });
 
+    test('of the keys removed together, one refused: the others still go, each said in the tray', async () => {
+        const deleted = [];
+        mockFetch({
+            keys: [{name: 'k1', node: 'n', size: 1}, {name: 'k2', node: 'n', size: 2}],
+            methods: {DELETE: (url) => {
+                const name = new URL(url, 'http://x').searchParams.get('name');
+                if (name === 'k1') return Promise.resolve({ok: false, status: 403, json: async () => ({detail: 'forbidden'})});
+                deleted.push(name);
+                return Promise.resolve({ok: true});
+            }},
+        });
+        await renderAndWait('root/cfg/cfg1', 2);
+        await act(async () => {
+            await user.click(screen.getByRole('checkbox', {name: 'Select key k1'}));
+            await user.click(screen.getByRole('checkbox', {name: 'Select key k2'}));
+        });
+        await act(async () => {
+            await user.click(screen.getByRole('button', {name: 'Remove 2 keys'}));
+        });
+        const confirm = await screen.findByRole('dialog', {name: 'Confirm Key Deletion'});
+        await act(async () => {
+            await user.click(within(confirm).getByRole('button', {name: /Delete/}));
+        });
+        await waitFor(() => expect(tray()).toHaveLength(2));
+        expect(tray()).toEqual([
+            ['Delete key k2', 'root/cfg/cfg1', 'succeeded', null],
+            ['Delete key k1', 'root/cfg/cfg1', 'refused', expect.stringMatching(/^HTTP 403/)],
+        ]);
+        expect(deleted).toEqual(['k2']);
+    });
+
     test('the keys checked, removed together once confirmed; nothing checked, a hint', async () => {
         const deleted = [];
         mockFetch({
@@ -205,7 +242,11 @@ describe('KeysSection', () => {
         await act(async () => {
             await user.click(within(confirm).getByRole('button', {name: /Delete/}));
         });
-        await waitFor(() => expect(openSnackbar).toHaveBeenCalledWith('2 keys deleted successfully'));
+        // One entry a key, newest first.
+        await waitFor(() => expect(tray()).toEqual([
+            ['Delete key k3', 'root/cfg/cfg1', 'succeeded', null],
+            ['Delete key k1', 'root/cfg/cfg1', 'succeeded', null],
+        ]));
         expect(deleted).toEqual(['k1', 'k3']);
     });
 
@@ -361,10 +402,10 @@ describe('KeysSection', () => {
     });
 
     test.each([
-        ['create', 'Create', 'newKey', true, 'Creating key newKey…', "Key 'newKey' created successfully"],
-        ['edit', 'Update', 'updatedKey', true, 'Updating key updatedKey…', "Key 'updatedKey' updated successfully"],
-        ['delete', 'Delete', 'key1', false, 'Deleting key key1…', "Key 'key1' deleted successfully"],
-    ])('%s success', async (action, btn, name, needsFile, info, ok) => {
+        ['create', 'Create', 'newKey', true, 'Add key newKey'],
+        ['edit', 'Update', 'updatedKey', true, 'Update key updatedKey'],
+        ['delete', 'Delete', 'key1', false, 'Delete key key1'],
+    ])('%s success', async (action, btn, name, needsFile, label) => {
         mockFetch({keys: [{name: 'key1', node: 'n1', size: 10}]});
         await renderAndWait('root/cfg/cfg1', 1);
         const dialog = await openDialog(action);
@@ -376,8 +417,8 @@ describe('KeysSection', () => {
                 await user.click(within(dialog).getByRole('button', {name: /Delete/i}));
             });
         }
-        expect(openSnackbar).toHaveBeenCalledWith(info, 'info');
-        await waitFor(() => expect(openSnackbar).toHaveBeenCalledWith(ok));
+        await waitFor(() => expect(tray()).toEqual([[label, 'root/cfg/cfg1', 'succeeded', null]]));
+        noWriteSnackbar();
     });
 
     test('create empty content mode', async () => {
@@ -391,14 +432,14 @@ describe('KeysSection', () => {
         await act(async () => {
             await user.click(within(dialog).getByRole('button', {name: /Create/i}));
         });
-        await waitFor(() => expect(openSnackbar).toHaveBeenCalledWith("Key 'emptyKey' created successfully"));
+        await waitFor(() => expect(tray()).toEqual([['Add key emptyKey', 'root/cfg/cfg1', 'succeeded', null]]));
     });
 
     test.each([
-        ['create', 'POST', 'newKey', 'Create', 'Creating key newKey…', 'Failed to create key: 400'],
-        ['edit', 'PUT', 'updatedKey', 'Update', 'Updating key updatedKey…', 'Failed to update key: 400'],
-        ['delete', 'DELETE', 'key1', 'Delete', 'Deleting key key1…', 'Failed to delete key: 400'],
-    ])('%s HTTP error', async (action, method, name, btn, info, err) => {
+        ['create', 'POST', 'newKey', 'Create', 'Add key newKey'],
+        ['edit', 'PUT', 'updatedKey', 'Update', 'Update key updatedKey'],
+        ['delete', 'DELETE', 'key1', 'Delete', 'Delete key key1'],
+    ])('%s HTTP error', async (action, method, name, btn, label) => {
         mockFetch({
             keys: [{name: 'key1', node: 'n1', size: 10}],
             methods: {[method]: () => Promise.resolve({ok: false, status: 400})},
@@ -413,15 +454,15 @@ describe('KeysSection', () => {
                 await user.click(within(dialog).getByRole('button', {name: /Delete/i}));
             });
         }
-        expect(openSnackbar).toHaveBeenCalledWith(info, 'info');
-        await waitFor(() => expect(openSnackbar).toHaveBeenCalledWith(err, 'error'));
+        await waitFor(() => expect(tray()).toEqual([[label, 'root/cfg/cfg1', 'refused', expect.stringMatching(/^HTTP 400/)]]));
+        noWriteSnackbar();
     });
 
     test.each([
-        ['create', 'POST', 'newKey', 'Create', 'Creating key newKey…'],
-        ['edit', 'PUT', 'updatedKey', 'Update', 'Updating key updatedKey…'],
-        ['delete', 'DELETE', 'key1', 'Delete', 'Deleting key key1…'],
-    ])('%s network error', async (action, method, name, btn, info) => {
+        ['create', 'POST', 'newKey', 'Create', 'Add key newKey'],
+        ['edit', 'PUT', 'updatedKey', 'Update', 'Update key updatedKey'],
+        ['delete', 'DELETE', 'key1', 'Delete', 'Delete key key1'],
+    ])('%s network error', async (action, method, name, btn, label) => {
         mockFetch({
             keys: [{name: 'key1', node: 'n1', size: 10}],
             methods: {[method]: () => Promise.reject(new Error('Network error'))},
@@ -436,8 +477,8 @@ describe('KeysSection', () => {
                 await user.click(within(dialog).getByRole('button', {name: /Delete/i}));
             });
         }
-        expect(openSnackbar).toHaveBeenCalledWith(info, 'info');
-        await waitFor(() => expect(openSnackbar).toHaveBeenCalledWith('Error: Network error', 'error'));
+        await waitFor(() => expect(tray()).toEqual([[label, 'root/cfg/cfg1', 'refused', 'Network error']]));
+        noWriteSnackbar();
     });
 
     test.each([
@@ -812,7 +853,7 @@ describe('KeysSection', () => {
         await act(async () => {
             await user.click(within(dialog).getByRole('button', {name: /Delete/i}));
         });
-        await waitFor(() => expect(openSnackbar).toHaveBeenCalledWith("Key 'k1' deleted successfully"));
+        await waitFor(() => expect(tray()).toEqual([['Delete key k1', 'root/cfg/cfg1', 'succeeded', null]]));
         expect(await screen.findByText(/Auth token not found/i)).toBeInTheDocument();
     });
 
@@ -1071,7 +1112,7 @@ describe('KeysSection', () => {
             await user.click(within(dialog).getByRole('button', {name: /Update/i}));
         });
 
-        await waitFor(() => expect(openSnackbar).toHaveBeenCalledWith("Key 'sk' updated successfully"));
+        await waitFor(() => expect(tray()).toEqual([['Update key sk', 'root/sec/sec1', 'succeeded', null]]));
         expect(capturedBody).toBeInstanceOf(File);
         expect(fetchKeyCalled).toBe(false);
     });
@@ -1086,7 +1127,7 @@ describe('KeysSection', () => {
         await act(async () => {
             await user.click(within(dialog).getByRole('button', {name: /Delete/i}));
         });
-        await waitFor(() => expect(openSnackbar).toHaveBeenCalledWith("Key 'sk' deleted successfully"));
+        await waitFor(() => expect(tray()).toEqual([['Delete key sk', 'root/sec/sec1', 'succeeded', null]]));
     });
 
     test('secret create works normally', async () => {
@@ -1106,7 +1147,7 @@ describe('KeysSection', () => {
         await act(async () => {
             await user.click(within(dialog).getByRole('button', {name: /Create/i}));
         });
-        await waitFor(() => expect(openSnackbar).toHaveBeenCalledWith("Key 'newSecret' created successfully"));
+        await waitFor(() => expect(tray()).toEqual([['Add key newSecret', 'root/sec/sec1', 'succeeded', null]]));
     });
 
     test('secret view offers to hide the value it shows', async () => {
@@ -1163,7 +1204,7 @@ describe('KeysSection', () => {
             await user.click(within(dialog).getByRole('button', {name: /Update/i}));
         });
 
-        await waitFor(() => expect(openSnackbar).toHaveBeenCalledWith("Key 'sk' updated successfully"));
+        await waitFor(() => expect(tray()).toEqual([['Update key sk', 'root/sec/sec1', 'succeeded', null]]));
         expect(capturedBody).toBeInstanceOf(Blob);
         expect(capturedBody).not.toBeInstanceOf(File);
     });

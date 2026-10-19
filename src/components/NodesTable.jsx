@@ -3,6 +3,9 @@ import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus.jsx";
 import {retainEventReception} from "../eventSourceManager";
 import useEventStore from "../hooks/useEventStore.js";
 import {useClusterNodeOrder} from "../hooks/useClusterNodeOrder";
+import {trackRefused, trackResponse} from "../app/action-tracker";
+import {refusalReason} from "./objectActions";
+import {getResponseErrorMessage} from "../services/api.jsx";
 import NodeRow from "../components/NodeRow.jsx";
 import logger from '../utils/logger.js';
 import {URL_NODE} from "../config/apiPath.js";
@@ -136,27 +139,20 @@ const NodesTable = () => {
             return;
         }
 
-        const label = actionLabel(action);
-        setSnackbar({
-            open: true,
-            message: t("nodes.feedback.executing", {action: label}),
-            severity: "info",
-        });
-        let successCount = 0;
-        let errorCount = 0;
-
+        // What comes of each node, accepted, refused or left alone, the actions tray says.
         const nodesToProcess = pendingAction.node
             ? [pendingAction.node]
             : selectedNodes;
+        const refuse = (node, reason) => trackRefused({action, subject: node, reason});
 
         const promises = nodesToProcess.map(async (node) => {
             const isFrozen = isNodeFrozen(nodeStatus[node]);
             if (action === "freeze" && isFrozen) {
-                errorCount++;
+                refuse(node, t("actionTray.reasons.alreadyFrozen"));
                 return;
             }
             if (action === "unfreeze" && !isFrozen) {
-                errorCount++;
+                refuse(node, t("actionTray.reasons.alreadyUnfrozen"));
                 return;
             }
             const url = postActionUrl(node, action);
@@ -169,29 +165,18 @@ const NodesTable = () => {
                     },
                 });
                 if (!response.ok) {
-                    errorCount++;
                     logger.error(`Failed to execute ${action} on ${node}: HTTP error! status: ${response.status}`);
+                    refuse(node, refusalReason({status: response.status, detail: await getResponseErrorMessage(response)}));
                     return;
                 }
-                successCount++;
+                await trackResponse(response, {action, subject: node, node});
             } catch (error) {
                 logger.error(`Failed to execute ${action} on ${node}: ${error.message}`);
-                errorCount++;
+                refuse(node, error.message);
             }
         });
 
         await Promise.all(promises);
-        setSnackbar({
-            open: true,
-            message:
-                successCount && !errorCount
-                    ? t("nodes.feedback.succeeded", {action: label, count: successCount})
-                    : successCount
-                        ? t("nodes.feedback.partial", {action: label, ok: successCount, errors: errorCount})
-                        : t("nodes.feedback.failed", {action: label, count: nodesToProcess.length}),
-            severity: successCount && !errorCount ? "success" : successCount ? "warning" : "error",
-        });
-
         setSelectedNodes([]);
         setPendingAction(null);
     };

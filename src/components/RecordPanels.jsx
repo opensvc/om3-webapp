@@ -158,7 +158,7 @@ function NamespaceActions({namespace}) {
     const path = namespace === "root" ? "/" : `${namespace}/`;
     const exists = useEventStore((s) => s.objectStatus?.[path] !== undefined);
     const mayWrite = canWriteClaims(useGrants());
-    const {ask, running, feedback, dialogs} = useActionRunner(path);
+    const {ask, running, dialogs} = useActionRunner(path);
     const menu = (
         <MenuButton
             solid
@@ -182,7 +182,6 @@ function NamespaceActions({namespace}) {
     return (
         <>
             {header.actions !== null && createPortal(menu, header.actions)}
-            {feedback}
             {dialogs}
         </>
     );

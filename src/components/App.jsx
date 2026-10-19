@@ -25,6 +25,7 @@ import {prepareForNavigation} from "../eventSourceManager";
 import {isRenewalRefused} from "../context/serialRenewal";
 import {PeekPanel} from "./PeekPanel";
 import {PanelAnchor} from "../app/PanelAnchor";
+import {ActionTray} from "../app/ActionTray";
 import {useMediaQuery} from "../ui/lib/media";
 import {useRecordHistory} from "../app/record-history";
 import {ShortcutsHelp} from "../app/ShortcutsHelp";
@@ -478,6 +479,8 @@ const App = () => {
                                             <PeekPanel/>
                                             {!narrow && <PanelAnchor/>}
                                             <ShortcutsHelp/>
+                                            {/* The actions asked, followed to their end, whatever the view. */}
+                                            <ActionTray/>
                                         </>
                                     )}
                                 </Suspense>

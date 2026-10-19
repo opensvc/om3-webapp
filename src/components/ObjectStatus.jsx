@@ -10,7 +10,7 @@ import {buildBoard} from "../app/statusboard";
 import {StatusBoard, rowNodes} from "../app/StatusBoard";
 import {usePanelHeader} from "../app/panel-header";
 import {Alert} from "../ui/components/Alert";
-import {Button, IconButton} from "../ui/components/Button";
+import {Button} from "../ui/components/Button";
 import {MenuButton} from "../ui/components/MenuButton";
 import {Spinner} from "../ui/components/Spinner";
 import {BoltIcon, CloseIcon} from "../ui/icons";
@@ -27,8 +27,6 @@ import logger from "../utils/logger.js";
 const ICON = "flex h-4 w-4 items-center justify-center text-ink-muted [&>svg]:h-4! [&>svg]:w-4!";
 const DANGER_ICON = "flex h-4 w-4 items-center justify-center text-state-down [&>svg]:h-4! [&>svg]:w-4!";
 
-/** The feedback message hides itself after a while, as in the other views. */
-const FEEDBACK_DURATION_MS = 5000;
 
 /** Every action the dialogs may have to confirm. */
 const SUPPORTED_ACTIONS = [...new Set([...OBJECT_ACTIONS, ...INSTANCE_ACTIONS, ...RESOURCE_ACTIONS, CLEAR_ACTION].map((a) => a.name))];
@@ -158,21 +156,16 @@ const ObjectStatus = ({path, onOrchestrationLogs, linkNode, linkResource}) => {
     // The title bar of the panel, for what concerns the whole object: its policies, its actions.
     const header = usePanelHeader();
 
-    // The actions: the one waiting for its confirmation, the ones running, what came of them.
+    // The actions: the one waiting for its confirmation, the ones being asked. What
+    // comes of them, accepted or refused, the actions tray says (postAction).
     const [pending, setPending] = useState(null);
     const [running, setRunning] = useState(false);
-    const [feedback, setFeedback] = useState(null);
     const [consoleTarget, setConsoleTarget] = useState(null);
     // The instances and the resources picked on the board, to act on together: the
     // nodes of the instances, and the resources as `node/rid`, one per node.
     const [pickedNodes, setPickedNodes] = useState([]);
     const [pickedCells, setPickedCells] = useState([]);
 
-    useEffect(() => {
-        if (feedback === null) return undefined;
-        const timer = setTimeout(() => setFeedback(null), FEEDBACK_DURATION_MS);
-        return () => clearTimeout(timer);
-    }, [feedback]);
 
     /**
      * Asks for the action, confirmed first. `targets` are what it runs on: none for
@@ -193,27 +186,20 @@ const ObjectStatus = ({path, onOrchestrationLogs, linkNode, linkResource}) => {
 
     const run = useCallback(async () => {
         if (pending === null) return;
-        const {action, subject, fromSelection} = pending;
+        const {action, fromSelection} = pending;
         setPending(null);
         setRunning(true);
-        setFeedback({tone: "info", message: t("statusBoard.feedback.running", {action, subject})});
         const targets = pending.targets.length === 0
             ? [{path, action}]
             : pending.targets.map(({node, rid}) => ({path, action, node, rid}));
-        const results = await Promise.all(targets.map((target) => postAction(target).catch((err) => ({detail: err.message}))));
-        const failures = results
-            .map((r, i) => (r === null ? null : `${targets[i].node ?? path}: ${r.status ? `HTTP ${r.status}` : ""}${r.detail ? ` ${r.detail}` : ""}`.trim()))
-            .filter((r) => r !== null);
-        setFeedback(failures.length === 0
-            ? {tone: "success", message: t("statusBoard.feedback.accepted", {action, subject})}
-            : {tone: "error", message: t("statusBoard.feedback.failed", {action, subject, detail: failures.join("; ")})});
+        await Promise.all(targets.map((target) => postAction(target)));
         if (fromSelection) {
             setPickedNodes([]);
             setPickedCells([]);
         }
         setRunning(false);
         refresh();
-    }, [pending, path, refresh, t]);
+    }, [pending, path, refresh]);
 
     if (error !== null && board === null) {
         return <Alert tone="error">{t("statusBoard.loadError", {message: error})}</Alert>;
@@ -435,18 +421,6 @@ const ObjectStatus = ({path, onOrchestrationLogs, linkNode, linkResource}) => {
 
     return (
         <div className="space-y-3">
-            {feedback !== null && (
-                <Alert
-                    tone={feedback.tone}
-                    action={
-                        <IconButton label={t("common.close")} bare onClick={() => setFeedback(null)}>
-                            <CloseIcon className="h-4 w-4"/>
-                        </IconButton>
-                    }
-                >
-                    {feedback.message}
-                </Alert>
-            )}
             {inHeader ? (
                 <>
                     <div className="flex items-start justify-between gap-2">

@@ -3,6 +3,7 @@ import {act, fireEvent, render, screen, waitFor} from '@testing-library/react';
 import {vi} from 'vitest';
 import CreateObjectDialog from '../CreateObjectDialog';
 import useEventStore from '../../hooks/useEventStore.js';
+import {useActionTracker} from '../../app/action-tracker';
 
 const SOURCE = '[DEFAULT]\nid = 11111111-1111-4111-8111-111111111111\nnodes = *\n\n[fs#1]\ntype = flag\n';
 
@@ -18,6 +19,7 @@ describe('CreateObjectDialog', () => {
     });
 
     beforeEach(() => {
+        useActionTracker.setState({tracked: [], revealed: 0});
         vi.clearAllMocks();
         localStorage.setItem('authToken', 'tok');
         requests = [];
@@ -83,7 +85,8 @@ describe('CreateObjectDialog', () => {
         type('Name', 'db');
         expect(screen.getByText('ns1/svc/db')).toBeInTheDocument();
         create();
-        await waitFor(() => expect(onCreated).toHaveBeenCalledWith('ns1/svc/db', null));
+        await waitFor(() => expect(onCreated).toHaveBeenCalledWith('ns1/svc/db'));
+        expect(useActionTracker.getState().tracked.map((e) => [e.label, e.subject, e.state])).toEqual([['Create', 'ns1/svc/db', 'succeeded']]);
         const [post] = posts();
         expect(post.url).toBe('/api/object/path/ns1/svc/db/config/file');
         expect(post.body).toMatch(/^\[DEFAULT\]\nid = [0-9a-f-]{36}\n$/);
@@ -94,7 +97,7 @@ describe('CreateObjectDialog', () => {
         type('Name', 'db');
         expect(screen.getByText('db')).toBeInTheDocument();
         create();
-        await waitFor(() => expect(onCreated).toHaveBeenCalledWith('db', null));
+        await waitFor(() => expect(onCreated).toHaveBeenCalledWith('db'));
         expect(posts()[0].url).toBe('/api/object/path/root/svc/db/config/file');
     });
 
@@ -105,7 +108,7 @@ describe('CreateObjectDialog', () => {
         expect(screen.getByText('Created empty: its keys are added next, in its panel.')).toBeInTheDocument();
         type('Name', 'tls');
         create();
-        await waitFor(() => expect(onCreated).toHaveBeenCalledWith('ns1/sec/tls', null));
+        await waitFor(() => expect(onCreated).toHaveBeenCalledWith('ns1/sec/tls'));
         expect(posts()[0].url).toBe('/api/object/path/ns1/sec/tls/config/file');
         expect(posts()[0].body).toMatch(/^\[DEFAULT\]\nid = [0-9a-f-]+\n$/);
     });
@@ -116,7 +119,7 @@ describe('CreateObjectDialog', () => {
         expect(screen.getByLabelText('Name')).toHaveValue('namespace');
         expect(screen.getByLabelText('Name')).toBeDisabled();
         create();
-        await waitFor(() => expect(onCreated).toHaveBeenCalledWith('ns2/nscfg/namespace', null));
+        await waitFor(() => expect(onCreated).toHaveBeenCalledWith('ns2/nscfg/namespace'));
     });
 
     test('a copy starts from the configuration of the object, its id replaced', async () => {
@@ -128,7 +131,7 @@ describe('CreateObjectDialog', () => {
         fireEvent.click(screen.getByRole('option', {name: 'ns1/svc/web'}));
         await waitFor(() => expect(screen.getByLabelText('Configuration')).toHaveValue(SOURCE));
         create();
-        await waitFor(() => expect(onCreated).toHaveBeenCalledWith('ns1/svc/web2', null));
+        await waitFor(() => expect(onCreated).toHaveBeenCalledWith('ns1/svc/web2'));
         const body = posts()[0].body;
         expect(body).not.toContain('11111111-1111');
         expect(body).toMatch(/^\[DEFAULT\]\nid = [0-9a-f-]{36}\nnodes = \*\n\n\[fs#1\]\ntype = flag\n$/);
@@ -156,8 +159,12 @@ describe('CreateObjectDialog', () => {
                 objectInstanceStatus: {'ns1/svc/db': {node1: {avail: 'down'}}},
             });
         });
-        await waitFor(() => expect(onCreated).toHaveBeenCalledWith('ns1/svc/db', 'requested'));
+        await waitFor(() => expect(onCreated).toHaveBeenCalledWith('ns1/svc/db'));
         expect(posts()[1].url).toBe('/api/object/path/ns1/svc/db/action/provision');
+        // The creation, then the provisioning, in the actions tray.
+        expect(useActionTracker.getState().tracked.map((e) => [e.action, e.subject])).toEqual(expect.arrayContaining([
+            ['create', 'ns1/svc/db'],
+        ]));
     });
 
     test('a configuration has nothing to provision', () => {

@@ -366,8 +366,8 @@ describe('ObjectStatus', () => {
             // The help and the buttons share a row as high as the buttons: the table does not move.
             const bar = screen.getByText(help).parentElement;
             expect(bar).toHaveClass('min-h-7');
-            // No checkbox in sight, until a cell is hovered.
-            for (const box of screen.getAllByRole('checkbox')) expect(box).toHaveClass('opacity-0', 'group-hover:opacity-100');
+            // The checkboxes light, until a cell is hovered.
+            for (const box of screen.getAllByRole('checkbox')) expect(box).toHaveClass('opacity-30', 'group-hover:opacity-100');
 
             pickCell('volume#1', 'dev3n1');
             expect(selectionButton()).toBeInTheDocument();
@@ -404,9 +404,9 @@ describe('ObjectStatus', () => {
             expect(screen.queryByRole('button', {name: /^Actions on/})).not.toBeInTheDocument();
             pickCell('container#janitor', 'dev3n1');
             const box = screen.getByRole('checkbox', {name: 'Select container#janitor on dev3n1'});
-            expect(box).not.toHaveClass('opacity-0');
+            expect(box).not.toHaveClass('opacity-30');
             // Partly selected, the box of the name stays shown too.
-            expect(screen.getByRole('checkbox', {name: 'Select container#janitor on all its nodes'})).not.toHaveClass('opacity-0');
+            expect(screen.getByRole('checkbox', {name: 'Select container#janitor on all its nodes'})).not.toHaveClass('opacity-30');
             // The type and the description select nothing: no checkbox.
             expect(within(name('container#janitor').closest('tr').querySelectorAll('td')[0]).queryByRole('checkbox')).toBeNull();
         });

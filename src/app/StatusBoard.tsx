@@ -251,8 +251,9 @@ const FIRST_NODE = 3;
 const NODES_START = "border-l border-line";
 
 /**
- * What selects, out of the way until wanted: a checkbox the cell holding it shows
- * on hover, or when it has the focus, and keeps shown once checked, or partly. A
+ * What selects, out of the way until wanted: a checkbox drawn light, that the cell
+ * holding it shows in full on hover, or when it has the focus, and keeps so once
+ * checked, or partly. A
  * click elsewhere in the cell selects nothing: its badges open their records.
  */
 function SelectBox({
@@ -271,7 +272,7 @@ function SelectBox({
       type="checkbox"
       className={cn(
         "h-3.5 w-3.5 shrink-0 cursor-pointer accent-(--accent)",
-        !checked && !indeterminate && "opacity-0 group-hover:opacity-100 focus-visible:opacity-100",
+        !checked && !indeterminate && "opacity-30 group-hover:opacity-100 focus-visible:opacity-100",
       )}
       checked={checked}
       ref={(el) => {

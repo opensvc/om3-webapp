@@ -23,6 +23,7 @@ import {useIsRoot} from "../hooks/useGrants";
 import {Pager} from "../ui/components/Pager";
 import {AgeTime} from "./AgeTime";
 import {HeartbeatMesh} from "./HeartbeatMesh";
+import {HeartbeatSummary} from "./HeartbeatSummary";
 import {TabCount} from "../ui/components/Tabs";
 import {usePaging} from "../app/paging";
 import {ChevronDownIcon, CloseIcon, FilterIcon} from "../ui/icons";
@@ -185,12 +186,6 @@ const Heartbeats = () => {
     const [sortDirection, setSortDirection] = useState("asc");
 
     const [showFilters, setShowFilters] = useState(() => isWideScreen ? true : !isMobile);
-    // The raw table of the streams, folded by default under the mesh: open when the
-    // URL filters it, a link asking for some streams in particular.
-    const [showStreams, setShowStreams] = useState(() => {
-        const params = new URLSearchParams(location.search);
-        return ["status", "node", "state", "id", "link"].some((key) => params.has(key));
-    });
 
     // Read query parameters
     const queryParams = new URLSearchParams(location.search);
@@ -199,6 +194,9 @@ const Heartbeats = () => {
     const rawState = queryParams.get("state") || "all";
     const rawId = queryParams.get("id") || "all";
     const rawLink = queryParams.get("link") || "";
+    const rawType = queryParams.get("type") || "all";
+    // A driver, "unicast": the streams of its heartbeats only.
+    const [filterType, setFilterType] = useState(rawType);
     // A link of the mesh, "from>to": its streams only.
     const [filterLink, setFilterLink] = useState(rawLink);
 
@@ -240,24 +238,27 @@ const Heartbeats = () => {
             const currentState = currentParams.get("state") || "all";
             const currentId = currentParams.get("id") || "all";
             const currentLink = currentParams.get("link") || "";
+            const currentType = currentParams.get("type") || "all";
 
             if (currentStatus === filterBeating &&
                 currentNode === filterNode &&
                 currentState === filterState &&
                 currentId === filterId &&
-                currentLink === filterLink) {
+                currentLink === filterLink &&
+                currentType === filterType) {
                 return;
             }
 
             // The other parameters, the page size and the open panel's, stay as they
             // are; the page goes, the list filtered otherwise starting over from its first.
             const newQueryParams = new URLSearchParams(location.search);
-            ["status", "node", "state", "id", "link", "offset"].forEach((key) => newQueryParams.delete(key));
+            ["status", "node", "state", "id", "link", "type", "offset"].forEach((key) => newQueryParams.delete(key));
             if (filterBeating !== "all") newQueryParams.set("status", filterBeating);
             if (filterNode !== "all") newQueryParams.set("node", filterNode);
             if (filterState !== "all") newQueryParams.set("state", filterState);
             if (filterId !== "all") newQueryParams.set("id", filterId);
             if (filterLink) newQueryParams.set("link", filterLink);
+            if (filterType !== "all") newQueryParams.set("type", filterType);
 
             const queryString = newQueryParams.toString();
             const newUrl = `${location.pathname}${queryString ? `?${queryString}` : ""}`;
@@ -268,7 +269,7 @@ const Heartbeats = () => {
         }, 300);
 
         return () => clearTimeout(timer);
-    }, [filterBeating, filterNode, filterState, filterId, filterLink, navigate, location.pathname, location.search]);
+    }, [filterBeating, filterNode, filterState, filterId, filterLink, filterType, navigate, location.pathname, location.search]);
 
     // Initialize filter states from URL
     useEffect(() => {
@@ -283,7 +284,8 @@ const Heartbeats = () => {
         setFilterState(rawState);
         setFilterId(baseId);
         setFilterLink(rawLink);
-    }, [location.search, rawStatus, rawNode, rawState, rawId, rawLink]);
+        setFilterType(rawType);
+    }, [location.search, rawStatus, rawNode, rawState, rawId, rawLink, rawType]);
 
     // Cache stopped streams with their last known peers
     useEffect(() => {
@@ -461,20 +463,40 @@ const Heartbeats = () => {
                 (deferredFilterNode === "all" || row.node === deferredFilterNode) &&
                 (deferredFilterState === "all" || row.state === deferredFilterState) &&
                 (deferredFilterId === "all" || rowBaseId === deferredFilterId) &&
+                (filterType === "all" || row.type === filterType) &&
                 linkMatches(filterLink, row)
             );
         });
-    }, [sortedRows, deferredFilterBeating, deferredFilterNode, deferredFilterState, deferredFilterId, filterLink]);
+    }, [sortedRows, deferredFilterBeating, deferredFilterNode, deferredFilterState, deferredFilterId, filterLink, filterType]);
 
-    // A line of the mesh clicked: its streams, unfolded, the other filters cleared.
+    // The drivers of the streams, for their filter.
+    const availableTypes = useMemo(() => [...new Set(streamRows.map((row) => row.type))]
+        .filter((type) => type && type !== t("common.notAvailable"))
+        .sort(), [streamRows, t]);
+
+    // A line of the mesh clicked: its streams, the other filters cleared.
     const handleMeshSelect = useCallback((group) => {
         setFilterBeating("all");
         setFilterNode("all");
         setFilterState("all");
         setFilterId("all");
+        setFilterType("all");
         setFilterLink(`${group.from}>${group.to}`);
-        setShowStreams(true);
     }, []);
+
+    // A heartbeat or a driver of the summary clicked: its streams, the other filters
+    // cleared; clicked again, all of them.
+    const handleSummarySelect = useCallback(({kind, value}) => {
+        const id = kind === "hb" ? value.replace(/^hb#/, "") : "all";
+        const type = kind === "driver" ? value : "all";
+        const again = filterId === id && filterType === type;
+        setFilterBeating("all");
+        setFilterNode("all");
+        setFilterState("all");
+        setFilterLink("");
+        setFilterId(again ? "all" : id);
+        setFilterType(again ? "all" : type);
+    }, [filterId, filterType]);
 
     // Stop or start a stream, root only; stopping is confirmed first.
     const isRoot = useIsRoot();
@@ -546,113 +568,115 @@ const Heartbeats = () => {
         // The page grows with its table, all its rows shown, the page scrolling
         // rather than the table in a box under the mesh.
         <div className="flex flex-col p-4 space-y-3">
-            <HeartbeatMesh heartbeatStatus={heartbeatStatus} onSelect={handleMeshSelect}/>
+            {/* The mesh as wide as its ring, the heartbeats in the rest, both as high:
+                under each other in a narrow window. */}
+            <div className="grid items-stretch gap-3 lg:grid-cols-[max-content_minmax(0,1fr)]">
+                <HeartbeatMesh heartbeatStatus={heartbeatStatus} onSelect={handleMeshSelect}/>
+                <HeartbeatSummary
+                    heartbeatStatus={heartbeatStatus}
+                    selected={{hb: filterId === "all" ? null : `hb#${filterId}`, driver: filterType === "all" ? null : filterType}}
+                    onSelect={handleSummarySelect}
+                />
+            </div>
 
-            <button
-                type="button"
-                className="flex shrink-0 items-center gap-1.5 self-start font-semibold"
-                aria-expanded={showStreams}
-                aria-controls="heartbeats-streams"
-                onClick={() => setShowStreams((open) => !open)}
-            >
-                <ChevronDownIcon className={showStreams ? "h-4 w-4" : "h-4 w-4 -rotate-90"}/>
+            {/* The streams, the raw data of the page, always shown under a heading as the others. */}
+            <h2 className="flex shrink-0 items-center gap-1.5 font-semibold">
                 {t("heartbeats.streams")}
                 <TabCount count={filteredRows.length}/>
-            </button>
+            </h2>
 
-            {showStreams && (
-                <div id="heartbeats-streams" className="flex flex-col space-y-3">
-                    <div className="flex shrink-0 flex-wrap items-center gap-3">
-                        {isMobile && (
-                            <Button
-                                variant="ghost"
-                                size="sm"
-                                icon={<FilterIcon className="h-4 w-4"/>}
-                                onClick={toggleShowFilters}
-                                aria-label={showFilters ? t("heartbeats.filters.hide") : t("heartbeats.filters.show")}
-                                aria-expanded={showFilters}
-                                aria-controls="heartbeats-filters"
-                            >
-                                <span className="hidden sm:inline">{t("common.filters")}</span>
-                                <ChevronDownIcon className={showFilters ? "h-4 w-4 rotate-180" : "h-4 w-4"}/>
-                            </Button>
-                        )}
-                        <div
-                            id="heartbeats-filters"
-                            hidden={!showFilters}
-                            className="flex flex-wrap items-center gap-3"
+            <div id="heartbeats-streams" className="flex flex-col space-y-3">
+                <div className="flex shrink-0 flex-wrap items-center gap-3">
+                    {isMobile && (
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            icon={<FilterIcon className="h-4 w-4"/>}
+                            onClick={toggleShowFilters}
+                            aria-label={showFilters ? t("heartbeats.filters.hide") : t("heartbeats.filters.show")}
+                            aria-expanded={showFilters}
+                            aria-controls="heartbeats-filters"
                         >
-                            {filterSelect(t("heartbeats.filters.routine"), filterState, setFilterState, availableStates
-                                .filter(s => s !== "all")
-                                .map(state => [state, routineWord(state, t)]))}
-                            {filterSelect(t("heartbeats.filters.beating"), filterBeating, setFilterBeating, [
-                                ["beating", t("heartbeats.marks.beating")],
-                                ["stale", t("heartbeats.marks.stale")],
-                            ])}
-                            {filterSelect(t("common.node"), filterNode, setFilterNode, nodes.map(node => [node, node]))}
-                            {filterSelect(t("heartbeats.filters.id"), filterId, setFilterId, availableIds.map(id => [id, id]))}
-                            {filterLink && (
-                                <button
-                                    type="button"
-                                    className="inline-flex items-center gap-1 rounded-full border border-line bg-surface-raised px-2 text-data"
-                                    aria-label={t("heartbeats.filters.clearLink", {link: filterLink.replace(">", " → ")})}
-                                    onClick={() => setFilterLink("")}
-                                >
-                                    {filterLink.replace(">", " → ")}
-                                    <CloseIcon className="h-3 w-3"/>
-                                </button>
-                            )}
-                        </div>
-                    </div>
-
-                    {actionFeedback && (
-                        <Alert
-                            tone={actionFeedback.tone}
-                            className="shrink-0"
-                            action={
-                                <IconButton label={t("common.close")} bare onClick={() => setActionFeedback(null)}>
-                                    <CloseIcon className="h-4 w-4"/>
-                                </IconButton>
-                            }
-                        >
-                            {actionFeedback.message}
-                        </Alert>
+                            <span className="hidden sm:inline">{t("common.filters")}</span>
+                            <ChevronDownIcon className={showFilters ? "h-4 w-4 rotate-180" : "h-4 w-4"}/>
+                        </Button>
                     )}
+                    <div
+                        id="heartbeats-filters"
+                        hidden={!showFilters}
+                        className="flex flex-wrap items-center gap-3"
+                    >
+                        {filterSelect(t("heartbeats.filters.routine"), filterState, setFilterState, availableStates
+                            .filter(s => s !== "all")
+                            .map(state => [state, routineWord(state, t)]))}
+                        {filterSelect(t("heartbeats.filters.beating"), filterBeating, setFilterBeating, [
+                            ["beating", t("heartbeats.marks.beating")],
+                            ["stale", t("heartbeats.marks.stale")],
+                        ])}
+                        {filterSelect(t("common.node"), filterNode, setFilterNode, nodes.map(node => [node, node]))}
+                        {filterSelect(t("heartbeats.filters.id"), filterId, setFilterId, availableIds.map(id => [id, id]))}
+                        {filterSelect(t("heartbeats.filters.driver"), filterType, setFilterType, availableTypes.map(type => [type, type]))}
+                        {filterLink && (
+                            <button
+                                type="button"
+                                className="inline-flex items-center gap-1 rounded-full border border-line bg-surface-raised px-2 text-data"
+                                aria-label={t("heartbeats.filters.clearLink", {link: filterLink.replace(">", " → ")})}
+                                onClick={() => setFilterLink("")}
+                            >
+                                {filterLink.replace(">", " → ")}
+                                <CloseIcon className="h-3 w-3"/>
+                            </button>
+                        )}
+                    </div>
+                </div>
 
-                    <Pager paging={paging}/>
+                {actionFeedback && (
+                    <Alert
+                        tone={actionFeedback.tone}
+                        className="shrink-0"
+                        action={
+                            <IconButton label={t("common.close")} bare onClick={() => setActionFeedback(null)}>
+                                <CloseIcon className="h-4 w-4"/>
+                            </IconButton>
+                        }
+                    >
+                        {actionFeedback.message}
+                    </Alert>
+                )}
 
-                    <Table sticky>
-                        <thead>
-                            <HeaderRow>
-                                {COLUMNS.map(({labelKey, key}) => (
-                                    <SortHeaderCell
-                                        key={key}
-                                        label={t(labelKey)}
-                                        active={sortColumn === key}
-                                        direction={sortDirection}
-                                        onSort={() => handleSort(key)}
-                                    />
-                                ))}
-                            </HeaderRow>
-                        </thead>
-                        <tbody>
-                            {visibleRows.map(row => (
-                                <HeartbeatRow
-                                    key={`${row.node}-${row.id}-${row.peer}`}
-                                    row={row}
-                                    isSingleNode={isSingleNode}
-                                    onAction={isRoot ? handleAction : undefined}
+                <Pager paging={paging}/>
+
+                <Table sticky>
+                    <thead>
+                        <HeaderRow>
+                            {COLUMNS.map(({labelKey, key}) => (
+                                <SortHeaderCell
+                                    key={key}
+                                    label={t(labelKey)}
+                                    active={sortColumn === key}
+                                    direction={sortDirection}
+                                    onSort={() => handleSort(key)}
                                 />
                             ))}
-                            {visibleRows.length === 0 && (
-                                <EmptyRow colSpan={COLUMNS.length}>
-                                    {t("heartbeats.empty")}
-                                </EmptyRow>
-                            )}
-                        </tbody>
-                    </Table>
-                </div>
-            )}
+                        </HeaderRow>
+                    </thead>
+                    <tbody>
+                        {visibleRows.map(row => (
+                            <HeartbeatRow
+                                key={`${row.node}-${row.id}-${row.peer}`}
+                                row={row}
+                                isSingleNode={isSingleNode}
+                                onAction={isRoot ? handleAction : undefined}
+                            />
+                        ))}
+                        {visibleRows.length === 0 && (
+                            <EmptyRow colSpan={COLUMNS.length}>
+                                {t("heartbeats.empty")}
+                            </EmptyRow>
+                        )}
+                    </tbody>
+                </Table>
+            </div>
 
             <Dialog
                 open={pendingStop !== null}

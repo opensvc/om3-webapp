@@ -419,7 +419,8 @@
       "id": "ID",
       "show": "Afficher les filtres",
       "hide": "Masquer les filtres",
-      "clearLink": "Retirer le filtre {{link}}"
+      "clearLink": "Retirer le filtre {{link}}",
+      "driver": "Pilote"
     },
     "marks": {
       "healthySingleNode": "Sain (nœud unique)",
@@ -436,7 +437,13 @@
       "groupLabel_one": "de {{from}} vers {{to}} : {{beating}} lien sur {{count}} en battement",
       "groupLabel_other": "de {{from}} vers {{to}} : {{beating}} liens sur {{count}} en battement",
       "beatingOf_one": "{{beating}} sur {{count}} en battement",
-      "beatingOf_other": "{{beating}} sur {{count}} en battement"
+      "beatingOf_other": "{{beating}} sur {{count}} en battement",
+      "legend": {
+        "direction": "→ le sens des battements",
+        "up": "tous battent",
+        "warn": "certains battent",
+        "down": "aucun ne bat"
+      }
     },
     "streams": "Flux",
     "actions": {
@@ -455,6 +462,18 @@
     "direction": {
       "tx": "envoie à",
       "rx": "reçoit de"
+    },
+    "summary": {
+      "list": "Heartbeats",
+      "layer": {
+        "network": "réseau",
+        "storage": "stockage",
+        "relay": "relais",
+        "other": "autre"
+      },
+      "drivers": "Pilotes",
+      "title": "Synthèse",
+      "hint": "Sélectionnez un heartbeat ou un pilote pour filtrer les flux."
     }
   },
   "instance": {
@@ -573,7 +592,8 @@
       "datastores": "Magasins de données",
       "actions": "Actions sur l'instance",
       "selectResource": "Sélectionner {{rid}}",
-      "selectionHelp": "Cochez des ressources pour les sélectionner."
+      "selectionHelp": "Cochez des ressources pour les sélectionner.",
+      "volumes": "Volumes"
     },
     "on": "sur {{node}}"
   },
@@ -1498,7 +1518,8 @@
     "datastores": "Magasins de données",
     "refresh": "Rafraîchir l'état",
     "refreshAll": "Rafraîchir l'état de toutes les instances",
-    "refreshFailed": "Rafraîchissement refusé : {{detail}}"
+    "refreshFailed": "Rafraîchissement refusé : {{detail}}",
+    "volumes": "Volumes"
   },
   "shortcuts": {
     "title": "Raccourcis clavier",

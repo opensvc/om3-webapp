@@ -18,7 +18,12 @@ const lines = (container) => [...container.querySelectorAll('[data-group]')];
 describe('HeartbeatMesh', () => {
     test('a line each way between two nodes, no fan-out, no text: the color of its links', () => {
         const {container} = render(<HeartbeatMesh heartbeatStatus={STATUS}/>);
-        expect(screen.getByText('Mesh')).toBeInTheDocument();
+        expect(screen.getByRole('heading', {name: 'Mesh'})).toBeInTheDocument();
+        // Always shown: no fold.
+        expect(document.querySelector('details')).toBeNull();
+        // A key to its lines; the ring no wider than its column.
+        expect([...document.querySelectorAll('[data-legend-state]')].map((key) => key.textContent)).toEqual(['all beating', 'some beating', 'none beating']);
+        expect(document.querySelector('svg[role="group"]')).toHaveClass('max-w-full', 'h-auto');
         expect([...container.querySelectorAll('[data-node]')].map((n) => n.dataset.node)).toEqual(['dev3n1', 'dev3n2']);
         expect(lines(container).map((g) => [g.dataset.group, g.dataset.state, g.textContent])).toEqual([
             // One end beating, the other not: a mix, orange.

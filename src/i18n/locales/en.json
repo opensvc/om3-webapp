@@ -419,7 +419,8 @@
       "id": "ID",
       "show": "Show filters",
       "hide": "Hide filters",
-      "clearLink": "Remove the {{link}} filter"
+      "clearLink": "Remove the {{link}} filter",
+      "driver": "Driver"
     },
     "marks": {
       "healthySingleNode": "Healthy (single node)",
@@ -436,7 +437,13 @@
       "groupLabel_one": "{{from}} to {{to}}: {{beating}} of {{count}} link beating",
       "groupLabel_other": "{{from}} to {{to}}: {{beating}} of {{count}} links beating",
       "beatingOf_one": "{{beating}} of {{count}} beating",
-      "beatingOf_other": "{{beating}} of {{count}} beating"
+      "beatingOf_other": "{{beating}} of {{count}} beating",
+      "legend": {
+        "direction": "→ the way the beats go",
+        "up": "all beating",
+        "warn": "some beating",
+        "down": "none beating"
+      }
     },
     "streams": "Streams",
     "actions": {
@@ -455,6 +462,18 @@
     "direction": {
       "tx": "sends to",
       "rx": "receives from"
+    },
+    "summary": {
+      "list": "Heartbeats",
+      "layer": {
+        "network": "network",
+        "storage": "storage",
+        "relay": "relay",
+        "other": "other"
+      },
+      "drivers": "Drivers",
+      "title": "Summary",
+      "hint": "Select a heartbeat or a driver to filter the streams."
     }
   },
   "instance": {
@@ -573,7 +592,8 @@
       "datastores": "Datastores",
       "actions": "Instance actions",
       "selectResource": "Select {{rid}}",
-      "selectionHelp": "Check resources to select them."
+      "selectionHelp": "Check resources to select them.",
+      "volumes": "Volumes"
     },
     "on": "on {{node}}"
   },
@@ -1498,7 +1518,8 @@
     "datastores": "Datastores",
     "refresh": "Refresh the status",
     "refreshAll": "Refresh the status of all the instances",
-    "refreshFailed": "Refresh refused: {{detail}}"
+    "refreshFailed": "Refresh refused: {{detail}}",
+    "volumes": "Volumes"
   },
   "shortcuts": {
     "title": "Keyboard shortcuts",

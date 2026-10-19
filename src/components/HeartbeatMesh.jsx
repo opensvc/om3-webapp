@@ -63,17 +63,18 @@ export function HeartbeatMesh({heartbeatStatus, onSelect}) {
         + (l.streamState && l.streamState !== "running" ? ` (${l.streamState})` : "");
 
     return (
-        // Foldable: the mesh takes room above the streams table.
-        <details open className="shrink-0 space-y-2">
-            <summary id={`${id}-title`} className="cursor-pointer font-semibold">{t("heartbeats.mesh.title")}</summary>
-            <div className="relative max-h-[60vh] overflow-auto rounded-(--radius-panel) border border-line bg-surface">
+        <section aria-labelledby={`${id}-title`} className="flex min-w-0 flex-col space-y-2">
+            <h2 id={`${id}-title`} className="font-semibold">{t("heartbeats.mesh.title")}</h2>
+            {/* On the ground of the tables, as the heartbeats beside it. */}
+            <div className="relative max-h-[60vh] flex-1 overflow-auto rounded-(--radius-panel) border border-line bg-surface-raised">
                 <svg
                     role="group"
                     aria-labelledby={`${id}-title`}
                     width={layout.width}
                     height={layout.height}
                     viewBox={`0 0 ${layout.width} ${layout.height}`}
-                    className="block text-data"
+                    // Its drawn size at most, smaller in a narrower column: no scrolling to see it.
+                    className="block h-auto max-w-full shrink-0 text-data"
                 >
                     <defs>
                         {["up", "warn", "down"].map((state) => (
@@ -189,6 +190,18 @@ export function HeartbeatMesh({heartbeatStatus, onSelect}) {
                     document.body,
                 )}
             </div>
-        </details>
+            {/* What the lines say. */}
+            <p className="flex flex-wrap items-center gap-x-4 gap-y-1 text-data text-ink-muted" data-legend="">
+                <span>{t("heartbeats.mesh.legend.direction")}</span>
+                {["up", "warn", "down"].map((state) => (
+                    <span key={state} className="inline-flex items-center gap-1.5" data-legend-state={state}>
+                        <svg aria-hidden="true" width="18" height="4" className="shrink-0">
+                            <line x1="0" y1="2" x2="18" y2="2" strokeWidth="2.5" className={STROKE[state]}/>
+                        </svg>
+                        {t(`heartbeats.mesh.legend.${state}`)}
+                    </span>
+                ))}
+            </p>
+        </section>
     );
 }

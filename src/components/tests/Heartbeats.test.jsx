@@ -83,7 +83,7 @@ const setMedia = ({mobile = false, wide = false} = {}) => {
     }));
 };
 
-const SELECT_LABEL = {running: "Routine", beating: "Beating", node: "Node", id: "ID"};
+const SELECT_LABEL = {running: "Routine", beating: "Beating", node: "Node", id: "ID", driver: "Driver"};
 
 const getFilter = (selectKey, options) =>
     screen.getByRole("combobox", {name: SELECT_LABEL[selectKey], ...options});
@@ -155,6 +155,66 @@ describe("Heartbeats Component", () => {
     };
 
     // ==================== STRUCTURE & BASIC RENDER ====================
+    test("the mesh and the heartbeats side by side, the heartbeats out of the box of the mesh, the mesh never folded", async () => {
+        mockHeartbeatStore(buildStatus([{
+            node: "node1",
+            streams: [{id: "hb#1.rx", state: "running", type: "unicast", peers: {peer1: {is_beating: true}}}],
+        }]));
+        renderWithRouter(<Heartbeats/>);
+        const mesh = screen.getByRole("region", {name: "Mesh"});
+        const heartbeats = screen.getByRole("region", {name: "Summary"});
+        expect(mesh.contains(heartbeats)).toBe(false);
+        // Beside the mesh, the mesh as wide as its ring, the heartbeats in the rest, both as high.
+        expect(heartbeats.parentElement).toBe(mesh.parentElement);
+        expect(mesh.parentElement).toHaveClass("grid", "items-stretch", "lg:grid-cols-[max-content_minmax(0,1fr)]");
+        expect(mesh.querySelector("svg").parentElement).toHaveClass("bg-surface-raised");
+        expect(document.querySelector("details")).toBeNull();
+    });
+
+    test("the streams always shown under a heading, their count beside it", () => {
+        mockHeartbeatStore(buildStatus([{node: "node1", streams: [
+            {id: "hb#1.rx", state: "running", type: "unicast", peers: {p: {is_beating: true, desc: "d"}}},
+            {id: "hb#1.tx", state: "running", type: "unicast", peers: {p: {is_beating: true, desc: "d"}}},
+        ]}]));
+        renderWithRouter(<Heartbeats/>, {folded: true});
+        expect(screen.getByRole("heading", {name: /^Streams/})).toHaveTextContent("Streams2");
+        expect(screen.queryByRole("button", {name: /^Streams/})).toBeNull();
+        expect(screen.getByRole("table")).toBeInTheDocument();
+    });
+
+    test("a heartbeat or a driver of the summary clicked filters the streams to it; clicked again, all of them", async () => {
+        mockHeartbeatStore(buildStatus([
+            {node: "n1", streams: [
+                {id: "hb#1.rx", state: "running", type: "unicast", peers: {n2: {is_beating: true, desc: "d"}}},
+                {id: "hb#2.rx", state: "running", type: "disk", peers: {n2: {is_beating: false, desc: "d"}}},
+            ]},
+        ]));
+        renderWithRouter(<Heartbeats/>, {route: "/heartbeats?node=n1"});
+        const summary = screen.getByRole("region", {name: "Summary"});
+        const hb2 = within(summary.querySelector('[data-row="hb#2"]')).getByRole("button");
+        fireEvent.click(hb2);
+        expect(hb2).toHaveAttribute("aria-pressed", "true");
+        expect(getDataRows().map(streamOf)).toEqual(["2.rx"]);
+        expect(getFilter("node")).toHaveValue("all");
+        fireEvent.click(hb2);
+        expect(hb2).toHaveAttribute("aria-pressed", "false");
+        expect(getDataRows()).toHaveLength(2);
+        const unicast = within(summary.querySelector('[data-row="unicast"]')).getByRole("button");
+        fireEvent.click(unicast);
+        expect(getDataRows().map(streamOf)).toEqual(["1.rx"]);
+        expect(getFilter("driver")).toHaveValue("unicast");
+        await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith(expect.stringContaining("type=unicast"), {replace: true}));
+    });
+
+    test("a driver in the URL filters the streams", () => {
+        mockHeartbeatStore(buildStatus([{node: "n1", streams: [
+            {id: "hb#1.rx", state: "running", type: "unicast", peers: {n2: {is_beating: true, desc: "d"}}},
+            {id: "hb#2.rx", state: "running", type: "disk", peers: {n2: {is_beating: true, desc: "d"}}},
+        ]}]));
+        renderWithRouter(<Heartbeats/>, {route: "/heartbeats?type=disk"});
+        expect(getDataRows().map(streamOf)).toEqual(["2.rx"]);
+    });
+
     test("renders table structure and basic heartbeat rows", async () => {
         mockHeartbeatStore(buildStatus([{
             node: "node1",
@@ -644,8 +704,8 @@ describe("Heartbeats Component", () => {
             ]
         }]));
         renderWithRouter(<Heartbeats/>);
-        // The four filters, and the page size.
-        expect(screen.getAllByRole("combobox")).toHaveLength(5);
+        // The five filters, and the page size.
+        expect(screen.getAllByRole("combobox")).toHaveLength(6);
         const ids = within(getFilter("id")).getAllByRole("option").map(o => o.value);
         expect(ids).toEqual(["all", "1"]);
     });
@@ -980,14 +1040,11 @@ describe("Heartbeats Component", () => {
         expect(linkMatches("n1>n2", {node: "n2", id: "4.tx", peer: "N/A", peerUnknown: true})).toBe(false);
     });
 
-    test("a line of the mesh clicked unfolds the streams, filtered to its links, other filters cleared", async () => {
+    test("a line of the mesh clicked filters the streams to its links, other filters cleared", async () => {
         mockApi({});
         mockHeartbeatStore(TWO_NODES());
-        const {container} = renderWithRouter(<Heartbeats/>, {route: "/heartbeats?node=n2", folded: true});
-        fireEvent.click(screen.getByRole("button", {name: /^Streams/}));
-        expect(screen.getByRole("button", {name: /^Streams/})).toHaveAttribute("aria-expanded", "false");
+        const {container} = renderWithRouter(<Heartbeats/>, {route: "/heartbeats?node=n2"});
         fireEvent.click(container.querySelector('[data-group="n1 n2"]'));
-        expect(screen.getByRole("button", {name: /^Streams/})).toHaveAttribute("aria-expanded", "true");
         // n1 tx toward n2, n2 rx from n1: two rows, whatever the node filter was.
         expect(getDataRows().map((row) => [streamOf(row), ...[2, 4].map((i) => within(row).getAllByRole("cell")[i].textContent)]))
             .toEqual(expect.arrayContaining([["1.tx", "n1", "n2"], ["1.rx", "n2", "n1"]]));
@@ -1053,46 +1110,6 @@ describe("Heartbeats Component", () => {
         expect(shown).toHaveLength(2);
     });
 
-    test("no stop nor start for a user who is not root", async () => {
-        const calls = mockApi({admin: ["ns1"]});
-        mockHeartbeatStore(TWO_NODES());
-        renderWithRouter(<Heartbeats/>);
-        await waitFor(() => expect(calls.some((c) => c.url === "/api/auth/whoami")).toBe(true));
-        await act(async () => {});
-        expect(screen.queryByRole("button", {name: /Stop$/})).not.toBeInTheDocument();
-        expect(screen.queryByRole("button", {name: /Start$/})).not.toBeInTheDocument();
-        // The routine as a word only.
-        expect(screen.getAllByText("started").length).toBeGreaterThan(0);
-    });
-
-    // ==================== FOLDED STREAMS ====================
-    test("the streams table is folded by default under the mesh, its count beside its title", () => {
-        mockHeartbeatStore(buildStatus([{node: "node1", streams: [
-            {id: "hb#1.rx", state: "running", type: "unicast", peers: {p: {is_beating: true, desc: "d"}}},
-            {id: "hb#1.tx", state: "running", type: "unicast", peers: {p: {is_beating: true, desc: "d"}}},
-        ]}]));
-        renderWithRouter(<Heartbeats/>, {folded: true});
-        const toggle = screen.getByRole("button", {name: /^Streams/});
-        expect(toggle).toHaveAttribute("aria-expanded", "false");
-        expect(toggle).toHaveTextContent("Streams2");
-        expect(screen.queryByRole("table")).not.toBeInTheDocument();
-        expect(screen.queryByLabelText("Per page")).not.toBeInTheDocument();
-        fireEvent.click(toggle);
-        expect(toggle).toHaveAttribute("aria-expanded", "true");
-        expect(screen.getByRole("table")).toBeInTheDocument();
-        fireEvent.click(toggle);
-        expect(screen.queryByRole("table")).not.toBeInTheDocument();
-    });
-
-    test("a link filtering the streams opens them", () => {
-        mockHeartbeatStore(buildStatus([{node: "node1", streams: [
-            {id: "hb#1.rx", state: "running", type: "unicast", peers: {p: {is_beating: true, desc: "d"}}},
-        ]}]));
-        renderWithRouter(<Heartbeats/>, {route: "/heartbeats?node=node1", folded: true});
-        expect(screen.getByRole("button", {name: /^Streams/})).toHaveAttribute("aria-expanded", "true");
-        expect(screen.getByRole("table")).toBeInTheDocument();
-    });
-
     // ==================== PAGES ====================
     const makeManyStreams = (n = 50) => {
         const many = {};
@@ -1113,6 +1130,19 @@ describe("Heartbeats Component", () => {
         return many;
     };
 
+    test("no stop nor start for a user who is not root", async () => {
+        const calls = mockApi({admin: ["ns1"]});
+        mockHeartbeatStore(TWO_NODES());
+        renderWithRouter(<Heartbeats/>);
+        await waitFor(() => expect(calls.some((c) => c.url === "/api/auth/whoami")).toBe(true));
+        await act(async () => {});
+        expect(screen.queryByRole("button", {name: /Stop$/})).not.toBeInTheDocument();
+        expect(screen.queryByRole("button", {name: /Start$/})).not.toBeInTheDocument();
+        // The routine as a word only.
+        expect(screen.getAllByText("started").length).toBeGreaterThan(0);
+    });
+
+    // ==================== FOLDED STREAMS ====================
     test("pages the rows, 50 a page, as oc3 does: the next page, another size", () => {
         mockHeartbeatStore(makeManyStreams(60));
         renderWithRouter(<Heartbeats/>);

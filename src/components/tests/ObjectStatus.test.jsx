@@ -137,7 +137,7 @@ describe('ObjectStatus', () => {
         answer(dns);
         useEventStore.setState({objectInstanceStatus: {'system/svc/dns': {
             dev3n1: {resources: {'fs#1': {datastores: ['system/cfg/dns']}}},
-            dev3n2: {resources: {'fs#1': {datastores: ['system/cfg/dns', 'system/sec/dns']}}},
+            dev3n2: {resources: {'fs#1': {datastores: ['system/cfg/dns', 'system/sec/dns']}, 'volume#1': {volumes: ['system/vol/dns']}}},
         }}});
         try {
             render(<MemoryRouter><ObjectStatus path="system/svc/dns"/></MemoryRouter>);
@@ -146,6 +146,10 @@ describe('ObjectStatus', () => {
             expect(label.tagName).toBe('DT');
             expect(label.previousElementSibling.previousElementSibling).toHaveTextContent('Instances up');
             expect(within(label.nextElementSibling).getAllByRole('button').map((b) => b.textContent)).toEqual(['system/cfg/dns', 'system/sec/dns']);
+            // The volumes, after the datastores.
+            const volumes = screen.getByText('Volumes', {selector: 'dt'});
+            expect(volumes.previousElementSibling.previousElementSibling).toBe(label);
+            expect(within(volumes.nextElementSibling).getAllByRole('button').map((b) => b.textContent)).toEqual(['system/vol/dns']);
         } finally {
             useEventStore.setState({objectInstanceStatus: {}});
         }

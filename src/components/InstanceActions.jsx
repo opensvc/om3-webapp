@@ -136,12 +136,16 @@ export function RefreshStatusButton({path, nodes}) {
     );
 }
 
-/** The datastores the resources given use — the cfg and sec objects they install from — once each, sorted. */
-export function datastoresOf(resources) {
-    return [...new Set(resources.flatMap((r) => r?.datastores ?? []))].sort((a, b) => a.localeCompare(b));
-}
+/** The objects the resources given name in `field`, once each, sorted. */
+const pathsOf = (resources, field) => [...new Set(resources.flatMap((r) => r?.[field] ?? []))].sort((a, b) => a.localeCompare(b));
 
-/** The datastores, a badge each opening its object panel. */
+/** The datastores the resources given use — the cfg and sec objects they install from — once each, sorted. */
+export const datastoresOf = (resources) => pathsOf(resources, "datastores");
+
+/** The vol objects the resources given use — a volume resource, the one it is — once each, sorted. */
+export const volumesOf = (resources) => pathsOf(resources, "volumes");
+
+/** Objects, the datastores or the volumes of resources, a badge each opening its object panel. */
 export function DatastoreLinks({paths}) {
     return (
         <span className="inline-flex flex-wrap items-center gap-1">

@@ -15,6 +15,8 @@ import {getResponseErrorMessage} from "../services/api.jsx";
 import logger from '../utils/logger.js';
 import {parseObjectPath} from '../utils/objectUtils';
 import {KEY_KINDS} from "../constants/actions";
+import {hasPemCertificate} from "../utils/x509";
+import CertificateDetails from "./CertificateDetails";
 import {Trans, useTranslation} from "react-i18next";
 
 const getAuthToken = () => {
@@ -371,6 +373,8 @@ const KeysSection = ({decodedObjectName, openSnackbar, refreshKey}) => {
         : {by, direction: by === "size" ? "desc" : "asc"}));
     const [keyToView, setKeyToView] = useState(null);
     const [keyViewContent, setKeyViewContent] = useState(null);
+    // The certificates of the key shown decoded, in the place of its text.
+    const [showCertificate, setShowCertificate] = useState(false);
     const [keyViewLoading, setKeyViewLoading] = useState(false);
     const [revealSecret, setRevealSecret] = useState(false);
     // A revealed secret is masked again on its own after a few seconds.
@@ -578,6 +582,7 @@ const KeysSection = ({decodedObjectName, openSnackbar, refreshKey}) => {
         setKeyViewLoading(true);
         setViewDialogOpen(true);
         setKeyViewContent(null);
+        setShowCertificate(false);
         setRevealSecret(false);
 
         const result = await fetchKeyContent(keyName);
@@ -590,6 +595,9 @@ const KeysSection = ({decodedObjectName, openSnackbar, refreshKey}) => {
         }
         setKeyViewLoading(false);
     };
+
+    // A key holding PEM certificates, a chain or one with its private key, offers to decode them.
+    const isCertificate = keyViewContent?.type === "text" && hasPemCertificate(keyViewContent.content);
 
     // Closed, a revealed value is masked: it is not shown again on reopening before it is read.
     const closeViewDialog = () => {
@@ -792,6 +800,11 @@ const KeysSection = ({decodedObjectName, openSnackbar, refreshKey}) => {
                                 {isSecret && revealSecret && ` · ${t("keys.view.maskedAgain", {count: secondsLeft})}`}
                             </p>
                             <div className="flex items-center gap-1">
+                                {isCertificate && (
+                                    <Button size="sm" onClick={() => setShowCertificate((shown) => !shown)}>
+                                        {showCertificate ? t("keys.view.showContent") : t("keys.view.decodeCertificate")}
+                                    </Button>
+                                )}
                                 {/* A secret copied masked too: pasted where needed, never shown. */}
                                 {keyViewContent.type === "text" && (
                                     <CopyButton text={keyViewContent.content} label={t("keys.view.copy")}/>
@@ -816,7 +829,10 @@ const KeysSection = ({decodedObjectName, openSnackbar, refreshKey}) => {
                                 )}
                             </div>
                         </div>
-                        {isSecret && !revealSecret ? (
+                        {/* A certificate is public: decoded, it is shown even with the secret masked. */}
+                        {isCertificate && showCertificate ? (
+                            <CertificateDetails text={keyViewContent.content}/>
+                        ) : isSecret && !revealSecret ? (
                             <div className="flex flex-col items-center gap-1 rounded-(--radius-control) border border-dashed border-line bg-surface-sunken p-6 text-center text-ink-muted">
                                 <LockIcon/>
                                 <p>{t("keys.view.hidden")}</p>

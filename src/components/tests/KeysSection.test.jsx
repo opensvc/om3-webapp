@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event';
 import {vi} from 'vitest';
 import KeysSection from '../KeysSection';
 import {resetMaxKeySize} from '../../hooks/useMaxKeySize';
+import {CA_PEM, LEAF_PEM} from '../../utils/tests/certificates.fixture';
 
 // ── Mocks ──────────────────────────────────────────────────────────────
 vi.mock('../../hooks/useEventStore.js', () => ({default: vi.fn()}));
@@ -529,6 +530,49 @@ describe('KeysSection', () => {
         await waitFor(() => expect(queryLoading(within(dialog))).not.toBeInTheDocument());
         expect(within(dialog).getByText(/Type:\s*Text/i)).toBeInTheDocument();
         expect(within(dialog).getByDisplayValue('hello')).toBeInTheDocument();
+        expect(within(dialog).queryByRole('button', {name: 'Decode certificate'})).toBeNull();
+    });
+
+    test('a key holding certificates decodes them, and shows its content again', async () => {
+        const chain = LEAF_PEM + CA_PEM;
+        mockFetch({keys: [{name: 'chain', node: 'n', size: chain.length}], keyBlob: makeMockBlob(encodeText(chain))});
+        await renderAndWait('root/cfg/cfg1', 1);
+        const dialog = await openDialog('view', 'chain');
+        await waitFor(() => expect(queryLoading(within(dialog))).not.toBeInTheDocument());
+        await act(async () => {
+            await user.click(within(dialog).getByRole('button', {name: 'Decode certificate'}));
+        });
+        expect(within(dialog).queryByRole('textbox', {name: 'Key content'})).toBeNull();
+        const leaf = within(dialog).getByRole('region', {name: 'Certificate 1 of 2'});
+        expect(within(leaf).getByText('O=OpenSVC, CN=web.example.com')).toBeInTheDocument();
+        expect(within(leaf).getByText('DNS:web.example.com')).toBeInTheDocument();
+        expect(within(leaf).getByText('RSA 2048 bits')).toBeInTheDocument();
+        expect(within(leaf).getByText(/^Valid, expires in \d+ days$/)).toHaveClass('text-state-up');
+        expect(await within(leaf).findByText(/^47:A1:99:02/)).toBeInTheDocument();
+        const ca = within(dialog).getByRole('region', {name: 'Certificate 2 of 2'});
+        expect(within(ca).getByText('CA:TRUE, pathlen:0')).toBeInTheDocument();
+        expect(within(ca).getByText('Basic constraints (critical)')).toBeInTheDocument();
+        await act(async () => {
+            await user.click(within(dialog).getByRole('button', {name: 'Show content'}));
+        });
+        expect(within(dialog).getByRole('textbox', {name: 'Key content'})).toHaveValue(chain);
+    });
+
+    test('a certificate of a masked secret decodes, the secret kept masked', async () => {
+        const pem = '-----BEGIN PRIVATE KEY-----\nMC4CAQAwBQYDK2VwBCIEIA==\n-----END PRIVATE KEY-----\n' + LEAF_PEM;
+        mockFetch({keys: [{name: 'fullpem', node: 'n', size: pem.length}], keyBlob: makeMockBlob(encodeText(pem))});
+        await renderAndWait('root/sec/sec1', 1);
+        const dialog = await openDialog('view', 'fullpem');
+        await waitFor(() => expect(queryLoading(within(dialog))).not.toBeInTheDocument());
+        await act(async () => {
+            await user.click(within(dialog).getByRole('button', {name: 'Hide secret'}));
+        });
+        expect(within(dialog).getByText('The content of this secret is masked.')).toBeInTheDocument();
+        await act(async () => {
+            await user.click(within(dialog).getByRole('button', {name: 'Decode certificate'}));
+        });
+        expect(within(dialog).getByRole('region', {name: 'Certificate'})).toBeInTheDocument();
+        expect(within(dialog).queryByText(/PRIVATE KEY/)).toBeNull();
     });
 
     test('view shows binary', async () => {

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { MeshLink } from "../heartbeat-mesh";
-import { driversOf, heartbeatsOf, layerOf } from "../heartbeat-summary";
+import { heartbeatsOf, layerOf, sidesOf } from "../heartbeat-summary";
 
 /** A link one way, its sender and receiver, beating or not. */
 const link = (hb: string, type: string, from: string, to: string, up: boolean, extra: Partial<MeshLink> = {}): MeshLink => ({
@@ -36,15 +36,22 @@ describe("heartbeat summary", () => {
     ]);
   });
 
-  test("each driver over the cluster: its heartbeats, their links beating out of all, its layer", () => {
-    const rows = driversOf([
-      ...both("hb#1", "unicast", "n1", "n2", true),
-      ...both("hb#11", "unicast", "n1", "n2", false),
-      ...both("hb#2", "disk", "n1", "n2", true),
+  test("each side of each node: its heartbeats, their links beating, stopped, out of all", () => {
+    // The links of both sides of each end: n1 tx and n2 rx, n2 tx and n1 rx.
+    const ends = (hb: string, a: string, b: string, up: boolean, extra: Partial<MeshLink> = {}) => [
+      link(hb, "unicast", a, b, up, { node: a, peer: b, dir: "tx", ...extra }),
+      link(hb, "unicast", a, b, up, { node: b, peer: a, dir: "rx" }),
+    ];
+    const rows = sidesOf([
+      ...ends("hb#1", "n10", "n1", true),
+      ...ends("hb#1", "n1", "n10", true),
+      ...ends("hb#2", "n1", "n10", false, { streamState: "stopped" }),
     ]);
-    expect(rows.map((r) => [r.type, r.layer, r.hbs, r.beating, r.total, r.state])).toEqual([
-      ["disk", "storage", ["hb#2"], 2, 2, "up"],
-      ["unicast", "network", ["hb#1", "hb#11"], 2, 4, "warn"],
+    expect(rows.map((r) => [r.node, r.dir, r.hbs, r.beating, r.stopped, r.total, r.state])).toEqual([
+      ["n1", "tx", ["hb#1", "hb#2"], 1, 1, 2, "warn"],
+      ["n1", "rx", ["hb#1"], 1, 0, 1, "up"],
+      ["n10", "tx", ["hb#1"], 1, 0, 1, "up"],
+      ["n10", "rx", ["hb#1", "hb#2"], 1, 0, 2, "warn"],
     ]);
   });
 });

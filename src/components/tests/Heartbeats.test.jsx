@@ -43,20 +43,27 @@ const mockLocalStorage = {
 };
 Object.defineProperty(window, "localStorage", {value: mockLocalStorage});
 
-/**
- * Renders the page, its streams table unfolded (folded by default under the mesh):
- * the tests are about the table. `folded` leaves it as the page opens.
- */
-const renderWithRouter = (ui, {route = "/", folded = false} = {}) => {
+/** The logs viewer, its props told: the nodes and the journal fields it reads. */
+const {mockLogsViewer} = vi.hoisted(() => ({mockLogsViewer: vi.fn()}));
+vi.mock("../LogsViewer", async () => {
+    const {createElement} = await import("react");
+    return {
+        default: (props) => {
+            mockLogsViewer(props);
+            return createElement("div", {"data-testid": "logs-viewer"});
+        },
+    };
+});
+const logsProps = () => mockLogsViewer.mock.calls.at(-1)[0];
+
+/** Renders the page at `route`. */
+const renderWithRouter = (ui, {route = "/"} = {}) => {
     const Wrapper = ({children}) => (
         <MemoryRouter initialEntries={[route]}>
             {children}
         </MemoryRouter>
     );
-    const result = render(ui, {wrapper: Wrapper});
-    const toggle = screen.queryByRole("button", {name: /^(Streams|Flux)/});
-    if (!folded && toggle?.getAttribute("aria-expanded") === "false") fireEvent.click(toggle);
-    return result;
+    return render(ui, {wrapper: Wrapper});
 };
 
 const buildStatus = (streamDefs) => {
@@ -171,18 +178,78 @@ describe("Heartbeats Component", () => {
         expect(document.querySelector("details")).toBeNull();
     });
 
-    test("the streams always shown under a heading, their count beside it", () => {
+    test("the streams in the Data tab, their count in its name; the Logs tab named in the URL", () => {
         mockHeartbeatStore(buildStatus([{node: "node1", streams: [
             {id: "hb#1.rx", state: "running", type: "unicast", peers: {p: {is_beating: true, desc: "d"}}},
             {id: "hb#1.tx", state: "running", type: "unicast", peers: {p: {is_beating: true, desc: "d"}}},
         ]}]));
-        renderWithRouter(<Heartbeats/>, {folded: true});
-        expect(screen.getByRole("heading", {name: /^Streams/})).toHaveTextContent("Streams2");
-        expect(screen.queryByRole("button", {name: /^Streams/})).toBeNull();
-        expect(screen.getByRole("table")).toBeInTheDocument();
+        renderWithRouter(<Heartbeats/>, {route: "/heartbeats?node=node1"});
+        expect(screen.getByRole("tab", {name: "Data 2"})).toHaveAttribute("aria-selected", "true");
+        expect(within(screen.getByRole("tabpanel")).getByRole("table")).toBeInTheDocument();
+        expect(screen.queryByTestId("logs-viewer")).toBeNull();
+        fireEvent.click(screen.getByRole("tab", {name: "Logs"}));
+        expect(mockNavigate).toHaveBeenCalledWith("/heartbeats?node=node1&view=logs", {replace: true});
     });
 
-    test("a heartbeat or a driver of the summary clicked filters the streams to it; clicked again, all of them", async () => {
+    describe("the Logs tab", () => {
+        const THREE_NODES = () => buildStatus(["n1", "n2", "n3"].map((node) => ({node, streams: [
+            {id: "hb#1.tx", state: "running", type: "unicast", peers: Object.fromEntries(["n1", "n2", "n3"].filter((peer) => peer !== node).map((peer) => [peer, {is_beating: true, desc: "d"}]))},
+            {id: "hb#2.rx", state: "running", type: "disk", peers: Object.fromEntries(["n1", "n2", "n3"].filter((peer) => peer !== node).map((peer) => [peer, {is_beating: true, desc: "d"}]))},
+        ]})));
+
+        beforeEach(() => mockLogsViewer.mockClear());
+
+        test("the logs of the heartbeats of all the nodes merged, in place of the streams", () => {
+            mockHeartbeatStore(THREE_NODES());
+            renderWithRouter(<Heartbeats/>, {route: "/heartbeats?view=logs"});
+            expect(screen.getByRole("tab", {name: "Logs"})).toHaveAttribute("aria-selected", "true");
+            expect(screen.queryByRole("table")).toBeNull();
+            expect(logsProps()).toMatchObject({type: "node", nodenames: ["n1", "n2", "n3"]});
+            expect(logsProps().filters).toEqual(expect.arrayContaining(["PKG=daemon/hb", "PKG=daemon/hb/hbdisk", "PKG=daemon/hbctrl"]));
+            // Nothing selected, no chips.
+            expect(screen.queryByRole("group", {name: "Selection"})).toBeNull();
+        });
+
+        test("a heartbeat selected: its logs; its chip removed, all of them again", () => {
+            mockHeartbeatStore(THREE_NODES());
+            renderWithRouter(<Heartbeats/>, {route: "/heartbeats?view=logs&id=2"});
+            expect(logsProps().filters).toContain("HB_NAME=hb#2");
+            const chips = screen.getByRole("group", {name: "Selection"});
+            fireEvent.click(within(chips).getByRole("button", {name: "Remove the hb#2 filter"}));
+            expect(logsProps().filters).not.toContain("HB_NAME=hb#2");
+            expect(screen.queryByRole("group", {name: "Selection"})).toBeNull();
+        });
+
+        test("a side of a node and a heartbeat selected in the summary: the logs of both, on that node", () => {
+            mockHeartbeatStore(THREE_NODES());
+            renderWithRouter(<Heartbeats/>, {route: "/heartbeats?view=logs"});
+            const summary = screen.getByRole("region", {name: "Summary"});
+            fireEvent.click(within(summary.querySelector('[data-row="rx:n2"]')).getByRole("button"));
+            fireEvent.click(within(summary.querySelector('[data-row="hb#2"]')).getByRole("button"));
+            expect(logsProps().nodenames).toEqual(["n2"]);
+            expect(logsProps().filters).toEqual(expect.arrayContaining(["HB_NAME=hb#2", "HB_FUNC=rx"]));
+            const chips = screen.getByRole("group", {name: "Selection"});
+            expect(within(chips).getAllByRole("button").map((chip) => chip.textContent)).toEqual(["hb#2", "n2 ↓ rx"]);
+            // A link of the mesh in place of the side, the heartbeat kept.
+            fireEvent.click(document.querySelector('[data-group="n1 n2"]'));
+            expect(within(chips).getAllByRole("button").map((chip) => chip.textContent)).toEqual(["hb#2", "n1 → n2"]);
+        });
+
+        test("a link selected: the logs of its two nodes; the changes only, of the watchers of its streams", () => {
+            mockHeartbeatStore(THREE_NODES());
+            renderWithRouter(<Heartbeats/>, {route: "/heartbeats?view=logs&link=n3%3En1"});
+            expect(logsProps().nodenames).toEqual(["n3", "n1"]);
+            fireEvent.click(screen.getByRole("checkbox", {name: "State changes only"}));
+            // n3 sends to n1 on its hb#1.tx; n1 receives from n3 on its hb#2.rx.
+            expect(logsProps().filters).toEqual([
+                "PKG=daemon/hbctrl:peerWatch",
+                "HB_PEER_WATCH=hb#1.tx-n1",
+                "HB_PEER_WATCH=hb#2.rx-n3",
+            ]);
+        });
+    });
+
+    test("a heartbeat or a side of a node of the summary clicked filters the streams to it, both together; clicked again, all of them", async () => {
         mockHeartbeatStore(buildStatus([
             {node: "n1", streams: [
                 {id: "hb#1.rx", state: "running", type: "unicast", peers: {n2: {is_beating: true, desc: "d"}}},
@@ -199,11 +266,30 @@ describe("Heartbeats Component", () => {
         fireEvent.click(hb2);
         expect(hb2).toHaveAttribute("aria-pressed", "false");
         expect(getDataRows()).toHaveLength(2);
-        const unicast = within(summary.querySelector('[data-row="unicast"]')).getByRole("button");
-        fireEvent.click(unicast);
+        // The rx side of n1 and hb#1: both.
+        const side = within(summary.querySelector('[data-row="rx:n1"]')).getByRole("button");
+        fireEvent.click(side);
+        expect(getDataRows()).toHaveLength(2);
+        fireEvent.click(within(summary.querySelector('[data-row="hb#1"]')).getByRole("button"));
+        expect(side).toHaveAttribute("aria-pressed", "true");
         expect(getDataRows().map(streamOf)).toEqual(["1.rx"]);
-        expect(getFilter("driver")).toHaveValue("unicast");
-        await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith(expect.stringContaining("type=unicast"), {replace: true}));
+        await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith(expect.stringContaining("side=rx%3An1"), {replace: true}));
+        fireEvent.click(side);
+        expect(side).toHaveAttribute("aria-pressed", "false");
+    });
+
+    test("a side of a node in the URL filters the streams", () => {
+        mockHeartbeatStore(buildStatus([
+            {node: "n1", streams: [
+                {id: "hb#1.rx", state: "running", type: "unicast", peers: {n2: {is_beating: true, desc: "d"}}},
+                {id: "hb#1.tx", state: "running", type: "unicast", peers: {n2: {is_beating: true, desc: "d"}}},
+            ]},
+            {node: "n2", streams: [
+                {id: "hb#1.tx", state: "running", type: "unicast", peers: {n1: {is_beating: true, desc: "d"}}},
+            ]},
+        ]));
+        renderWithRouter(<Heartbeats/>, {route: "/heartbeats?side=tx%3An1"});
+        expect(getDataRows().map((row) => [streamOf(row), within(row).getAllByRole("cell")[2].textContent])).toEqual([["1.tx", "n1"]]);
     });
 
     test("a driver in the URL filters the streams", () => {
@@ -1101,7 +1187,7 @@ describe("Heartbeats Component", () => {
                 {id: "hb#4.tx", state: "running", type: "unicast", peers: {dev3n1: {is_beating: true, desc: "→ dev3n1"}}},
             ]},
         ]));
-        const {container} = renderWithRouter(<Heartbeats/>, {folded: true});
+        const {container} = renderWithRouter(<Heartbeats/>);
         const line = container.querySelector('[data-group="dev3n1 dev3n2"]');
         expect(line).toHaveAttribute("data-state", "down");
         fireEvent.click(line);

@@ -1,7 +1,7 @@
 /*
  * What the heartbeat mesh says at a glance (HeartbeatSummary): how each heartbeat
- * and each driver fare over the cluster, and the layer of infrastructure they go
- * over. Read from the links of the mesh (meshLinks).
+ * fares over the cluster and the layer of infrastructure it goes over, how each node
+ * sends and receives. Read from the links of the mesh (meshLinks).
  */
 
 import type { GroupState, MeshLink } from "./heartbeat-mesh";
@@ -29,18 +29,27 @@ export function layerOf(type: string): Layer {
   }
 }
 
-/** A heartbeat over the cluster: its links beating out of all of them. */
-export interface HeartbeatSummaryRow {
-  hb: string;
-  type: string;
-  layer: Layer;
+/** Links beating, on a stopped stream, out of all: the figures and the bar of a row. */
+interface Counts {
   beating: number;
+  stopped: number;
   total: number;
   state: GroupState;
 }
 
-const stateOf = (beating: number, total: number): GroupState =>
-  beating === total ? "up" : beating === 0 ? "down" : "warn";
+/** A heartbeat over the cluster: its links beating out of all of them. */
+export interface HeartbeatSummaryRow extends Counts {
+  hb: string;
+  type: string;
+  layer: Layer;
+}
+
+function countsOf(links: MeshLink[]): Counts {
+  const beating = links.filter((l) => l.state === "up").length;
+  const stopped = links.filter((l) => l.streamState !== undefined && l.streamState !== "running").length;
+  const total = links.length;
+  return { beating, stopped, total, state: beating === total ? "up" : beating === 0 ? "down" : "warn" };
+}
 
 /** Each heartbeat, by its name, with its links beating out of all of them. */
 export function heartbeatsOf(links: MeshLink[]): HeartbeatSummaryRow[] {
@@ -51,39 +60,35 @@ export function heartbeatsOf(links: MeshLink[]): HeartbeatSummaryRow[] {
   return [...byHb.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([hb, of]) => {
-      const beating = of.filter((l) => l.state === "up").length;
       const type = of.find((l) => l.type)?.type ?? "";
-      return { hb, type, layer: layerOf(type), beating, total: of.length, state: stateOf(beating, of.length) };
+      return { hb, type, layer: layerOf(type), ...countsOf(of) };
     });
 }
 
-/** A driver over the cluster: its heartbeats, their links beating out of all of them. */
-export interface DriverSummaryRow {
-  type: string;
-  layer: Layer;
+/**
+ * A side of a node: its tx streams sending to its peers, or its rx streams receiving
+ * from them, over all its heartbeats.
+ */
+export interface SideSummaryRow extends Counts {
+  node: string;
+  dir: "tx" | "rx";
   hbs: string[];
-  beating: number;
-  total: number;
-  state: GroupState;
 }
 
-/** Each driver, by its name, with its heartbeats and their links beating out of all of them. */
-export function driversOf(links: MeshLink[]): DriverSummaryRow[] {
-  const byType = new Map<string, MeshLink[]>();
+/** Each node, by its name, its tx side then its rx side, with their links beating out of all. */
+export function sidesOf(links: MeshLink[]): SideSummaryRow[] {
+  const bySide = new Map<string, MeshLink[]>();
   for (const link of links) {
-    byType.set(link.type, [...(byType.get(link.type) ?? []), link]);
+    if (link.dir === "") continue;
+    const key = `${link.dir} ${link.node}`;
+    bySide.set(key, [...(bySide.get(key) ?? []), link]);
   }
-  return [...byType.entries()]
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([type, of]) => {
-      const beating = of.filter((l) => l.state === "up").length;
-      return {
-        type,
-        layer: layerOf(type),
-        hbs: [...new Set(of.map((l) => l.hb))].sort(),
-        beating,
-        total: of.length,
-        state: stateOf(beating, of.length),
-      };
-    });
+  return [...bySide.values()]
+    .map((of) => ({
+      node: of[0].node,
+      dir: of[0].dir as "tx" | "rx",
+      hbs: [...new Set(of.map((l) => l.hb))].sort(),
+      ...countsOf(of),
+    }))
+    .sort((a, b) => a.node.localeCompare(b.node) || (a.dir === b.dir ? 0 : a.dir === "tx" ? -1 : 1));
 }

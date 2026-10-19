@@ -419,7 +419,6 @@
       "id": "ID",
       "show": "Show filters",
       "hide": "Hide filters",
-      "clearLink": "Remove the {{link}} filter",
       "driver": "Driver"
     },
     "marks": {
@@ -445,7 +444,6 @@
         "down": "none beating"
       }
     },
-    "streams": "Streams",
     "actions": {
       "stop": "Stop",
       "start": "Start",
@@ -471,9 +469,25 @@
         "relay": "relay",
         "other": "other"
       },
-      "drivers": "Drivers",
       "title": "Summary",
-      "hint": "Select a heartbeat or a driver to filter the streams."
+      "hint": "Select a heartbeat, a side of a node, or both, to filter the streams and the logs. tx: the streams sending to the peers; rx: receiving from them.",
+      "sides": "Nodes",
+      "side": {
+        "tx": "↑ tx",
+        "rx": "↓ rx"
+      }
+    },
+    "tabs": {
+      "label": "Heartbeats views",
+      "data": "Data",
+      "logs": "Logs"
+    },
+    "selection": {
+      "label": "Selection",
+      "clear": "Remove the {{name}} filter"
+    },
+    "logs": {
+      "changes": "State changes only"
     }
   },
   "instance": {

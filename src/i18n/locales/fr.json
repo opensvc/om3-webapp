@@ -419,7 +419,6 @@
       "id": "ID",
       "show": "Afficher les filtres",
       "hide": "Masquer les filtres",
-      "clearLink": "Retirer le filtre {{link}}",
       "driver": "Pilote"
     },
     "marks": {
@@ -445,7 +444,6 @@
         "down": "aucun ne bat"
       }
     },
-    "streams": "Flux",
     "actions": {
       "stop": "Arrêter",
       "start": "Démarrer",
@@ -471,9 +469,25 @@
         "relay": "relais",
         "other": "autre"
       },
-      "drivers": "Pilotes",
       "title": "Synthèse",
-      "hint": "Sélectionnez un heartbeat ou un pilote pour filtrer les flux."
+      "hint": "Sélectionnez un heartbeat, un côté d'un nœud, ou les deux, pour filtrer les flux et les journaux. tx : les flux émettant vers les pairs ; rx : recevant d'eux.",
+      "sides": "Nœuds",
+      "side": {
+        "tx": "↑ tx",
+        "rx": "↓ rx"
+      }
+    },
+    "tabs": {
+      "label": "Vues des heartbeats",
+      "data": "Données",
+      "logs": "Journaux"
+    },
+    "selection": {
+      "label": "Sélection",
+      "clear": "Retirer le filtre {{name}}"
+    },
+    "logs": {
+      "changes": "Changements d'état seulement"
     }
   },
   "instance": {

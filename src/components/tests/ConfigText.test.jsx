@@ -96,6 +96,40 @@ describe('ConfigText', () => {
         expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });
 
+    test('the help stands out of the file, in the window, whatever the room around', async () => {
+        const {container} = render(<ConfigText text={FILE} label="cfg" keywordsUrl="/kw" cacheKey="svc"/>);
+        await hover();
+        // The "?" by the bottom right corner of a window 800 wide, 600 high.
+        const button = screen.getByRole('button', {name: 'What fs#1.device does'});
+        button.getBoundingClientRect = () => ({top: 560, bottom: 576, left: 780, right: 796, width: 16, height: 16});
+        Object.defineProperty(document.documentElement, 'clientWidth', {configurable: true, value: 800});
+        const innerHeight = window.innerHeight;
+        Object.defineProperty(window, 'innerHeight', {configurable: true, value: 600});
+        const scrollHeight = vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockReturnValue(200);
+        try {
+            fireEvent.click(button);
+            const doc = screen.getByRole('dialog', {name: 'fs#1.device'});
+            // Not in the file, which scrolls sideways and is cut by the panel.
+            expect(container.contains(doc)).toBe(false);
+            expect(doc).toHaveClass('fixed');
+            expect(button).toHaveAttribute('aria-controls', doc.id);
+            // Over the "?", short of room below; its right edge on the one of the "?", kept in the window.
+            expect(doc.style.bottom).toBe('44px');
+            expect(doc.style.top).toBe('');
+            expect(doc.style.width).toBe('576px');
+            expect(doc.style.left).toBe('216px');
+            // A click in it keeps it open.
+            fireEvent.pointerDown(doc);
+            expect(screen.getByRole('dialog', {name: 'fs#1.device'})).toBeInTheDocument();
+            fireEvent.pointerDown(document.body);
+            expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+        } finally {
+            scrollHeight.mockRestore();
+            delete document.documentElement.clientWidth;
+            Object.defineProperty(window, 'innerHeight', {configurable: true, value: innerHeight});
+        }
+    });
+
     test('the keywords of a kind are read once for all its objects', async () => {
         const {unmount} = render(<ConfigText text={FILE} label="cfg" keywordsUrl="/kw/a" cacheKey="svc"/>);
         await hover();

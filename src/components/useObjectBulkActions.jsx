@@ -4,7 +4,7 @@ import useEventStore from "../hooks/useEventStore.js";
 import {forceFlush} from "../eventSourceManager";
 import logger from "../utils/logger.js";
 import {isActionAllowedForSelection, parseObjectPath} from "../utils/objectUtils";
-import {KEY_KINDS, OBJECT_ACTIONS, actionLabel} from "../constants/actions";
+import {KEY_KINDS, OBJECT_ACTIONS, actionLabel, isKeyKindAction} from "../constants/actions";
 import {actionUrl} from "./objectActions";
 import ActionDialogManager from "./ActionDialogManager";
 import {Alert} from "../ui/components/Alert";
@@ -140,7 +140,8 @@ export function useObjectBulkActions({selectedObjects, onDone}) {
         // Keys held on all the nodes are deleted, or the orchestration on them aborted: nothing else.
         const keysOnly = selectedKinds.size > 0 && [...selectedKinds].every((kind) => KEY_KINDS.includes(kind));
         return OBJECT_ACTIONS
-            .filter((action) => !keysOnly || ["delete", "purge", "abort"].includes(action.name))
+            .filter((action) => !keysOnly || action.name === "abort"
+                || [...selectedKinds].every((kind) => isKeyKindAction(kind, action.name)))
             .filter((action) => !action.kinds ||
                 (selectedKinds.size > 0 && [...selectedKinds].every((kind) => action.kinds.includes(kind))))
             .map((action) => ({

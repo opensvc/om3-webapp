@@ -1,5 +1,5 @@
 import i18n from '../../i18n';
-import {actionLabel, NODE_ACTIONS, OBJECT_ACTIONS, INSTANCE_ACTIONS, RESOURCE_ACTIONS} from '../actions';
+import {actionLabel, NODE_ACTIONS, OBJECT_ACTIONS, INSTANCE_ACTIONS, RESOURCE_ACTIONS, objectActionsFor} from '../actions';
 
 describe('actionLabel', () => {
     afterEach(async () => {
@@ -53,5 +53,16 @@ describe('INSTANCE_ACTIONS', () => {
 
     test('sync ingest posts to action/ingest, its path since om3 named the paths after the actions', () => {
         expect(INSTANCE_ACTIONS.find((a) => a.name === 'sync ingest').endpoint).toBe('ingest');
+    });
+});
+
+describe('objectActionsFor the key kinds', () => {
+    const names = (kind) => objectActionsFor(kind).map((a) => a.name);
+
+    test('a secret is deleted, not purged; a configuration and a user both', () => {
+        expect(names('sec')).toEqual(['delete']);
+        expect(names('cfg')).toEqual(['delete', 'purge']);
+        expect(names('usr')).toEqual(['delete', 'purge']);
+        expect(names('svc')).toContain('purge');
     });
 });

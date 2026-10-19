@@ -6,6 +6,7 @@ import { HistoryIcon } from "../ui/icons";
 import { useShortcut } from "../ui/lib/shortcuts";
 import { usePeek } from "./panel-search";
 import { isPeekStep, stepLabel } from "./peek";
+import { requestHistoryMenu } from "./PanelHistory";
 import { readLastRecord, useRecordHistory } from "./record-history";
 
 /**
@@ -76,6 +77,8 @@ export function PanelAnchor({ inBar = false }: { inBar?: boolean }) {
         title={label}
         aria-keyshortcuts="p"
         onClick={() => {
+          // No room for the rail: the panel opens on its history list, the history asked.
+          requestHistoryMenu();
           peek(target.kind, target.id);
         }}
         className="flex h-7 shrink-0 items-center gap-1 rounded-(--radius-control) px-1.5 text-ink-muted hover:bg-surface-sunken hover:text-ink"

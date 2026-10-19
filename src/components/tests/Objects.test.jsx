@@ -603,6 +603,21 @@ describe('Objects Component', () => {
         expect(within(menu).getByRole('menuitem', {name: 'Abort'})).toBeEnabled();
     });
 
+    test('a selection of secrets offers no purge: a secret is deleted', async () => {
+        setup({
+            objectStatus: {
+                ...defaultState.objectStatus,
+                'test-ns/cfg/conf1': {avail: 'n/a', frozen: 'unfrozen', provisioned: 'true'},
+                'test-ns/sec/sec1': {avail: 'n/a', frozen: 'unfrozen', provisioned: 'true'},
+            },
+        }, '?list=secrets');
+        await waitForLoad();
+        selectRow('test-ns/sec/sec1');
+        openActionsMenu();
+        const menu = await screen.findByRole('menu');
+        expect(within(menu).getAllByRole('menuitem').map((i) => i.textContent)).toEqual(['Abort', 'Delete']);
+    });
+
     describe('tabs', () => {
         const mixed = {
             objectStatus: {

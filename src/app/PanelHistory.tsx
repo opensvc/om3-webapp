@@ -127,6 +127,17 @@ export function PanelHistoryRail({ currentKey }: { currentKey: string }) {
   );
 }
 
+/** The history list asked open with the next panel, by the history button of a narrow window. */
+let menuRequested = false;
+
+/**
+ * Opens the history list of the next record panel shown: in a narrow window, the
+ * history button of the header bar brings the history, not the record alone.
+ */
+export function requestHistoryMenu() {
+  menuRequested = true;
+}
+
 /**
  * The panel history as a button of the header opening a list, where the window
  * leaves no room for the rail beside the panel. Same entries, same groups and same
@@ -138,6 +149,13 @@ export function PanelHistoryMenu({ currentKey }: { currentKey: string }) {
   const history = usePanelHistory(currentKey, grouping.value);
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
+
+  // Asked open with the panel: once, by the panel that shows first.
+  useEffect(() => {
+    if (!menuRequested) return;
+    menuRequested = false;
+    setOpen(true);
+  }, []);
 
   useEffect(() => {
     if (!open) return;

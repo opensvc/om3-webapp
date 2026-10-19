@@ -102,6 +102,10 @@ describe('ObjectStatus', () => {
         expect(screen.getByText('Overall').tagName).toBe('DT');
         expect(screen.getByRole('list', {name: 'Issues'})).toHaveTextContent('not provisioned');
         expect(screen.getByRole('list', {name: 'Issues'})).toHaveClass('flex-col');
+        // Beside the summary, not under it: a state coming or going (frozen) moves nothing below.
+        const summary = screen.getByText('Instances up').closest('dl');
+        expect(screen.getByRole('list', {name: 'Issues'}).parentElement).toBe(summary.parentElement);
+        expect(summary.parentElement).toHaveClass('flex', 'flex-wrap');
         // Out of a panel, the policies and the actions stand over the summary.
         const policies = screen.getByLabelText('Policies');
         expect(policies).toHaveTextContent('Topology: flexOrchestrate: haPlacement: nodes order');

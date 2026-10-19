@@ -381,50 +381,54 @@ export function StatusBoard({
 
   return (
     <div className="space-y-3">
-      {/* The summary: the statuses of the object, one a line, then what is wrong with it, if anything. */}
-      <dl className="grid w-max grid-cols-[auto_auto] items-center gap-x-3 gap-y-1">
-        {avail !== undefined && (
-          <>
-            <dt className="text-ink-muted">{t("statusBoard.avail")}</dt>
-            <dd><SummaryStatus status={avail.status} /></dd>
-          </>
-        )}
-        {overall !== undefined && (
-          <>
-            <dt className="text-ink-muted">{t("statusBoard.overall")}</dt>
-            <dd><SummaryStatus status={overall.status} /></dd>
-          </>
-        )}
-        {count !== undefined && (
-          <>
-            <dt className="text-ink-muted">{t("statusBoard.instancesUp")}</dt>
-            <dd className={cn("font-medium tabular-nums", count.tone === "error" && "text-state-down")}>{count.text}</dd>
-          </>
-        )}
-        {facts.map(({ label, value }) => (
-          <Fragment key={label}>
-            <dt className="text-ink-muted">{label}</dt>
-            <dd>{value}</dd>
-          </Fragment>
-        ))}
-      </dl>
-      {states.length > 0 && (
-        <ul aria-label={t("statusBoard.issues")} className="flex flex-col items-start gap-y-1">
-          {states.map((s) =>
-            s.text === "frozen" || s.text === "mixed-frozen" ? (
-              <li key={s.text} className="inline-flex items-center gap-1 text-icon-network">
-                <FrozenMark frozen />
-                {t(`statusBoard.states.${s.text}`)}
-              </li>
-            ) : (
-              <li key={s.text} className={cn("inline-flex items-center gap-1", TONES[s.tone ?? "secondary"])}>
-                <AlertTriangleIcon className="h-3.5 w-3.5" />
-                {t(`statusBoard.states.${s.text}`)}
-              </li>
-            ),
+      {/* The summary: the statuses of the object, one a line, and beside them what is
+          wrong with it, if anything: a state coming or going (frozen, not provisioned)
+          moves nothing below. Short of room, the states go under. */}
+      <div className="flex flex-wrap items-start gap-x-10 gap-y-3">
+        <dl className="grid w-max grid-cols-[auto_auto] items-center gap-x-3 gap-y-1">
+          {avail !== undefined && (
+            <>
+              <dt className="text-ink-muted">{t("statusBoard.avail")}</dt>
+              <dd><SummaryStatus status={avail.status} /></dd>
+            </>
           )}
-        </ul>
-      )}
+          {overall !== undefined && (
+            <>
+              <dt className="text-ink-muted">{t("statusBoard.overall")}</dt>
+              <dd><SummaryStatus status={overall.status} /></dd>
+            </>
+          )}
+          {count !== undefined && (
+            <>
+              <dt className="text-ink-muted">{t("statusBoard.instancesUp")}</dt>
+              <dd className={cn("font-medium tabular-nums", count.tone === "error" && "text-state-down")}>{count.text}</dd>
+            </>
+          )}
+          {facts.map(({ label, value }) => (
+            <Fragment key={label}>
+              <dt className="text-ink-muted">{label}</dt>
+              <dd>{value}</dd>
+            </Fragment>
+          ))}
+        </dl>
+        {states.length > 0 && (
+          <ul aria-label={t("statusBoard.issues")} className="flex flex-col items-start gap-y-1">
+            {states.map((s) =>
+              s.text === "frozen" || s.text === "mixed-frozen" ? (
+                <li key={s.text} className="inline-flex items-center gap-1 text-icon-network">
+                  <FrozenMark frozen />
+                  {t(`statusBoard.states.${s.text}`)}
+                </li>
+              ) : (
+                <li key={s.text} className={cn("inline-flex items-center gap-1", TONES[s.tone ?? "secondary"])}>
+                  <AlertTriangleIcon className="h-3.5 w-3.5" />
+                  {t(`statusBoard.states.${s.text}`)}
+                </li>
+              ),
+            )}
+          </ul>
+        )}
+      </div>
 
       {toolbar}
 

@@ -2,9 +2,10 @@ import React, {useEffect, useState} from 'react';
 import {useTranslation} from 'react-i18next';
 import {URL_AUTH_WHOAMI} from '../config/apiPath';
 import {Button} from '../ui/components/Button';
+import {Select} from '../ui/components/Field';
 import {Alert} from '../ui/components/Alert';
 import {Spinner} from '../ui/components/Spinner';
-import {LockIcon, MoonIcon, ServerIcon, SignOutIcon, SunIcon, UserIcon} from '../ui/icons';
+import {GlobeIcon, LockIcon, MoonIcon, ServerIcon, SignOutIcon, SunIcon, UserIcon} from '../ui/icons';
 import {useOidc} from "../context/OidcAuthContext.tsx";
 import {useAuth, useAuthDispatch, Logout} from "../context/AuthProvider.jsx";
 import {useNavigate} from "react-router-dom";
@@ -12,6 +13,7 @@ import logger from '../utils/logger.js';
 import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus";
 import {useDarkMode} from "../context/DarkModeContext";
 import {clearObjectCache} from "../hooks/useEventStore.js";
+import {LANGUAGES, LANGUAGE_NAMES, isLanguage, setLanguage} from "../i18n";
 
 /** A labelled value of a panel: the label muted above, the value in monospace. */
 const Value = ({label, children}) => (
@@ -36,7 +38,7 @@ const WhoAmI = () => {
     const navigate = useNavigate();
     const {daemon, fetchNodes} = useFetchDaemonStatus();
     const {isDarkMode, toggleDarkMode} = useDarkMode();
-    const {t} = useTranslation();
+    const {t, i18n} = useTranslation();
 
     // Fetch version from GitHub
     useEffect(() => {
@@ -182,7 +184,20 @@ const WhoAmI = () => {
                 </section>
             </div>
 
-            <div className="flex flex-col gap-2 sm:flex-row">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                {/* Each language named in itself: found whatever the language shown. */}
+                <label className="flex items-center gap-2">
+                    <GlobeIcon className="h-4 w-4 text-ink-muted"/>
+                    <span>{t('user.language')}</span>
+                    <Select
+                        value={isLanguage(i18n.language) ? i18n.language : 'en'}
+                        onChange={(event) => setLanguage(event.target.value)}
+                    >
+                        {LANGUAGES.map((language) => (
+                            <option key={language} value={language} lang={language}>{LANGUAGE_NAMES[language]}</option>
+                        ))}
+                    </Select>
+                </label>
                 <Button
                     onClick={toggleDarkMode}
                     icon={isDarkMode ? <SunIcon className="h-4 w-4"/> : <MoonIcon className="h-4 w-4"/>}

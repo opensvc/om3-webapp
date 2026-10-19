@@ -92,6 +92,7 @@ describe('eventSourceManager', () => {
                 if (JSON.stringify(mockStore.objectInstanceStatus) !== JSON.stringify(v)) mockStore.objectInstanceStatus = v;
             }),
             removeInstanceFromObject: vi.fn(),
+            removeNode: vi.fn(),
             removePendingDelete: vi.fn(),
             removeObjects: vi.fn(),
         };
@@ -161,7 +162,7 @@ describe('eventSourceManager', () => {
         test('should create an EventSource and attach event listeners', () => {
             const es = createES();
             expect(EventSourcePolyfill).toHaveBeenCalled();
-            expect(es.addEventListener).toHaveBeenCalledTimes(10);
+            expect(es.addEventListener).toHaveBeenCalledTimes(11);
         });
 
         test('should close existing EventSource before creating a new one', () => {
@@ -520,6 +521,16 @@ describe('eventSourceManager', () => {
             vi.runAllTimers();
             expect(mockStore.removeInstanceFromObject).toHaveBeenCalledWith('obj1', 'node1');
             expect(mockStore.removePendingDelete).toHaveBeenCalledWith('obj1', 'node1');
+        });
+
+        test('a node dropped by the cluster (NodeMonitorDeleted) leaves the store', () => {
+            const es = createES();
+            const handler = getHandler(es, 'NodeMonitorDeleted');
+            fire(handler, {node: 'node1'});
+            fire(handler, {labels: {node: 'node2'}});
+            fire(handler, {});
+            vi.runAllTimers();
+            expect(mockStore.removeNode.mock.calls).toEqual([['node1'], ['node2']]);
         });
 
         test('should warn on InstanceConfigDeleted missing path or node', () => {

@@ -234,6 +234,60 @@ const useEventStore = create(
                     return {objectInstanceStatus: newObjectInstanceStatus};
                 }),
 
+            // The instances of the nodes no longer in the cluster, as a cluster status
+            // read tells its nodes: kept from an earlier session (localStorage), they
+            // would show a node dropped meanwhile as it was, where a "?" is due.
+            pruneInstancesOfNodes: (liveNodes) =>
+                set((state) => {
+                    if (!Array.isArray(liveNodes) || liveNodes.length === 0) return state;
+                    const live = new Set(liveNodes);
+                    const keep = (byNode) => {
+                        const gone = Object.keys(byNode ?? {}).filter((node) => !live.has(node));
+                        if (gone.length === 0) return byNode;
+                        const next = {...byNode};
+                        for (const node of gone) delete next[node];
+                        return next;
+                    };
+                    const pruneByPath = (map) => {
+                        let changed = false;
+                        const next = {};
+                        for (const [path, byNode] of Object.entries(map ?? {})) {
+                            next[path] = keep(byNode);
+                            if (next[path] !== byNode) changed = true;
+                        }
+                        return changed ? next : map;
+                    };
+                    const objectInstanceStatus = pruneByPath(state.objectInstanceStatus);
+                    const instanceConfig = pruneByPath(state.instanceConfig);
+                    // The monitors are keyed "node:path".
+                    const monitorKeys = Object.keys(state.instanceMonitor ?? {});
+                    const goneMonitors = monitorKeys.filter((key) => !live.has(key.slice(0, key.indexOf(":"))));
+                    let instanceMonitor = state.instanceMonitor;
+                    if (goneMonitors.length > 0) {
+                        instanceMonitor = {...state.instanceMonitor};
+                        for (const key of goneMonitors) delete instanceMonitor[key];
+                    }
+                    if (objectInstanceStatus === state.objectInstanceStatus && instanceConfig === state.instanceConfig
+                        && instanceMonitor === state.instanceMonitor) return state;
+                    return {objectInstanceStatus, instanceConfig, instanceMonitor};
+                }),
+
+            // A node the cluster dropped: what it reported goes, until it rejoins.
+            removeNode: (node) =>
+                set((state) => {
+                    const without = (map) => {
+                        if (!map || !(node in map)) return map;
+                        const next = {...map};
+                        delete next[node];
+                        return next;
+                    };
+                    const nodeStatus = without(state.nodeStatus);
+                    const nodeMonitor = without(state.nodeMonitor);
+                    const nodeStats = without(state.nodeStats);
+                    if (nodeStatus === state.nodeStatus && nodeMonitor === state.nodeMonitor && nodeStats === state.nodeStats) return state;
+                    return {nodeStatus, nodeMonitor, nodeStats};
+                }),
+
             setNodeStatuses: (nodeStatus) =>
                 set((state) => shallowEqual(state.nodeStatus, nodeStatus) ? state : {nodeStatus}),
 

@@ -19,6 +19,7 @@ export const EVENT_TYPES = {
     INSTANCE_MONITOR_UPDATED: 'InstanceMonitorUpdated',
     INSTANCE_CONFIG_UPDATED: 'InstanceConfigUpdated',
     INSTANCE_CONFIG_DELETED: 'InstanceConfigDeleted',
+    NODE_MONITOR_DELETED: 'NodeMonitorDeleted',
 };
 
 // Event Source connection event types (these are NOT API events)
@@ -89,6 +90,7 @@ let buffers = {
     instanceConfig: {},
     configUpdated: new Set(),
     instanceConfigDeleted: [],
+    nodeDeleted: [],
 };
 
 // Deep equality check to detect actual changes
@@ -159,6 +161,7 @@ const getAndClearBuffers = () => {
         instanceConfig: buffers.instanceConfig,
         configUpdated: buffers.configUpdated,
         instanceConfigDeleted: buffers.instanceConfigDeleted,
+        nodeDeleted: buffers.nodeDeleted,
     };
 
     buffers = {
@@ -172,6 +175,7 @@ const getAndClearBuffers = () => {
         instanceConfig: {},
         configUpdated: new Set(),
         instanceConfigDeleted: [],
+        nodeDeleted: [],
     };
 
     return buffersToFlush;
@@ -308,6 +312,15 @@ const flushBuffers = () => {
                 store.removePendingDelete(path, node);
             }
         }
+        // A node dropped by the cluster: its status, monitor and stats go, after
+        // the updates flushed with them.
+        if (buffersToFlush.nodeDeleted.length > 0) {
+            const store = useEventStore.getState();
+            for (const node of buffersToFlush.nodeDeleted) {
+                debugLog(`🗑️ Flushing NodeMonitorDeleted: node=${node}`);
+                store.removeNode(node);
+            }
+        }
 
         if (eventCount > 0) {
             debugLog(`✅ Flushed ${eventCount} events`);
@@ -394,6 +407,7 @@ const clearBuffers = () => {
         instanceConfig: {},
         configUpdated: new Set(),
         instanceConfigDeleted: [],
+        nodeDeleted: [],
     };
     if (flushTimeoutId) {
         clearTimeout(flushTimeoutId);
@@ -473,6 +487,12 @@ const updateBuffer = (bufferName, key, value) => {
     if (bufferName === 'configUpdated') {
         buffers.configUpdated.add(value);
         debugLog(`📝 Buffer[configUpdated]: Added ${value}`);
+        scheduleFlush();
+        return;
+    }
+
+    if (bufferName === 'nodeDeleted') {
+        buffers.nodeDeleted.push(value);
         scheduleFlush();
         return;
     }
@@ -652,6 +672,11 @@ export const createEventSource = (url, token, filters = DEFAULT_FILTERS) => {
                         updateBuffer('nodeMonitor', data.node, data.node_monitor);
                     }
                     break;
+                case EVENT_TYPES.NODE_MONITOR_DELETED: {
+                    const droppedNode = data.node || data.labels?.node;
+                    if (droppedNode) updateBuffer('nodeDeleted', null, droppedNode);
+                    break;
+                }
                 case EVENT_TYPES.NODE_STATS_UPDATED:
                     if (data.node && data.node_stats) {
                         updateBuffer('nodeStats', data.node, data.node_stats);

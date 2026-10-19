@@ -45,6 +45,9 @@ vi.mock('../../hooks/useEventStore', async (importOriginal) => {
 });
 
 const mockGrants = vi.hoisted(() => ({value: {}}));
+// The nodes of the cluster configuration; null, not read: the nodes reporting an instance.
+const mockClusterOrder = vi.hoisted(() => ({value: null}));
+vi.mock('../../hooks/useClusterNodeOrder', () => ({useClusterNodeOrder: () => mockClusterOrder.value}));
 vi.mock('../../hooks/useGrants', () => ({useGrants: () => mockGrants.value}));
 vi.mock('../../hooks/useFetchDaemonStatus', () => ({
     default: vi.fn(() => ({daemon: {cluster: {object: {}}}})),
@@ -311,6 +314,8 @@ describe('Objects Component', () => {
         expect(screen.getByText('Object')).toBeInTheDocument();
         expect(screen.getByRole('table')).toBeInTheDocument();
         expect(mockRetainEventReception).toHaveBeenCalledWith('mock-token', expect.any(Array));
+        // The instances of a node dropped are deleted: the list hears it, for its "?".
+        expect(mockRetainEventReception.mock.calls[0][1]).toContain('InstanceConfigDeleted');
         unmount();
         expect(mockReleaseEventReception).toHaveBeenCalled();
     });
@@ -474,6 +479,33 @@ describe('Objects Component', () => {
                 expect(propertyCell(cfg, label)).toHaveTextContent(/^$/)
             );
         });
+    });
+
+    test('a node gone keeps its column, a "?" for the objects it runs, as om mon', async () => {
+        // node3, of the cluster, reports nothing: dropped, its instances deleted.
+        mockClusterOrder.value = ['node2', 'node1', 'node3'];
+        try {
+            setup({
+                objectStatus: {
+                    ...defaultState.objectStatus,
+                    'test-ns/svc/test1': {...defaultState.objectStatus['test-ns/svc/test1'], scope: ['node1', 'node2', 'node3']},
+                    'root/svc/test3': {...defaultState.objectStatus['root/svc/test3'], scope: ['node2']},
+                },
+            }, '', {isWideScreen: true, isMobile: false});
+            await waitForLoad();
+            // In the order of the cluster configuration.
+            const headers = within(screen.getByRole('table', {name: 'Objects'})).getAllByRole('columnheader')
+                .map((h) => h.textContent).filter((text) => /^node/.test(text));
+            expect(headers).toEqual(['node2', 'node1', 'node3']);
+            const gone = nodeCell(objectRow('test-ns/svc/test1'), 2);
+            expect(gone).toHaveTextContent('?');
+            expect(within(gone).getByTitle('No status from node3: the node is gone or not heard from')).toHaveClass('text-state-down');
+            // Not of its scope: nothing.
+            expect(nodeCell(objectRow('root/svc/test3'), 2)).toHaveTextContent(/^$/);
+            expect(nodeCell(objectRow('root/svc/test3'), 1)).toHaveTextContent(/^$/);
+        } finally {
+            mockClusterOrder.value = null;
+        }
     });
 
     test('per-node cells show avail, frozen, not provisioned and monitor state', async () => {

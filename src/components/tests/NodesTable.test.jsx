@@ -57,6 +57,10 @@ vi.mock('../NodeRow.jsx', () => ({
     ),
 }));
 
+// The nodes of the cluster configuration; null, not read: the nodes reporting a status.
+const mockClusterOrder = vi.hoisted(() => ({value: null}));
+vi.mock('../../hooks/useClusterNodeOrder', () => ({useClusterNodeOrder: () => mockClusterOrder.value}));
+
 vi.mock('../ActionDialogManager', () => ({
     __esModule: true,
     default: ({pendingAction, handleConfirm, target, onClose}) => {
@@ -195,6 +199,18 @@ describe('NodesTable', () => {
         mockUseEventStore.mockImplementation((sel) => sel(store));
         return store;
     };
+
+    test('a node of the cluster dropped keeps its line, and the drops are heard', async () => {
+        mockClusterOrder.value = ['node-1', 'node-2', 'node-3', 'node-4'];
+        try {
+            renderWithRouter(<NodesTable/>);
+            expect(await screen.findByTestId('row-node-4')).toBeInTheDocument();
+            expect(screen.getByTestId('row-node-1')).toBeInTheDocument();
+            expect(mockRetainEventReception.mock.calls[0][1]).toContain('NodeMonitorDeleted');
+        } finally {
+            mockClusterOrder.value = null;
+        }
+    });
 
     test('shows loader when no data, then renders rows', async () => {
         setStore({nodeStatus: {}, nodeStats: {}, nodeMonitor: {}});

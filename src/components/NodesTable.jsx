@@ -2,6 +2,7 @@ import React, {useEffect, useState, useMemo} from "react";
 import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus.jsx";
 import {retainEventReception} from "../eventSourceManager";
 import useEventStore from "../hooks/useEventStore.js";
+import {useClusterNodeOrder} from "../hooks/useClusterNodeOrder";
 import NodeRow from "../components/NodeRow.jsx";
 import logger from '../utils/logger.js';
 import {URL_NODE} from "../config/apiPath.js";
@@ -64,6 +65,8 @@ const NodesTable = () => {
         "NodeStatusUpdated",
         "NodeMonitorUpdated",
         "NodeStatsUpdated",
+        // A node dropped by the cluster: its line turns to "?", as om mon shows it.
+        "NodeMonitorDeleted",
         "CONNECTION_OPENED",
         "CONNECTION_ERROR",
         "RECONNECTION_ATTEMPT",
@@ -202,8 +205,11 @@ const NodesTable = () => {
         });
     });
 
+    // The nodes of the cluster configuration too: a node dropped keeps its line.
+    const clusterNodes = useClusterNodeOrder();
     const sortedNodes = React.useMemo(() => {
-        return [...Object.keys(nodeStatus)].sort((a, b) => {
+        const names = [...new Set([...(clusterNodes ?? []), ...Object.keys(nodeStatus)])];
+        return names.sort((a, b) => {
             let diff = 0;
             if (sortColumn === "name") {
                 diff = a.localeCompare(b);
@@ -232,7 +238,7 @@ const NodesTable = () => {
             }
             return sortDirection === "asc" ? diff : -diff;
         });
-    }, [nodeStatus, nodeStats, nodeMonitor, sortColumn, sortDirection]);
+    }, [clusterNodes, nodeStatus, nodeStats, nodeMonitor, sortColumn, sortDirection]);
 
     const handleSort = (column) => {
         if (sortColumn === column) {

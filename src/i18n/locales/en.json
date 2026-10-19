@@ -1043,6 +1043,7 @@
       "failed_other": "'{{action}}' could not be requested on any of the {{count}} nodes."
     },
     "row": {
+      "lost": "No status: the node is gone or not heard from",
       "label": "Node {{node}} row",
       "select": "Select node {{node}}",
       "connected": "Connected to this node"
@@ -1234,6 +1235,7 @@
     "datastoreHint": "Created empty: its keys are added next, in its panel."
   },
   "objects": {
+    "noInstanceStatus": "No status from {{node}}: the node is gone or not heard from",
     "flex": {
       "title": "Flex",
       "min": "Min instances",
@@ -1366,6 +1368,7 @@
     "productName": "OM3 WebApp",
     "lightMode": "Light Mode",
     "darkMode": "Dark Mode",
+    "language": "Language",
     "logout": "Logout"
   },
   "panel": {

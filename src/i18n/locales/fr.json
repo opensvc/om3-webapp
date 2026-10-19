@@ -1043,6 +1043,7 @@
       "failed_other": "« {{action}} » n'a pu être demandé sur aucun des {{count}} nœuds."
     },
     "row": {
+      "lost": "Aucun état : le nœud est perdu ou ne répond pas",
       "label": "Ligne du nœud {{node}}",
       "select": "Sélectionner le nœud {{node}}",
       "connected": "Connecté à ce nœud"
@@ -1234,6 +1235,7 @@
     "datastoreHint": "Créé vide : ses clés s’ajoutent ensuite, dans son panneau."
   },
   "objects": {
+    "noInstanceStatus": "Aucun état de {{node}} : le nœud est perdu ou ne répond pas",
     "flex": {
       "title": "Flex",
       "min": "Instances min",
@@ -1366,6 +1368,7 @@
     "productName": "WebApp OM3",
     "lightMode": "Thème clair",
     "darkMode": "Thème sombre",
+    "language": "Langue",
     "logout": "Se déconnecter"
   },
   "panel": {

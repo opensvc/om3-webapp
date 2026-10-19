@@ -568,6 +568,16 @@ describe('ObjectStatus', () => {
             await waitFor(() => expect(posted).toEqual(['POST /api/node/name/dev3n3/instance/path/system/svc/dns/action/start']));
         });
 
+        test('a node of the scope that reports nothing shows a red "?", as om status draws it', async () => {
+            const wider = structuredClone(dns);
+            wider.scope = [...wider.scope, 'dev3n3'];
+            await ready(wider);
+            const unknown = document.querySelectorAll('[data-state="unknown"]');
+            expect(unknown).toHaveLength(1);
+            expect(unknown[0]).toHaveTextContent('?');
+            expect(unknown[0]).toHaveClass('text-state-down');
+        });
+
         test('a failed instance is cleared, for the orchestration to try again', async () => {
             await ready();
             pickNode('dev3n1');

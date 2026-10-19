@@ -782,6 +782,51 @@ describe('useEventStore', () => {
         });
     });
 
+    describe('pruneInstancesOfNodes', () => {
+        test('forgets the instances of the nodes no longer in the cluster', () => {
+            useEventStore.setState({
+                objectInstanceStatus: {svc1: {n1: {avail: 'up'}, n2: {avail: 'down'}}, svc2: {n1: {avail: 'up'}}},
+                instanceConfig: {svc1: {n1: {}, n2: {}}},
+                instanceMonitor: {'n1:svc1': {state: 'idle'}, 'n2:svc1': {state: 'idle'}},
+            });
+            useEventStore.getState().pruneInstancesOfNodes(['n1']);
+            const s = useEventStore.getState();
+            expect(s.objectInstanceStatus).toEqual({svc1: {n1: {avail: 'up'}}, svc2: {n1: {avail: 'up'}}});
+            expect(s.instanceConfig).toEqual({svc1: {n1: {}}});
+            expect(s.instanceMonitor).toEqual({'n1:svc1': {state: 'idle'}});
+        });
+
+        test('all nodes live, or none told: nothing changes', () => {
+            useEventStore.setState({objectInstanceStatus: {svc1: {n1: {avail: 'up'}}}});
+            const before = useEventStore.getState();
+            useEventStore.getState().pruneInstancesOfNodes(['n1', 'n2']);
+            useEventStore.getState().pruneInstancesOfNodes([]);
+            useEventStore.getState().pruneInstancesOfNodes(undefined);
+            expect(useEventStore.getState()).toBe(before);
+        });
+    });
+
+    describe('removeNode', () => {
+        test('drops what a node reported, the other nodes kept', () => {
+            useEventStore.setState({
+                nodeStatus: {n1: {agent: 'a'}, n2: {agent: 'b'}},
+                nodeMonitor: {n1: {state: 'idle'}, n2: {state: 'idle'}},
+                nodeStats: {n1: {score: 1}},
+            });
+            useEventStore.getState().removeNode('n1');
+            const s = useEventStore.getState();
+            expect(s.nodeStatus).toEqual({n2: {agent: 'b'}});
+            expect(s.nodeMonitor).toEqual({n2: {state: 'idle'}});
+            expect(s.nodeStats).toEqual({});
+        });
+
+        test('a node not known changes nothing', () => {
+            const before = useEventStore.getState();
+            useEventStore.getState().removeNode('nope');
+            expect(useEventStore.getState()).toBe(before);
+        });
+    });
+
     describe('removeInstanceFromObject', () => {
         test('removes instance from all three maps', () => {
             act(() => {

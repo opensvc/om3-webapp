@@ -46,9 +46,21 @@ const GLYPH_INK: Record<ObjectState, string> = {
   unknown: "text-state-unknown",
 };
 
-/** A status as the other views draw it: the glyph of its state, gray when no issue; n/a as om writes it, "/". */
+/**
+ * A status as the other views draw it: the glyph of its state, gray when no issue; n/a
+ * as om writes it, "/". Unknown, a red "?" as om draws it: an instance of the object
+ * that tells nothing, its node gone or not heard from.
+ */
 function Status({ span }: { span: Span }) {
   const badge = statusBadge(span.status);
+  if (span.status === "undef") {
+    return (
+      <span data-state="unknown" className="inline-flex w-4 shrink-0 items-center justify-center font-semibold text-state-down">
+        <span aria-hidden="true">?</span>
+        <span className="sr-only">{badge.label ?? span.status}</span>
+      </span>
+    );
+  }
   // om grays a down where the object misses no instance: it is no issue.
   const muted = span.tone === "secondary" && badge.state !== "unknown" && badge.state !== "na";
   return (

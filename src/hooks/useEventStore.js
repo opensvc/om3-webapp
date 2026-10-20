@@ -202,32 +202,16 @@ const useEventStore = create(
                         } else {
                             newObjectInstanceStatus[path] = {...newObjectInstanceStatus[path]};
                         }
+                        // An instance status event carries the whole status: it replaces the
+                        // one known. The daemon omits a field once empty (resources, running,
+                        // encap, rpo_breached_at...): merged, its old value stayed.
                         for (const node in incomingNodes) {
                             if (!incomingNodes.hasOwnProperty(node)) continue;
-                            const newStatus = incomingNodes[node];
+                            const next = {node, path, ...incomingNodes[node]};
                             const existingData = newObjectInstanceStatus[path][node];
-                            if (existingData && shallowEqual(existingData, newStatus)) continue;
+                            if (existingData && shallowEqual(existingData, next)) continue;
                             hasChanges = true;
-                            if (newStatus?.encap) {
-                                const existingEncap = existingData?.encap || {};
-                                const mergedEncap = {...existingEncap};
-                                for (const containerId in newStatus.encap) {
-                                    if (newStatus.encap.hasOwnProperty(containerId)) {
-                                        const existingContainer = existingEncap[containerId] || {};
-                                        const newContainer = newStatus.encap[containerId] || {};
-                                        mergedEncap[containerId] = {
-                                            ...existingContainer,
-                                            ...newContainer,
-                                            resources: newContainer.resources && Object.keys(newContainer.resources).length > 0
-                                                ? {...newContainer.resources}
-                                                : existingContainer.resources || {},
-                                        };
-                                    }
-                                }
-                                newObjectInstanceStatus[path][node] = {node, path, ...newStatus, encap: mergedEncap};
-                            } else {
-                                newObjectInstanceStatus[path][node] = {node, path, ...existingData, ...newStatus};
-                            }
+                            newObjectInstanceStatus[path][node] = next;
                         }
                     }
                     if (!hasChanges) return state;

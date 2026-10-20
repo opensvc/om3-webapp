@@ -147,7 +147,7 @@ describe('useEventStore', () => {
                 expect(useEventStore.getState().objectInstanceStatus).toEqual(first);
             });
 
-            test('preserves existing encap resources when incoming resources is empty', () => {
+            test('an encap container whose resources went empty has none', () => {
                 act(() => {
                     useEventStore.getState().setInstanceStatuses({
                         svc: {n1: {encap: {c1: {resources: {cpu: 100}}}}}
@@ -159,7 +159,7 @@ describe('useEventStore', () => {
                     });
                 });
                 expect(useEventStore.getState().objectInstanceStatus.svc.n1.encap.c1.resources)
-                    .toEqual({cpu: 100});
+                    .toEqual({});
             });
 
             test('uses incoming resources when non-empty', () => {
@@ -188,7 +188,7 @@ describe('useEventStore', () => {
                 expect(useEventStore.getState().objectInstanceStatus.svc).toEqual({});
             });
 
-            test('merges non-encap properties correctly', () => {
+            test('a field the new status omits is gone', () => {
                 act(() => {
                     useEventStore.getState().setInstanceStatuses({svc: {n1: {status: 'old', val: 1}}});
                 });
@@ -196,7 +196,7 @@ describe('useEventStore', () => {
                     useEventStore.getState().setInstanceStatuses({svc: {n1: {status: 'new'}}});
                 });
                 expect(useEventStore.getState().objectInstanceStatus.svc.n1).toEqual({
-                    node: 'n1', path: 'svc', status: 'new', val: 1,
+                    node: 'n1', path: 'svc', status: 'new',
                 });
             });
 
@@ -212,19 +212,21 @@ describe('useEventStore', () => {
                 expect(useEventStore.getState().objectInstanceStatus).toEqual(first);
             });
 
-            test('skips inherited properties in encap', () => {
-                const encapProto = {inheritedContainer: {resources: {cpu: 1}}};
-                const encap = Object.create(encapProto);
-                encap.c1 = {resources: {cpu: 100}};
+            test('a container gone from encap is gone', () => {
                 act(() => {
-                    useEventStore.getState().setInstanceStatuses({svc: {n1: {encap}}});
+                    useEventStore.getState().setInstanceStatuses({
+                        svc: {n1: {encap: {c1: {resources: {cpu: 100}}, c2: {resources: {cpu: 50}}}}}
+                    });
                 });
-                const result = useEventStore.getState().objectInstanceStatus.svc.n1.encap;
-                expect(result).toHaveProperty('c1');
-                expect(result).not.toHaveProperty('inheritedContainer');
+                act(() => {
+                    useEventStore.getState().setInstanceStatuses({
+                        svc: {n1: {encap: {c1: {resources: {cpu: 100}}}}}
+                    });
+                });
+                expect(Object.keys(useEventStore.getState().objectInstanceStatus.svc.n1.encap)).toEqual(['c1']);
             });
 
-            test('preserves existing encap resources when incoming resources is undefined', () => {
+            test('an encap container that reports no resources has none', () => {
                 act(() => {
                     useEventStore.getState().setInstanceStatuses({
                         svc: {n1: {encap: {c1: {resources: {cpu: 100}}}}}
@@ -236,7 +238,7 @@ describe('useEventStore', () => {
                     });
                 });
                 expect(useEventStore.getState().objectInstanceStatus.svc.n1.encap.c1.resources)
-                    .toEqual({cpu: 100});
+                    .toBeUndefined();
             });
         });
 
@@ -281,32 +283,11 @@ describe('useEventStore', () => {
             });
         });
 
-        describe('preservation of stopped_at / rpo_breached_at across partial updates', () => {
-            test('stopped_at survives a subsequent partial update without it', () => {
-                act(() => {
-                    useEventStore.getState().setInstanceStatuses({
-                        'root/svc/foo': {
-                            dev1n1: {
-                                avail: 'down',
-                                stopped_at: '2025-05-16T10:00:00Z',
-                            },
-                        },
-                    });
-                });
-                act(() => {
-                    useEventStore.getState().setInstanceStatuses({
-                        'root/svc/foo': {
-                            dev1n1: {state: 'idle'},
-                        },
-                    });
-                });
-                const node = useEventStore.getState().objectInstanceStatus['root/svc/foo'].dev1n1;
-                expect(node.stopped_at).toBe('2025-05-16T10:00:00Z');
-                expect(node.state).toBe('idle');
-                expect(node.avail).toBe('down');
-            });
-
-            test('rpo_breached_at survives a subsequent partial update without it', () => {
+        // Each InstanceStatusUpdated carries the whole status (om3 msgbus: the
+        // instance.Status value), a field omitted once empty or zero (rpo_breached_at
+        // omitzero, resources and running omitempty): a field it lacks is gone.
+        describe('a status replaces the one known: a field it omits is gone', () => {
+            test('rpo_breached_at omitted once the breach is over: no breach kept', () => {
                 act(() => {
                     useEventStore.getState().setInstanceStatuses({
                         'root/svc/foo': {
@@ -320,39 +301,43 @@ describe('useEventStore', () => {
                 act(() => {
                     useEventStore.getState().setInstanceStatuses({
                         'root/svc/foo': {
-                            dev1n1: {state: 'running'},
+                            dev1n1: {avail: 'up', stopped_at: '0001-01-01T00:00:00Z'},
                         },
                     });
                 });
                 const node = useEventStore.getState().objectInstanceStatus['root/svc/foo'].dev1n1;
-                expect(node.rpo_breached_at).toBe('2025-05-16T10:00:00Z');
-                expect(node.state).toBe('running');
+                expect(node).not.toHaveProperty('rpo_breached_at');
                 expect(node.avail).toBe('up');
             });
 
-            test('both stopped_at and rpo_breached_at survive together', () => {
+            test('resources omitted once the instance has none: none kept', () => {
                 act(() => {
                     useEventStore.getState().setInstanceStatuses({
-                        'root/svc/foo': {
-                            dev1n1: {
-                                avail: 'down',
-                                stopped_at: '2025-05-16T10:00:00Z',
-                                rpo_breached_at: '2025-05-16T10:05:00Z',
-                            },
-                        },
+                        'root/svc/foo': {dev1n1: {avail: 'up', resources: {'fs#1': {status: 'up'}}}},
                     });
                 });
                 act(() => {
                     useEventStore.getState().setInstanceStatuses({
-                        'root/svc/foo': {
-                            dev1n1: {state: 'stopping'},
-                        },
+                        'root/svc/foo': {dev1n1: {avail: 'n/a'}},
                     });
                 });
-                const node = useEventStore.getState().objectInstanceStatus['root/svc/foo'].dev1n1;
-                expect(node.stopped_at).toBe('2025-05-16T10:00:00Z');
-                expect(node.rpo_breached_at).toBe('2025-05-16T10:05:00Z');
-                expect(node.state).toBe('stopping');
+                expect(useEventStore.getState().objectInstanceStatus['root/svc/foo'].dev1n1)
+                    .toEqual({node: 'dev1n1', path: 'root/svc/foo', avail: 'n/a'});
+            });
+
+            test('running omitted once the action ended: nothing running kept', () => {
+                act(() => {
+                    useEventStore.getState().setInstanceStatuses({
+                        'root/svc/foo': {dev1n1: {avail: 'up', running: [{rid: 'task#1'}]}},
+                    });
+                });
+                act(() => {
+                    useEventStore.getState().setInstanceStatuses({
+                        'root/svc/foo': {dev1n1: {avail: 'up'}},
+                    });
+                });
+                expect(useEventStore.getState().objectInstanceStatus['root/svc/foo'].dev1n1)
+                    .not.toHaveProperty('running');
             });
 
             test('an explicit stopped_at in the incoming payload overrides the previous value', () => {
@@ -414,7 +399,7 @@ describe('useEventStore', () => {
                     .toBe('0001-01-01T00:00:00Z');
             });
 
-            test('preservation also works across multiple sequential partial updates', () => {
+            test('the last of several statuses is the status', () => {
                 act(() => {
                     useEventStore.getState().setInstanceStatuses({
                         'root/svc/foo': {
@@ -428,18 +413,17 @@ describe('useEventStore', () => {
                 });
                 act(() => {
                     useEventStore.getState().setInstanceStatuses({
-                        'root/svc/foo': {dev1n1: {state: 'stopping'}},
+                        'root/svc/foo': {dev1n1: {avail: 'down', stopped_at: '2025-05-16T10:00:00Z'}},
                     });
                 });
                 act(() => {
                     useEventStore.getState().setInstanceStatuses({
-                        'root/svc/foo': {dev1n1: {state: 'idle'}},
+                        'root/svc/foo': {dev1n1: {avail: 'up', stopped_at: '0001-01-01T00:00:00Z'}},
                     });
                 });
-                const node = useEventStore.getState().objectInstanceStatus['root/svc/foo'].dev1n1;
-                expect(node.stopped_at).toBe('2025-05-16T10:00:00Z');
-                expect(node.rpo_breached_at).toBe('2025-05-16T10:05:00Z');
-                expect(node.state).toBe('idle');
+                expect(useEventStore.getState().objectInstanceStatus['root/svc/foo'].dev1n1).toEqual({
+                    node: 'dev1n1', path: 'root/svc/foo', avail: 'up', stopped_at: '0001-01-01T00:00:00Z',
+                });
             });
         });
     });

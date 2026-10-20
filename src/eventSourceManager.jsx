@@ -545,12 +545,10 @@ const updateBuffer = (bufferName, key, value) => {
         if (!buffers.instanceStatus[path]) {
             buffers.instanceStatus[path] = {};
         }
-        const existing = buffers.instanceStatus[path][node];
-        buffers.instanceStatus[path][node] = existing ? {...existing, ...value} : value;
-        debugLog(`📝 Buffer[instanceStatus]: ${path}:${node}`, {
-            incoming: value,
-            merged: buffers.instanceStatus[path][node]
-        });
+        // The whole status in each event: the last one is the status, nothing merged
+        // from an earlier one, a field it omits (once empty) is gone.
+        buffers.instanceStatus[path][node] = value;
+        debugLog(`📝 Buffer[instanceStatus]: ${path}:${node}`, value);
     } else if (bufferName === 'instanceConfig') {
         const [path, node] = key.split(':');
         if (!buffers.instanceConfig[path]) {

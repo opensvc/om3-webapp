@@ -974,15 +974,16 @@ describe('eventSourceManager', () => {
             }
         });
 
-        test('should merge repeated buffer updates for instanceStatus, instanceConfig, instanceMonitor, and catch-all (lines 444/455/459/463)', () => {
+        test('should keep the last instanceStatus, merge repeated buffer updates for instanceConfig, instanceMonitor, and catch-all', () => {
             {
                 const es = createES();
                 const h = getHandler(es, 'InstanceStatusUpdated');
+                // Each event the whole status: the last one, nothing of the first kept.
                 fire(h, {path: 'obj1', node: 'n1', instance_status: {a: 1}});
                 fire(h, {path: 'obj1', node: 'n1', instance_status: {b: 2}});
                 eventSourceManager.forceFlush();
                 expect(mockStore.setInstanceStatuses).toHaveBeenCalledWith(
-                    expect.objectContaining({obj1: {n1: {a: 1, b: 2}}})
+                    expect.objectContaining({obj1: {n1: {b: 2}}})
                 );
                 eventSourceManager.closeEventSource();
             }

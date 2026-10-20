@@ -1,4 +1,4 @@
-import React, {useMemo, useState} from "react";
+import React, {useEffect, useMemo, useRef, useState} from "react";
 import {useTranslation} from "react-i18next";
 import {URL_OBJECT} from "../config/apiPath.js";
 import {parseObjectPath} from "../utils/objectUtils.jsx";
@@ -6,6 +6,8 @@ import {Table, HeaderRow, HeaderCell, Row, Cell} from "../ui/components/Table";
 import {RelativeTime} from "../ui/components/RelativeTime";
 import {DataTable, FilterField, Loaded, isSet, matches, useApiResource} from "./NodePanel";
 import {InstanceLink, ResourceLink} from "./RecordLinks";
+import useEventStore from "../hooks/useEventStore.js";
+import {retainEventReception} from "../eventSourceManager.jsx";
 
 /*
  * Tabs of the object panel, read from the daemon API as om reads them: the daemon
@@ -77,16 +79,40 @@ export function ObjectSchedules({path}) {
  * info tab of its own panel. With `node`, that node alone: the resources tab of an
  * instance. The filter keeps a resource whole by its name, else the keys and the
  * values that match.
+ *
+ * The daemon reads these from a cache of each instance, which a change of its
+ * configuration does not refresh: a resource deleted stays in it. The resources
+ * configured on a node, as its instance configuration says (InstanceConfigUpdated),
+ * are the ones shown there; a change of a configuration reads the key-values again.
  */
 export function ObjectResources({path, rid: only, node: onNode}) {
     const {t} = useTranslation();
     const info = useApiResource(objectUrl(path, "resource/info"));
     const [filter, setFilter] = useState("");
 
+    // The configurations of the instances, carried by the stream while shown.
+    useEffect(() => {
+        const token = localStorage.getItem("authToken");
+        const release = token ? retainEventReception(token, ["InstanceConfigUpdated"], path) : null;
+        return () => release?.();
+    }, [path]);
+    const configs = useEventStore((s) => s.instanceConfig?.[path]);
+    // Their checksums, one string: it changes with a configuration, not with each render.
+    const checksums = Object.entries(configs ?? {}).map(([node, c]) => `${node}=${c?.csum ?? ""}`).sort().join(",");
+    const seen = useRef(checksums);
+    const {reload} = info;
+    useEffect(() => {
+        // The first configurations known are those of the key-values just read.
+        if (seen.current !== "" && seen.current !== checksums) reload();
+        seen.current = checksums;
+    }, [checksums, reload]);
+
     const items = useMemo(
         () => (info.data?.items ?? []).filter((item) =>
-            (only === undefined || item.rid === only) && (onNode === undefined || item.node === onNode)),
-        [info.data, only, onNode],
+            (only === undefined || item.rid === only) && (onNode === undefined || item.node === onNode)
+            // A node whose configuration is not known yet: all it reports.
+            && (configs?.[item.node]?.resources === undefined || item.rid in configs[item.node].resources)),
+        [info.data, only, onNode, configs],
     );
     const nodes = useMemo(() => [...new Set(items.map((i) => i.node))].sort(), [items]);
     // rid → key → node → value, the resources and their keys in their order.

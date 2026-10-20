@@ -698,6 +698,16 @@
     "removeSelected_other": "Remove {{count}} keys",
     "selectAll": "Select all the keys"
   },
+  "containerLogs": {
+    "node": "Node of the container",
+    "lines": "Container log lines",
+    "count": "{{shown}} / {{total}} lines",
+    "empty": "The container wrote nothing yet.",
+    "lost": "The container logs of {{node}} were lost (the container stopped, or the daemon restarted): reconnecting…",
+    "forbidden": "Reading the logs of a container takes the root role.",
+    "absent": "No container {{rid}} on {{node}}: it does not run there, or was removed as it stopped. Its logs are read as soon as it runs.",
+    "stopped": "{{rid}} does not run on {{node}}: these are the last lines it wrote. Its logs are followed again as soon as it runs."
+  },
   "logs": {
     "subtitle": "{{instance}} on {{node}}",
     "connected": "Connected",
@@ -1375,7 +1385,8 @@
       "schedules": "Schedules",
       "keys": "Keys",
       "config": "Configuration",
-      "info": "Info"
+      "info": "Info",
+      "containerLogs": "Container logs"
     },
     "crossLink": "Show the {{kind}} here",
     "kinds": {

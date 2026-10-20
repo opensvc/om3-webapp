@@ -16,6 +16,7 @@ import {NotProvisionedMark} from "../ui/components/StateMarks";
 import {toObjectState} from "../ui/components/status";
 import {ReadErrors, TotalTile, cpuText} from "./NamespaceMetrics";
 import {ObjectResources} from "./ObjectTabs";
+import {ContainerLogs, isContainerResource} from "./ContainerLogs";
 import {InstanceLink, ResourceLink} from "./RecordLinks";
 import {ObjectLogs} from "./ObjectLogs";
 import ObjectConfig from "./ObjectConfig";
@@ -399,7 +400,8 @@ export function InstanceDetailPanel({id, tab, onTabChange, onClose}) {
  * A resource of an object, by `path:rid`: its state on each node of the object,
  * then what it reports on each (`om <path> resource info list`, ObjectResources),
  * then its logs on all of them, merged, then its section of the configuration of
- * the object. It closes once the object is gone.
+ * the object; a container, what it writes too (ContainerLogs), on the nodes it is
+ * on. It closes once the object is gone.
  */
 export function ResourceDetailPanel({id, tab, onTabChange, onClose}) {
     const {t} = useTranslation();
@@ -408,10 +410,17 @@ export function ResourceDetailPanel({id, tab, onTabChange, onClose}) {
     useCloseWhenGone(id, known, onClose);
     const instances = useEventStore((s) => (parsed === null ? undefined : s.objectInstanceStatus?.[parsed.path]));
     const nodes = useMemo(() => Object.keys(instances ?? {}).sort(), [instances]);
+    // The nodes the resource is on, and those where it is up: a container's logs read there.
+    const rid = parsed?.rid;
+    const resourceNodes = useMemo(() => nodes.filter((node) => instances?.[node]?.resources?.[rid] !== undefined), [nodes, instances, rid]);
+    const upNodes = useMemo(() => resourceNodes.filter((node) => instances[node].resources[rid].status === "up"), [resourceNodes, instances, rid]);
+    const type = resourceNodes.map((node) => instances[node].resources[rid].type).find(Boolean);
+    const container = rid !== undefined && isContainerResource(rid, type);
     const tabs = [
         {key: "status", label: t("panel.tabs.status")},
         {key: "info", label: t("panel.tabs.info")},
         {key: "logs", label: t("panel.tabs.logs")},
+        ...(container ? [{key: "container", label: t("panel.tabs.containerLogs")}] : []),
         {key: "config", label: t("panel.tabs.config")},
     ];
     return (
@@ -430,6 +439,8 @@ export function ResourceDetailPanel({id, tab, onTabChange, onClose}) {
                 ? <ObjectConfig key={id} path={parsed.path} section={parsed.rid}/>
                 : active === "logs"
                 ? <ObjectLogs key={id} path={parsed.path} nodes={nodes} filters={[`RID=${parsed.rid}`]}/>
+                : active === "container" && container
+                ? <ContainerLogs key={id} path={parsed.path} rid={parsed.rid} nodes={resourceNodes.length > 0 ? resourceNodes : nodes} upNodes={upNodes}/>
                 : active === "info"
                 ? <ObjectResources key={id} path={parsed.path} rid={parsed.rid}/>
                 : <ResourceStatus key={id} path={parsed.path} rid={parsed.rid}/>)}

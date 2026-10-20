@@ -698,6 +698,16 @@
     "removeSelected_other": "Supprimer {{count}} clés",
     "selectAll": "Sélectionner toutes les clés"
   },
+  "containerLogs": {
+    "node": "Nœud du conteneur",
+    "lines": "Lignes du journal du conteneur",
+    "count": "{{shown}} / {{total}} lignes",
+    "empty": "Le conteneur n'a encore rien écrit.",
+    "lost": "Les journaux du conteneur sur {{node}} ont été perdus (le conteneur s'est arrêté, ou le démon a redémarré) : reconnexion…",
+    "forbidden": "Lire les journaux d'un conteneur demande le rôle root.",
+    "absent": "Aucun conteneur {{rid}} sur {{node}} : il n'y tourne pas, ou a été supprimé à son arrêt. Ses journaux sont lus dès qu'il tourne.",
+    "stopped": "{{rid}} ne tourne pas sur {{node}} : voici les dernières lignes qu'il a écrites. Ses journaux sont suivis de nouveau dès qu'il tourne."
+  },
   "logs": {
     "subtitle": "{{instance}} sur {{node}}",
     "connected": "Connecté",
@@ -1375,7 +1385,8 @@
       "schedules": "Planifications",
       "keys": "Clés",
       "config": "Configuration",
-      "info": "Infos"
+      "info": "Infos",
+      "containerLogs": "Journaux du conteneur"
     },
     "crossLink": "Afficher la fiche ici ({{kind}})",
     "kinds": {

@@ -395,15 +395,6 @@ const App = () => {
         prepareForNavigation();
     }, [location.pathname]);
 
-    useEffect(() => {
-        const checkTokenChange = () => {
-            const newToken = localStorage.getItem("authToken");
-            logger.debug("Storage event: newToken=", newToken);
-        };
-        window.addEventListener("storage", checkTokenChange);
-        return () => window.removeEventListener("storage", checkTokenChange);
-    }, []);
-
     const appContainerStyle = {
         position: 'fixed',
         top: 0,

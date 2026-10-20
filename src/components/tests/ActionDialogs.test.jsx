@@ -651,6 +651,43 @@ describe('ActionDialogs', () => {
             expect(onClose).toHaveBeenCalled();
         });
     });
+
+    // ----- What a dialog acts on -----
+    describe('target', () => {
+        test.each([
+            ['FreezeDialog', FreezeDialog], ['StopDialog', StopDialog], ['SwitchDialog', SwitchDialog],
+            ['GivebackDialog', GivebackDialog],
+        ])('%s says what it acts on', (_, DialogComponent) => {
+            render(<DialogComponent open onClose={onClose} onConfirm={onConfirm} checked={false}
+                                    setChecked={defaultSetState} disabled={false} target="object root/svc/web"/>);
+            expect(screen.getByRole('dialog')).toHaveTextContent('Acts on object root/svc/web.');
+            expect(screen.getByText('object root/svc/web', {selector: 'strong'})).toBeInTheDocument();
+        });
+
+        test.each([
+            ['ShutdownDialog', ShutdownDialog, {instancesDown: false, peerTakeover: false}],
+            ['UnprovisionDialog', UnprovisionDialog, {dataLoss: false, serviceInterruption: false, clusterwide: false}],
+            ['PurgeDialog', PurgeDialog, {dataLoss: false, configLoss: false, serviceInterruption: false}],
+            ['DeleteDialog', DeleteDialog, {configLoss: false, clusterwide: false}],
+        ])('%s lists the names of a bulk action', (_, DialogComponent, checkboxes) => {
+            render(<DialogComponent open onClose={onClose} onConfirm={onConfirm} checkboxes={checkboxes}
+                                    setCheckboxes={defaultSetState} disabled={false}
+                                    target="3 objects" names={['root/svc/a', 'root/svc/b', 'root/svc/c']}/>);
+            const dialog = screen.getByRole('dialog');
+            expect(dialog).toHaveTextContent('Acts on 3 objects.');
+            const list = within(dialog).getByRole('list', {name: 'Targets'});
+            expect(within(list).getAllByRole('listitem').map((li) => li.textContent))
+                .toEqual(['root/svc/a', 'root/svc/b', 'root/svc/c']);
+        });
+
+        test('a single name is not listed again', () => {
+            render(<DeleteDialog open onClose={onClose} onConfirm={onConfirm}
+                                 checkboxes={{configLoss: false, clusterwide: false}}
+                                 setCheckboxes={defaultSetState} disabled={false}
+                                 target="1 objects" names={['root/svc/a']}/>);
+            expect(screen.queryByRole('list')).not.toBeInTheDocument();
+        });
+    });
 });
 
 describe('ActionDialogs in French', () => {

@@ -331,6 +331,7 @@ const NodesTable = () => {
                 target={pendingAction?.node
                     ? t("nodes.target.node", {node: pendingAction.node})
                     : t("nodes.target.selected", {count: selectedNodes.length})}
+                names={pendingAction?.node ? undefined : selectedNodes}
                 supportedActions={NODE_ACTIONS.map((action) => action.name)}
                 onClose={() => setPendingAction(null)}
             />

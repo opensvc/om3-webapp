@@ -133,10 +133,28 @@ vi.mock('../ActionDialogs', () => ({
                        data-testid="giveback-checkbox"/>
                 <span>{props.pendingAction?.action}</span>
                 <span>{props.target}</span>
+                <span data-testid="giveback-names">{props.names?.join(',')}</span>
             </div>
         ) : null
     ),
+    Subject: vi.fn((props) => <span data-testid="subject-names">{props.names?.join(',')}</span>),
 }));
+
+describe('ActionDialogManager', () => {
+    test('passes the names of a bulk action to its dialog', () => {
+        render(<ActionDialogManager pendingAction={{action: 'giveback'}} handleConfirm={vi.fn()}
+                                    target="2 objects" names={['a', 'b']}
+                                    supportedActions={['giveback']} onClose={vi.fn()}/>);
+        expect(screen.getByTestId('giveback-names')).toHaveTextContent('a,b');
+    });
+
+    test('lists the names of a bulk action in the simple confirmation', () => {
+        render(<ActionDialogManager pendingAction={{action: 'other'}} handleConfirm={vi.fn()}
+                                    target="2 objects" names={['a', 'b']}
+                                    supportedActions={['other']} onClose={vi.fn()}/>);
+        expect(screen.getByTestId('subject-names')).toHaveTextContent('a,b');
+    });
+});
 
 describe('ActionDialogManager', () => {
     const defaultProps = {

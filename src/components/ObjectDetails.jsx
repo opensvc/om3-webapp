@@ -582,7 +582,12 @@ const ObjectDetail = ({path, embedded = false, onOpenLogs, onViewInstance, onOrc
                 <ActionDialogManager
                     pendingAction={pendingAction}
                     handleConfirm={handleDialogConfirm}
-                    target={t("objectDetails.dialogTarget", {name: decodedObjectName})}
+                    target={pendingAction?.batch === "nodes"
+                        ? t("statusBoard.subjects.instance", {path: decodedObjectName, where: t("nodes.target.selected", {count: selectedNodes.length})})
+                        : pendingAction?.node
+                            ? t("statusBoard.subjects.instance", {path: decodedObjectName, where: t("nodes.target.node", {node: pendingAction.node})})
+                            : t("objectDetails.dialogTarget", {name: decodedObjectName})}
+                    names={pendingAction?.batch === "nodes" ? selectedNodes : undefined}
                     supportedActions={
                         pendingAction?.batch === "nodes" || pendingAction?.node
                             ? INSTANCE_ACTIONS.map(a => a.name)

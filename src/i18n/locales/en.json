@@ -105,6 +105,8 @@
       "deleteSectionsHint": "Delete sections (one key per line, e.g., section)",
       "deleteSectionsAria": "Sections to delete input"
     },
+    "subject": "Acts on <strong>{{target}}</strong>.",
+    "subjectNamesAria": "Targets",
     "simpleConfirm": {
       "title": "Confirm {{action}}",
       "confirmAria": "Confirm {{action}} action",

@@ -105,6 +105,8 @@
       "deleteSectionsHint": "Supprimer des sections (une clé par ligne, p. ex. section)",
       "deleteSectionsAria": "Saisie des sections à supprimer"
     },
+    "subject": "Porte sur <strong>{{target}}</strong>.",
+    "subjectNamesAria": "Cibles",
     "simpleConfirm": {
       "title": "Confirmer « {{label}} »",
       "confirmAria": "Confirmer l'action « {{label}} »",

@@ -172,6 +172,7 @@ export function useObjectBulkActions({selectedObjects, onDone}) {
             target={pendingAction?.target
                 ? t("objects.dialogTarget.object", {name: pendingAction.target})
                 : t("objects.dialogTarget.objects", {count: selectedObjects.length})}
+            names={pendingAction?.target ? undefined : selectedObjects}
             supportedActions={OBJECT_ACTIONS.map((action) => action.name)}
             onClose={() => setPendingAction(null)}
         />

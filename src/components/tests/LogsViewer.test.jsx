@@ -37,16 +37,21 @@ global.URL.createObjectURL = vi.fn().mockReturnValue('blob-url');
 global.URL.revokeObjectURL = vi.fn();
 
 // Simulate a readable stream for testing SSE
+/**
+ * The body of a followed log: its chunks, then open, as the daemon keeps it, with
+ * nothing more to read; `ends`, closed after them, as a daemon restarting closes it.
+ */
 class MockReadableStream {
-    constructor(chunks, delay = 0) {
+    constructor(chunks, delay = 0, {ends = false} = {}) {
         this.chunks = chunks || [];
         this.cancelled = false;
         this.delay = delay;
+        this.ends = ends;
     }
 
     getReader() {
         let index = 0;
-        const {chunks, delay} = this;
+        const {chunks, delay, ends} = this;
         const stream = this;
         return {
             read: async () => {
@@ -56,6 +61,7 @@ class MockReadableStream {
                     if (delay > 0) await new Promise(r => setTimeout(r, delay));
                     return {value: new TextEncoder().encode(chunk), done: false};
                 }
+                if (!ends) return new Promise(() => {});
                 return {done: true};
             },
             releaseLock: vi.fn(),
@@ -875,6 +881,92 @@ describe('LogsViewer', () => {
             expect(lines[0]).toHaveTextContent('first on n1');
             expect(lines[1]).toHaveTextContent('second on n2');
             expect(screen.getByText('web on n1, n2')).toBeInTheDocument();
+        });
+    });
+
+    describe('a stream lost', () => {
+        const line = (ms, message) => `data: ${JSON.stringify({__REALTIME_TIMESTAMP: String(ms * 1000), MESSAGE: message})}\n\n`;
+        const status = () => screen.getByText(/^(Connected|Disconnected)$/).parentElement;
+        // The reads of the log not stopped at once.
+        const logReads = () => global.fetch.mock.calls.filter(([url, options]) => url.includes('/log?') && !options?.signal?.aborted).length;
+
+        /** Answered once its reading still goes on: one stopped at once (a second start) takes no body. */
+        const unlessAborted = (options, answer) => Promise.resolve().then(() => (options?.signal?.aborted
+            ? Promise.reject(Object.assign(new Error('aborted'), {name: 'AbortError'}))
+            : answer()));
+
+        /** The bodies of the successive reads of the log, the last one again past them. */
+        const answers = (...bodies) => {
+            let read = 0;
+            global.fetch = vi.fn((url, options) => {
+                if (url === '/api/cluster/status') {
+                    return Promise.resolve({ok: true, status: 200, json: () => Promise.resolve({cluster: {config: {nodes: ['test-node']}}})});
+                }
+                return unlessAborted(options, () => ({ok: true, status: 200, body: bodies[Math.min(read++, bodies.length - 1)]()}));
+            });
+        };
+
+        test('ended by the daemon, it is said, read again, and its lines not shown twice', async () => {
+            const now = Date.now();
+            answers(
+                () => new MockReadableStream([line(now, 'before restart')], 0, {ends: true}),
+                // The daemon back, its stream replays the last lines, then follows.
+                () => new MockReadableStream([line(now, 'before restart'), line(now + 1, 'after restart')]),
+            );
+            renderComponent();
+            await waitFor(() => expect(screen.getByText(/was lost: reconnecting/)).toBeInTheDocument());
+            expect(status()).toHaveAttribute('data-state', 'down');
+            await waitFor(() => expect(findLogsContainer()).toHaveTextContent('after restart'), {timeout: 3000});
+            expect(status()).toHaveAttribute('data-state', 'up');
+            expect(screen.queryByText(/was lost: reconnecting/)).not.toBeInTheDocument();
+            expect(screen.getAllByText('before restart')).toHaveLength(1);
+            expect(logReads()).toBe(2);
+        });
+
+        test('cut (the daemon or the network gone), it is read again', async () => {
+            const now = Date.now();
+            const cut = () => ({
+                getReader: () => ({
+                    read: () => Promise.reject(new TypeError('network error')),
+                    releaseLock: vi.fn(),
+                }),
+            });
+            answers(cut, () => new MockReadableStream([line(now, 'back')]));
+            renderComponent();
+            await waitFor(() => expect(findLogsContainer()).toHaveTextContent('back'), {timeout: 3000});
+            expect(status()).toHaveAttribute('data-state', 'up');
+            expect(screen.queryByText(/Failed to fetch logs/)).not.toBeInTheDocument();
+        });
+
+        test('connected only while the stream of every node is open', async () => {
+            const reads = {n1: 0, n2: 0};
+            global.fetch = vi.fn((url, options) => {
+                if (url === '/api/cluster/status') {
+                    return Promise.resolve({ok: true, status: 200, json: () => Promise.resolve({cluster: {config: {nodes: ['n1', 'n2']}}})});
+                }
+                return unlessAborted(options, () => {
+                    const node = url.includes('/n1/') ? 'n1' : 'n2';
+                    reads[node] += 1;
+                    // The stream of n2 ends once, then follows.
+                    const ends = node === 'n2' && reads.n2 === 1;
+                    return {ok: true, status: 200, body: new MockReadableStream([], 0, {ends})};
+                });
+            });
+            render(<LogsViewer nodenames={['n1', 'n2']}/>);
+            await waitFor(() => expect(screen.getByText(/stream of n2 was lost/)).toBeInTheDocument());
+            expect(status()).toHaveAttribute('data-state', 'down');
+            await waitFor(() => expect(status()).toHaveAttribute('data-state', 'up'), {timeout: 3000});
+            expect(reads).toEqual({n1: 1, n2: 2});
+        });
+
+        test('closed meanwhile, the viewer reads nothing again', async () => {
+            answers(() => new MockReadableStream([], 0, {ends: true}));
+            const {unmount} = renderComponent();
+            await waitFor(() => expect(screen.getByText(/was lost: reconnecting/)).toBeInTheDocument());
+            const before = global.fetch.mock.calls.length;
+            unmount();
+            await new Promise((r) => setTimeout(r, 1500));
+            expect(global.fetch.mock.calls.length).toBe(before);
         });
     });
 });

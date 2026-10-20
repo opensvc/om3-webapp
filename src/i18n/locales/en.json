@@ -726,7 +726,8 @@
       "authFailed": "Authentication failed. Please refresh your token.",
       "instanceNotFound": "Instance logs endpoint not found for {{instance}} on node {{node}}",
       "nodeNotFound": "Node logs endpoint not found for node {{node}}",
-      "fetchFailed": "Failed to fetch logs: {{message}}"
+      "fetchFailed": "Failed to fetch logs: {{message}}",
+      "reconnecting": "The log stream of {{node}} was lost: reconnecting…"
     },
     "following": "Following",
     "follow": "Follow",

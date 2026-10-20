@@ -48,7 +48,12 @@ const OBJECT_SPECIFIC_FILTERS = [
 let currentEventSource = null;
 let currentLoggerEventSource = null;
 let currentToken = null;
+// Each stream its own reconnections: one opened does not reset the other's count.
 let reconnectAttempts = 0;
+let loggerReconnectAttempts = 0;
+// The reconnection planned of each stream: one at a time, cancelled when it closes.
+let reconnectTimer = null;
+let loggerReconnectTimer = null;
 let isPageActive = true;
 let flushTimeoutId = null;
 let eventCount = 0;
@@ -74,6 +79,29 @@ const SAFARI_MIN_FLUSH_INTERVAL = 100;
 const MAX_RECONNECT_ATTEMPTS = 10;
 const BASE_RECONNECT_DELAY = 1000;
 const MAX_RECONNECT_DELAY = 30000;
+
+// The ready states of an event source, the polyfill's as the standard's. Connecting
+// after an error, the polyfill reconnects on its own (a connection lost, nothing
+// received for a while); closed, it gave up (a status not 200): ours to open again.
+const CONNECTING = 0;
+const CLOSED = 2;
+
+const clearReconnectTimer = () => {
+    if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+    }
+};
+
+const clearLoggerReconnectTimer = () => {
+    if (loggerReconnectTimer) {
+        clearTimeout(loggerReconnectTimer);
+        loggerReconnectTimer = null;
+    }
+};
+
+/** The event types of a stream, read from its address. */
+const filtersOf = (url) => new URLSearchParams(url.split('?')[1]).getAll('filter').map(f => f.split(',')[0]);
 const BATCH_SIZE = isSafari ? SAFARI_BATCH_SIZE : 50;
 const FLUSH_DELAY = isSafari ? SAFARI_FLUSH_DELAY : 10;
 const MIN_FLUSH_INTERVAL = isSafari ? SAFARI_MIN_FLUSH_INTERVAL : 10;
@@ -557,6 +585,7 @@ export const createEventSource = (url, token, filters = DEFAULT_FILTERS) => {
         return null;
     }
 
+    clearReconnectTimer();
     if (currentEventSource) {
         logger.info('Closing existing EventSource');
         currentEventSource.close();
@@ -735,7 +764,10 @@ export const createEventSource = (url, token, filters = DEFAULT_FILTERS) => {
             return;
         }
 
-        handleReconnection(url, token, filters);
+        // Reconnecting on its own: a second connection of ours would replace it.
+        if (eventSourceRef.readyState === CONNECTING) return;
+
+        handleReconnection(url, filters);
     };
 
     return currentEventSource;
@@ -778,7 +810,7 @@ const handleAuthError = (token, url) => {
     navigationService.redirectToAuth();
 };
 
-const handleReconnection = (url, token, filters) => {
+const handleReconnection = (url, filters) => {
     if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS && isPageActive) {
         reconnectAttempts++;
 
@@ -796,10 +828,15 @@ const handleReconnection = (url, token, filters) => {
 
         logger.info(`🔄 Reconnecting in ${delay}ms (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
 
-        setTimeout(() => {
-            const currentToken = getCurrentToken();
-            if (currentToken && isPageActive) {
-                createEventSource(url, currentToken, filters);
+        const failed = currentEventSource;
+        clearReconnectTimer();
+        reconnectTimer = setTimeout(() => {
+            reconnectTimer = null;
+            // Replaced since (a token updated, other claims): that one is not to be reopened.
+            if (currentEventSource !== failed) return;
+            const token = getCurrentToken();
+            if (token && isPageActive) {
+                createEventSource(url, token, filters);
             }
         }, delay);
     } else if (isPageActive) {
@@ -819,6 +856,7 @@ export const createLoggerEventSource = (url, token, filters) => {
         return null;
     }
 
+    clearLoggerReconnectTimer();
     if (currentLoggerEventSource) {
         logger.info('Closing existing Logger EventSource');
         currentLoggerEventSource.close();
@@ -841,7 +879,7 @@ export const createLoggerEventSource = (url, token, filters) => {
 
     currentLoggerEventSource.onopen = () => {
         logger.info('✅ Logger EventSource connection established');
-        reconnectAttempts = 0;
+        loggerReconnectAttempts = 0;
         useEventLogStore.getState().setConnected?.(true);
     };
 
@@ -878,19 +916,26 @@ export const createLoggerEventSource = (url, token, filters) => {
             }
         }
 
-        if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS && isPageActive) {
-            reconnectAttempts++;
+        // Reconnecting on its own: a second connection of ours would replace it.
+        if (loggerEventSourceRef.readyState === CONNECTING) return;
+
+        if (loggerReconnectAttempts < MAX_RECONNECT_ATTEMPTS && isPageActive) {
+            loggerReconnectAttempts++;
             const delay = Math.min(
-                BASE_RECONNECT_DELAY * Math.pow(2, reconnectAttempts) + Math.random() * 100,
+                BASE_RECONNECT_DELAY * Math.pow(2, loggerReconnectAttempts) + Math.random() * 100,
                 MAX_RECONNECT_DELAY
             );
 
-            logger.info(`🔄 Logger reconnecting in ${delay}ms (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
+            logger.info(`🔄 Logger reconnecting in ${delay}ms (attempt ${loggerReconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
 
-            setTimeout(() => {
-                const currentToken = getCurrentToken();
-                if (currentToken && isPageActive) {
-                    createLoggerEventSource(url, currentToken, filters);
+            clearLoggerReconnectTimer();
+            loggerReconnectTimer = setTimeout(() => {
+                loggerReconnectTimer = null;
+                // Replaced since (a token updated, another feed): that one is not to be reopened.
+                if (currentLoggerEventSource !== loggerEventSourceRef) return;
+                const token = getCurrentToken();
+                if (token && isPageActive) {
+                    createLoggerEventSource(url, token, filters);
                 }
             }, delay);
         } else if (isPageActive) {
@@ -923,43 +968,29 @@ export const createLoggerEventSource = (url, token, filters) => {
     return currentLoggerEventSource;
 };
 
-// Update EventSource token
+// Update EventSource token. A stream the daemon refused (401) is closed by the
+// polyfill before it says so: closed or not, the stream opens again with the new
+// token, on its address, its claims unchanged. The logger stream, on the same token, too.
 export const updateEventSourceToken = (newToken) => {
     if (!newToken) return;
 
     currentToken = newToken;
 
-    if (currentEventSource && currentEventSource.readyState !== EventSource.CLOSED) {
+    if (currentEventSource) {
         logger.info('🔄 Token updated, restarting EventSource');
         const currentUrl = currentEventSource.url;
-        closeEventSource();
-
-        setTimeout(() => {
-            // Extract filters from current URL
-            const urlParams = new URLSearchParams(currentUrl.split('?')[1]);
-            const filters = urlParams.getAll('filter').map(f => {
-                // Remove any path parameters from filter
-                return f.split(',')[0];
-            });
-            createEventSource(currentUrl, newToken, filters);
-        }, 100);
+        createEventSource(currentUrl, newToken, filtersOf(currentUrl));
     }
+    updateLoggerEventSourceToken(newToken);
 };
 
 export const updateLoggerEventSourceToken = (newToken) => {
     if (!newToken) return;
 
-    if (currentLoggerEventSource && currentLoggerEventSource.readyState !== EventSource.CLOSED) {
+    if (currentLoggerEventSource) {
         logger.info('🔄 Token updated, restarting Logger EventSource');
         const currentUrl = currentLoggerEventSource.url;
-        closeLoggerEventSource();
-
-        setTimeout(() => {
-            // Extract filters from current URL
-            const urlParams = new URLSearchParams(currentUrl.split('?')[1]);
-            const filters = urlParams.getAll('filter').map(f => f.split(',')[0]);
-            createLoggerEventSource(currentUrl, newToken, filters);
-        }, 100);
+        createLoggerEventSource(currentUrl, newToken, filtersOf(currentUrl));
     }
 };
 
@@ -986,6 +1017,7 @@ export const closeEventSource = () => {
         currentToken = null;
         reconnectAttempts = 0;
     }
+    clearReconnectTimer();
     claimedQuery = null;
 };
 
@@ -1005,8 +1037,10 @@ export const closeLoggerEventSource = () => {
 
         currentLoggerEventSource.close();
         currentLoggerEventSource = null;
+        loggerReconnectAttempts = 0;
         useEventLogStore.getState().setConnected?.(false);
     }
+    clearLoggerReconnectTimer();
 };
 
 export const configureEventSource = (token, objectName = null, filters = DEFAULT_FILTERS, useCache = true) => {
@@ -1074,7 +1108,8 @@ const applyClaims = () => {
         return;
     }
     const {query, types} = claimsQuery([...streamClaims.values()]);
-    if (query === claimedQuery && currentEventSource) return;
+    // The same claims on a stream given up on (closed): opened again.
+    if (query === claimedQuery && currentEventSource && currentEventSource.readyState !== CLOSED) return;
     closeEventSource();
     currentEventSource = createEventSource(`${URL_NODE_EVENT}?${query}`, token, types);
     claimedQuery = query;

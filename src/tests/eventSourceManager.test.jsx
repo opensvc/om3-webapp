@@ -335,11 +335,127 @@ describe('eventSourceManager', () => {
             expect(EventSourcePolyfill).toHaveBeenCalledTimes(2);
         });
 
-        test('should not restart EventSource when connection is already closed', () => {
+        test('should restart EventSource when connection is already closed: the polyfill closes one refused', () => {
             createES('old-token');
             mockEventSource.readyState = 2;
             eventSourceManager.updateEventSourceToken('new-token');
-            expect(EventSourcePolyfill).toHaveBeenCalledTimes(1);
+            expect(EventSourcePolyfill).toHaveBeenCalledTimes(2);
+            expect(EventSourcePolyfill.mock.calls[1][1].headers.Authorization).toBe('Bearer new-token');
+        });
+    });
+
+    // ==================== A token refused, the reconnections ====================
+    describe('a token refused, and the reconnections', () => {
+        // A new source for each connection, as the polyfill makes, on its address.
+        const sources = [];
+        const opened = () => vi.mocked(EventSourcePolyfill).mock.calls;
+        const last = () => sources[sources.length - 1];
+
+        beforeEach(() => {
+            sources.length = 0;
+            vi.mocked(EventSourcePolyfill).mockImplementation((url) => {
+                const source = {onopen: null, onerror: null, addEventListener: vi.fn(), close: vi.fn(), readyState: 1, url};
+                sources.push(source);
+                return source;
+            });
+        });
+
+        /** The daemon refuses the token: the polyfill closes the source, then says why. */
+        const refuse = (source) => {
+            source.readyState = 2;
+            source.onerror({status: 401});
+        };
+
+        test('a 401 with a newer token stored opens the stream again with it', () => {
+            localStorageMock.getItem.mockReturnValue('new-token');
+            createES('old-token');
+            refuse(last());
+            expect(opened()).toHaveLength(2);
+            expect(opened()[1][0]).toBe(URL_NODE_EVENT);
+            expect(opened()[1][1].headers.Authorization).toBe('Bearer new-token');
+        });
+
+        test('the stream dead on a 401 that follows its own reconnection comes back, whatever the order', () => {
+            // A refresh the stream missed: the newer token stored, the stream on the old one.
+            localStorageMock.getItem.mockReturnValue('new-token');
+            const url = `${URL_NODE_EVENT}?cache=true&filter=InstanceStatusUpdated`;
+            eventSourceManager.createEventSource(url, 'old-token', ['InstanceStatusUpdated']);
+            // Given up on (a 502), reopened by our timer still on the old token, refused.
+            last().readyState = 2;
+            last().onerror({status: 502});
+            vi.advanceTimersByTime(30000);
+            expect(opened()).toHaveLength(2);
+            refuse(last());
+            expect(opened()).toHaveLength(3);
+            expect(opened()[2][0]).toBe(url);
+            expect(opened()[2][1].headers.Authorization).toBe('Bearer new-token');
+        });
+
+        test('an error while the polyfill reconnects on its own opens no second connection', () => {
+            createES();
+            last().readyState = 0;
+            last().onerror({message: 'No activity within 45000 milliseconds. Reconnecting.'});
+            vi.advanceTimersByTime(60000);
+            expect(opened()).toHaveLength(1);
+        });
+
+        test('a reconnection planned is cancelled by the stream closed', () => {
+            localStorageMock.getItem.mockReturnValue('tok');
+            createES('tok');
+            last().readyState = 2;
+            last().onerror({status: 502});
+            eventSourceManager.closeEventSource();
+            vi.advanceTimersByTime(60000);
+            expect(opened()).toHaveLength(1);
+        });
+
+        test('a reconnection planned does not bring back the address of a stream replaced since', () => {
+            localStorageMock.getItem.mockReturnValue('tok');
+            eventSourceManager.createEventSource(`${URL_NODE_EVENT}?filter=A`, 'tok', []);
+            last().readyState = 2;
+            last().onerror({status: 502});
+            eventSourceManager.createEventSource(`${URL_NODE_EVENT}?filter=B`, 'tok', []);
+            vi.advanceTimersByTime(60000);
+            expect(opened().map(([url]) => url)).toEqual([`${URL_NODE_EVENT}?filter=A`, `${URL_NODE_EVENT}?filter=B`]);
+        });
+
+        test('the logger stream opened does not reset the count of the main one', () => {
+            localStorageMock.getItem.mockReturnValue('tok');
+            createES('tok');
+            const main = last();
+            eventSourceManager.createLoggerEventSource(`${URL_NODE_EVENT}?filter=ObjectStatusUpdated`, 'tok', ['ObjectStatusUpdated']);
+            const feed = last();
+            for (let i = 0; i < 11; i++) {
+                main.readyState = 2;
+                main.onerror({status: 502});
+                feed.onopen();
+            }
+            expect(mockLogStore.addEventLog).toHaveBeenCalledWith('MAX_RECONNECTIONS_REACHED', expect.any(Object));
+        });
+
+        test('a token updated opens the logger stream again too', () => {
+            createES('old-token');
+            eventSourceManager.createLoggerEventSource(`${URL_NODE_EVENT}?filter=ObjectStatusUpdated`, 'old-token', ['ObjectStatusUpdated']);
+            eventSourceManager.updateEventSourceToken('new-token');
+            const tokens = opened().slice(2).map(([url, options]) => [url, options.headers.Authorization]);
+            expect(tokens).toEqual([
+                [URL_NODE_EVENT, 'Bearer new-token'],
+                [`${URL_NODE_EVENT}?filter=ObjectStatusUpdated`, 'Bearer new-token'],
+            ]);
+        });
+
+        test('the same claims on a stream given up on open it again', async () => {
+            localStorageMock.getItem.mockReturnValue('tok');
+            const release = eventSourceManager.retainEventReception('tok', ['ObjectStatusUpdated']);
+            await Promise.resolve();
+            expect(opened()).toHaveLength(1);
+            last().readyState = 2;
+            const again = eventSourceManager.retainEventReception('tok', ['ObjectStatusUpdated']);
+            await Promise.resolve();
+            expect(opened()).toHaveLength(2);
+            again();
+            release();
+            await Promise.resolve();
         });
     });
 
@@ -1208,11 +1324,12 @@ describe('eventSourceManager', () => {
             expect(EventSourcePolyfill).toHaveBeenCalledTimes(2);
         });
 
-        test('should not restart logger EventSource when connection is already closed', () => {
+        test('should restart logger EventSource when connection is already closed: the polyfill closes one refused', () => {
             eventSourceManager.createLoggerEventSource(URL_NODE_EVENT, 'old-token', []);
             mockLoggerEventSource.readyState = 2;
             eventSourceManager.updateLoggerEventSourceToken('new-token');
-            expect(EventSourcePolyfill).toHaveBeenCalledTimes(1);
+            expect(EventSourcePolyfill).toHaveBeenCalledTimes(2);
+            expect(EventSourcePolyfill.mock.calls[1][1].headers.Authorization).toBe('Bearer new-token');
         });
 
         test('should configure and start logger with objectName', () => {

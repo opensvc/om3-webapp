@@ -383,7 +383,18 @@
     "latest": "Latest events",
     "newEvents_one": "1 new event",
     "newEvents_other": "{{count}} new events",
-    "showOlder": "Show older events"
+    "showOlder": "Show older events",
+    "connected": "Connected",
+    "disconnected": "Disconnected",
+    "download": "Download the events shown",
+    "searchPlaceholder": "Search events…",
+    "types": "Types",
+    "allTypes": "All types",
+    "filtersActive": "Filters active",
+    "resetFilters": "Reset the filters",
+    "countOf": "{{shown}} / {{total}} events",
+    "showData": "Show its data",
+    "hideData": "Hide its data"
   },
   "heartbeats": {
     "columns": {

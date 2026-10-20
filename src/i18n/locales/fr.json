@@ -383,7 +383,18 @@
     "latest": "Derniers événements",
     "newEvents_one": "1 nouvel événement",
     "newEvents_other": "{{count}} nouveaux événements",
-    "showOlder": "Afficher les événements plus anciens"
+    "showOlder": "Afficher les événements plus anciens",
+    "connected": "Connecté",
+    "disconnected": "Déconnecté",
+    "download": "Télécharger les événements affichés",
+    "searchPlaceholder": "Rechercher des événements…",
+    "types": "Types",
+    "allTypes": "Tous les types",
+    "filtersActive": "Filtres actifs",
+    "resetFilters": "Réinitialiser les filtres",
+    "countOf": "{{shown}} / {{total}} événements",
+    "showData": "Afficher ses données",
+    "hideData": "Masquer ses données"
   },
   "heartbeats": {
     "columns": {

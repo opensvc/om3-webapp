@@ -842,6 +842,7 @@ export const createLoggerEventSource = (url, token, filters) => {
     currentLoggerEventSource.onopen = () => {
         logger.info('✅ Logger EventSource connection established');
         reconnectAttempts = 0;
+        useEventLogStore.getState().setConnected?.(true);
     };
 
     currentLoggerEventSource.onerror = (error) => {
@@ -849,6 +850,7 @@ export const createLoggerEventSource = (url, token, filters) => {
         if (currentLoggerEventSource !== loggerEventSourceRef) return;
 
         logger.error('🚨 Logger EventSource error:', error, 'URL:', url, 'readyState:', currentLoggerEventSource?.readyState);
+        useEventLogStore.getState().setConnected?.(false);
 
         if (error.status === 401) {
             logger.warn('🔐 Authentication error detected in logger');
@@ -1003,6 +1005,7 @@ export const closeLoggerEventSource = () => {
 
         currentLoggerEventSource.close();
         currentLoggerEventSource = null;
+        useEventLogStore.getState().setConnected?.(false);
     }
 };
 

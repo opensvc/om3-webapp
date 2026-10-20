@@ -588,6 +588,7 @@ const ObjectDetail = ({path, embedded = false, onOpenLogs, onViewInstance, onOrc
                             ? t("statusBoard.subjects.instance", {path: decodedObjectName, where: t("nodes.target.node", {node: pendingAction.node})})
                             : t("objectDetails.dialogTarget", {name: decodedObjectName})}
                     names={pendingAction?.batch === "nodes" ? selectedNodes : undefined}
+                    instances={pendingAction?.batch === "nodes" || Boolean(pendingAction?.node)}
                     supportedActions={
                         pendingAction?.batch === "nodes" || pendingAction?.node
                             ? INSTANCE_ACTIONS.map(a => a.name)

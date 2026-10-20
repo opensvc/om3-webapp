@@ -444,6 +444,7 @@ const ObjectStatus = ({path, onOrchestrationLogs, linkNode, linkResource}) => {
                 pendingAction={pending}
                 handleConfirm={run}
                 target={pending?.subject ?? ""}
+                instances={(pending?.targets?.length ?? 0) > 0}
                 supportedActions={SUPPORTED_ACTIONS}
                 onClose={() => setPending(null)}
             />

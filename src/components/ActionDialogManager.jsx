@@ -58,6 +58,7 @@ const ActionDialogManager = ({
                                  handleConfirm,
                                  target,
                                  names,
+                                 instances = false,
                                  supportedActions = [],
                                  onClose,
                              }) => {
@@ -149,6 +150,7 @@ const ActionDialogManager = ({
                 pendingAction,
                 target,
                 names,
+                instances,
             },
         },
         unprovision: {
@@ -187,6 +189,7 @@ const ActionDialogManager = ({
                 pendingAction,
                 target,
                 names,
+                instances,
             },
         },
         purge: {
@@ -263,6 +266,7 @@ const ActionDialogManager = ({
                 pendingAction,
                 target,
                 names,
+                instances,
             },
         },
         "switch": {
@@ -320,7 +324,7 @@ const ActionDialogManager = ({
                 cancelDisabled: false,
             },
         },
-    }), [checkboxState, handleConfirm, pendingAction, target, names, onClose]);
+    }), [checkboxState, handleConfirm, pendingAction, target, names, instances, onClose]);
     useEffect(() => {
         if (pendingAction === null) {
             setLastAction(null);

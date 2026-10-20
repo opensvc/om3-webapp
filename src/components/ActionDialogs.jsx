@@ -149,8 +149,11 @@ export const StopDialog = ({open, onClose, onConfirm, checked, setChecked, disab
 };
 
 // Dialog for the "shutdown" action
-export const ShutdownDialog = ({open, onClose, onConfirm, checkboxes, setCheckboxes, disabled, target, names}) => {
+// `instances`: the shutdown of instances of an object, its resources stopped on their
+// nodes, not of nodes, their daemon stopped.
+export const ShutdownDialog = ({open, onClose, onConfirm, checkboxes, setCheckboxes, disabled, target, names, instances = false}) => {
     const {t} = useTranslation();
+    const scope = instances ? 'shutdown.instance' : 'shutdown';
     return (
         <Dialog
             open={open}
@@ -179,16 +182,16 @@ export const ShutdownDialog = ({open, onClose, onConfirm, checkboxes, setCheckbo
                     onChange={(e) =>
                         setCheckboxes((prev) => ({...prev, instancesDown: e.target.checked}))
                     }
-                    aria-label={t('actionDialogs.shutdown.instancesDownAria')}
-                    label={t('actionDialogs.shutdown.instancesDown')}
+                    aria-label={t(`actionDialogs.${scope}.instancesDownAria`)}
+                    label={t(`actionDialogs.${scope}.instancesDown`)}
                 />
                 <Checkbox
                     checked={checkboxes.peerTakeover}
                     onChange={(e) =>
                         setCheckboxes((prev) => ({...prev, peerTakeover: e.target.checked}))
                     }
-                    aria-label={t('actionDialogs.shutdown.peerTakeoverAria')}
-                    label={t('actionDialogs.shutdown.peerTakeover')}
+                    aria-label={t(`actionDialogs.${scope}.peerTakeoverAria`)}
+                    label={t(`actionDialogs.${scope}.peerTakeover`)}
                 />
             </Acknowledgements>
         </Dialog>
@@ -248,9 +251,10 @@ export const DrainDialog = ({open, onClose, onConfirm, checked, setChecked, disa
 };
 
 // Dialog for the "unprovision" action
-export const UnprovisionDialog = ({open, onClose, onConfirm, checkboxes, setCheckboxes, disabled, pendingAction, target, names}) => {
+// `instances`: the unprovisioning of instances of an object, on their nodes only.
+export const UnprovisionDialog = ({open, onClose, onConfirm, checkboxes, setCheckboxes, disabled, pendingAction, target, names, instances = false}) => {
     const {t} = useTranslation();
-    const isNodeAction = pendingAction?.node || pendingAction?.batch === 'nodes';
+    const isNodeAction = instances || pendingAction?.node || pendingAction?.batch === 'nodes';
 
     return (
         <Dialog
@@ -370,7 +374,9 @@ export const PurgeDialog = ({open, onClose, onConfirm, checkboxes, setCheckboxes
 };
 
 // Dialog for the "delete" action
-export const DeleteDialog = ({open, onClose, onConfirm, checkboxes, setCheckboxes, disabled, target, names}) => {
+// `instances`: the delete of instances of an object, their configuration only, on their
+// nodes: not orchestrated on the cluster, and the object kept.
+export const DeleteDialog = ({open, onClose, onConfirm, checkboxes, setCheckboxes, disabled, target, names, instances = false}) => {
     const {t} = useTranslation();
     return (
         <Dialog
@@ -396,16 +402,16 @@ export const DeleteDialog = ({open, onClose, onConfirm, checkboxes, setCheckboxe
                     onChange={(e) =>
                         setCheckboxes((prev) => ({...prev, configLoss: e.target.checked}))
                     }
-                    aria-label={t('actionDialogs.acknowledge.configLossAria')}
-                    label={t('actionDialogs.acknowledge.configLoss')}
+                    aria-label={t(instances ? 'actionDialogs.delete.instance.configLossAria' : 'actionDialogs.acknowledge.configLossAria')}
+                    label={t(instances ? 'actionDialogs.delete.instance.configLoss' : 'actionDialogs.acknowledge.configLoss')}
                 />
                 <Checkbox
                     checked={checkboxes.clusterwide}
                     onChange={(e) =>
                         setCheckboxes((prev) => ({...prev, clusterwide: e.target.checked}))
                     }
-                    aria-label={t('actionDialogs.acknowledge.clusterwideAria')}
-                    label={t('actionDialogs.acknowledge.clusterwide')}
+                    aria-label={t(instances ? 'actionDialogs.delete.instance.localOnlyAria' : 'actionDialogs.acknowledge.clusterwideAria')}
+                    label={t(instances ? 'actionDialogs.delete.instance.localOnly' : 'actionDialogs.acknowledge.clusterwide')}
                 />
             </Acknowledgements>
         </Dialog>

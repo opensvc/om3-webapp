@@ -35,7 +35,13 @@
       "instancesDownAria": "Confirm instances shutdown",
       "instancesDown": "I understand all svc and vol instances on this node will be shut down and the daemon will be stopped.",
       "peerTakeoverAria": "Confirm peer takeover",
-      "peerTakeover": "I understand peer nodes are not notified of a maintenance period and will try to take over services as soon as the instances are down."
+      "peerTakeover": "I understand peer nodes are not notified of a maintenance period and will try to take over services as soon as the instances are down.",
+      "instance": {
+        "instancesDownAria": "Confirm instances shutdown",
+        "instancesDown": "I understand every resource of these instances, standby ones included, will be stopped.",
+        "peerTakeoverAria": "Confirm peer takeover",
+        "peerTakeover": "I understand peer nodes may take over the services as soon as these instances are down."
+      }
     },
     "restart": {
       "title": "Confirm Restart",
@@ -64,7 +70,13 @@
     },
     "delete": {
       "title": "Confirm Delete",
-      "confirmAria": "Confirm delete action"
+      "confirmAria": "Confirm delete action",
+      "instance": {
+        "configLossAria": "Confirm instance configuration loss",
+        "configLoss": "I understand the configuration and states of these instances will be deleted, whatever their status.",
+        "localOnlyAria": "Confirm instance configuration only",
+        "localOnly": "I understand nothing is stopped nor unprovisioned, and the daemon may recreate the configuration from a peer's copy."
+      }
     },
     "switch": {
       "title": "Confirm Switch",

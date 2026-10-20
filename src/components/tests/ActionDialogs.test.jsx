@@ -680,6 +680,35 @@ describe('ActionDialogs', () => {
                 .toEqual(['root/svc/a', 'root/svc/b', 'root/svc/c']);
         });
 
+        test('ShutdownDialog on instances says their resources stop, not the daemon', () => {
+            render(<ShutdownDialog open onClose={onClose} onConfirm={onConfirm} instances
+                                   checkboxes={{instancesDown: false, peerTakeover: false}}
+                                   setCheckboxes={defaultSetState} disabled={false}/>);
+            const dialog = screen.getByRole('dialog');
+            expect(within(dialog).getByRole('checkbox', {name: 'Confirm instances shutdown'})).toBeInTheDocument();
+            expect(dialog).toHaveTextContent('every resource of these instances, standby ones included, will be stopped');
+            expect(dialog).not.toHaveTextContent('daemon');
+        });
+
+        test('DeleteDialog on instances says their configuration only goes, not orchestrated', () => {
+            render(<DeleteDialog open onClose={onClose} onConfirm={onConfirm} instances
+                                 checkboxes={{configLoss: true, clusterwide: true}}
+                                 setCheckboxes={defaultSetState} disabled={false}/>);
+            const dialog = screen.getByRole('dialog');
+            expect(within(dialog).getByRole('checkbox', {name: 'Confirm instance configuration loss'})).toBeChecked();
+            expect(within(dialog).getByRole('checkbox', {name: 'Confirm instance configuration only'})).toBeChecked();
+            expect(dialog).not.toHaveTextContent('clusterwide');
+            expect(within(dialog).getByRole('button', {name: 'Confirm delete action'})).toBeEnabled();
+        });
+
+        test('UnprovisionDialog on instances asks no clusterwide acknowledgement', () => {
+            render(<UnprovisionDialog open onClose={onClose} onConfirm={onConfirm} instances
+                                      checkboxes={{dataLoss: true, serviceInterruption: true, clusterwide: false}}
+                                      setCheckboxes={defaultSetState} disabled={false}/>);
+            expect(screen.queryByRole('checkbox', {name: 'Confirm clusterwide orchestration'})).not.toBeInTheDocument();
+            expect(screen.getByRole('button', {name: 'Confirm unprovision action'})).toBeEnabled();
+        });
+
         test('a single name is not listed again', () => {
             render(<DeleteDialog open onClose={onClose} onConfirm={onConfirm}
                                  checkboxes={{configLoss: false, clusterwide: false}}

@@ -35,7 +35,13 @@
       "instancesDownAria": "Confirmer l'extinction des instances",
       "instancesDown": "Je comprends que toutes les instances svc et vol de ce nœud seront éteintes et que le démon sera arrêté.",
       "peerTakeoverAria": "Confirmer la reprise par les pairs",
-      "peerTakeover": "Je comprends que les nœuds pairs ne sont pas prévenus d'une période de maintenance et tenteront de reprendre les services dès que les instances seront arrêtées."
+      "peerTakeover": "Je comprends que les nœuds pairs ne sont pas prévenus d'une période de maintenance et tenteront de reprendre les services dès que les instances seront arrêtées.",
+      "instance": {
+        "instancesDownAria": "Confirmer l'extinction des instances",
+        "instancesDown": "Je comprends que toutes les ressources de ces instances, celles en standby comprises, seront arrêtées.",
+        "peerTakeoverAria": "Confirmer la reprise par les pairs",
+        "peerTakeover": "Je comprends que les nœuds pairs peuvent reprendre les services dès que ces instances seront arrêtées."
+      }
     },
     "restart": {
       "title": "Confirmer le redémarrage",
@@ -64,7 +70,13 @@
     },
     "delete": {
       "title": "Confirmer la suppression",
-      "confirmAria": "Confirmer l'action supprimer"
+      "confirmAria": "Confirmer l'action supprimer",
+      "instance": {
+        "configLossAria": "Confirmer la perte de la configuration des instances",
+        "configLoss": "Je comprends que la configuration et les états de ces instances seront supprimés, quel que soit leur statut.",
+        "localOnlyAria": "Confirmer la configuration des instances seule",
+        "localOnly": "Je comprends que rien n'est arrêté ni déprovisionné, et que le démon peut recréer la configuration à partir de la copie d'un pair."
+      }
     },
     "switch": {
       "title": "Confirmer la bascule",

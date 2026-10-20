@@ -97,6 +97,7 @@ vi.mock('../ActionDialogs', () => ({
     DeleteDialog: vi.fn((props) =>
         props.open ? (
             <div data-testid="delete-dialog">
+                <span data-testid="delete-instances">{String(props.instances)}</span>
                 <button onClick={props.onClose}>Cancel</button>
                 <button onClick={props.onConfirm} disabled={props.disabled}>Confirm</button>
                 <input type="checkbox" checked={props.checkboxes.configLoss}
@@ -146,6 +147,13 @@ describe('ActionDialogManager', () => {
                                     target="2 objects" names={['a', 'b']}
                                     supportedActions={['giveback']} onClose={vi.fn()}/>);
         expect(screen.getByTestId('giveback-names')).toHaveTextContent('a,b');
+    });
+
+    test('tells the delete dialog it acts on instances', () => {
+        render(<ActionDialogManager pendingAction={{action: 'delete'}} handleConfirm={vi.fn()}
+                                    target="web on node n1" instances
+                                    supportedActions={['delete']} onClose={vi.fn()}/>);
+        expect(screen.getByTestId('delete-instances')).toHaveTextContent('true');
     });
 
     test('lists the names of a bulk action in the simple confirmation', () => {

@@ -578,6 +578,21 @@ describe('Objects Component', () => {
         expect(screen.getByText('1 selected')).toBeInTheDocument();
     });
 
+    test('an object a filter hides leaves the selection, and stays out when the filter goes', async () => {
+        setup();
+        await waitForLoad();
+        selectRow('test-ns/svc/test1');
+        selectRow('test-ns/svc/test2');
+        expect(screen.getByText('2 selected')).toBeInTheDocument();
+        fireEvent.change(screen.getByLabelText('Name'), {target: {value: 'test1'}});
+        await waitFor(() => expect(rowCheckboxes()).toHaveLength(1));
+        expect(screen.getByText('1 selected')).toBeInTheDocument();
+        fireEvent.change(screen.getByLabelText('Name'), {target: {value: ''}});
+        await waitFor(() => expect(rowCheckboxes().length).toBeGreaterThan(1));
+        expect(screen.getByText('1 selected')).toBeInTheDocument();
+        expect(screen.getByRole('checkbox', {name: 'Select object test-ns/svc/test2'})).not.toBeChecked();
+    });
+
     test('actions menu opens and lists actions', async () => {
         setup();
         await waitForLoad();
@@ -1218,7 +1233,7 @@ describe('Objects Component', () => {
             ])));
         });
 
-        test('object removed from objectStatus after selection is treated as an error (rawObj missing)', async () => {
+        test('an object gone after its selection leaves it: the action acts on the others only', async () => {
             const {rerender} = setup();
             await waitForLoad();
             selectRow('test-ns/svc/test1');
@@ -1238,11 +1253,13 @@ describe('Objects Component', () => {
                 </MemoryRouter>
             );
 
+            await waitFor(() => expect(screen.getByText('1 selected')).toBeInTheDocument());
             openActionsMenu();
             await clickMenuItem('Restart');
             await confirmDialog();
             await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(1));
-            await waitFor(() => expect(tray()).toContainEqual(['restart', 'test-ns/svc/test2', 'refused', 'the object is not known']));
+            expect(global.fetch.mock.calls[0][0]).toContain('test1');
+            expect(tray().some(([, path]) => path === 'test-ns/svc/test2')).toBe(false);
         });
 
 
@@ -1707,6 +1724,20 @@ describe('Objects Component', () => {
             expect(namespaceRows().map((row) => row.textContent)).toEqual(['test-ns']);
             fireEvent.click(screen.getByRole('checkbox', {name: 'Select the objects of test-ns'}));
             expect(screen.getByText('60 selected')).toBeInTheDocument();
+        });
+
+        test('select all selects the rows of the page shown, unticked it leaves the other pages selected', async () => {
+            setup(makeMany(60), '', {isWideScreen: true, isMobile: false});
+            await waitForLoad();
+            const selectAll = () => screen.getByRole('checkbox', {name: 'Select all objects'});
+            fireEvent.click(selectAll());
+            expect(screen.getByText('50 selected')).toBeInTheDocument();
+            fireEvent.click(screen.getByRole('button', {name: 'Next'}));
+            expect(selectAll()).not.toBeChecked();
+            fireEvent.click(selectAll());
+            expect(screen.getByText('60 selected')).toBeInTheDocument();
+            fireEvent.click(selectAll());
+            expect(screen.getByText('50 selected')).toBeInTheDocument();
         });
 
         test('a filter changed starts the list over from its first page', async () => {

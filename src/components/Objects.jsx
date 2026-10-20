@@ -763,9 +763,26 @@ const Objects = () => {
         navigate(`${location.pathname}?${params.toString()}`);
     }, [list, location.pathname, location.search, navigate]);
 
-    const handleSelectAll = useCallback((e) => {
-        setSelectedObjects(e.target.checked ? filteredObjectNames : []);
+    // An object a filter hides, or gone, leaves the selection: an action on the
+    // selection acts on none the list does not show.
+    useEffect(() => {
+        const shown = new Set(filteredObjectNames);
+        setSelectedObjects((prev) => (prev.every((name) => shown.has(name))
+            ? prev
+            : prev.filter((name) => shown.has(name))));
     }, [filteredObjectNames]);
+
+    // All, the rows of the page shown: not those of the other pages, nor the
+    // configuration of a namespace its line stands for, unless that line is ticked.
+    // Unticked, the rows of the page leave the selection, those of others stay.
+    const handleSelectAll = useCallback((e) => {
+        const {checked} = e.target;
+        setSelectedObjects((prev) => (checked
+            ? [...new Set([...prev, ...visibleObjectNames])]
+            : prev.filter((name) => !visibleObjectNames.includes(name))));
+    }, [visibleObjectNames]);
+    const allSelected = visibleObjectNames.length > 0
+        && visibleObjectNames.every((name) => selectedObjects.includes(name));
 
     const globalStateOptions = useMemo(
         () => withSelected(globalStates, selectedGlobalStates).map((state) => ({
@@ -882,7 +899,7 @@ const Objects = () => {
                     <HeaderRow>
                         <HeaderCell className="w-8">
                             <Checkbox
-                                checked={selectedObjects.length === filteredObjectNames.length && filteredObjectNames.length > 0}
+                                checked={allSelected}
                                 onChange={handleSelectAll}
                                 aria-label={t("objects.selectAll")}
                             />

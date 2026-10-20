@@ -1178,6 +1178,7 @@
     "loadingText": "Chargement des données de l'objet…",
     "noInformation": "Aucune information disponible pour cet objet.",
     "authTokenNotFound": "Jeton d'authentification introuvable",
+    "fallbackFailed": "L'objet n'a pas pu être lu : HTTP {{status}}",
     "instancesHeading": "Instances ({{count}})",
     "batchActionsMenu": "Actions sur les nœuds sélectionnés ({{count}})",
     "dialogTarget": "l'objet {{name}}",

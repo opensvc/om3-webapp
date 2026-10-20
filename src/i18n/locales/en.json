@@ -1178,6 +1178,7 @@
     "loadingText": "Loading object data...",
     "noInformation": "No information available for object.",
     "authTokenNotFound": "Auth token not found",
+    "fallbackFailed": "The object could not be read: HTTP {{status}}",
     "instancesHeading": "Instances ({{count}})",
     "batchActionsMenu": "Actions on selected nodes ({{count}})",
     "dialogTarget": "object {{name}}",

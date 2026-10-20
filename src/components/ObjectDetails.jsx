@@ -182,31 +182,32 @@ const ObjectDetail = ({path, embedded = false, onOpenLogs, onViewInstance, onOrc
         const encodedName = encodeURIComponent(objName);
 
         try {
+            // The object and its instances in one answer: the status of the object in
+            // `data`, each instance's status, configuration and monitor under `data.instances`.
             const objRes = await fetch(
                 `${URL_OBJECT}/${encodedNamespace}/${encodedKind}/${encodedName}`,
                 {headers: {Authorization: `Bearer ${token}`}, cache: "no-cache"}
             );
-            let objectData = null;
-            if (objRes.ok) objectData = await objRes.json();
-
-            const instRes = await fetch(
-                `${URL_NODE}/all/instance/path/${encodedNamespace}/${encodedKind}/${encodedName}`,
-                {headers: {Authorization: `Bearer ${token}`}, cache: "no-cache"}
-            );
-            let instancesData = {};
-            if (instRes.ok) instancesData = await instRes.json();
+            if (!objRes.ok) throw new Error(t("objectDetails.fallbackFailed", {status: objRes.status}));
+            const {instances = {}, ...objectStatus} = (await objRes.json())?.data ?? {};
 
             const currentState = useEventStore.getState();
             const hasInstances = currentState.objectInstanceStatus[decodedObjectName] &&
                 Object.keys(currentState.objectInstanceStatus[decodedObjectName]).length > 0;
 
+            // The stream may have brought them meanwhile: it is newer. This object alone
+            // set, the others kept: a panel stands over a list of them.
             if (!hasInstances) {
-                if (objectData) currentState.setObjectStatuses({[decodedObjectName]: objectData});
-                if (instancesData) {
-                    currentState.setInstanceStatuses({[decodedObjectName]: instancesData}, true);
-                } else {
-                    currentState.setInstanceStatuses({[decodedObjectName]: {}}, true);
+                currentState.setObjectStatuses({...currentState.objectStatus, [decodedObjectName]: objectStatus});
+                const statuses = {};
+                const monitors = {...currentState.instanceMonitor};
+                for (const [node, instance] of Object.entries(instances)) {
+                    if (instance?.status) statuses[node] = instance.status;
+                    if (instance?.config) currentState.setInstanceConfig(decodedObjectName, node, instance.config);
+                    if (instance?.monitor) monitors[`${node}:${decodedObjectName}`] = instance.monitor;
                 }
+                currentState.setInstanceStatuses({[decodedObjectName]: statuses}, true);
+                currentState.setInstanceMonitors(monitors);
             }
         } catch (err) {
             logger.error("Fallback fetch failed:", err);

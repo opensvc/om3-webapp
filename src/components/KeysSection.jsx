@@ -125,8 +125,9 @@ const readKeyFile = async (file) => {
  * is empty. The name of a new key is that of the file, when not typed first.
  *
  * `hidden` is why the content of the key to update is not in the form: "secret", a
- * secret is never read back; "binary", it does not read as text. The update then
- * waits for new content. `maxSize`, the largest key the API takes, in bytes: a
+ * secret is never read back; "binary", it does not read as text; "unread", it could
+ * not be read. The update then waits for new content: an empty form never empties
+ * a key it does not show. `maxSize`, the largest key the API takes, in bytes: a
  * larger one is said, and not sent.
  */
 const KeyFormDialog = ({
@@ -188,7 +189,8 @@ const KeyFormDialog = ({
 
     const placeholder = hidden === "secret"
         ? t("keys.form.hiddenSecret")
-        : hidden === "binary" ? t("keys.form.hiddenBinary") : t("keys.form.contentPlaceholder");
+        : hidden === "binary" ? t("keys.form.hiddenBinary")
+            : hidden === "unread" ? t("keys.form.hiddenUnread") : t("keys.form.contentPlaceholder");
 
     const sizeLine = (
         <p className={tooLarge ? "text-data text-state-down" : "text-data text-ink-muted"} aria-live="polite">
@@ -388,8 +390,10 @@ const KeysSection = ({decodedObjectName, openSnackbar, refreshKey}) => {
 
     const [updateInitialName, setUpdateInitialName] = useState("");
     const [updateInitialContent, setUpdateInitialContent] = useState("");
-    // Why the content of the key to update is not in its form: "secret" or "binary".
+    // Why the content of the key to update is not in its form: "secret", "binary" or "unread".
     const [updateHidden, setUpdateHidden] = useState(null);
+    // The last update form opened: the content read for one before it, arriving late, is dropped.
+    const updateRequest = useRef(0);
     const maxKeySize = useMaxKeySize(createDialogOpen || updateDialogOpen);
     const [updateContentLoading, setUpdateContentLoading] = useState(false);
     const titleId = useId();
@@ -596,6 +600,7 @@ const KeysSection = ({decodedObjectName, openSnackbar, refreshKey}) => {
     };
 
     const openUpdateDialog = async (keyName) => {
+        const request = ++updateRequest.current;
         setUpdateInitialName(keyName);
         setUpdateDialogOpen(true);
         setUpdateInitialContent("");
@@ -610,10 +615,14 @@ const KeysSection = ({decodedObjectName, openSnackbar, refreshKey}) => {
 
         setUpdateContentLoading(true);
         const result = await fetchKeyContent(keyName);
+        if (request !== updateRequest.current) return;
         if (result.type === "text") {
             setUpdateInitialContent(result.content);
         } else if (result.type === "binary") {
             setUpdateHidden("binary");
+        } else {
+            // Not read: the form shows none of it, and waits for new content to replace it.
+            setUpdateHidden("unread");
         }
         setUpdateContentLoading(false);
     };

@@ -685,8 +685,46 @@ describe('KeysSection', () => {
             methods: {GET: (url) => url.includes('/data/key?name=') && ++reads > 1 ? Promise.reject(new Error('fail')) : undefined},
         });
         await renderAndWait('root/cfg/cfg1', 1);
-        await openDialog('edit', 'key1');
+        const dialog = await openDialog('edit', 'key1');
         await waitFor(() => expect(openSnackbar).toHaveBeenCalledWith('Error: fail', 'error'));
+        // Not read, the key is not shown empty: an update would empty it.
+        const content = await within(dialog).findByRole('textbox', {name: 'Key Content'});
+        expect(content).toHaveValue('');
+        expect(content).toHaveAttribute('placeholder', expect.stringMatching(/could not be read/));
+        expect(within(dialog).getByRole('button', {name: 'Update'})).toBeDisabled();
+        await act(async () => {
+            await user.type(content, 'new');
+        });
+        expect(within(dialog).getByRole('button', {name: 'Update'})).toBeEnabled();
+    });
+
+    test('update: the content of a key read late does not fill the form of another', async () => {
+        let resolveFirst;
+        const reads = {};
+        mockFetch({
+            keys: [{name: 'key1', node: 'n1', size: 3}, {name: 'key2', node: 'n1', size: 3}],
+            methods: {
+                // Each key shown first, read at once; key1 edited, read when the test says.
+                GET: (url) => {
+                    const name = url.match(/\/data\/key\?name=(\w+)/)?.[1];
+                    if (!name) return undefined;
+                    reads[name] = (reads[name] ?? 0) + 1;
+                    if (name === 'key1' && reads[name] > 1) {
+                        return Promise.resolve({ok: true, blob: () => new Promise((r) => { resolveFirst = r; })});
+                    }
+                    return Promise.resolve({ok: true, blob: () => Promise.resolve(makeMockBlob(encodeText(name === 'key1' ? 'one' : 'two')))});
+                },
+            },
+        });
+        await renderAndWait('root/cfg/cfg1', 2);
+        const first = await openDialog('edit', 'key1');
+        await act(async () => {
+            await user.click(within(first).getByRole('button', {name: 'Cancel'}));
+        });
+        const second = await openDialog('edit', 'key2');
+        await waitFor(() => expect(within(second).getByRole('textbox', {name: 'Key Content'})).toHaveValue('two'));
+        await act(async () => resolveFirst(makeMockBlob(encodeText('one'))));
+        expect(within(screen.getByRole('dialog', {name: 'Update Key'})).getByRole('textbox', {name: 'Key Content'})).toHaveValue('two');
     });
 
     test('fullscreen toggles', async () => {

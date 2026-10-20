@@ -683,7 +683,8 @@
       "sizeOfMax": "{{size}} sur {{max}} au plus",
       "tooLarge": "{{size}} : trop grand, une clé contient au plus {{max}}",
       "hiddenSecret": "Le contenu d'un secret est masqué : saisissez, collez ou déposez un nouveau contenu pour le remplacer.",
-      "hiddenBinary": "Le contenu est binaire : déposez ou choisissez un fichier pour le remplacer, ou saisissez un nouveau contenu."
+      "hiddenBinary": "Le contenu est binaire : déposez ou choisissez un fichier pour le remplacer, ou saisissez un nouveau contenu.",
+      "hiddenUnread": "Le contenu n'a pas pu être lu : saisissez, collez ou déposez un nouveau contenu pour le remplacer."
     },
     "errors": {
       "noToken": "Jeton d'authentification introuvable.",

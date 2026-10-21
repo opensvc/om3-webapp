@@ -229,7 +229,7 @@ function NodeActions({node, frozen, monitor, onOrchestrationLogs}) {
                 label={t("nodePanel.actions")}
                 align="end"
                 // The node, its inventory, its daemon: a column each in a wide window.
-                columns={3}
+                columns={2}
                 items={items}
             />
             <NodeActionDialog

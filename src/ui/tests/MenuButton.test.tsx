@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MenuButton, submenuShift, verticalPlacement, type MenuItem } from "../components/MenuButton";
 
@@ -348,20 +348,19 @@ describe("submenuShift", () => {
 });
 
 describe("MenuButton prominent", () => {
-  test("the actions: outlined, as every button neither creating nor deleting, the corners of the controls", () => {
+  test("the actions: of the accent fill, as every button changing a state, the corners of the controls", () => {
     render(<MenuButton label="Actions" items={items()} prominent />);
     const button = screen.getByRole("button", { name: "Actions" });
-    expect(button).toHaveClass("rounded-(--radius-control)", "border", "border-line", "text-ink");
-    expect(button).not.toHaveClass("bg-accent", "rounded-(--radius-pill)");
+    expect(button).toHaveClass("rounded-(--radius-control)", "bg-accent", "text-accent-ink", "aria-expanded:brightness-110");
+    expect(button).not.toHaveClass("rounded-(--radius-pill)", "border-line");
     expect(button).toHaveTextContent("Actions");
     expect(button).not.toHaveAttribute("title");
   });
 
-  test("solid, drawn as the actions: its text in a wide window, its icon alone in a narrow one, named by its label", () => {
+  test("solid, of the accent fill as the actions: its text in a wide window, its icon alone in a narrow one, named by its label", () => {
     render(<MenuButton label="Node actions" text="Actions" items={items()} solid icon={<svg data-testid="bolt" />} />);
     const button = screen.getByRole("button", { name: "Node actions" });
-    expect(button).toHaveClass("max-md:w-7", "border", "border-line");
-    expect(button).not.toHaveClass("bg-accent");
+    expect(button).toHaveClass("max-md:w-7", "bg-accent", "text-accent-ink");
     expect(button).toHaveTextContent(/^Actions$/);
     expect(screen.getByText("Actions")).toHaveClass("max-md:hidden");
     expect(screen.getByTestId("bolt").parentElement).toHaveClass("hidden", "max-md:inline-flex");
@@ -381,24 +380,24 @@ describe("MenuButton prominent", () => {
 });
 
 describe("MenuButton groups", () => {
-  test("a mega menu: its groups under their headings, a column each, each entry with what it does, the harmful ones red", async () => {
+  test("a mega menu: its sections under their headings, in a masonry, each whole, each entry with what it does, the harmful ones red", async () => {
     const user = userEvent.setup();
     const go = vi.fn();
     render(
       <MenuButton
         label="Node"
-        columns={3}
+        columns={2}
         items={[
-          { key: "freeze", label: "Freeze", description: "Stop orchestrating.", heading: "Node", column: 1, onSelect: go },
-          { key: "asset", label: "Asset", description: "Push the inventory.", heading: "Inventory", column: 2 },
-          { key: "stop", label: "Stop", description: "Stop the daemon.", heading: "Daemon", column: 3, danger: true },
-          { key: "drain", label: "Drain", column: 3, danger: true },
+          { key: "freeze", label: "Freeze", description: "Stop orchestrating.", heading: "Node", onSelect: go },
+          { key: "asset", label: "Asset", description: "Push the inventory.", heading: "Inventory" },
+          { key: "stop", label: "Stop", description: "Stop the daemon.", heading: "Daemon", danger: true },
+          { key: "drain", label: "Drain", danger: true },
         ]}
       />,
     );
     await user.click(screen.getByRole("button", { name: "Node" }));
     const menu = screen.getByRole("menu", { name: "Node" });
-    expect(menu).toHaveClass("md:grid", "md:grid-cols-3", "md:grid-flow-dense");
+    expect(menu).toHaveClass("md:columns-2");
     // The headings: not entries, said before their group.
     expect([...menu.querySelectorAll("[data-menu-heading]")].map((h) => h.textContent)).toEqual(["Node", "Inventory", "Daemon"]);
     expect(screen.getAllByRole("menuitem")).toHaveLength(4);
@@ -407,9 +406,11 @@ describe("MenuButton groups", () => {
     expect(stop).toHaveAccessibleDescription("Stop the daemon.");
     expect(stop).toHaveClass("text-state-down");
     expect(screen.getByRole("menuitem", { name: "Freeze" })).not.toHaveClass("text-state-down");
-    // Each in the column of its group.
-    expect(stop.parentElement).toHaveClass("md:col-start-3");
-    expect(screen.getByRole("menuitem", { name: "Asset" }).parentElement).toHaveClass("md:col-start-2");
+    // Each section a group named by its heading, never split across two columns.
+    const sections = within(menu).getAllByRole("group");
+    expect(sections.map((section) => section.getAttribute("aria-label"))).toEqual(["Node", "Inventory", "Daemon"]);
+    expect(sections.every((section) => section.classList.contains("break-inside-avoid"))).toBe(true);
+    expect(within(sections[2]!).getAllByRole("menuitem")).toHaveLength(2);
     // The arrows walk them in their order, group after group.
     await user.keyboard("{ArrowDown}");
     expect(screen.getByRole("menuitem", { name: "Freeze" })).toHaveFocus();

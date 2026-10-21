@@ -493,14 +493,14 @@ describe('NodesTable', () => {
             );
         });
 
-        test('bulk menu lists the node actions by group, a column each, each with what it does, the harmful ones red', async () => {
+        test('bulk menu lists the node actions by group, in a masonry of two columns, each with what it does, the harmful ones red', async () => {
             renderWithRouter(<NodesTable/>);
             fireEvent.click(await screen.findByRole('checkbox', {name: 'select node-2'}));
             fireEvent.click(screen.getByRole('button', {name: 'Actions'}));
             const menu = await screen.findByRole('menu', {name: 'Actions'});
-            // The node, its inventory, its daemon, in that order, a column each in a wide window.
+            // The node, its inventory, its daemon, in that order, in a masonry of two columns in a wide window.
             expect([...menu.querySelectorAll('[data-menu-heading]')].map((h) => h.textContent)).toEqual(['Node', 'Inventory', 'Daemon']);
-            expect(menu).toHaveClass('md:grid-cols-3');
+            expect(menu).toHaveClass('md:columns-2');
             const entries = within(menu).getAllByRole('menuitem');
             expect(entries.map((item) => item.getAttribute('aria-labelledby') && document.getElementById(item.getAttribute('aria-labelledby')).textContent)).toEqual([
                 'Freeze',

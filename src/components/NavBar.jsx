@@ -28,7 +28,7 @@ const crumb = (part, index, path) => ({
     key: index === 0 && SEGMENTS.has(part) ? `nav.breadcrumb.segments.${part}` : undefined,
 });
 
-const NavBar = ({sidebarOpen = false, onToggleSidebar, showSidebarToggle = false, menuAlert = null, anchor = null}) => {
+const NavBar = ({sidebarOpen = false, onToggleSidebar, showSidebarToggle = false, menuAlert = null}) => {
     const auth = useAuth();
     const location = useLocation();
     const {clusterName, fetchNodes, loading} = useFetchDaemonStatus();
@@ -230,8 +230,6 @@ const NavBar = ({sidebarOpen = false, onToggleSidebar, showSidebarToggle = false
                     </span>
                 )}
 
-                {/* In a narrow window, the anchor that brings the panels back. */}
-                {anchor}
 
                 {showSidebarToggle && (
                     <>

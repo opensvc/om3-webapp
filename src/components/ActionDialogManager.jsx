@@ -38,7 +38,7 @@ export const SimpleConfirmDialog = ({open, onClose, onConfirm, action, target, n
                     <Button variant="secondary" onClick={onClose} disabled={cancelDisabled}>
                         {t('common.cancel')}
                     </Button>
-                    <Button onClick={onConfirm} disabled={disabled}>
+                    <Button variant="change" onClick={onConfirm} disabled={disabled}>
                         {t('common.confirm')}
                     </Button>
                 </>

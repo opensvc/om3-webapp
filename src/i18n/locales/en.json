@@ -1524,8 +1524,7 @@
       "namespace": "Namespaces",
       "instance": "Instances",
       "resource": "Resources"
-    },
-    "reopen": "Reopen {{name}}"
+    }
   },
   "statusBoard": {
     "caption": "Status of {{path}} by node",

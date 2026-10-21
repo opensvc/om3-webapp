@@ -7,11 +7,14 @@ import { cn } from "../cn";
  * the small rounded corners of the controls:
  *
  * - `create`: the accent fill, for a button that creates something.
+ * - `change`: the accent fill too, for a button that changes a state: an action
+ *   (start, stop, freeze, drain…), its confirmation.
  * - `delete`: the down fill, for a button that deletes something.
- * - `secondary`: an outline, for every other action (Save, Cancel, Stop, Retry…).
+ * - `secondary`: an outline, for every other one (Save, Cancel, Close, Retry…).
  */
 const VARIANTS = {
   create: "bg-accent text-accent-ink hover:brightness-110",
+  change: "bg-accent text-accent-ink hover:brightness-110",
   // Pressed, a toggle on (Follow): the accent outline, tinted.
   secondary:
     "border border-line bg-surface-raised text-ink hover:bg-surface-sunken aria-pressed:border-accent aria-pressed:bg-accent-soft",

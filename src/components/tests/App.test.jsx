@@ -1,5 +1,5 @@
 import React from 'react';
-import {fireEvent, render, screen, waitFor, act} from '@testing-library/react';
+import {fireEvent, render, screen, waitFor, act, within} from '@testing-library/react';
 import {MemoryRouter} from 'react-router-dom';
 import App from '../App';
 import {vi} from 'vitest';
@@ -43,7 +43,7 @@ vi.mock('../Network', async () => {
     return {default: () => <div data-testid="network">{useLocation().search}</div>};
 });
 vi.mock('../PeekPanel', () => ({PeekPanel: () => <div data-testid="peek-panel"/>}));
-vi.mock('../../app/PanelAnchor', () => ({PanelAnchor: ({inBar}) => <div data-testid="panel-anchor" data-in-bar={String(!!inBar)}/>}));
+vi.mock('../../app/PanelReopenKey', () => ({PanelReopenKey: () => <div data-testid="panel-reopen-key"/>}));
 vi.mock('../../app/ShortcutsHelp', () => ({ShortcutsHelp: () => <div data-testid="shortcuts-help"/>}));
 vi.mock('../WhoAmI', () => ({default: () => <div data-testid="whoami">WhoAmI</div>}));
 vi.mock('../SilentRenew.jsx', () => ({default: () => <div data-testid="silent-renew">SilentRenew</div>}));
@@ -272,11 +272,11 @@ describe('App Component', () => {
         raf.mockRestore();
     });
 
-    test('the record panel and its anchor stand over the views, not over the sign-in', async () => {
+    test('the record panel and the key bringing it back stand over the views, not over the sign-in', async () => {
         setupBasicAuth();
         const {unmount} = renderApp(['/objects']);
         expect(await screen.findByTestId('peek-panel')).toBeInTheDocument();
-        expect(screen.getByTestId('panel-anchor')).toBeInTheDocument();
+        expect(screen.getByTestId('panel-reopen-key')).toBeInTheDocument();
         expect(screen.getByTestId('shortcuts-help')).toBeInTheDocument();
         unmount();
         renderApp(['/auth/login']);
@@ -979,49 +979,17 @@ describe('App Component', () => {
         }
     });
 
-    describe('the gutter of the anchor that brings the panels back', () => {
-        afterEach(() => {
-            mockHistory.entries = [];
-        });
-
-        test('none while there is nothing to bring back', async () => {
-            setupBasicAuth();
-            renderApp(['/objects']);
-            await screen.findByTestId('objects');
-            const main = document.getElementById('app-scroll-container');
-            expect(main.style.paddingRight).toBe('');
-            expect(main.style.paddingLeft).toBe('');
-        });
-
-        test('on the right, where the anchor stands: an Actions menu at the end of a toolbar stays clear of it', async () => {
-            mockHistory.entries = [{kind: 'node', id: 'dev3n1', at: Date.now()}];
+    test('no anchor bringing the panels back, nor a gutter kept for one, whatever the history or the window', async () => {
+        mockHistory.entries = [{kind: 'node', id: 'dev3n1', at: Date.now()}];
+        try {
             setupBasicAuth();
             renderApp(['/nodes']);
             await screen.findByTestId('nodes');
-            expect(document.getElementById('app-scroll-container').style.paddingRight).toBe('2.5rem');
-            expect(screen.getByTestId('panel-anchor')).toHaveAttribute('data-in-bar', 'false');
-        });
-
-        test('none in a narrow window: the anchor is a button of the header bar', async () => {
-            const matchMedia = window.matchMedia;
-            window.matchMedia = (query) => ({
-                matches: query === '(max-width: 47.95rem)',
-                addEventListener: () => {},
-                removeEventListener: () => {},
-            });
-            try {
-                mockHistory.entries = [{kind: 'node', id: 'dev3n1', at: Date.now()}];
-                setupBasicAuth();
-                renderApp(['/nodes']);
-                await screen.findByTestId('nodes');
-                expect(document.getElementById('app-scroll-container').style.paddingRight).toBe('');
-                const anchors = screen.getAllByTestId('panel-anchor');
-                expect(anchors).toHaveLength(1);
-                expect(screen.getByTestId('navbar')).toContainElement(anchors[0]);
-                expect(anchors[0]).toHaveAttribute('data-in-bar', 'true');
-            } finally {
-                window.matchMedia = matchMedia;
-            }
-        });
+            const main = document.getElementById('app-scroll-container');
+            expect(main.style.paddingRight).toBe('');
+            expect(within(screen.getByTestId('navbar')).queryByTestId('panel-reopen-key')).toBeNull();
+        } finally {
+            mockHistory.entries = [];
+        }
     });
 });

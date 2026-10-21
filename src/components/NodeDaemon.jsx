@@ -527,7 +527,7 @@ export function NodeDaemon({node}) {
                 footer={
                     <>
                         <Button variant="secondary" onClick={() => setPending(null)}>{t("common.cancel")}</Button>
-                        <Button onClick={confirm}>{t("common.confirm")}</Button>
+                        <Button variant="change" onClick={confirm}>{t("common.confirm")}</Button>
                     </>
                 }
             >

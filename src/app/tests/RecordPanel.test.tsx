@@ -4,7 +4,7 @@ import { MemoryRouter, useLocation } from "react-router-dom";
 import { createPortal } from "react-dom";
 import { RecordPanel } from "../RecordPanel";
 import { usePanelHeader } from "../panel-header";
-import { PanelAnchor } from "../PanelAnchor";
+import { PanelReopenKey } from "../PanelReopenKey";
 import { CrossLink } from "../CrossLink";
 import { usePanelSearch } from "../panel-search";
 import { readLastRecord, reloadRecordHistory } from "../record-history";
@@ -33,7 +33,7 @@ function Search() {
 }
 
 /** A view with a record panel driven by the URL, as the views have. */
-function View({ inBar = false }: { inBar?: boolean }) {
+function View() {
   const { peek, peektab, setPeekTab, closePeek } = usePanelSearch();
   return (
     <>
@@ -64,16 +64,16 @@ function View({ inBar = false }: { inBar?: boolean }) {
           {(active) => <p>content of {active}</p>}
         </RecordPanel>
       ))}
-      <PanelAnchor inBar={inBar} />
+      <PanelReopenKey />
       <Search />
     </>
   );
 }
 
-function renderView(url = "/objects?kind=svc", inBar = false) {
+function renderView(url = "/objects?kind=svc") {
   return render(
     <MemoryRouter initialEntries={[url]}>
-      <View inBar={inBar} />
+      <View />
     </MemoryRouter>,
   );
 }
@@ -125,32 +125,18 @@ describe("record panels", () => {
     expect(JSON.parse(sessionStorage.getItem("om3.history") ?? "{}").records.map((r: { id: string }) => r.id)).toEqual(["ns1/svc/web", "lo"]);
   });
 
-  test("closed, the anchor brings back the last record, and so does p", () => {
+  test("closed, p brings back the last record, nothing on screen to do so", () => {
     renderView();
-    expect(screen.queryByRole("button", { name: /Reopen/ })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "lo" }));
     fireEvent.click(screen.getByRole("button", { name: "web" }));
     fireEvent.click(within(screen.getByRole("dialog", { name: "ns1/svc/web" })).getAllByRole("button", { name: "Close" })[0]!);
     expect(screen.getByTestId("search")).toHaveTextContent("?kind=svc");
+    expect(screen.queryByRole("button", { name: /Reopen/ })).not.toBeInTheDocument();
 
-    const anchor = screen.getByRole("button", { name: "Reopen ns1/svc/web (p)" });
-    fireEvent.click(anchor);
-    expect(screen.getByRole("dialog", { name: "ns1/svc/web" })).toBeInTheDocument();
-
-    fireEvent.keyDown(document.body, { key: "p" });
-    expect(openDialogs()).toHaveLength(0);
     fireEvent.keyDown(document.body, { key: "p" });
     expect(openDialogs().map((d) => d.getAttribute("aria-label"))).toEqual(["ns1/svc/web"]);
-  });
-
-  test("in the header bar, the anchor is a button in line, not on the edge of the window", () => {
-    renderView("/objects?kind=svc", true);
-    fireEvent.click(screen.getByRole("button", { name: "web" }));
-    fireEvent.click(within(screen.getByRole("dialog", { name: "ns1/svc/web" })).getAllByRole("button", { name: "Close" })[0]!);
-    const anchor = screen.getByRole("button", { name: /Reopen ns1\/svc\/web/ });
-    expect(anchor).not.toHaveClass("fixed");
-    fireEvent.click(anchor);
-    expect(screen.getByRole("dialog", { name: "ns1/svc/web" })).toBeInTheDocument();
+    fireEvent.keyDown(document.body, { key: "p" });
+    expect(openDialogs()).toHaveLength(0);
   });
 
   test("the content puts what concerns the whole record in the title bar", () => {

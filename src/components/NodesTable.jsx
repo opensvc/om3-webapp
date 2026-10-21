@@ -246,7 +246,7 @@ const NodesTable = () => {
                             label={t("nodes.bulkActions")}
                             align="end"
                             // The node, its inventory, its daemon: a column each in a wide window.
-                            columns={3}
+                            columns={2}
                             items={nodeMenuItems({
                                 t,
                                 nodes: selectedNodes,

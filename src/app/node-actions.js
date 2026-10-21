@@ -26,14 +26,14 @@ export function nodeActionRequest(node, name) {
 }
 
 /**
- * The entries of the menu of the actions on nodes, a column a group in a wide window,
+ * The entries of the menu of the actions on nodes, their groups in a masonry in a wide window,
  * each group under its heading, each entry with what it does. `offered`, whether an
  * action is offered (freeze or unfreeze, by their state); `apiNode`, the node serving
  * the webapp, which cannot be asked to leave: another of the cluster evicts it.
  */
 export function nodeMenuItems({t, nodes, offered = () => true, apiNode, renderIcon, onSelect}) {
     const items = [];
-    NODE_ACTION_GROUPS.forEach((group, index) => {
+    NODE_ACTION_GROUPS.forEach((group) => {
         const actions = NODE_ACTIONS.filter((action) => action.group === group && action.menu !== false && offered(action.name));
         actions.forEach((action, i) => {
             const key = nodeActionKey(action.name);
@@ -45,7 +45,6 @@ export function nodeMenuItems({t, nodes, offered = () => true, apiNode, renderIc
                 icon: renderIcon(action),
                 danger: action.color === "red",
                 disabled: fromHere,
-                column: index + 1,
                 ...(i === 0 ? {heading: t(`nodeActions.groups.${group}`)} : {}),
                 onSelect: () => onSelect(action.name),
             });

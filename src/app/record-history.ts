@@ -154,7 +154,7 @@ export function useRecordHistory() {
 
 /**
  * The record a panel showed last, for the anchor that reopens the panels once
- * closed (`PanelAnchor`): the history cannot tell, a record shown again keeping its
+ * closed (`PanelReopenKey`): the history cannot tell, a record shown again keeping its
  * place in it. Kept by the browser tab, like the history.
  */
 export function rememberLastRecord(step: PeekStep): void {

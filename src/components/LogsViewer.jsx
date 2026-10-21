@@ -562,7 +562,6 @@ const LogsViewer = ({
                     {/* Following is about the view, the pause about the stream. */}
                     <Button
                         size="sm"
-                        variant={following ? "primary" : "secondary"}
                         aria-pressed={following}
                         onClick={() => (following ? follow(false) : toEnd())}
                     >
@@ -678,7 +677,7 @@ const LogsViewer = ({
                             {noOlder ? (
                                 <span className="text-data text-ink-muted">{t("logs.noOlder")}</span>
                             ) : (
-                                <Button size="sm" variant="ghost" onClick={loadOlder} disabled={loadingOlder}>
+                                <Button size="sm" onClick={loadOlder} disabled={loadingOlder}>
                                     {loadingOlder ? t("logs.loadingOlder") : t("logs.loadOlder")}
                                 </Button>
                             )}

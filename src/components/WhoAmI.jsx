@@ -204,7 +204,7 @@ const WhoAmI = () => {
                 >
                     {isDarkMode ? t('user.lightMode') : t('user.darkMode')}
                 </Button>
-                <Button variant="danger" icon={<SignOutIcon/>} onClick={handleLogout}>
+                <Button icon={<SignOutIcon/>} onClick={handleLogout}>
                     {t('user.logout')}
                 </Button>
             </div>

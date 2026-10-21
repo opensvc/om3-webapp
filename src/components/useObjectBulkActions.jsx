@@ -156,7 +156,7 @@ export function useObjectBulkActions({selectedObjects, onDone}) {
             tone={TONES[snackbar.severity] ?? "info"}
             className="shrink-0"
             action={
-                <IconButton label={t("common.close")} bare onClick={closeFeedback}>
+                <IconButton label={t("common.close")} onClick={closeFeedback}>
                     <CloseIcon className="h-4 w-4"/>
                 </IconButton>
             }

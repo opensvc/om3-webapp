@@ -509,7 +509,7 @@ const ObjectDetail = ({path, embedded = false, onOpenLogs, onViewInstance, onOrc
         <Alert
             tone={TONES[snackbar.severity] ?? "info"}
             action={
-                <IconButton label={t("common.close")} bare onClick={closeSnackbar}>
+                <IconButton label={t("common.close")} onClick={closeSnackbar}>
                     <CloseIcon className="h-4 w-4"/>
                 </IconButton>
             }

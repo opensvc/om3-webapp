@@ -78,7 +78,6 @@ function ParamForm({submitLabel, submitting, disabled, onSubmit, error, children
             {children}
             {error && <Alert tone="error">{error}</Alert>}
             <Button
-                variant="primary"
                 type="submit"
                 disabled={submitting || disabled}
                 icon={submitting ? <Spinner label={submitLabel}/> : undefined}

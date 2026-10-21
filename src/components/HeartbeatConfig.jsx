@@ -78,19 +78,19 @@ export function HeartbeatConfigDialog({name, onClose, onEdit, onDeleted, deletab
             footer={confirming ? (
                 <>
                     <Button variant="secondary" onClick={() => setConfirming(false)} disabled={deleting}>{t("common.cancel")}</Button>
-                    <Button variant="danger" onClick={remove} disabled={deleting}>
+                    <Button variant="delete" onClick={remove} disabled={deleting}>
                         {deleting ? t("heartbeats.config.deleting") : t("heartbeats.config.delete")}
                     </Button>
                 </>
             ) : (
                 <>
                     {onDeleted && deletable && (
-                        <Button variant="danger" className="mr-auto" onClick={() => setConfirming(true)} disabled={!section}>
+                        <Button variant="delete" className="mr-auto" onClick={() => setConfirming(true)} disabled={!section}>
                             {t("heartbeats.config.delete")}
                         </Button>
                     )}
                     <Button variant="secondary" onClick={onClose}>{t("common.close")}</Button>
-                    {onEdit && <Button variant="primary" onClick={onEdit} disabled={!section}>{t("heartbeats.config.edit")}</Button>}
+                    {onEdit && <Button onClick={onEdit} disabled={!section}>{t("heartbeats.config.edit")}</Button>}
                 </>
             )}
         >
@@ -213,11 +213,11 @@ export function HeartbeatWizard({name, nodes, onClose, onSaved}) {
                     <Button variant="secondary" onClick={onClose}>{t("common.cancel")}</Button>
                     {index > 0 && <Button variant="secondary" onClick={() => setStep(STEPS[index - 1])} disabled={saving}>{t("heartbeats.wizard.back")}</Button>}
                     {step === "review" ? (
-                        <Button variant="primary" onClick={save} disabled={saving || (ops.set.length === 0 && ops.unset.length === 0 && !ops.rewrite)}>
+                        <Button onClick={save} disabled={saving || (ops.set.length === 0 && ops.unset.length === 0 && !ops.rewrite)}>
                             {saving ? t("heartbeats.wizard.saving") : t("heartbeats.wizard.save")}
                         </Button>
                     ) : (
-                        <Button variant="primary" onClick={() => setStep(STEPS[index + 1])} disabled={!canNext}>{t("heartbeats.wizard.next")}</Button>
+                        <Button onClick={() => setStep(STEPS[index + 1])} disabled={!canNext}>{t("heartbeats.wizard.next")}</Button>
                     )}
                 </>
             )}

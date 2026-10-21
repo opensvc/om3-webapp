@@ -29,7 +29,7 @@ export function NodeActionDialog({pending, target, onConfirm, onClose}) {
                 <>
                     <Button variant="secondary" onClick={onClose}>{t("common.cancel")}</Button>
                     <Button
-                        variant={harmful ? "danger" : "primary"}
+                        variant={pending.action === "leave" ? "delete" : "secondary"}
                         disabled={harmful && !understood}
                         onClick={() => onConfirm(pending.action)}
                     >

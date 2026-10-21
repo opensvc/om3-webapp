@@ -348,23 +348,23 @@ describe("submenuShift", () => {
 });
 
 describe("MenuButton prominent", () => {
-  test("the actions: a pill of the accent fill, brighter when open", () => {
+  test("the actions: outlined, as every button neither creating nor deleting, the corners of the controls", () => {
     render(<MenuButton label="Actions" items={items()} prominent />);
     const button = screen.getByRole("button", { name: "Actions" });
-    expect(button).toHaveClass("rounded-(--radius-pill)", "bg-accent", "text-accent-ink", "aria-expanded:brightness-110");
-    expect(button).not.toHaveClass("bg-accent-soft");
+    expect(button).toHaveClass("rounded-(--radius-control)", "border", "border-line", "text-ink");
+    expect(button).not.toHaveClass("bg-accent", "rounded-(--radius-pill)");
     expect(button).toHaveTextContent("Actions");
     expect(button).not.toHaveAttribute("title");
   });
 
-  test("solid, of the accent fill: its text in a wide window, its icon alone in a narrow one, named by its label", () => {
+  test("solid, drawn as the actions: its text in a wide window, its icon alone in a narrow one, named by its label", () => {
     render(<MenuButton label="Node actions" text="Actions" items={items()} solid icon={<svg data-testid="bolt" />} />);
     const button = screen.getByRole("button", { name: "Node actions" });
-    expect(button).toHaveClass("max-md:w-7", "bg-accent", "text-accent-ink");
+    expect(button).toHaveClass("max-md:w-7", "border", "border-line");
+    expect(button).not.toHaveClass("bg-accent");
     expect(button).toHaveTextContent(/^Actions$/);
     expect(screen.getByText("Actions")).toHaveClass("max-md:hidden");
     expect(screen.getByTestId("bolt").parentElement).toHaveClass("hidden", "max-md:inline-flex");
-    expect(button).not.toHaveClass("border-line");
     expect(button).toHaveAttribute("title", "Node actions");
   });
 

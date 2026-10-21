@@ -235,7 +235,6 @@ const Login = forwardRef((props, ref) => {
                     {t('auth.login.changeMethod')}
                 </Button>
                 <Button
-                    variant="primary"
                     onClick={handleSubmit}
                     disabled={!username || !password || loading}
                 >

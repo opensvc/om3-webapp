@@ -5,9 +5,13 @@ import { ObjectIcon } from "../ui/components/ObjectIcon";
 import { StatusBadge } from "../ui/components/StatusBadge";
 import { StatusMark } from "../ui/components/StatusMark";
 import { statusBadge } from "../ui/components/status";
-import { CloseIcon, SearchIcon } from "../ui/icons";
+import { CloseIcon, HistoryIcon, SearchIcon, TrashIcon } from "../ui/icons";
+import { formatRelativeInstant } from "../ui/lib/format";
 import { typing } from "../ui/lib/shortcuts";
-import { usePeek } from "./panel-search";
+import { usePanelSearch, usePeek } from "./panel-search";
+import { useHistoryGrouping, usePanelHistory, type HistoryEntry } from "./panel-history";
+import { serialiseStep } from "./peek";
+import { GroupHeading, GroupingSwitch } from "./RecentRecords";
 import { KIND_ICON, SEARCH_KINDS, hitIcon, search, type SearchEntry, type SearchIndex, type SearchKind } from "./search";
 
 type Scope = SearchKind | "all";
@@ -46,6 +50,11 @@ function isMac(): boolean {
  * badge does (`usePeek`), a node included. Up and Down move through the results,
  * Enter opens, Escape closes; a
  * scope narrows the search to one kind and shows more of it.
+ *
+ * Nothing typed yet, it proposes the records shown recently in this browser tab
+ * (`usePanelHistory`), grouped by how long ago or by kind, the record on display
+ * said so; picked as a result, one comes back in front. Delete, or the cross of
+ * an entry, removes it; the bin clears them all.
  *
  * `loadIndex` reads what is searched, each time the palette opens.
  */
@@ -114,9 +123,12 @@ function SearchPalette({
   loadIndex: () => Promise<SearchIndex>;
   onClose: (restoreFocus: boolean) => void;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const id = useId();
   const peek = usePeek();
+  const grouping = useHistoryGrouping();
+  const { peek: shown } = usePanelSearch();
+  const recent = usePanelHistory(shown === null ? "" : serialiseStep(shown), grouping.value);
   const [query, setQuery] = useState("");
   const [scope, setScope] = useState<Scope>("all");
   const [active, setActive] = useState(0);
@@ -143,27 +155,55 @@ function SearchPalette({
 
   const trimmed = query.trim();
   const groups = useMemo(() => (index === null ? [] : search(index, trimmed, scope)), [index, trimmed, scope]);
-  const hits = useMemo(() => groups.flatMap((g) => g.hits), [groups]);
-  const current = hits[Math.min(active, hits.length - 1)];
-  const key = (hit: SearchEntry) => `${hit.kind}:${hit.id}`;
-  const optionId = (hit: SearchEntry) => `${id}-${key(hit)}`;
+  // Nothing typed: the records shown recently, of the kind in scope.
+  const proposing = trimmed === "";
+  const recentGroups = recent.groups
+    .map((group) => ({ ...group, entries: group.entries.filter((entry) => scope === "all" || entry.step.kind === scope) }))
+    .filter((group) => group.entries.length > 0);
+  const options: Option[] = proposing
+    ? recentGroups.flatMap((group) => group.entries.map((entry) => ({ type: "recent" as const, key: entry.key, entry })))
+    : groups.flatMap((group) => group.hits.map((hit) => ({ type: "hit" as const, key: `${hit.kind}:${hit.id}`, hit })));
+  const current = options[Math.min(active, options.length - 1)];
+  const optionId = (option: Option) => `${id}-${option.type}-${option.key}`;
 
   // A new result list starts on its first result.
   useEffect(() => {
     setActive(0);
   }, [trimmed, scope]);
 
+  const currentId = current === undefined ? undefined : optionId(current);
   useEffect(() => {
-    if (current === undefined) return;
-    document.getElementById(optionId(current))?.scrollIntoView?.({ block: "nearest" });
-    // optionId only depends on the stable useId prefix.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [current]);
+    if (currentId === undefined) return;
+    document.getElementById(currentId)?.scrollIntoView?.({ block: "nearest" });
+  }, [currentId]);
 
-  function choose(hit: SearchEntry) {
+  function choose(option: Option) {
     onClose(false);
-    peek(hit.kind, hit.id);
+    if (option.type === "hit") peek(option.hit.kind, option.hit.id);
+    else peek(option.entry.step.kind, option.entry.step.id);
   }
+
+  /**
+   * The option at `at` in the list: chosen by a click, made the active one by the
+   * pointer. Told active by its place: the options are built anew at each render.
+   */
+  const optionProps = (option: Option, at: number) => {
+    const selected = at === Math.min(active, options.length - 1);
+    return {
+      id: optionId(option),
+      role: "option",
+      "aria-selected": selected,
+      onPointerMove: () => {
+        if (!selected) setActive(at);
+      },
+      onClick: () => {
+        choose(option);
+      },
+      className: `group mx-1 flex cursor-pointer items-center gap-3 rounded-(--radius-control) px-2 py-1.5 ${
+        selected ? "bg-accent-soft" : ""
+      }`,
+    };
+  };
 
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     switch (event.key) {
@@ -175,12 +215,18 @@ function SearchPalette({
         return;
       case "ArrowDown":
       case "ArrowUp": {
-        if (hits.length === 0) return;
+        if (options.length === 0) return;
         event.preventDefault();
         const step = event.key === "ArrowDown" ? 1 : -1;
-        setActive((i) => (Math.min(i, hits.length - 1) + step + hits.length) % hits.length);
+        setActive((i) => (Math.min(i, options.length - 1) + step + options.length) % options.length);
         return;
       }
+      case "Delete":
+        // A record shown recently, forgotten; the next one becomes the active one.
+        if (event.target !== input.current || current?.type !== "recent") return;
+        event.preventDefault();
+        recent.remove(current.entry);
+        return;
       case "Enter":
         if (event.target !== input.current || current === undefined) return;
         event.preventDefault();
@@ -188,7 +234,7 @@ function SearchPalette({
         return;
       case "Tab": {
         // The palette is modal: the focus stays inside it.
-        const focusable = dialog.current?.querySelectorAll<HTMLElement>("input, button:not([disabled])");
+        const focusable = dialog.current?.querySelectorAll<HTMLElement>("input, button:not([disabled]):not([tabindex='-1'])");
         if (focusable === undefined || focusable.length === 0) return;
         const first = focusable[0];
         const last = focusable[focusable.length - 1];
@@ -229,10 +275,10 @@ function SearchPalette({
             // Not "search": its own clear button would double the close button.
             type="text"
             role="combobox"
-            aria-expanded={hits.length > 0}
+            aria-expanded={options.length > 0}
             aria-controls={`${id}-results`}
             aria-autocomplete="list"
-            aria-activedescendant={current === undefined ? undefined : optionId(current)}
+            aria-activedescendant={currentId}
             aria-label={t("search.title")}
             placeholder={t("search.placeholder")}
             value={query}
@@ -252,7 +298,7 @@ function SearchPalette({
               onClose(true);
             }}
             title={t("search.close")}
-            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-(--radius-control) text-ink-muted hover:text-ink"
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-(--radius-control) border border-line text-ink-muted hover:bg-surface-sunken hover:text-ink"
           >
             <CloseIcon />
             <span className="sr-only">{t("search.close")}</span>
@@ -286,8 +332,63 @@ function SearchPalette({
             <p role="alert" className="px-3 py-6 text-center text-state-down">
               ■ {failure}
             </p>
-          ) : trimmed === "" ? (
-            <p className="px-3 py-6 text-center text-ink-muted">{t("search.hint")}</p>
+          ) : proposing ? (
+            recent.entries.length === 0 ? (
+              <p className="px-3 py-6 text-center text-ink-muted">{t("search.hint")}</p>
+            ) : (
+              <>
+                <div className="flex items-center gap-2 px-3 py-1 text-ink-muted">
+                  <HistoryIcon className="h-4 w-4 shrink-0" />
+                  <span id={`${id}-recent`} className="min-w-0 flex-1 truncate">
+                    {t("search.recent.title")}
+                  </span>
+                  <GroupingSwitch value={grouping.value} onChange={grouping.set} />
+                  <button
+                    type="button"
+                    title={t("panelHistory.clear")}
+                    onClick={() => {
+                      recent.clear();
+                      input.current?.focus();
+                    }}
+                    // It deletes the records: the down fill.
+                    className="flex h-6 items-center gap-1 rounded-(--radius-control) bg-state-down px-1.5 text-data font-medium text-surface-raised hover:brightness-110"
+                  >
+                    <TrashIcon className="h-3.5 w-3.5" />
+                    {t("search.recent.clear")}
+                  </button>
+                </div>
+                {recentGroups.length === 0 && (
+                  <p className="px-3 py-6 text-center text-ink-muted">{t("search.recent.noneOfKind")}</p>
+                )}
+                {recentGroups.map((group) => {
+                  const headingId = `${id}-recent-${group.key}`;
+                  return (
+                    <div key={group.key} role="group" aria-labelledby={headingId} className="py-1">
+                      <div className="flex items-center gap-2 px-3 py-1 text-data text-ink-muted">
+                        <GroupHeading group={group} id={headingId} />
+                      </div>
+                      {group.entries.map((entry) => {
+                        const option: Option = { type: "recent", key: entry.key, entry };
+                        const at = options.findIndex((o) => o.key === entry.key);
+                        return (
+                          <RecentRow
+                            key={entry.key}
+                            entry={entry}
+                            kindShown={group.by === "time"}
+                            when={formatRelativeInstant(entry.at, i18n.language)}
+                            optionProps={optionProps(option, at)}
+                            onRemove={() => {
+                              recent.remove(entry);
+                              input.current?.focus();
+                            }}
+                          />
+                        );
+                      })}
+                    </div>
+                  );
+                })}
+              </>
+            )
           ) : index === null ? (
             <p className="px-3 py-6 text-center text-ink-muted">{t("search.searching")}</p>
           ) : groups.length === 0 ? (
@@ -317,24 +418,10 @@ function SearchPalette({
                   </div>
                   {group.error && <p className="px-3 py-1 text-state-down">■ {t("search.kindError")}</p>}
                   {group.hits.map((hit) => {
-                    const selected = hit === current;
+                    const option: Option = { type: "hit", key: `${hit.kind}:${hit.id}`, hit };
+                    const at = options.findIndex((o) => o.type === "hit" && o.key === option.key);
                     return (
-                      <div
-                        key={key(hit)}
-                        id={optionId(hit)}
-                        role="option"
-                        aria-selected={selected}
-                        onPointerMove={() => {
-                          const at = hits.indexOf(hit);
-                          if (at !== active) setActive(at);
-                        }}
-                        onClick={() => {
-                          choose(hit);
-                        }}
-                        className={`mx-1 flex cursor-pointer items-center gap-3 rounded-(--radius-control) px-2 py-1.5 ${
-                          selected ? "bg-accent-soft" : ""
-                        }`}
-                      >
+                      <div key={option.key} {...optionProps(option, at)}>
                         <ObjectIcon kind={hitIcon(hit)} className="h-4 w-4 shrink-0" />
                         <div className="min-w-0 flex-1">
                           <div className="truncate font-medium">
@@ -370,11 +457,70 @@ function SearchPalette({
           <span>
             <kbd className="rounded-sm border border-line px-1">↵</kbd> {t("search.keys.open")}
           </span>
+          {proposing && recent.entries.length > 0 && (
+            <span>
+              <kbd className="rounded-sm border border-line px-1">Del</kbd> {t("search.keys.remove")}
+            </span>
+          )}
           <span>
             <kbd className="rounded-sm border border-line px-1">Esc</kbd> {t("search.keys.close")}
           </span>
         </div>
       </div>
+    </div>
+  );
+}
+
+/** An option of the palette: a result of the search, or a record shown recently. */
+type Option =
+  | { type: "hit"; key: string; hit: SearchEntry }
+  | { type: "recent"; key: string; entry: HistoryEntry };
+
+/**
+ * A record shown recently, as an option of the palette: its icon and name, under it
+ * its kind when grouped by time, on the right how long ago it was shown and, for the
+ * record on display, that it is. The cross, shown with the pointer over the entry or
+ * on the active one, removes it; Delete does so from the keyboard.
+ */
+function RecentRow({
+  entry,
+  kindShown,
+  when,
+  optionProps,
+  onRemove,
+}: {
+  entry: HistoryEntry;
+  kindShown: boolean;
+  when: string;
+  optionProps: Record<string, unknown>;
+  onRemove: () => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <div {...optionProps} aria-current={entry.current ? "true" : undefined}>
+      <ObjectIcon kind={entry.icon} className="h-4 w-4 shrink-0" />
+      <div className="min-w-0 flex-1">
+        <div className="truncate font-medium">{entry.label}</div>
+        {kindShown && <div className="truncate text-data text-ink-muted">{t(`search.recent.types.${entry.type}`)}</div>}
+      </div>
+      {entry.current && (
+        <span className="shrink-0 rounded-full border border-accent px-1.5 text-data text-ink">{t("search.recent.current")}</span>
+      )}
+      <span className="shrink-0 text-data text-ink-muted tabular-nums">{when}</span>
+      <button
+        type="button"
+        // The keyboard removes it with Delete: the cross is for the pointer.
+        tabIndex={-1}
+        title={t("panelHistory.remove", { name: entry.label })}
+        onClick={(event) => {
+          event.stopPropagation();
+          onRemove();
+        }}
+        className="shrink-0 rounded-full p-1 text-ink-muted opacity-0 group-hover:opacity-100 group-aria-selected:opacity-100 hover:bg-surface-sunken hover:text-ink"
+      >
+        <CloseIcon className="h-3 w-3" />
+        <span className="sr-only">{t("panelHistory.remove", { name: entry.label })}</span>
+      </button>
     </div>
   );
 }

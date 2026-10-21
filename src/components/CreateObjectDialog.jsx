@@ -212,9 +212,11 @@ const CreateObjectDialog = ({open, onClose, defaultKind = "svc", defaultNamespac
             initialFocus={nameRef}
             footer={
                 <>
-                    <Button onClick={onClose} disabled={submitting}>{t("common.cancel")}</Button>
+                    {/* Pressed, it keeps the focus where it is: a field left would say its error, the
+                        dialog growing, the button moved from under the pointer before it is released. */}
+                    <Button onMouseDown={(e) => e.preventDefault()} onClick={onClose} disabled={submitting}>{t("common.cancel")}</Button>
                     <Button
-                        variant="primary"
+                        variant="create"
                         type="submit"
                         form={`${ids}-form`}
                         disabled={submitting || loadingSource}

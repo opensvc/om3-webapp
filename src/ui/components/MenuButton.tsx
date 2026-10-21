@@ -47,15 +47,15 @@ const ITEM =
  * the right arrow; within it the arrows walk its own entries, and the left arrow
  * or Escape give the focus back to the entry that opened it.
  *
- * `prominent` draws a menu the page is used for, such as the actions: a pill of
- * the accent fill, brighter when hovered or open, its
- * label and chevron in a wide window, its `icon` alone in a narrow one, the label
- * then its accessible name and tooltip.
+ * `prominent` draws a menu the page is used for, such as the actions: outlined, as
+ * every button that neither creates nor deletes (`Button`), in the ink rather than
+ * muted, its label and chevron in a wide window, its `icon` alone in a narrow one,
+ * the label then its accessible name and tooltip.
  *
  * om3 additions: `icon` without `prominent` makes the trigger an icon alone, `label`
- * staying its accessible name and tooltip; with `solid`, of the accent fill, as the
- * actions, its `text` (the label without) shown in a wide window, its icon alone in a
- * narrow one; `compact` makes it small and borderless, for a table
+ * staying its accessible name and tooltip; with `solid`, drawn as the actions, its
+ * `text` (the label without) shown in a wide window, its icon alone in a narrow one;
+ * `compact` makes it small, for a table
  * row; `align="end"` lines the menu up with the right edge of the trigger. The menu
  * is placed against the window, so that a scrolling container (a table) cannot cut
  * it, and closes when the page scrolls or resizes rather than drift from its button.
@@ -79,12 +79,12 @@ export function MenuButton({
   disabled?: boolean;
   className?: string;
   /**
-   * A menu the page is used for, such as the actions on the selection: a pill,
-   * outlined and tinted with the accent, filled when hovered or open. The plain one, for a
-   * secondary menu, is muted. A primary button, filled, stays apart from both.
+   * A menu the page is used for, such as the actions on the selection: outlined, in
+   * the ink, tinted when hovered or open. The plain one, for a secondary menu, is
+   * muted. Only a button creating or deleting something is filled (`Button`).
    */
   prominent?: boolean;
-  /** The accent fill, as the actions: its text in a wide window, its icon alone in a narrow one. */
+  /** Drawn as the actions: its text in a wide window, its icon alone in a narrow one. */
   solid?: boolean;
   /** With `solid`, the word shown in a wide window, shorter than the label naming it. */
   text?: string;
@@ -253,17 +253,18 @@ export function MenuButton({
         title={iconOnly || (prominent && icon !== undefined) ? label : undefined}
         aria-label={iconOnly || trigger !== undefined ? label : undefined}
         className={
+          // A menu acts, it does not create nor delete: outlined, as every such button.
           prominent
-            ? `flex h-7 items-center gap-1.5 rounded-(--radius-pill) border border-accent bg-accent pr-2.5 pl-3 font-medium text-accent-ink hover:brightness-110 disabled:opacity-60 disabled:hover:brightness-100 aria-expanded:brightness-110 ${
+            ? `flex h-7 items-center gap-1.5 rounded-(--radius-control) border border-line bg-surface-raised px-2.5 font-medium text-ink hover:bg-surface-sunken disabled:opacity-60 aria-expanded:bg-surface-sunken ${
                 icon !== undefined ? "max-md:w-7 max-md:justify-center max-md:px-0" : ""
               }`
             : trigger !== undefined
             ? // Drawn as the other menu triggers, lighter: a border and a chevron say it opens.
               "inline-flex h-6 cursor-pointer items-center gap-1 rounded-(--radius-control) border border-line pr-0.5 pl-1 hover:border-line-strong hover:bg-surface-sunken disabled:cursor-default disabled:opacity-60 aria-expanded:border-line-strong aria-expanded:bg-surface-sunken"
             : compact
-            ? "flex h-5 w-5 items-center justify-center rounded-(--radius-control) text-ink-muted hover:bg-surface-sunken hover:text-ink disabled:opacity-60 aria-expanded:bg-surface-sunken aria-expanded:text-ink"
+            ? "flex h-5 w-5 items-center justify-center rounded-(--radius-control) border border-line text-ink-muted hover:bg-surface-sunken hover:text-ink disabled:opacity-60 aria-expanded:bg-surface-sunken aria-expanded:text-ink"
             : iconOnly && solid
-            ? "flex h-7 items-center gap-1.5 rounded-(--radius-control) border border-accent bg-accent px-2.5 font-medium text-accent-ink hover:brightness-110 disabled:opacity-60 disabled:hover:brightness-100 aria-expanded:brightness-110 max-md:w-7 max-md:justify-center max-md:px-0"
+            ? "flex h-7 items-center gap-1.5 rounded-(--radius-control) border border-line bg-surface-raised px-2.5 font-medium text-ink hover:bg-surface-sunken disabled:opacity-60 aria-expanded:bg-surface-sunken max-md:w-7 max-md:justify-center max-md:px-0"
             : `flex h-7 items-center gap-1.5 rounded-(--radius-control) border border-line text-ink-muted hover:border-line-strong hover:text-ink disabled:opacity-60 aria-expanded:text-ink ${
                 iconOnly ? "w-7 justify-center" : "px-2"
               }`

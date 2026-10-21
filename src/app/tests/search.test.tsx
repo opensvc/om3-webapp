@@ -1,7 +1,9 @@
-import { describe, expect, test, vi } from "vitest";
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { act, fireEvent, render, renderHook, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { GlobalSearch } from "../GlobalSearch";
+import { setHistoryGrouping } from "../panel-history";
+import { reloadRecordHistory, useRecordHistory } from "../record-history";
 import { LIMIT_ALL, hitIcon, search, type SearchIndex } from "../search";
 
 const index: SearchIndex = {
@@ -53,9 +55,9 @@ function Search() {
   return <output data-testid="location">{decodeURIComponent(useLocation().pathname + useLocation().search)}</output>;
 }
 
-function renderSearch(load = vi.fn(() => Promise.resolve(index))) {
+function renderSearch(load = vi.fn(() => Promise.resolve(index)), at = "/objects?kind=svc") {
   render(
-    <MemoryRouter initialEntries={["/objects?kind=svc"]}>
+    <MemoryRouter initialEntries={[at]}>
       <GlobalSearch loadIndex={load} />
       <Search />
     </MemoryRouter>,
@@ -128,5 +130,125 @@ describe("GlobalSearch", () => {
     fireEvent.keyDown(field, { key: "/" });
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     field.remove();
+  });
+});
+
+describe("GlobalSearch, the records shown recently", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    sessionStorage.clear();
+    reloadRecordHistory();
+    setHistoryGrouping("time");
+  });
+
+  afterEach(() => {
+    localStorage.clear();
+    sessionStorage.clear();
+  });
+
+  /** Records shown, the last one the most recent. */
+  function show(...steps: [string, string][]) {
+    const { result } = renderHook(() => useRecordHistory());
+    steps.forEach(([kind, id]) => {
+      act(() => {
+        result.current.record(kind, id);
+      });
+    });
+  }
+
+  const open = () => {
+    fireEvent.keyDown(document.body, { key: "k", ctrlKey: true });
+    return screen.getByRole("combobox", { name: "Search the cluster" });
+  };
+  /** The options as listed: their names. */
+  const names = () => screen.queryAllByRole("option").map((option) => option.querySelector(".font-medium")?.textContent);
+  const active = () => screen.getAllByRole("option").find((option) => option.getAttribute("aria-selected") === "true");
+
+  test("nothing typed, proposed the most recent first, each with its kind and when; the arrows and Enter open one", () => {
+    show(["object", "ns1/sec/tls"], ["network", "lo"], ["object", "ns1/svc/web"]);
+    renderSearch();
+    const input = open();
+    expect(screen.getByText("Recently opened")).toBeInTheDocument();
+    expect(names()).toEqual(["ns1/svc/web", "lo", "ns1/sec/tls"]);
+    const first = screen.getAllByRole("option")[0]!;
+    expect(first).toHaveTextContent("Service");
+    expect(first).toHaveTextContent(/now|ago|second/);
+    expect(active()).toBe(first);
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    expect(input).toHaveAttribute("aria-activedescendant", active()!.id);
+    expect(active()).toHaveTextContent("lo");
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByTestId("location")).toHaveTextContent("peek=network:lo");
+  });
+
+  test("the active option alone highlighted, following the arrows, in the records as in the results", async () => {
+    show(["object", "ns1/sec/tls"], ["network", "lo"]);
+    renderSearch();
+    const input = open();
+    const highlighted = () => screen.getAllByRole("option").filter((option) => option.classList.contains("bg-accent-soft"));
+    expect(highlighted().map((o) => o.textContent)).toEqual([expect.stringContaining("lo")]);
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    expect(highlighted()).toEqual([active()]);
+    expect(active()).toHaveTextContent("ns1/sec/tls");
+    fireEvent.change(input, { target: { value: "dns" } });
+    await waitFor(() => expect(names()).toEqual(["ns1/sec/dns-key", "system/svc/dns"]));
+    expect(highlighted()).toEqual([active()]);
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    expect(highlighted()).toEqual([active()]);
+    expect(active()).toHaveTextContent("system/svc/dns");
+  });
+
+  test("typed, the search; emptied, the records again", async () => {
+    show(["object", "ns1/svc/web"]);
+    renderSearch();
+    const input = open();
+    fireEvent.change(input, { target: { value: "dns" } });
+    expect(screen.queryByText("Recently opened")).not.toBeInTheDocument();
+    await waitFor(() => expect(names()).toEqual(["ns1/sec/dns-key", "system/svc/dns"]));
+    fireEvent.change(input, { target: { value: "" } });
+    expect(names()).toEqual(["ns1/svc/web"]);
+  });
+
+  test("Delete, or the cross, removes one; the bin clears them all, the hint back", () => {
+    show(["object", "ns1/sec/tls"], ["network", "lo"], ["object", "ns1/svc/web"]);
+    renderSearch();
+    const input = open();
+    fireEvent.keyDown(input, { key: "Delete" });
+    expect(names()).toEqual(["lo", "ns1/sec/tls"]);
+    fireEvent.click(screen.getByRole("button", { name: "Remove ns1/sec/tls from the history" }));
+    expect(names()).toEqual(["lo"]);
+    // Still open, the focus back in the field.
+    expect(input).toHaveFocus();
+    fireEvent.click(screen.getByRole("button", { name: "Clear" }));
+    expect(names()).toEqual([]);
+    expect(screen.getByText(/Type a name/)).toBeInTheDocument();
+  });
+
+  test("grouped by kind, the om3 kinds in order; the choice remembered in this browser", () => {
+    show(["object", "ns1/sec/tls"], ["object", "ns1/svc/web"], ["network", "lo"], ["object", "ns1/svc/db"]);
+    renderSearch();
+    open();
+    fireEvent.click(screen.getByRole("button", { name: "By kind" }));
+    const groups = screen.getAllByRole("group").filter((group) => group.querySelector("[role=option]"));
+    expect(groups.map((group) => group.getAttribute("aria-labelledby") && document.getElementById(group.getAttribute("aria-labelledby")!)?.textContent)).toEqual([
+      "Services",
+      "Secrets",
+      "Networks",
+    ]);
+    expect(names()).toEqual(["ns1/svc/db", "ns1/svc/web", "ns1/sec/tls", "lo"]);
+    expect(localStorage.getItem("om3.panelHistory.grouping")).toBe("kind");
+  });
+
+  test("a scope keeps the records of its kind; the one on display is said open", () => {
+    show(["object", "ns1/svc/web"], ["network", "lo"]);
+    renderSearch(undefined, "/objects?peek=object:ns1/svc/web");
+    open();
+    expect(screen.getAllByRole("option")[1]).toHaveTextContent("open");
+    fireEvent.click(screen.getByRole("button", { name: "Networks" }));
+    expect(names()).toEqual(["lo"]);
+    fireEvent.click(screen.getByRole("button", { name: "Nodes" }));
+    expect(names()).toEqual([]);
+    expect(screen.getByText("Nothing of this kind opened recently.")).toBeInTheDocument();
   });
 });

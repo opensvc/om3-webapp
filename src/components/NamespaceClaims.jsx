@@ -134,7 +134,7 @@ export function NamespaceClaims({namespace}) {
                                 aria-label={t("namespaces.claims.editOf", {name: nameOf(line)})}>
                             {t("namespaces.claims.edit")}
                         </Button>
-                        <Button size="sm" variant="secondary" onClick={() => setRemoving(line.claim)}
+                        <Button size="sm" variant="delete" onClick={() => setRemoving(line.claim)}
                                 aria-label={t("namespaces.claims.removeOf", {name: nameOf(line)})}>
                             {t("namespaces.claims.remove")}
                         </Button>
@@ -322,11 +322,11 @@ function ClaimWizard({namespace, start, own, configured, lines, pools, networks,
                     <Button variant="secondary" onClick={onClose}>{t("common.cancel")}</Button>
                     {index > firstStep && <Button variant="secondary" onClick={back} disabled={saving}>{t("namespaces.claims.wizard.back")}</Button>}
                     {step === "review" ? (
-                        <Button variant="primary" onClick={save} disabled={saving}>
+                        <Button variant={editing ? "secondary" : "create"} onClick={save} disabled={saving}>
                             {saving ? t("namespaces.claims.wizard.saving") : t("namespaces.claims.wizard.save")}
                         </Button>
                     ) : (
-                        <Button variant="primary" onClick={next} disabled={!canNext}>{t("namespaces.claims.wizard.next")}</Button>
+                        <Button onClick={next} disabled={!canNext}>{t("namespaces.claims.wizard.next")}</Button>
                     )}
                 </>
             )}
@@ -520,7 +520,7 @@ function RemoveClaim({namespace, claim, onClose, onRemoved}) {
             footer={(
                 <>
                     <Button variant="secondary" onClick={onClose}>{t("common.cancel")}</Button>
-                    <Button variant="danger" onClick={remove} disabled={saving}>{t("namespaces.claims.remove")}</Button>
+                    <Button variant="delete" onClick={remove} disabled={saving}>{t("namespaces.claims.remove")}</Button>
                 </>
             )}
         >

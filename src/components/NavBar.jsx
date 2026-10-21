@@ -14,9 +14,9 @@ import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus";
 import useOnlineStatus from "../hooks/useOnlineStatus";
 import logger from '../utils/logger.js';
 
-// Header icon buttons, as in the oc3 top bar: muted ink, darker on hover.
+// Header icon buttons: outlined, as every button that neither creates nor deletes; muted ink, darker on hover.
 const HEADER_BUTTON =
-    "flex h-7 w-7 shrink-0 items-center justify-center rounded-(--radius-control) text-ink-muted hover:bg-surface-sunken hover:text-ink";
+    "flex h-7 w-7 shrink-0 items-center justify-center rounded-(--radius-control) border border-line text-ink-muted hover:bg-surface-sunken hover:text-ink";
 
 /** First path segments named after a view: their breadcrumb is translated, the others are names. */
 const SEGMENTS = new Set(["heartbeats", "kinds", "namespaces", "network", "nodes", "objects", "pools", "whoami"]);

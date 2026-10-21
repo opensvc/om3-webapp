@@ -134,6 +134,61 @@ describe("Table", () => {
     expect(onActivate).toHaveBeenCalledTimes(3);
   });
 
+  test("Up and Down walk the rows that open something, Home and End go to the ends; not from a control inside", async () => {
+    const user = userEvent.setup();
+    renderTable(
+      <>
+        <Row onActivate={() => {}}><Cell>one</Cell></Row>
+        <Row><Cell>plain</Cell></Row>
+        <Row onActivate={() => {}}><Cell>two</Cell></Row>
+        <Row onActivate={() => {}}>
+          <Cell>three</Cell>
+          <Cell><input aria-label="inner" /></Cell>
+        </Row>
+      </>,
+    );
+    const row = (name: string) => screen.getByRole("row", { name: new RegExp(`^${name}`) });
+    row("one").focus();
+    await user.keyboard("{ArrowDown}");
+    expect(row("two")).toHaveFocus();
+    await user.keyboard("{ArrowDown}");
+    expect(row("three")).toHaveFocus();
+    // The last one: it stays.
+    await user.keyboard("{ArrowDown}");
+    expect(row("three")).toHaveFocus();
+    await user.keyboard("{Home}");
+    expect(row("one")).toHaveFocus();
+    await user.keyboard("{ArrowUp}");
+    expect(row("one")).toHaveFocus();
+    await user.keyboard("{End}");
+    expect(row("three")).toHaveFocus();
+    screen.getByRole("textbox", { name: "inner" }).focus();
+    await user.keyboard("{ArrowUp}");
+    expect(screen.getByRole("textbox", { name: "inner" })).toHaveFocus();
+  });
+
+  test("Space checks the checkbox of a row that has one, Enter still opens it", async () => {
+    const user = userEvent.setup();
+    const onActivate = vi.fn();
+    const onChange = vi.fn();
+    renderTable(
+      <Row onActivate={onActivate}>
+        <Cell><input type="checkbox" aria-label="pick" onChange={onChange} onClick={(event) => event.stopPropagation()} /></Cell>
+        <Cell>a</Cell>
+      </Row>,
+    );
+    const row = screen.getAllByRole("row")[1]!;
+    row.focus();
+    await user.keyboard(" ");
+    expect(screen.getByRole("checkbox", { name: "pick" })).toBeChecked();
+    expect(onActivate).not.toHaveBeenCalled();
+    expect(row).toHaveFocus();
+    await user.keyboard(" ");
+    expect(screen.getByRole("checkbox", { name: "pick" })).not.toBeChecked();
+    await user.keyboard("{Enter}");
+    expect(onActivate).toHaveBeenCalledTimes(1);
+  });
+
   test("a row without onActivate is not focusable, a selected one is marked current", () => {
     renderTable(
       <Row selected>

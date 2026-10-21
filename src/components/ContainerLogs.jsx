@@ -195,7 +195,6 @@ export function ContainerLogs({path, rid, nodes, upNodes = []}) {
                 <div className="ml-auto flex items-center gap-2">
                     <Button
                         size="sm"
-                        variant={following ? "primary" : "secondary"}
                         aria-pressed={following}
                         onClick={() => (following ? follow(false) : toEnd())}
                     >

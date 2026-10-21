@@ -14,6 +14,7 @@ import {ConfigText} from "./ConfigText";
 import {CopyButton} from "../ui/components/CopyButton";
 import {extractSection, replaceSection} from "../utils/configSections";
 import {trackDone, trackRefused, trackWrite} from "../app/action-tracker";
+import {newId, withId} from "../app/object-create";
 
 /**
  * The object configuration file, its secrets redacted unless `showSecrets`: the
@@ -290,7 +291,6 @@ const UpdateConfigDialog = ({
             <>
                 <Button onClick={onClose} disabled={actionLoading}>{t("common.cancel")}</Button>
                 <Button
-                    variant="primary"
                     onClick={handleUpdateConfig}
                     disabled={actionLoading || !newConfigFile}
                     icon={actionLoading ? <Spinner label={t("config.update.updating")}/> : undefined}
@@ -484,7 +484,6 @@ const ManageParamsDialog = ({
                 <>
                     <Button onClick={onClose} disabled={actionLoading}>{t("common.cancel")}</Button>
                     <Button
-                        variant="primary"
                         onClick={handleManageParamsSubmit}
                         disabled={actionLoading}
                         icon={actionLoading ? <Spinner label={t("config.params.applying")}/> : undefined}
@@ -663,8 +662,13 @@ const ConfigSection = ({
                            configRefreshTrigger = 0,
                            inline = false,
                            section = null,
+                           absent: absentProp = false,
                        }) => {
     const {t} = useTranslation();
+    // `absent`, the object has no configuration yet: the file starts empty, and the
+    // first change written creates the object with it. Created, it is written as any.
+    const [created, setCreated] = useState(false);
+    const absent = absentProp && !created;
     // Secrets stay hidden until asked for, and hidden again each time the dialog opens.
     const [showSecrets, setShowSecrets] = useState(false);
     useEffect(() => {
@@ -715,6 +719,10 @@ const ConfigSection = ({
         setShowSecrets(false);
         setEditError(null);
         setEditConflict(false);
+        if (absent) {
+            setEdit({file: "", base: "", text: ""});
+            return;
+        }
         setEditLoading(true);
         try {
             const file = await fetchRawConfigFile(decodedObjectName);
@@ -746,23 +754,24 @@ const ConfigSection = ({
         try {
             // The daemon writes the whole file: a change landed since the edit
             // started would be undone without a word.
-            const current = await fetchRawConfigFile(decodedObjectName);
+            const current = absent ? "" : await fetchRawConfigFile(decodedObjectName);
             if (current !== edit.file) {
                 setEditConflict(true);
                 setEditError(t("config.feedback.conflict"));
                 return;
             }
             const response = await fetch(`${URL_OBJECT}/${namespace}/${kind}/${name}/config/file`, {
-                method: "PUT",
+                // None yet: created with the file, an id of its own.
+                method: absent ? "POST" : "PUT",
                 headers: {
                     Authorization: `Bearer ${token}`,
                     "Content-Type": "application/octet-stream",
                 },
                 // A section edited goes back in its place in the file as it was.
-                body: section === null ? edit.text : replaceSection(edit.file, section, edit.text),
+                body: absent ? withId(edit.text, newId()) : section === null ? edit.text : replaceSection(edit.file, section, edit.text),
             });
             // What came of it, the actions tray says; refused, the editor stays open and says why.
-            const label = t("actionTray.writes.configFile");
+            const label = t(absent ? "actionTray.writes.configCreate" : "actionTray.writes.configFile");
             if (!response.ok) {
                 if (response.status === 409) setEditConflict(true);
                 const message = await problemMessage(response);
@@ -772,6 +781,7 @@ const ConfigSection = ({
                 return;
             }
             trackDone({action: "config", label, subject: decodedObjectName, path: decodedObjectName});
+            if (absent) setCreated(true);
             setEdit(null);
             if (configNode) await fetchConfig(configNode, true);
         } catch (err) {
@@ -785,7 +795,8 @@ const ConfigSection = ({
     const handleOpenManageParamsDialog = () => {
         setManageParamsDialogOpen(true);
         void fetchKeywords();
-        void fetchExistingParams();
+        // None yet: nothing set to read.
+        if (!absent) void fetchExistingParams();
     };
 
     const handleUpdateConfig = async () => {
@@ -802,17 +813,18 @@ const ConfigSection = ({
         const {namespace, kind, name} = parseObjectPath(decodedObjectName);
         setActionLoading(true);
         // What came of it, the actions tray says.
-        const write = {action: "config", label: t("actionTray.writes.configFile"), subject: decodedObjectName, path: decodedObjectName};
+        const write = {action: "config", label: t(absent ? "actionTray.writes.configCreate" : "actionTray.writes.configFile"), subject: decodedObjectName, path: decodedObjectName};
         try {
             const response = await fetch(`${URL_OBJECT}/${namespace}/${kind}/${name}/config/file`, {
-                method: "PUT",
+                method: absent ? "POST" : "PUT",
                 headers: {
                     Authorization: `Bearer ${token}`,
                     "Content-Type": "application/octet-stream",
                 },
-                body: newConfigFile,
+                body: absent ? withId(await newConfigFile.text(), newId()) : newConfigFile,
             });
             if (!(await trackWrite(response, write, refusal))) return;
+            if (absent) setCreated(true);
             if (configNode) {
                 await fetchConfig(configNode, true);
                 setConfigDialogOpen(true);
@@ -845,6 +857,8 @@ const ConfigSection = ({
         const {namespace, kind, name} = parseObjectPath(decodedObjectName);
         setActionLoading(true);
         let successCount = 0;
+        // None yet: the keywords set all at once, in the request creating it.
+        const creating = [];
         for (const param of paramsToSet) {
             let fullKeyword;
             if (param.section !== undefined) {
@@ -871,6 +885,10 @@ const ConfigSection = ({
                         continue;
                     }
                 }
+                if (absent) {
+                    creating.push(`${fullKeyword}=${value}`);
+                    continue;
+                }
                 const url = `${URL_OBJECT}/${namespace}/${kind}/${name}/config?set=${encodeURIComponent(fullKeyword)}=${encodeURIComponent(value)}`;
                 const response = await fetch(url, {
                     method: "PATCH",
@@ -879,6 +897,23 @@ const ConfigSection = ({
                 if (await trackWrite(response, write("set", {keyword: fullKeyword, value}), refusal)) successCount++;
             } catch (err) {
                 trackRefused({...write("set", {keyword: fullKeyword, value}), reason: err.message});
+            }
+        }
+        if (creating.length > 0) {
+            const created = write("configCreate");
+            try {
+                const query = creating.map((kw) => `set=${encodeURIComponent(kw)}`).join("&");
+                const response = await fetch(`${URL_OBJECT}/${namespace}/${kind}/${name}/config/file?${query}`, {
+                    method: "POST",
+                    headers: {Authorization: `Bearer ${token}`, "Content-Type": "application/octet-stream"},
+                    body: withId("", newId()),
+                });
+                if (await trackWrite(response, created, refusal)) {
+                    successCount += creating.length;
+                    setCreated(true);
+                }
+            } catch (err) {
+                trackRefused({...created, reason: err.message});
             }
         }
         if (successCount > 0) {
@@ -1032,18 +1067,18 @@ const ConfigSection = ({
                             {shownText !== null && !configLoading && (
                                 <CopyButton size="md" text={shownText} label={t("config.view.copy")}/>
                             )}
-                            <IconButton
+                            {!absent && <IconButton
                                 label={showSecrets ? t("config.view.hideSecrets") : t("config.view.showSecrets")}
                                 aria-pressed={showSecrets}
                                 onClick={() => setShowSecrets((shown) => !shown)}
                                 disabled={configLoading}
                             >
                                 {showSecrets ? <EyeOffIcon/> : <EyeIcon/>}
-                            </IconButton>
+                            </IconButton>}
                             <IconButton
                                 label={t("config.view.editFile")}
                                 onClick={startEdit}
-                                disabled={actionLoading || editLoading || !configNode}
+                                disabled={actionLoading || editLoading || (!configNode && !absent)}
                             >
                                 {/* The file edited: the pencil. */}
                                 <PencilIcon/>
@@ -1069,7 +1104,8 @@ const ConfigSection = ({
                                 </>
                             )}
                         </div>
-                        {!configNode && !configLoading && !configError && (
+                        {absent && <p className="text-ink-muted">{t("config.view.absent")}</p>}
+                        {!absent && !configNode && !configLoading && !configError && (
                             <p className="text-ink-muted">{t("config.view.noInstance")}</p>
                         )}
                         {editLoading && <Spinner label={t("config.view.loadingForEdit")}/>}
@@ -1097,7 +1133,6 @@ const ConfigSection = ({
                     <>
                         <Button onClick={cancelEdit} disabled={actionLoading}>{t("common.cancel")}</Button>
                         <Button
-                            variant="primary"
                             onClick={saveEdit}
                             disabled={actionLoading || !editDirty}
                             icon={actionLoading ? <Spinner label={t("config.view.saving")}/> : undefined}
@@ -1123,11 +1158,11 @@ const ConfigSection = ({
                 open={manageParamsDialogOpen}
                 onClose={() => setManageParamsDialogOpen(false)}
                 keywordsData={keywordsData}
-                existingParams={existingParams}
+                existingParams={absent ? [] : existingParams}
                 keywordsLoading={keywordsLoading}
                 existingParamsLoading={existingParamsLoading}
                 keywordsError={keywordsError}
-                existingParamsError={existingParamsError}
+                existingParamsError={absent ? null : existingParamsError}
                 paramsToSet={paramsToSet}
                 setParamsToSet={setParamsToSet}
                 paramsToUnset={paramsToUnset}

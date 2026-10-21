@@ -1,7 +1,6 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import type { ObjectKind } from "../ui/components/ObjectIcon";
 import { isPeekStep, pathKind, serialiseStep, stepIcon, stepLabel, type PeekKind, type PeekStep } from "./peek";
-import { usePeek } from "./panel-search";
 import { useRecordHistory } from "./record-history";
 
 /** The key of the record a panel shows, as the history names it; empty without an id. */
@@ -102,21 +101,7 @@ function useNow(): number {
   return now;
 }
 
-/**
- * The record last picked in the history itself. The panel title, which records
- * every record shown, leaves that one where it stands (`openedFromHistory`): the
- * list must not move under the pointer of who is going through it.
- */
-let picked: { key: string; at: number } | null = null;
-
-/** Long enough for the panel to mount and record, too short for another gesture. */
-const PICK_MS = 2000;
-
-export function openedFromHistory(key: string): boolean {
-  return picked !== null && picked.key === key && performance.now() - picked.at < PICK_MS;
-}
-
-/** An entry of the history, as the side panel and the menu show it. */
+/** An entry of the history, as the search palette proposes it. */
 export interface HistoryEntry {
   key: string;
   step: PeekStep & { kind: PeekKind };
@@ -142,12 +127,11 @@ export type HistoryGroup =
  * The panel history, ready to be shown: the records displayed in this browser tab
  * during the last week, the most recently shown first, grouped by how long ago they
  * were shown or, with `grouping` "kind", by kind of record in the order of om3 —
- * only the groups that hold a record — and what opens one, removes one or clears
- * them all. Opening one from here leaves it where it stands.
+ * only the groups that hold a record — and what removes one or clears them all.
+ * One is opened as any record (`usePeek`), and comes back in front.
  */
 export function usePanelHistory(currentKey: string, grouping: HistoryGrouping = "time") {
   const history = useRecordHistory();
-  const peek = usePeek();
   const now = useNow();
   const entries: HistoryEntry[] = history.entries.flatMap((record) => {
     const step = { kind: record.kind, id: record.id };
@@ -183,10 +167,6 @@ export function usePanelHistory(currentKey: string, grouping: HistoryGrouping = 
   return {
     entries,
     groups,
-    open: (entry: HistoryEntry) => {
-      picked = { key: entry.key, at: performance.now() };
-      peek(entry.step.kind, entry.step.id);
-    },
     remove: (entry: HistoryEntry) => {
       history.remove(entry.step.kind, entry.step.id);
     },

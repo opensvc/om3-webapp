@@ -503,7 +503,7 @@ export function NodeDaemon({node}) {
                         </>
                     ) : null}
                 </span>
-                <Button size="sm" variant="ghost" className="ml-auto" icon={<RefreshIcon className="h-3.5 w-3.5"/>} onClick={reloadAll}>
+                <Button size="sm" className="ml-auto" icon={<RefreshIcon className="h-3.5 w-3.5"/>} onClick={reloadAll}>
                     {t("nodeDaemon.refresh")}
                 </Button>
             </div>
@@ -527,7 +527,7 @@ export function NodeDaemon({node}) {
                 footer={
                     <>
                         <Button variant="secondary" onClick={() => setPending(null)}>{t("common.cancel")}</Button>
-                        <Button variant="primary" onClick={confirm}>{t("common.confirm")}</Button>
+                        <Button onClick={confirm}>{t("common.confirm")}</Button>
                     </>
                 }
             >

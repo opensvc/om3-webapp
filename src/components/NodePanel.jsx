@@ -634,7 +634,7 @@ function NodeConfig({node}) {
                         setEdit(null);
                         setError(null);
                     }} disabled={saving}>{t("common.cancel")}</Button>
-                    <Button variant="primary" onClick={save} disabled={saving || edit.text === edit.base}
+                    <Button onClick={save} disabled={saving || edit.text === edit.base}
                             icon={saving ? <Spinner label={t("config.view.saving")}/> : undefined}>
                         {t("common.save")}
                     </Button>

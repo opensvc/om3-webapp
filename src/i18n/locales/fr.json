@@ -2266,7 +2266,7 @@
     "actions": "Actions",
     "none": "Aucun verrou n’est tenu.",
     "forbidden": "Lire les verrous du cluster demande le rôle root.",
-    "footer": "Relus toutes les {{seconds}} s : aucun événement ne signale un verrou pris ou relâché.",
+    "footer": "Relus {{seconds}} s après chaque lecture, tant que cette page est affichée : aucun événement ne dit un verrou pris ou rendu.",
     "leftSeconds": "{{seconds}} s",
     "leftMinutes": "{{minutes}} min {{seconds}} s",
     "release": "Relâcher",
@@ -2275,7 +2275,9 @@
     "confirmTitle": "Relâcher le verrou {{name}} ?",
     "confirm": "Le verrou {{name}} est repris à {{holder}}, comme le fait om cluster lock release.",
     "warning": "Son détenteur n’est pas prévenu : il continue comme s’il tenait le verrou. Ne le relâchez que pour un détenteur bloqué, ou parti avant la fin de son bail.",
-    "byId": "Relâché seulement s’il est encore tenu sous {{id}} : accordé à un autre entre-temps, il lui est laissé."
+    "byId": "Relâché seulement s’il est encore tenu sous {{id}} : accordé à un autre entre-temps, il lui est laissé.",
+    "stale": "Non relus ({{message}}) : les verrous ci-dessous sont ceux de la dernière lecture, aucun n’est rendu avant qu’ils ne soient relus.",
+    "unanswered": "pas de réponse ({{message}}), et le verrou toujours tenu : rendu ou non, relisez les verrous"
   },
   "resources": {
     "caption": "Les ressources du cluster",

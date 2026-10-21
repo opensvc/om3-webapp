@@ -133,4 +133,152 @@ describe('ClusterLocks', () => {
         expect(await screen.findByText('Reading the cluster locks takes the root role.')).toBeInTheDocument();
         expect(screen.queryByRole('table')).not.toBeInTheDocument();
     });
+
+    describe('what the review found', () => {
+        const advance = (ms) => act(async () => {
+            await vi.advanceTimersByTimeAsync(ms);
+        });
+
+        test('never two reads at a time: the next read waits for a slow one to end', async () => {
+            let answer = null;
+            global.fetch = vi.fn((url) => {
+                requests.push(`GET ${url}`);
+                return new Promise((resolve) => {
+                    answer = () => resolve(new Response(JSON.stringify({items: locks}), {status: 200}));
+                });
+            });
+            renderLocks();
+            // Slower than the pace of the reads: no second read meanwhile.
+            await advance(LOCKS_EVERY_MS * 1.5);
+            expect(requests).toHaveLength(1);
+            // Seen again meanwhile: the read running goes on alone.
+            act(() => document.dispatchEvent(new Event('visibilitychange')));
+            expect(requests).toHaveLength(1);
+            await act(async () => answer());
+            await waitFor(() => expect(rows()).toHaveLength(2));
+            await advance(LOCKS_EVERY_MS);
+            expect(requests).toHaveLength(2);
+        });
+
+        test('a double click on the confirmation releases once', async () => {
+            renderLocks();
+            await waitFor(() => expect(rows()).toHaveLength(2));
+            fireEvent.click(screen.getByRole('button', {name: 'Release alloc'}));
+            const confirm = within(screen.getByRole('dialog')).getByRole('button', {name: 'Release'});
+            fireEvent.click(confirm);
+            fireEvent.click(confirm);
+            await waitFor(() => expect(tray()).toHaveLength(1));
+            expect(requests.filter((r) => r.startsWith('DELETE'))).toEqual(['DELETE /api/cluster/lock?name=alloc&id=id-1']);
+        });
+
+        test('denied after a read: no table of locks the session may not see', async () => {
+            renderLocks();
+            await waitFor(() => expect(rows()).toHaveLength(2));
+            global.fetch = vi.fn(async () => new Response(JSON.stringify({detail: 'forbidden'}), {status: 403}));
+            await advance(LOCKS_EVERY_MS);
+            expect(await screen.findByText('Reading the cluster locks takes the root role.')).toBeInTheDocument();
+            expect(screen.queryByRole('table')).not.toBeInTheDocument();
+            expect(screen.queryByRole('button', {name: /^Release /})).not.toBeInTheDocument();
+        });
+
+        test('a read failing once: the locks kept, said not current, none released, the confirmation left open', async () => {
+            renderLocks();
+            await waitFor(() => expect(rows()).toHaveLength(2));
+            fireEvent.click(screen.getByRole('button', {name: 'Release alloc'}));
+            global.fetch = vi.fn(async () => new Response(JSON.stringify({error: 'leader restarting'}), {status: 502}));
+            await advance(LOCKS_EVERY_MS);
+            expect(await screen.findByText('Not read again (HTTP 502 leader restarting): the locks below are as last read, none released until they are read again.')).toBeInTheDocument();
+            expect(rows()).toHaveLength(2);
+            expect(screen.getByRole('button', {name: 'Release alloc'})).toBeDisabled();
+            expect(screen.getByRole('dialog', {name: 'Release the lock alloc?'})).toBeInTheDocument();
+        });
+
+        test('a lock without a name still listed; without its lease left, counted down to the end the daemon wrote, never hidden here', async () => {
+            const end = new Date(Date.now() + 20_000).toISOString();
+            locks = [lock(undefined, 'id-3'), lock('alloc', 'id-1', {expires_in: undefined, expires_at: end})];
+            renderLocks();
+            await waitFor(() => expect(rows()).toHaveLength(2));
+            expect(rows().map((r) => [r[0], r[4], r[5]])).toEqual([['', '30 s', 'id-3'], ['alloc', '20 s', 'id-1']]);
+            // Past that end on this clock, which need not be the daemon's: still listed, the next read tells.
+            global.fetch = vi.fn(() => new Promise(() => undefined));
+            await advance(25_000);
+            expect(rows().map((r) => [r[4], r[5]])).toEqual([['5 s', 'id-3'], ['0 s', 'id-1']]);
+        });
+
+        test('the lock to release gone meanwhile, its lease run out: the confirmation closes, nothing released', async () => {
+            locks = [lock('alloc', 'id-1', {expires_in: '2s'})];
+            renderLocks();
+            await waitFor(() => expect(rows()).toHaveLength(1));
+            fireEvent.click(screen.getByRole('button', {name: 'Release alloc'}));
+            expect(screen.getByRole('dialog', {name: 'Release the lock alloc?'})).toBeInTheDocument();
+            await advance(3100);
+            expect(screen.queryByRole('dialog', {name: /Release the lock/})).not.toBeInTheDocument();
+            expect(requests.filter((r) => r.startsWith('DELETE'))).toEqual([]);
+        });
+
+        test('the page hidden, nothing read nor counted down; seen again, read at once', async () => {
+            const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+            try {
+                renderLocks();
+                await waitFor(() => expect(rows()).toHaveLength(2));
+                visibility.mockReturnValue('hidden');
+                const lease = rows()[0][4];
+                await advance(LOCKS_EVERY_MS * 3);
+                // The read before it was hidden alone; the lease left as it was.
+                expect(requests).toEqual(['GET /api/cluster/lock']);
+                expect(rows()[0][4]).toBe(lease);
+                visibility.mockReturnValue('visible');
+                act(() => document.dispatchEvent(new Event('visibilitychange')));
+                await waitFor(() => expect(requests).toEqual(['GET /api/cluster/lock', 'GET /api/cluster/lock']));
+                // And on again at its pace.
+                await advance(LOCKS_EVERY_MS);
+                expect(requests).toHaveLength(3);
+            } finally {
+                visibility.mockRestore();
+            }
+        });
+
+        test('the release confirmed in red, as what is taken away; the refresh outlined', async () => {
+            renderLocks();
+            await waitFor(() => expect(rows()).toHaveLength(2));
+            expect(screen.getByRole('button', {name: 'Refresh'})).toHaveClass('border');
+            fireEvent.click(screen.getByRole('button', {name: 'Release alloc'}));
+            expect(within(screen.getByRole('dialog')).getByRole('button', {name: 'Release'})).toHaveClass('bg-state-down');
+        });
+
+        test('a release unanswered: not said refused, the locks read until it is gone', async () => {
+            renderLocks();
+            await waitFor(() => expect(rows()).toHaveLength(2));
+            const reading = global.fetch;
+            global.fetch = vi.fn(async (url, options = {}) => {
+                if (options.method === 'DELETE') {
+                    // Released on the daemon, the answer lost.
+                    locks = locks.filter((l) => l.id !== 'id-1');
+                    throw new TypeError('Failed to fetch');
+                }
+                return reading(url, options);
+            });
+            fireEvent.click(screen.getByRole('button', {name: 'Release alloc'}));
+            fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', {name: 'Release'}));
+            await advance(100);
+            await waitFor(() => expect(tray()).toEqual([['Release', 'the lock alloc', 'succeeded', null]]));
+        });
+
+        test('a refusal said in the words of the daemon, its error as well as its detail', async () => {
+            released = {status: 500};
+            renderLocks();
+            await waitFor(() => expect(rows()).toHaveLength(2));
+            global.fetch = vi.fn(async (url, options = {}) => (options.method === 'DELETE'
+                ? new Response(JSON.stringify({error: 'lock store unavailable'}), {status: 500})
+                : new Response(JSON.stringify({items: locks}), {status: 200})));
+            fireEvent.click(screen.getByRole('button', {name: 'Release alloc'}));
+            fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', {name: 'Release'}));
+            await waitFor(() => expect(tray()).toEqual([['Release', 'the lock alloc', 'refused', 'HTTP 500 lock store unavailable']]));
+        });
+
+        test('the footer says the pace as it is: after each read, while shown', async () => {
+            renderLocks();
+            expect(await screen.findByText('Read again 5 s after each read, while this page is shown: no event tells a lock taken or released.')).toBeInTheDocument();
+        });
+    });
 });

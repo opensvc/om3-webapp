@@ -1,9 +1,10 @@
 import React, {useCallback, useEffect, useState} from "react";
 import {useTranslation} from "react-i18next";
 import {URL_CLUSTER} from "../config/apiPath.js";
-import {getResponseErrorMessage} from "../services/api.jsx";
-import {trackDone, trackRefused} from "../app/action-tracker";
+import {apiFetch, authHeaders, problemOf} from "../services/api.jsx";
+import {trackDone, trackPoll, trackRefused} from "../app/action-tracker";
 import {refusalReason} from "./objectActions";
+import {pageSeen, usePagePoll} from "../hooks/usePagePoll";
 import {CrossLink} from "../app/CrossLink";
 import {Alert} from "../ui/components/Alert";
 import {Button} from "../ui/components/Button";
@@ -18,14 +19,23 @@ import {RefreshIcon} from "../ui/icons";
  * speaking for the cluster granted, whose holder has neither released them nor
  * seen their lease end; each released on demand, as `om cluster lock release`
  * does. Root reads and releases them. No event tells a lock taken or released:
- * read again every few seconds while shown.
+ * read again a few seconds after each read ends, while shown and the page seen
+ * (usePagePoll).
  */
 
-/** How often the locks are read again while shown. */
+/** How long after a read ends the locks are read again, while shown. */
 export const LOCKS_EVERY_MS = 5000;
 
 const URL_LOCKS = `${URL_CLUSTER}/lock`;
-const headers = () => ({Authorization: `Bearer ${localStorage.getItem("authToken") || ""}`});
+
+/** How long a release is waited for: the node speaking for the cluster may be slow to answer. */
+export const RELEASE_TIMEOUT_MS = 60_000;
+
+/** The reason of a refusal apiFetch threw: the daemon's words, by its status. */
+const refusalOf = (err) => refusalReason({status: err.status, detail: problemOf(err)});
+
+/** A refusal saying the session may not read them: the locks are not shown, no matter what was read before. */
+const denied = (err) => err.status === 401 || err.status === 403;
 
 const UNITS = {h: 3_600_000, m: 60_000, s: 1000, ms: 1, us: 0.001, "µs": 0.001, ns: 0.000001};
 
@@ -51,86 +61,99 @@ export function ClusterLocks() {
     const {t, i18n} = useTranslation();
     // The locks read, each with the moment its lease ends on the clock of this page.
     const [locks, setLocks] = useState(null);
+    // The last read failing: the locks read before kept, said not current, none released.
     const [error, setError] = useState("");
     const [now, setNow] = useState(() => Date.now());
     // The lock to release, waiting for its confirmation.
     const [releasing, setReleasing] = useState(null);
-    const [busy, setBusy] = useState(false);
     const [reads, setReads] = useState(0);
     const reload = useCallback(() => setReads((n) => n + 1), []);
 
-    useEffect(() => {
-        let live = true;
-        const read = async () => {
-            try {
-                const response = await fetch(URL_LOCKS, {headers: headers(), cache: "no-cache"});
-                if (!live) return;
-                if (!response.ok) {
-                    const detail = await getResponseErrorMessage(response);
-                    if (!live) return;
-                    setError(response.status === 403 ? t("clusterLocks.forbidden") : refusalReason({status: response.status, detail}));
-                    return;
-                }
-                const body = await response.json();
-                if (!live) return;
-                const readAt = Date.now();
-                // Rebased on this clock from the lease left, as the nodes do: the clocks need not agree.
-                setLocks((body?.items ?? []).map((lock) => {
-                    const lease = durationMs(lock.expires_in);
-                    return {...lock, endsAt: lease === null ? Date.parse(lock.expires_at) : readAt + lease};
-                }).sort((a, b) => a.name.localeCompare(b.name)));
-                // Counted down from the moment read, not from the last tick before it.
-                setNow(readAt);
-                setError("");
-            } catch (err) {
-                if (live) setError(err.message);
+    usePagePoll(async (live) => {
+        try {
+            const body = await apiFetch(URL_LOCKS, {headers: authHeaders(), cache: "no-cache"});
+            if (!live()) return;
+            const readAt = Date.now();
+            setLocks((body?.items ?? []).map((lock) => {
+                const lease = durationMs(lock.expires_in);
+                // Rebased on this clock from the lease left, as the nodes do: the clocks
+                // need not agree. Without it, the end the daemon wrote, on its clock:
+                // counted down, never hidden here, the next read dropping it once ended.
+                return {
+                    ...lock,
+                    name: String(lock.name ?? ""),
+                    endsAt: lease !== null ? readAt + lease : Date.parse(lock.expires_at),
+                    ownClock: lease !== null,
+                };
+            }).sort((a, b) => a.name.localeCompare(b.name)));
+            // Counted down from the moment read, not from the last tick before it.
+            setNow(readAt);
+            setError("");
+        } catch (err) {
+            if (!live()) return;
+            if (denied(err)) {
+                setLocks(null);
+                setError(t("clusterLocks.forbidden"));
+            } else {
+                // A read failing once (a timeout, a node restarting): the locks read kept, said not current.
+                setError(refusalOf(err));
             }
-        };
-        void read();
-        const timer = setInterval(read, LOCKS_EVERY_MS);
-        return () => {
-            live = false;
-            clearInterval(timer);
-        };
-    }, [reads, t]);
+        }
+    }, LOCKS_EVERY_MS, [reads, t]);
 
-    // The leases counted down between two reads.
+    // The leases counted down between two reads, while the page is seen.
     useEffect(() => {
-        const timer = setInterval(() => setNow(Date.now()), 1000);
+        const timer = setInterval(() => {
+            if (pageSeen()) setNow(Date.now());
+        }, 1000);
         return () => clearInterval(timer);
     }, []);
 
+    const when = (value) => <RelativeTime value={value} locale={i18n.language}/>;
+    // A lease run out on this clock is no lock: gone at the next read, hidden until then.
+    const held = (locks ?? []).filter((lock) => !lock.ownClock || Number.isNaN(lock.endsAt) || lock.endsAt > now);
+    const stale = locks !== null && error !== "";
+    // Confirmed only while the lock is held: released or its lease run out meanwhile, nothing to confirm.
+    const releasingHeld = releasing !== null && held.some((lock) => lock.name === releasing.name && lock.id === releasing.id);
+
     const release = async () => {
         const lock = releasing;
+        // The confirmation closes on the first click: a second one finds nothing to release.
+        if (!releasingHeld) return;
         setReleasing(null);
-        setBusy(true);
         const info = {action: "release", label: t("clusterLocks.release"), subject: t("clusterLocks.subject", {name: lock.name})};
         try {
             const query = new URLSearchParams({name: lock.name, id: lock.id});
-            const response = await fetch(`${URL_LOCKS}?${query}`, {method: "DELETE", headers: headers()});
-            if (response.ok) trackDone(info);
-            else trackRefused({...info, reason: refusalReason({status: response.status, detail: await getResponseErrorMessage(response)})});
+            await apiFetch(`${URL_LOCKS}?${query}`, {method: "DELETE", headers: authHeaders(), timeout: RELEASE_TIMEOUT_MS});
+            trackDone(info);
         } catch (err) {
-            trackRefused({...info, reason: err.message});
+            if (err.status) {
+                trackRefused({...info, reason: refusalOf(err)});
+            } else {
+                // No answer, the request timed out or cut: released or not, the locks tell it.
+                trackPoll(info, async () => {
+                    const body = await apiFetch(URL_LOCKS, {headers: authHeaders(), cache: "no-cache"});
+                    return !(body?.items ?? []).some((l) => l.name === lock.name && l.id === lock.id);
+                }, {lost: t("clusterLocks.unanswered", {message: err.message})});
+            }
         } finally {
-            setBusy(false);
             reload();
         }
     };
-
-    const when = (value) => <RelativeTime value={value} locale={i18n.language}/>;
-    // A lease run out is no lock: gone at the next read, hidden until then.
-    const held = (locks ?? []).filter((lock) => !(lock.endsAt <= now));
 
     return (
         <div className="space-y-3">
             <div className="flex flex-wrap items-start gap-3">
                 <p className="min-w-0 flex-1 text-ink-muted">{t("clusterLocks.intro")}</p>
-                <Button size="sm" variant="ghost" icon={<RefreshIcon className="h-3.5 w-3.5"/>} onClick={reload}>
+                <Button size="sm" icon={<RefreshIcon className="h-3.5 w-3.5"/>} onClick={reload}>
                     {t("clusterLocks.refresh")}
                 </Button>
             </div>
-            {error && <Alert tone="error">{error}</Alert>}
+            {error && (
+                <Alert tone={stale ? "warning" : "error"}>
+                    {stale ? t("clusterLocks.stale", {message: error}) : error}
+                </Alert>
+            )}
             {locks === null ? (
                 !error && <div className="flex justify-center py-4"><Spinner label={t("clusterLocks.loading")}/></div>
             ) : (
@@ -159,7 +182,8 @@ export function ClusterLocks() {
                                     <Button
                                         size="sm"
                                         variant="secondary"
-                                        disabled={busy}
+                                        // Not current, a lock may be gone: none released until read again.
+                                        disabled={stale}
                                         aria-label={t("clusterLocks.releaseOne", {name: lock.name})}
                                         onClick={() => setReleasing(lock)}
                                     >
@@ -175,13 +199,14 @@ export function ClusterLocks() {
             <p className="text-ink-muted">{t("clusterLocks.footer", {seconds: LOCKS_EVERY_MS / 1000})}</p>
 
             <Dialog
-                open={releasing !== null}
+                open={releasingHeld}
                 onClose={() => setReleasing(null)}
                 title={releasing ? t("clusterLocks.confirmTitle", {name: releasing.name}) : ""}
                 footer={
                     <>
-                        <Button variant="secondary" onClick={() => setReleasing(null)}>{t("common.cancel")}</Button>
-                        <Button variant="primary" onClick={release}>{t("clusterLocks.release")}</Button>
+                        <Button onClick={() => setReleasing(null)}>{t("common.cancel")}</Button>
+                        {/* The lock taken away from its holder: red, as what is removed. */}
+                        <Button variant="delete" onClick={release}>{t("clusterLocks.release")}</Button>
                     </>
                 }
             >

@@ -2266,7 +2266,7 @@
     "actions": "Actions",
     "none": "No lock is held.",
     "forbidden": "Reading the cluster locks takes the root role.",
-    "footer": "Read again every {{seconds}} s: no event tells a lock taken or released.",
+    "footer": "Read again {{seconds}} s after each read, while this page is shown: no event tells a lock taken or released.",
     "leftSeconds": "{{seconds}} s",
     "leftMinutes": "{{minutes}} min {{seconds}} s",
     "release": "Release",
@@ -2275,7 +2275,9 @@
     "confirmTitle": "Release the lock {{name}}?",
     "confirm": "The lock {{name}} is taken back from {{holder}}, as om cluster lock release does.",
     "warning": "Its holder is not told: it goes on as if it held the lock. Release it only from a holder known to be stuck, or gone before its lease ends.",
-    "byId": "Released only while still held under {{id}}: granted to another meanwhile, it is left to that one."
+    "byId": "Released only while still held under {{id}}: granted to another meanwhile, it is left to that one.",
+    "stale": "Not read again ({{message}}): the locks below are as last read, none released until they are read again.",
+    "unanswered": "no answer ({{message}}), and the lock still held: released or not, read the locks again"
   },
   "resources": {
     "caption": "The resources of the cluster",

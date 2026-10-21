@@ -1614,6 +1614,7 @@
     "selectInstance": "Select the instance on {{node}}",
     "selectResource": "Select {{rid}} on all its nodes",
     "selectCell": "Select {{rid}} on {{node}}",
+    "openCell": "Open {{rid}} on {{node}}",
     "policies": "Policies",
     "issues": "Issues",
     "details": {
@@ -1772,6 +1773,8 @@
   "resource": {
     "panel": {
       "title": "{{rid}} of {{path}}",
+      "titleOnNode": "{{rid}} of {{path}} on {{node}}",
+      "instance": "Instance",
       "nodes": "The resource on each node",
       "flags": "Flags",
       "log": "Last message",

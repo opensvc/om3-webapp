@@ -10,7 +10,13 @@ vi.mock('../ObjectDetails', () => ({
         <div data-testid="object-details" data-embedded={String(embedded)}>{path}</div>
     ),
 }));
-vi.mock('../ObjectStatus', () => ({default: ({path}) => <div data-testid="object-status">{path}</div>}));
+// The board is tested on its own: here, what a click on the value of a resource on a node opens.
+vi.mock('../ObjectStatus', () => ({default: ({path, openCell}) => (
+    <div data-testid="object-status">
+        {path}
+        <button type="button" onClick={() => openCell('fs#1', 'n2')}>fs#1 on n2</button>
+    </div>
+)}));
 vi.mock('../ObjectConfig', () => ({default: ({path}) => <div data-testid="object-config">{path}</div>}));
 vi.mock('../ObjectTabs', () => ({
     ObjectResources: ({path}) => <div data-testid="object-resources">{path}</div>,
@@ -118,6 +124,12 @@ describe('record panels', () => {
         const tabs = within(panel).getAllByRole('tab');
         expect(tabs).toHaveLength(count);
         for (const tab of tabs) expect(tab.querySelector('svg')).toBeNull();
+    });
+
+    test('a resource on a node, from the board: its panel on that instance alone', () => {
+        renderPeek('/nodes?peek=object:ns1/svc/web');
+        fireEvent.click(within(screen.getByTestId('object-status')).getByRole('button', {name: 'fs#1 on n2'}));
+        expect(screen.getByTestId('search')).toHaveTextContent('peek=resource:ns1/svc/web:fs#1@n2');
     });
 
     test('the schedules of the object on a tab; what its resources report, in the panels of its instances and resources', () => {

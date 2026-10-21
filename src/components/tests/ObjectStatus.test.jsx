@@ -241,6 +241,34 @@ describe('ObjectStatus', () => {
         expect(screen.queryByRole('button', {name: /^Open the instance on/})).not.toBeInTheDocument();
     });
 
+    test('the value of a resource on a node opens the resource on that instance; its checkbox, apart, selects it', async () => {
+        answer(dns);
+        const openCell = vi.fn();
+        render(<ObjectStatus path="system/svc/dns" openCell={openCell}/>);
+        await screen.findByRole('table');
+        const row = screen.getByRole('rowheader', {name: /volume#1$/}).closest('tr');
+        const open = within(within(row).getAllByRole('cell')[3]).getByRole('button', {name: 'Open volume#1 on dev3n2'});
+        // Drawn as the badges of the names: clickable at a glance, not on hover alone.
+        expect(open).toHaveClass('rounded-full', 'border', 'border-line', 'cursor-pointer');
+        expect(open).toHaveClass('hover:border-line-strong');
+        fireEvent.click(open);
+        expect(openCell).toHaveBeenCalledWith('volume#1', 'dev3n2');
+        expect(screen.queryByRole('button', {name: /^Actions on/})).not.toBeInTheDocument();
+        // The instances' cells open nothing.
+        const state = screen.getByRole('rowheader', {name: 'State'}).closest('tr');
+        expect(within(state).queryAllByRole('button', {name: /^Open/})).toHaveLength(0);
+        fireEvent.click(screen.getByRole('checkbox', {name: 'Select volume#1 on dev3n2'}));
+        expect(openCell).toHaveBeenCalledTimes(1);
+        expect(screen.getByRole('button', {name: 'Actions on 1 resource'})).toBeInTheDocument();
+    });
+
+    test('without a way to open them given, the values of the resources are plain text', async () => {
+        answer(dns);
+        render(<ObjectStatus path="system/svc/dns"/>);
+        await screen.findByRole('table');
+        expect(screen.queryAllByRole('button', {name: /^Open /})).toHaveLength(0);
+    });
+
     test('without badges given, the names are plain text', async () => {
         answer(dns);
         render(<ObjectStatus path="system/svc/dns"/>);

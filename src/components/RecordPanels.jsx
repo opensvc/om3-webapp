@@ -13,6 +13,8 @@ import {NamespaceClaims} from "./NamespaceClaims";
 import {ObjectUsage} from "./InstanceRecord";
 import {InstanceLink, ResourceLink} from "./RecordLinks";
 import {CrossLink} from "../app/CrossLink";
+import {usePeek} from "../app/panel-search";
+import {resourceId} from "../app/peek";
 import {NAMESPACE_LISTS, NamespaceObjects, useNamespaceObjectTabs} from "./NamespaceObjects";
 import {ObjectLogs} from "./ObjectLogs";
 import {EventLog, OBJECT_EVENT_TYPES} from "./EventLogger";
@@ -58,6 +60,9 @@ export function ObjectDetailPanel({path, tab, onTabChange, onClose}) {
         ? <CrossLink kind="node" id={node}>{node}</CrossLink>
         : <InstanceLink path={path} node={node}/>), [kind, path]);
     const linkResource = useCallback((rid) => <ResourceLink path={path} rid={rid}/>, [path]);
+    // The value of a resource on a node, its cell: the resource on that instance alone.
+    const peek = usePeek();
+    const openCell = useCallback((rid, node) => peek("resource", resourceId(path, rid, node)), [peek, path]);
     const [logsOrchestration, setLogsOrchestration] = useState(null);
     useEffect(() => {
         setLogsOrchestration(null);
@@ -118,7 +123,7 @@ export function ObjectDetailPanel({path, tab, onTabChange, onClose}) {
                         {keysOnly
                             ? <ObjectDetail key={path} path={path} embedded onOrchestrationLogs={showOrchestrationLogs}/>
                             : <ObjectStatus key={path} path={path} onOrchestrationLogs={showOrchestrationLogs}
-                                            linkNode={linkNode} linkResource={linkResource}/>}
+                                            linkNode={linkNode} linkResource={linkResource} openCell={openCell}/>}
                     </div>
                     {active === "usage" && <ObjectUsage key={path} path={path}/>}
                     {active === "schedules" && <ObjectSchedules key={path} path={path}/>}

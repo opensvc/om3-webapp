@@ -1614,6 +1614,7 @@
     "selectInstance": "Sélectionner l'instance sur {{node}}",
     "selectResource": "Sélectionner {{rid}} sur tous ses nœuds",
     "selectCell": "Sélectionner {{rid}} sur {{node}}",
+    "openCell": "Ouvrir {{rid}} sur {{node}}",
     "policies": "Politiques",
     "issues": "Problèmes",
     "details": {
@@ -1772,6 +1773,8 @@
   "resource": {
     "panel": {
       "title": "{{rid}} de {{path}}",
+      "titleOnNode": "{{rid}} de {{path}} sur {{node}}",
+      "instance": "Instance",
       "nodes": "La ressource sur chaque nœud",
       "flags": "Options",
       "log": "Dernier message",

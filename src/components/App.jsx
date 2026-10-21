@@ -30,6 +30,7 @@ import {ShortcutsHelp} from "../app/ShortcutsHelp";
 import {useShortcut} from "../ui/lib/shortcuts";
 
 import {decodeToken as decodeTokenFromLogin} from "./Login.jsx";
+import {rememberReturn} from "../app/after-login";
 
 // Lazy load components for code splitting
 const NodesTable = lazy(() => import("./NodesTable"));
@@ -39,6 +40,7 @@ const Heartbeats = lazy(() => import("./Heartbeats"));
 const Pools = lazy(() => import("./Pools"));
 const Network = lazy(() => import("./Network"));
 const WhoAmI = lazy(() => import("./WhoAmI"));
+const TokenPage = lazy(() => import("./TokenPage"));
 
 /*
  * The records had pages of their own; they open in a panel over their list now, as
@@ -337,6 +339,7 @@ const ProtectedRoute = ({children}) => {
     if (authChoice === 'openid') {
         if (!token) {
             logger.warn("No OIDC token found, redirecting to /auth-choice");
+            rememberReturn(location.pathname + location.search);
             return <Navigate to="/auth-choice" replace/>;
         }
         return children;
@@ -347,13 +350,15 @@ const ProtectedRoute = ({children}) => {
         localStorage.removeItem("authToken");
         localStorage.removeItem("tokenExpiration");
         localStorage.removeItem("authChoice");
+        rememberReturn(location.pathname + location.search);
         return <Navigate to="/auth-choice" replace/>;
     }
 
     return children;
 };
 
-const AUTH_PATHS = ['/auth', '/login', '/silent-renew'];
+// The token page stands alone too: it is opened on a node to enroll, maybe with no session.
+const AUTH_PATHS = ['/auth', '/login', '/silent-renew', '/token'];
 
 const App = () => {
     logger.info("App init");
@@ -441,6 +446,7 @@ const App = () => {
                                         <Route path="/objects/:objectName" element={<ObjectRedirect/>}/>
                                         <Route path="/nodes/:node/objects/:objectName" element={<InstanceRedirect/>}/>
                                         <Route path="/whoami" element={<ProtectedRoute><WhoAmI/></ProtectedRoute>}/>
+                                        <Route path="/token" element={<TokenPage/>}/>
                                         <Route path="/silent-renew" element={<SilentRenew/>}/>
                                         <Route path="/auth-callback" element={<OidcCallback/>}/>
                                         <Route path="/auth-choice" element={<AuthChoice authInfo={authInfo}/>}/>

@@ -64,6 +64,9 @@ vi.mock('../NodeRow.jsx', () => ({
 // The nodes of the cluster configuration; null, not read: the nodes reporting a status.
 const mockClusterOrder = vi.hoisted(() => ({value: null}));
 vi.mock('../../hooks/useClusterNodeOrder', () => ({useClusterNodeOrder: () => mockClusterOrder.value}));
+// The grants of the user: root enrolls a node.
+const mockGrants = vi.hoisted(() => ({value: {}}));
+vi.mock('../../hooks/useGrants', () => ({useGrants: () => mockGrants.value}));
 
 // The confirmation of a node action is tested on its own (NodeActionDialog.test): here, the action confirmed.
 vi.mock('../NodeActionDialog', () => ({
@@ -482,6 +485,25 @@ describe('NodesTable', () => {
             } finally {
                 vi.useRealTimers();
             }
+        });
+    });
+
+    describe('enroll', () => {
+        afterEach(() => {
+            mockGrants.value = {};
+        });
+
+        test('root enrolls a node: the accent of what creates, opening its dialog; others are not offered it', async () => {
+            const {unmount} = renderWithRouter(<NodesTable/>);
+            await screen.findAllByRole('checkbox');
+            expect(screen.queryByRole('button', {name: 'Enroll'})).toBeNull();
+            unmount();
+            mockGrants.value = {root: null};
+            renderWithRouter(<NodesTable/>);
+            const enroll = await screen.findByRole('button', {name: 'Enroll'});
+            expect(enroll).toHaveClass('bg-accent');
+            fireEvent.click(enroll);
+            expect(screen.getByRole('dialog', {name: 'Enroll a node'})).toBeInTheDocument();
         });
     });
 

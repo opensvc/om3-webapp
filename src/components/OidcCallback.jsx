@@ -7,6 +7,7 @@ import useAuthInfo from "../hooks/AuthInfo.jsx";
 import {useOidc} from "../context/OidcAuthContext.tsx";
 import logger from '../utils/logger.js';
 import {clearObjectCache} from "../hooks/useEventStore.js";
+import {takeReturn} from '../app/after-login';
 
 const OidcCallback = () => {
     const {userManager, recreateUserManager} = useOidc();
@@ -59,7 +60,7 @@ const OidcCallback = () => {
                     authDispatch({type: SetAuthChoice, data: "openid"});
                     authDispatch({type: Login, data: user.profile.preferred_username});
                 }
-                navigate('/');
+                navigate(takeReturn());
             })
             .catch((err) => {
                 logger.error("signinRedirectCallback failed:", err);
@@ -95,7 +96,7 @@ const OidcCallback = () => {
                     if (user && !user.expired) {
                         logger.info("Existing user session found:", user.profile?.preferred_username);
                         onUserRefreshed(user);
-                        navigate('/');
+                        navigate(takeReturn());
                     } else {
                         handleSigninRedirect();
                     }

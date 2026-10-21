@@ -28,6 +28,7 @@ import {Button} from "../ui/components/Button";
 import {Checkbox} from "../ui/components/Field";
 import {BoltIcon, CloseIcon} from "../ui/icons";
 import {INSTANCE_ACTIONS, RESOURCE_ACTIONS, actionLabel} from "../constants/actions";
+import {explainedMenu} from "../app/action-menu";
 
 const ZERO_TIME = "0001-01-01T00:00:00Z";
 const EMPTY = {};
@@ -166,12 +167,10 @@ export function InstanceStatus({path, node}) {
     const pickedRids = picked.filter((rid) => rids.includes(rid));
     const toggle = (rid) => setPicked((l) => (l.includes(rid) ? l.filter((r) => r !== rid) : [...l, rid]));
 
-    // The instance: freeze or unfreeze as it is, clear its monitor once failed.
+    // The instance: freeze and unfreeze both, as on an object; its monitor cleared once failed.
     const failed = (monitor.state ?? "").endsWith("failed");
     const onInstance = {targets: [{node}], subject: t("statusBoard.subjects.instance", {path, where: node})};
-    const instanceItems = [...(failed ? [CLEAR_ACTION] : []), ...INSTANCE_ACTIONS.filter((a) => (a.name === "freeze"
-        ? !frozen
-        : a.name === "unfreeze" ? frozen : true))]
+    const instanceItems = [...(failed ? [CLEAR_ACTION] : []), ...INSTANCE_ACTIONS]
         .map((a) => ({key: a.name, label: actionLabel(a.name), icon: actionIcon(a), onSelect: () => ask(a.name, onInstance)}));
     const instanceMenu = (
         <MenuButton
@@ -181,7 +180,7 @@ export function InstanceStatus({path, node}) {
             label={t("instance.panel.actions")}
             align="end"
             disabled={running}
-            items={instanceItems}
+            {...explainedMenu(t, "instance", instanceItems)}
         />
     );
 
@@ -236,7 +235,7 @@ export function InstanceStatus({path, node}) {
                             icon={<BoltIcon className="h-3.5 w-3.5"/>}
                             label={t("statusBoard.actions.selectionResources", {count: pickedRids.length})}
                             disabled={running || resourceItems.length === 0}
-                            items={resourceItems}
+                            {...explainedMenu(t, "resource", resourceItems)}
                         />
                         <Button size="sm" variant="secondary" icon={<CloseIcon/>} onClick={() => setPicked([])}>
                             {t("statusBoard.actions.clearSelection")}

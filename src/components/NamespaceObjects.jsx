@@ -13,6 +13,7 @@ import {MenuButton} from "../ui/components/MenuButton";
 import {BoltIcon} from "../ui/icons";
 import {useObjectBulkActions} from "./useObjectBulkActions";
 import {KeyCells, ObjectStatusCell, PropertyCells} from "./ObjectCells";
+import {menuColumns, menuFilter} from "../app/action-menu";
 
 /**
  * The kinds a namespace panel lists, a tab each, as the Objects page splits them:
@@ -105,6 +106,8 @@ export function NamespaceObjects({namespace, list}) {
                             label={t("objects.actionsMenu")}
                             align="end"
                             items={items}
+                            columns={menuColumns(items)}
+                            {...menuFilter(t, items)}
                         />
                     </>
                 ) : (

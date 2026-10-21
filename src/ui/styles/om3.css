@@ -3,22 +3,22 @@
  * webapp of a cluster shares the layout and the components of the collector, and
  * must not be taken for it at a glance.
  *
- * - Its own accent, indigo-violet instead of the oc3 petrol, in the four palettes.
- *   It stays apart from the state colours, and between the node blue and the code
- *   keyword violet, which it does not meet in the same places.
+ * - Hovers apart from the bands of the tables: a row hovered takes a tint of the
+ *   accent (`--row-hover`), not the grey of the bands heading a group of rows (a
+ *   namespace), which takes a deeper grey of its own (`--band-hover`): neither is
+ *   taken for the other. Mixed from the tokens, they follow every palette.
  * - A top bar in a dark slate band (`--brand-*`), neutral, instead of the raised
- *   white bar of oc3.
+ *   white bar of oc3. The accent stays the oc3 petrol (tokens.css): it fills the
+ *   buttons that create or change a state all over the views, where an accent of
+ *   its own would weigh too much.
  *
- * Contrasts (WCAG): accent text on the surfaces 6.6:1 at least, accent-ink on the
- * accent 7.8:1, the bar ink on the bar 9.9:1 at least, its muted ink 6.3:1 (5:1 on
- * a hovered button), focus ring included.
+ * Contrasts (WCAG): the bar ink on the bar 9.9:1 at least, its muted ink 6.3:1
+ * (5:1 on a hovered button), focus ring included.
  */
 
 :root {
-  --accent: #4338a8;
-  --accent-ink: #ffffff;
-  --accent-soft: #e7e5f7;
-  --focus-ring: #4338a8;
+  --row-hover: color-mix(in srgb, var(--surface-raised) 93%, var(--accent));
+  --band-hover: color-mix(in srgb, var(--surface-sunken) 60%, var(--line-strong));
 
   --brand: #3b444b;
   --brand-ink: #ffffff;
@@ -28,11 +28,6 @@
 }
 
 .dark {
-  --accent: #a99ff2;
-  --accent-ink: #14112e;
-  --accent-soft: #2b2756;
-  --focus-ring: #a99ff2;
-
   /* A band a step above the surfaces: a light one would glare over a dark page. */
   --brand: #283137;
   --brand-ink: #e3e8e6;
@@ -42,11 +37,6 @@
 }
 
 .contrast {
-  --accent: #2f2191;
-  --accent-ink: #ffffff;
-  --accent-soft: #dcd8f7;
-  --focus-ring: #2f2191;
-
   --brand: #2b3237;
   --brand-ink: #ffffff;
   --brand-ink-muted: #e1e6e9;
@@ -55,11 +45,6 @@
 }
 
 .dark.contrast {
-  --accent: #c4bcff;
-  --accent-ink: #000000;
-  --accent-soft: #251d5e;
-  --focus-ring: #c4bcff;
-
   --brand: #1f2529;
   --brand-ink: #ffffff;
   --brand-ink-muted: #d5dce0;

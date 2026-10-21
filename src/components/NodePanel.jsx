@@ -178,7 +178,7 @@ export const matches = (filter, ...values) => {
  * by its state. Abort is no action of the menu: the badge of the orchestration in
  * progress offers it, with its logs.
  */
-function NodeActions({node, frozen, monitor, onOrchestrationLogs}) {
+function NodeActions({node, monitor, onOrchestrationLogs}) {
     const {t} = useTranslation();
     const [pending, setPending] = useState(null);
     const {globalExpect, orchestrationId} = orchestrationOf([monitor]);
@@ -186,7 +186,6 @@ function NodeActions({node, frozen, monitor, onOrchestrationLogs}) {
     const items = nodeMenuItems({
         t,
         nodes: [node],
-        offered: (name) => !(name === "freeze" && frozen) && !(name === "unfreeze" && !frozen),
         apiNode,
         renderIcon: ({icon, color}) => <span aria-hidden="true" className={color === "red" ? DANGER_ICON : ICON}>{icon}</span>,
         onSelect: (name) => setPending({action: name, node}),
@@ -230,6 +229,9 @@ function NodeActions({node, frozen, monitor, onOrchestrationLogs}) {
                 align="end"
                 // The node, its inventory, its daemon: a column each in a wide window.
                 columns={2}
+                filterable
+                filterLabel={t("actionMenus.filter")}
+                filterEmpty={t("actionMenus.noMatch")}
                 items={items}
             />
             <NodeActionDialog
@@ -294,7 +296,7 @@ function NodeStatusTab({node, onOrchestrationLogs}) {
     return (
         <div className="space-y-4">
             {header.actions !== null && createPortal(
-                <NodeActions node={node} frozen={frozen} monitor={monitor} onOrchestrationLogs={onOrchestrationLogs}/>,
+                <NodeActions node={node} monitor={monitor} onOrchestrationLogs={onOrchestrationLogs}/>,
                 header.actions,
             )}
             <dl aria-label={t("nodePanel.status.title")} className="grid grid-cols-[max-content_1fr] gap-x-6 gap-y-1">

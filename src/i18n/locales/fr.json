@@ -946,7 +946,8 @@
       "pgNode": "Le CPU et la mémoire sont ceux des objets du nœud qui sert cette page.",
       "byObject": "CPU et mémoire par objet",
       "actions": "Actions sur le namespace",
-      "configOf": "la configuration de {{namespace}}"
+      "configOf": "la configuration de {{namespace}}",
+      "deleteDescription": "Supprimer l'objet de configuration du namespace : ses réservations et réglages avec lui."
     },
     "claims": {
       "actions": "Actions",
@@ -1741,7 +1742,12 @@
         "restart": "Redémarrer le listener {{listener}} de {{node}} ? Son API ne répond plus un instant."
       },
       "actionsOf": "Actions sur le listener {{listener}}",
-      "target": "l'écouteur {{listener}} de {{node}}"
+      "target": "l'écouteur {{listener}} de {{node}}",
+      "describe": {
+        "start": "Démarrer le listener {{listener}} : l'API répond à nouveau sur le réseau.",
+        "stop": "Arrêter le listener {{listener}} : l'API ne répond plus sur le réseau, cette page comprise si elle passe par ce nœud.",
+        "restart": "Redémarrer le listener {{listener}} : l'API ne répond plus un instant."
+      }
     },
     "heartbeats": {
       "title": "Heartbeats",
@@ -1754,6 +1760,13 @@
         "restart": "Redémarrer {{target}} ?",
         "sign": "Signer {{target}} ?",
         "wipe": "Effacer {{target}} ? Sa signature et les emplacements de ses pairs sont effacés."
+      },
+      "describe": {
+        "start": "Démarrer le flux : le nœud émet ou reçoit à nouveau dessus.",
+        "stop": "Arrêter le flux : le nœud n'émet ni ne reçoit plus dessus.",
+        "restart": "Redémarrer le flux.",
+        "sign": "Écrire la signature avec laquelle les nœuds du heartbeat disque réclament leur emplacement.",
+        "wipe": "Retirer cette signature : les emplacements de tous les nœuds du heartbeat disque sont effacés."
       }
     },
     "orchestrations": {
@@ -1993,5 +2006,72 @@
       "selfSigned": "Pas de ca : auto-signé.",
       "reading": "Lecture du ca du sec…"
     }
+  },
+  "actionMenus": {
+    "groups": {
+      "operator": "Opérateur",
+      "admin": "Administrateur",
+      "operatorInstance": "Opérateur · instance",
+      "operatorDisk": "Opérateur · disque",
+      "operatorTask": "Opérateur · tâche",
+      "operatorSync": "Opérateur · sync",
+      "adminPg": "Administrateur · pg"
+    },
+    "object": {
+      "start": "Demander au daemon de le démarrer, sur les nœuds que son placement élit.",
+      "stop": "Demander au daemon d'arrêter toutes ses instances ; il reste arrêté.",
+      "restart": "Demander au daemon de redémarrer ses instances.",
+      "freeze": "Bloquer les démarrages automatiques et les actions du moniteur du daemon, sur tous ses nœuds.",
+      "unfreeze": "Laisser le daemon le démarrer et agir sur lui à nouveau.",
+      "switch": "Arrêter l'instance en cours et la démarrer sur le nœud préféré suivant.",
+      "giveback": "Arrêter les instances mal placées et les démarrer sur les nœuds préférés.",
+      "abort": "Interrompre l'orchestration en cours.",
+      "enable": "Agir à nouveau sur lui : les actions ne l'ignorent plus.",
+      "disable": "L'ignorer dans les actions ; ce qui tourne reste en l'état.",
+      "provision": "Allouer les ressources système dont ses ressources ont besoin sur ses nœuds : formater un système de fichiers, créer un volume…",
+      "unprovision": "Libérer les ressources système de ses ressources sur tous ses nœuds : leurs données sont perdues.",
+      "delete": "Supprimer sa configuration du cluster ; ses ressources système restent en place.",
+      "purge": "Le déprovisionner, puis le supprimer : ses données et sa configuration sont perdues."
+    },
+    "instance": {
+      "start": "Démarrer les ressources de l'instance sur ce nœud.",
+      "stop": "Arrêter les ressources de l'instance sur ce nœud.",
+      "restart": "Redémarrer l'instance sur ce nœud.",
+      "run": "Exécuter ses tâches maintenant, hors de leur planification.",
+      "boot": "Exécuter les actions de nettoyage faites seulement au démarrage du nœud.",
+      "shutdown": "Arrêter l'instance, ses ressources de secours aussi, comme à l'arrêt du nœud.",
+      "startStandby": "Activer les ressources destinées à rester actives sur un nœud de secours.",
+      "freeze": "Bloquer les démarrages automatiques et les actions du moniteur sur ce nœud.",
+      "unfreeze": "Débloquer les démarrages automatiques et les actions du moniteur sur ce nœud.",
+      "clear": "Effacer l'état en échec de son moniteur, pour que le daemon agisse à nouveau dessus.",
+      "provision": "Allouer les ressources système de ses ressources sur ce nœud.",
+      "unprovision": "Libérer les ressources système de ses ressources sur ce nœud : leurs données sont perdues.",
+      "install": "Installer à nouveau ce que déclarent ses volumes et systèmes de fichiers, sans rien démarrer.",
+      "prstart": "Préempter la réservation d'écriture exclusive de ses périphériques.",
+      "prstop": "Libérer la réservation d'écriture exclusive de ses périphériques.",
+      "syncUpdate": "Copier les changements du jeu de données local vers les pairs.",
+      "syncFull": "Copier tout le jeu de données local vers les pairs.",
+      "syncResync": "Rétablir la synchronisation optimale des paires répliquées.",
+      "syncSplit": "Rendre les deux extrémités d'une paire répliquée accessibles en écriture.",
+      "syncIngest": "Intégrer les fichiers reçus de l'instance active.",
+      "pgReset": "Lever les plafonnements des groupes de processus, quoi que disent les mots-clés pg_*.",
+      "pgUpdate": "Appliquer à nouveau les mots-clés pg_* aux groupes de processus.",
+      "info": "Collecter et afficher les informations de l'instance.",
+      "status": "Évaluer à nouveau l'état de ses ressources.",
+      "delete": "Supprimer la configuration de l'instance sur ce nœud."
+    },
+    "resource": {
+      "start": "Démarrer les ressources choisies.",
+      "stop": "Arrêter les ressources choisies.",
+      "restart": "Redémarrer les ressources choisies.",
+      "run": "Exécuter les tâches choisies maintenant, hors de leur planification.",
+      "console": "Ouvrir une console dans le conteneur."
+    },
+    "impacts": {
+      "dataLoss": "perte de données",
+      "downTime": "interruption"
+    },
+    "filter": "Filtrer les actions",
+    "noMatch": "Aucune action ne correspond."
   }
 }

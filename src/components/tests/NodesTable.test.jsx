@@ -500,15 +500,15 @@ describe('NodesTable', () => {
             const menu = await screen.findByRole('menu', {name: 'Actions'});
             // The node, its inventory, its daemon, in that order, in a masonry of two columns in a wide window.
             expect([...menu.querySelectorAll('[data-menu-heading]')].map((h) => h.textContent)).toEqual(['Node', 'Inventory', 'Daemon']);
-            expect(menu).toHaveClass('md:columns-2');
+            expect(menu.querySelector('.md\\:columns-2')).not.toBeNull();
             const entries = within(menu).getAllByRole('menuitem');
             expect(entries.map((item) => item.getAttribute('aria-labelledby') && document.getElementById(item.getAttribute('aria-labelledby')).textContent)).toEqual([
-                'Freeze',
+                'Freeze', 'Unfreeze',
                 'Asset', 'Capabilities', 'Disks', 'Packages', 'SCSI', 'Sysreport',
                 'Clear monitor', 'Restart', 'Shutdown', 'Stop', 'Drain', 'Leave',
             ]);
-            // Not frozen, no unfreeze; no abort, the badge of the orchestration offers it; no dequeue.
-            expect(within(menu).queryByRole('menuitem', {name: /unfreeze|abort|dequeue/i})).toBeNull();
+            // Freeze and unfreeze both, whatever the state; no abort, the badge of the orchestration offers it; no dequeue.
+            expect(within(menu).queryByRole('menuitem', {name: /abort|dequeue/i})).toBeNull();
             // What each does, described; the harmful ones red.
             expect(within(menu).getByRole('menuitem', {name: 'Stop'})).toHaveAccessibleDescription('Stop the daemon; the instances keep running, unwatched.');
             expect(['Shutdown', 'Stop', 'Drain', 'Leave'].every((name) => within(menu).getByRole('menuitem', {name}).classList.contains('text-state-down'))).toBe(true);
@@ -531,7 +531,8 @@ describe('NodesTable', () => {
             fireEvent.click(screen.getByRole('button', {name: 'Actions'}));
             const leave = await screen.findByRole('menuitem', {name: 'Leave'});
             expect(leave).toBeDisabled();
-            expect(leave).toHaveAccessibleDescription('Ask it from the webapp of another node: this one serves the webapp.');
+            // Its cost badged, and why it is off.
+            expect(leave).toHaveAccessibleDescription('down-time Ask it from the webapp of another node: this one serves the webapp.');
         });
 
         test('filters based on frozen/unfrozen state and closes via Escape', async () => {

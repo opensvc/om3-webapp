@@ -22,6 +22,7 @@ import ConsoleTerminal from "./ConsoleTerminal.jsx";
 import {CLEAR_ACTION, postAction, resourceActions} from "./objectActions";
 import {DatastoreLinks, RefreshStatusButton, datastoresOf, volumesOf} from "./InstanceActions";
 import logger from "../utils/logger.js";
+import {explainedMenu} from "../app/action-menu";
 
 /** Icon of an action in a menu: the action icons are sized to the menu line. */
 const ICON = "flex h-4 w-4 items-center justify-center text-ink-muted [&>svg]:h-4! [&>svg]:w-4!";
@@ -231,32 +232,21 @@ const ObjectStatus = ({path, onOrchestrationLogs, linkNode, linkResource, openCe
         subject: t("statusBoard.subjects.resource", {rid: rows.map((r) => r.name).join(", "), path, where: where(nodes)}),
     });
 
-    /** What an instance is: frozen, its monitor failed. */
+    /** What an instance is: its monitor failed. */
     const instanceOf = (node) => {
         const index = allNodes.indexOf(node);
-        const cell = board.rows.find((r) => r.kind === "instance")?.cells[index] ?? [];
         return {
-            frozen: cell.some((s) => s.mark === "*"),
             // A failed monitor is cleared for the orchestration to try again, as its note says.
             failed: (board.rows.find((r) => r.kind === "monitor")?.cells[index] ?? []).some((s) => s.text.endsWith("failed")),
         };
     };
-    /** The instance actions for these instances: freeze where one is not, clear where one failed. */
+    /** The instance actions for these instances: clear where one failed. */
     const instanceActions = (nodes) => {
-        // The cluster object's instances stand for their nodes: the node is frozen or not.
-        if (kind === "ccfg") {
-            const frozen = nodes.map((node) => board.nodes.find((n) => n.name === node)?.frozen ?? false);
-            return INSTANCE_ACTIONS.filter((a) => (a.name === "freeze"
-                ? frozen.some((f) => !f)
-                : a.name === "unfreeze" && frozen.some((f) => f)));
-        }
+        // The cluster object's instances stand for their nodes: freezing or unfreezing them.
+        if (kind === "ccfg") return INSTANCE_ACTIONS.filter((a) => a.name === "freeze" || a.name === "unfreeze");
         const l = nodes.map(instanceOf);
-        return [
-            ...(l.some((i) => i.failed) ? [CLEAR_ACTION] : []),
-            ...INSTANCE_ACTIONS.filter((a) => (a.name === "freeze"
-                ? l.some((i) => !i.frozen)
-                : a.name === "unfreeze" ? l.some((i) => i.frozen) : true)),
-        ];
+        // Freeze and unfreeze both, as on an object: either is harmless where it changes nothing.
+        return [...(l.some((i) => i.failed) ? [CLEAR_ACTION] : []), ...INSTANCE_ACTIONS];
     };
     const menuItems = (actions, onSelect) => actions.map((a) => ({
         key: a.name,
@@ -318,14 +308,14 @@ const ObjectStatus = ({path, onOrchestrationLogs, linkNode, linkResource, openCe
             label={t("statusBoard.actions.object")}
             align="end"
             disabled={running}
-            items={objectActionsFor(kind)
+            {...explainedMenu(t, "object", objectActionsFor(kind)
                 .map((a) => ({
                     key: a.name,
                     label: actionLabel(a.name),
                     icon: actionIcon(a),
                     disabled: !isActionAllowedForSelection(a.name, [path]) || clusterIdle(a.name),
                     onSelect: () => ask(a.name),
-                }))}
+                })))}
         />
     );
 
@@ -394,7 +384,9 @@ const ObjectStatus = ({path, onOrchestrationLogs, linkNode, linkResource, openCe
         ? []
         : menuItems(instanceActions(nodesPicked), (action) => ask(action, {...onInstances(nodesPicked), fromSelection: true}));
     // One kind picked at a time: its actions.
-    const selectionItems = cellsPicked.length > 0 ? resourceItems : instanceItems;
+    const selectionMenu = cellsPicked.length > 0
+        ? explainedMenu(t, "resource", resourceItems)
+        : explainedMenu(t, "instance", instanceItems);
     const picked = nodesPicked.length + cellsPicked.length;
     // Nothing selected, no action to offer: the help says how to select. Both on a
     // row as high as the buttons, so that the table does not move from one to the other.
@@ -409,8 +401,8 @@ const ObjectStatus = ({path, onOrchestrationLogs, linkNode, linkResource, openCe
                         label={cellsPicked.length > 0
                             ? t("statusBoard.actions.selectionResources", {count: resourcesPicked})
                             : t("statusBoard.actions.selectionInstances", {count: nodesPicked.length})}
-                        disabled={running || selectionItems.length === 0}
-                        items={selectionItems}
+                        disabled={running || selectionMenu.items.length === 0}
+                        {...selectionMenu}
                     />
                     <Button size="sm" variant="secondary" icon={<CloseIcon/>} onClick={clearSelection}>
                         {t("statusBoard.actions.clearSelection")}

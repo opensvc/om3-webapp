@@ -8,7 +8,6 @@ import {refusalReason} from "./objectActions";
 import {getResponseErrorMessage} from "../services/api.jsx";
 import NodeRow from "../components/NodeRow.jsx";
 import logger from '../utils/logger.js';
-import {NODE_ACTIONS} from "../constants/actions";
 import {nodeActionRequest, nodeMenuItems} from "../app/node-actions";
 import {useTranslation} from "react-i18next";
 import {NodeActionDialog} from "./NodeActionDialog";
@@ -176,15 +175,6 @@ const NodesTable = () => {
         setPendingAction(null);
     };
 
-    const filteredMenuItems = NODE_ACTIONS.filter(({name}) => {
-        if (selectedNodes.length === 0) return false;
-        return selectedNodes.some((nodename) => {
-            const isFrozen = isNodeFrozen(nodeStatus[nodename]);
-            if (name === "freeze" && isFrozen) return false;
-            return !(name === "unfreeze" && !isFrozen);
-        });
-    });
-
     // The nodes of the cluster configuration too: a node dropped keeps its line.
     const clusterNodes = useClusterNodeOrder();
     const sortedNodes = React.useMemo(() => {
@@ -247,10 +237,12 @@ const NodesTable = () => {
                             align="end"
                             // The node, its inventory, its daemon: a column each in a wide window.
                             columns={2}
+                            filterable
+                            filterLabel={t("actionMenus.filter")}
+                            filterEmpty={t("actionMenus.noMatch")}
                             items={nodeMenuItems({
                                 t,
                                 nodes: selectedNodes,
-                                offered: (name) => filteredMenuItems.some((action) => action.name === name),
                                 apiNode: daemon?.nodename,
                                 renderIcon: ({icon, color}) => <span aria-hidden="true" className={color === "red" ? DANGER_ICON : ICON}>{icon}</span>,
                                 onSelect: handleAction,

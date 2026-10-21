@@ -200,12 +200,12 @@ describe('InstanceStatus', () => {
         expect(screen.queryByText('Volumes', {selector: 'dt'})).toBeNull();
     });
 
-    test('its actions: freeze as it is not frozen, each confirmed then posted to the instance', async () => {
+    test('its actions: freeze and unfreeze both, as on an object, each confirmed then posted to the instance', async () => {
         inRouter(<InstanceStatus path="prod/svc/web" node="n1"/>);
         fireEvent.click(screen.getByRole('button', {name: 'Instance actions'}));
         const menu = screen.getByRole('menu', {name: 'Instance actions'});
         expect(within(menu).getByRole('menuitem', {name: 'Freeze'})).toBeInTheDocument();
-        expect(within(menu).queryByRole('menuitem', {name: 'Unfreeze'})).toBeNull();
+        expect(within(menu).getByRole('menuitem', {name: 'Unfreeze'})).toBeInTheDocument();
         expect(within(menu).queryByRole('menuitem', {name: /Clear/})).toBeNull();
         fireEvent.click(within(menu).getByRole('menuitem', {name: 'Start'}));
         fireEvent.click(within(screen.getByRole('alertdialog', {name: 'start prod/svc/web on n1'})).getByRole('button', {name: 'Confirm'}));

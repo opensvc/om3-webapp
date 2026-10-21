@@ -127,9 +127,9 @@ describe('NodeDetailPanel', () => {
         expect(actions).toHaveTextContent(/^Actions$/);
         fireEvent.click(actions);
         const menu = screen.getByRole('menu', {name: 'Node actions'});
-        // Not frozen: freeze on offer, unfreeze not.
+        // Freeze and unfreeze both, whatever the state.
         expect(within(menu).getByRole('menuitem', {name: 'Freeze'})).toBeInTheDocument();
-        expect(within(menu).queryByRole('menuitem', {name: 'Unfreeze'})).not.toBeInTheDocument();
+        expect(within(menu).getByRole('menuitem', {name: 'Unfreeze'})).toBeInTheDocument();
         fireEvent.click(within(menu).getByRole('menuitem', {name: 'Freeze'}));
         fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', {name: 'Confirm'}));
         await waitFor(() => expect(requests).toContainEqual(expect.objectContaining({

@@ -225,7 +225,8 @@ export function Row({
       }
       aria-current={selected ? "true" : undefined}
       className={cn(
-        "h-[1.875rem] border-b border-line last:border-b-0 hover:bg-surface-sunken",
+        // Hovered, a tint of the accent: never the grey of the bands heading a group of rows.
+        "h-[1.875rem] border-b border-line last:border-b-0 hover:bg-row-hover",
         interactive &&
           "cursor-pointer focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-(--focus-ring)",
         selected && "bg-accent-soft",

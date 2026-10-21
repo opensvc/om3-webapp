@@ -30,6 +30,7 @@ import {Pager} from "../ui/components/Pager";
 import {usePaging} from "../app/paging";
 import {ALL_LIST, OBJECT_LISTS, OBJECTS_TABS, listOfKind} from "../utils/objectLists";
 import {BoltIcon, ChevronDownIcon, FilterIcon, GearIcon, PlusIcon, SearchIcon} from "../ui/icons";
+import {menuColumns, menuFilter} from "../app/action-menu";
 
 // The breakpoints of the MUI theme the view used: below md (900px) the filters fold
 // behind a button, from lg (1200px) the node columns are shown.
@@ -210,7 +211,8 @@ const NamespaceRow = ({namespace, colSpan, selectedCount, total, onToggle, onOpe
             } : undefined}
             className={cn(
                 "h-[1.875rem] border-b border-line bg-surface-sunken",
-                exists && "cursor-pointer hover:bg-surface-raised focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-(--focus-ring)",
+                // Hovered, a deeper grey of the band, its name underlined as what opens: still a band, not a row.
+                exists && "group/band cursor-pointer hover:bg-band-hover focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-(--focus-ring)",
             )}
         >
             <td className="w-8 px-2 py-1">
@@ -227,9 +229,9 @@ const NamespaceRow = ({namespace, colSpan, selectedCount, total, onToggle, onOpe
                 {narrow ? (
                     <span className="flex flex-col items-start gap-0.5">
                         <span className="flex h-4 items-center"><span className={cn(BADGE, "font-normal")}>{t("objects.badges.namespace")}</span></span>
-                        {namespace}
+                        <span className="group-hover/band:underline">{namespace}</span>
                     </span>
-                ) : namespace}
+                ) : <span className="group-hover/band:underline">{namespace}</span>}
             </th>
             <td className="px-2 py-1">
                 <span className="flex items-center justify-end gap-1 whitespace-nowrap">
@@ -906,6 +908,8 @@ const Objects = () => {
                                 label={t("objects.actionsMenu")}
                                 align="end"
                                 items={bulkActions}
+                                columns={menuColumns(bulkActions)}
+                                {...menuFilter(t, bulkActions)}
                             />
                         </>
                     ) : (

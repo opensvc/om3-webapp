@@ -12,6 +12,7 @@ import {NotProvisionedMark} from '../ui/components/StateMarks';
 import {KEY_KINDS, OBJECT_ACTIONS, actionLabel, objectActionsFor} from '../constants/actions';
 import {OrchestrationBadge} from './OrchestrationBadge';
 import {isActionAllowedForSelection} from '../utils/objectUtils';
+import {explainedMenu} from "../app/action-menu";
 
 /** Icon of an action in a menu: the action icons are sized to the menu line. */
 const ICON = "flex h-4 w-4 items-center justify-center text-ink-muted [&>svg]:h-4! [&>svg]:w-4!";
@@ -67,7 +68,7 @@ const HeaderSection = ({
             label={inHeader ? t("statusBoard.actions.object") : t("objects.header.actionsMenu")}
             align="end"
             disabled={actionInProgress}
-            items={allowedActions.map(({name, icon, color}) => {
+            {...explainedMenu(t, "object", allowedActions.map(({name, icon, color}) => {
                 const isAllowed = isActionAllowedForSelection(name, [decodedObjectName]);
                 return {
                     key: name,
@@ -78,9 +79,11 @@ const HeaderSection = ({
                         </span>
                     ),
                     disabled: !isAllowed || actionInProgress,
+                    // Red only when it may be asked.
+                    danger: color === "red" && isAllowed,
                     onSelect: () => handleObjectActionClick(name),
                 };
-            })}
+            }))}
         />
     );
 

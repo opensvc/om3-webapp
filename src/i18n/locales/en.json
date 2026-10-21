@@ -946,7 +946,8 @@
       "pgNode": "CPU and memory are those of the objects on the node serving this page.",
       "byObject": "CPU and memory by object",
       "actions": "Namespace actions",
-      "configOf": "the configuration of {{namespace}}"
+      "configOf": "the configuration of {{namespace}}",
+      "deleteDescription": "Delete the configuration object of the namespace: its claims and settings with it."
     },
     "claims": {
       "actions": "Actions",
@@ -1741,7 +1742,12 @@
         "restart": "Restart the {{listener}} listener of {{node}}? Its API stops answering for a moment."
       },
       "actionsOf": "Actions on the listener {{listener}}",
-      "target": "the {{listener}} listener of {{node}}"
+      "target": "the {{listener}} listener of {{node}}",
+      "describe": {
+        "start": "Start the {{listener}} listener: the API answers over the network again.",
+        "stop": "Stop the {{listener}} listener: the API stops answering over the network, this page included if it goes through this node.",
+        "restart": "Restart the {{listener}} listener: the API stops answering for a moment."
+      }
     },
     "heartbeats": {
       "title": "Heartbeats",
@@ -1754,6 +1760,13 @@
         "restart": "Restart {{target}}?",
         "sign": "Sign {{target}}?",
         "wipe": "Wipe {{target}}? Its signature and the slots of its peers are erased."
+      },
+      "describe": {
+        "start": "Start the stream: the node sends or receives on it again.",
+        "stop": "Stop the stream: the node stops sending or receiving on it.",
+        "restart": "Restart the stream.",
+        "sign": "Write the signature the nodes of the disk heartbeat claim their slot with.",
+        "wipe": "Remove that signature: the slots of every node of the disk heartbeat are erased."
       }
     },
     "orchestrations": {
@@ -1993,5 +2006,72 @@
       "selfSigned": "No ca: self-signed.",
       "reading": "Reading the ca of the sec…"
     }
+  },
+  "actionMenus": {
+    "groups": {
+      "operator": "Operator",
+      "admin": "Admin",
+      "operatorInstance": "Operator · instance",
+      "operatorDisk": "Operator · disk",
+      "operatorTask": "Operator · task",
+      "operatorSync": "Operator · sync",
+      "adminPg": "Admin · pg"
+    },
+    "object": {
+      "start": "Ask the daemon to start it, on the nodes its placement elects.",
+      "stop": "Ask the daemon to stop all its instances; it stays stopped.",
+      "restart": "Ask the daemon to restart its instances.",
+      "freeze": "Block the automatic starts and the monitor actions of the daemon, on all its nodes.",
+      "unfreeze": "Let the daemon start it and act on it again.",
+      "switch": "Stop the running instance and start it on the next preferred node.",
+      "giveback": "Stop the misplaced instances and start them on the preferred nodes.",
+      "abort": "Abort the orchestration in progress.",
+      "enable": "Act on it again: the actions no longer skip it.",
+      "disable": "Skip it on the actions; what runs is left as it is.",
+      "provision": "Allocate the system resources its resources need on its nodes: format a filesystem, create a volume…",
+      "unprovision": "Free the system resources of its resources on all its nodes: their data is lost.",
+      "delete": "Delete its configuration from the cluster; its system resources are left in place.",
+      "purge": "Unprovision, then delete it: its data and its configuration are lost."
+    },
+    "instance": {
+      "start": "Bring up the instance resources on this node.",
+      "stop": "Bring down the instance resources on this node.",
+      "restart": "Restart the instance on this node.",
+      "run": "Run its tasks now, outside their schedule.",
+      "boot": "Run the clean up actions done at node boot only.",
+      "shutdown": "Stop the instance, its standby resources too, as on a node shutdown.",
+      "startStandby": "Activate the resources meant to stay up on a standby node.",
+      "freeze": "Block the automatic starts and the monitor actions on this node.",
+      "unfreeze": "Unblock the automatic starts and the monitor actions on this node.",
+      "clear": "Clear the failed state of its monitor, for the daemon to act on it again.",
+      "provision": "Allocate the system resources of its resources on this node.",
+      "unprovision": "Free the system resources of its resources on this node: their data is lost.",
+      "install": "Install again what its volumes and filesystems declare, without starting anything.",
+      "prstart": "Preempt the exclusive write reservation of its devices.",
+      "prstop": "Release the exclusive write reservation of its devices.",
+      "syncUpdate": "Copy the changes of the local dataset to the peers.",
+      "syncFull": "Copy the whole local dataset to the peers.",
+      "syncResync": "Restore the optimal synchronization of the replicated pairs.",
+      "syncSplit": "Make both ends of a replicated pair read-write.",
+      "syncIngest": "Ingest the files received from the active instance.",
+      "pgReset": "Lift the process group cappings, whatever the pg_* keywords say.",
+      "pgUpdate": "Apply the pg_* keywords to the process groups again.",
+      "info": "Gather and show the instance information.",
+      "status": "Evaluate the status of its resources again.",
+      "delete": "Delete the instance configuration on this node."
+    },
+    "resource": {
+      "start": "Bring up the resources picked.",
+      "stop": "Bring down the resources picked.",
+      "restart": "Restart the resources picked.",
+      "run": "Run the tasks picked now, outside their schedule.",
+      "console": "Open a console in the container."
+    },
+    "impacts": {
+      "dataLoss": "data-loss",
+      "downTime": "down-time"
+    },
+    "filter": "Filter the actions",
+    "noMatch": "No action matches."
   }
 }

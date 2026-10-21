@@ -25,6 +25,11 @@ export interface MenuItem {
   description?: string;
   /** An entry that harms: its label and icon in the tint of down. */
   danger?: boolean;
+  /**
+   * What it costs, as small badges after its label (data-loss, down-time), in the
+   * tint of down or of warn; read with its description, not in its name.
+   */
+  badges?: { key: string; label: string; tone: "down" | "warn" }[];
   /** Entries of a submenu: the entry then opens it rather than being chosen. */
   items?: MenuItem[];
   onSelect?: () => void;
@@ -72,6 +77,9 @@ export function MenuButton({
   trigger,
   align = "start",
   columns,
+  filterable = false,
+  filterLabel = "Filter",
+  filterEmpty = "Nothing matches.",
 }: {
   label: string;
   items: MenuItem[];
@@ -106,6 +114,15 @@ export function MenuButton({
    * other in a narrow one.
    */
   columns?: 2 | 3;
+  /**
+   * A field over the entries, focused on opening, keeping those whose label,
+   * description, badges or section say what is typed: Down then goes to the first
+   * kept, Enter chooses it, Up from the first goes back to the field. `filterLabel`
+   * names the field, `filterEmpty` says nothing is kept.
+   */
+  filterable?: boolean;
+  filterLabel?: string;
+  filterEmpty?: string;
 }) {
   const [open, setOpen] = useState(false);
   const iconOnly = icon !== undefined && !prominent;
@@ -114,16 +131,18 @@ export function MenuButton({
   const root = useRef<HTMLDivElement>(null);
   const button = useRef<HTMLButtonElement>(null);
   const menu = useRef<HTMLDivElement>(null);
+  const filterField = useRef<HTMLInputElement>(null);
+  const [query, setQuery] = useState("");
   // Entry to focus on opening: the first one from the keyboard, none with the mouse.
   const focusOnOpen = useRef<"first" | "last" | null>(null);
 
   // The entries of the top level only: a submenu walks its own.
   function entries(): HTMLElement[] {
-    return [
-      ...(menu.current?.querySelectorAll<HTMLElement>(
-        ":scope > div > [role=menuitem], :scope > [role=group] > div > [role=menuitem]",
-      ) ?? []),
-    ];
+    const top = menu.current;
+    if (top === null) return [];
+    return [...top.querySelectorAll<HTMLElement>("[role=menuitem]")].filter(
+      (entry) => entry.parentElement?.closest("[role=menu]") === top,
+    );
   }
 
   // Placed against the window, before the menu is painted: under the trigger, or
@@ -152,13 +171,31 @@ export function MenuButton({
     };
   }, [open, align]);
 
+  // The focus on opening, once the menu is placed: it stays hidden until then, and a
+  // hidden field or entry does not take the focus. A menu to filter opens on its
+  // field, whatever opened it; another on its first or last entry from the keyboard.
+  const focusedOnOpen = useRef(false);
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      focusedOnOpen.current = false;
+      return;
+    }
+    if (position === null || focusedOnOpen.current) return;
+    focusedOnOpen.current = true;
     const target = focusOnOpen.current;
     focusOnOpen.current = null;
-    if (target !== null) {
+    if (filterable) {
+      filterField.current?.focus();
+    } else if (target !== null) {
       const list = entries();
       (target === "first" ? list[0] : list[list.length - 1])?.focus();
+    }
+  }, [open, position, filterable]);
+
+  useEffect(() => {
+    if (!open) {
+      setQuery("");
+      return;
     }
     function onPointerDown(event: PointerEvent) {
       if (!(event.target instanceof Node)) return;
@@ -219,6 +256,12 @@ export function MenuButton({
         move(index + 1);
         break;
       case "ArrowUp":
+        // From the first entry, back to the field that filters them.
+        if (filterable && index === 0) {
+          event.preventDefault();
+          filterField.current?.focus();
+          break;
+        }
         move(index - 1);
         break;
       case "Home":
@@ -238,6 +281,44 @@ export function MenuButton({
         break;
     }
   }
+
+  /** The keys of the field: the arrows go to the entries kept, Enter chooses the first. */
+  function onFilterKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    const list = entries().filter((entry) => !(entry as HTMLButtonElement).disabled);
+    switch (event.key) {
+      case "ArrowDown":
+      case "ArrowUp":
+        event.preventDefault();
+        event.stopPropagation();
+        (event.key === "ArrowDown" ? list[0] : list[list.length - 1])?.focus();
+        break;
+      case "Enter":
+        event.preventDefault();
+        event.stopPropagation();
+        list[0]?.click();
+        break;
+      case "Home":
+      case "End":
+        // The caret of the field, not the entries.
+        event.stopPropagation();
+        break;
+    }
+  }
+
+  // The sections kept by the filter, each with its heading, those left empty dropped.
+  const needle = query.trim().toLocaleLowerCase();
+  const matches = (item: MenuItem, heading?: string) =>
+    needle === "" ||
+    [item.label, item.description, heading, ...(item.badges ?? []).map((badge) => badge.label)].some(
+      (text) => text?.toLocaleLowerCase().includes(needle) ?? false,
+    );
+  const shown = sections(items)
+    .map((section) => ({
+      key: section[0]?.key ?? "",
+      heading: section[0]?.heading,
+      items: section.filter((item) => matches(item, section[0]?.heading)),
+    }))
+    .filter((section) => section.items.length > 0);
 
   return (
     <div ref={root} className={`relative ${className}`}>
@@ -318,26 +399,61 @@ export function MenuButton({
           onKeyDown={onMenuKeyDown}
           style={position ?? { visibility: "hidden" }}
           className={`fixed z-[1200] min-w-56 rounded-(--radius-panel) border border-line bg-surface-raised p-1 text-left text-ui font-normal shadow-lg ${
-            columns === undefined ? "" : `max-w-[calc(100vw-1rem)] gap-x-1 ${COLUMNS[columns]}`
+            columns === undefined ? "" : `max-w-[calc(100vw-1rem)] ${WIDTHS[columns]}`
           }`}
         >
-          {columns === undefined
-            ? items.map((item) => (
-                <MenuEntry
-                  key={item.key}
-                  item={item}
-                  onChosen={() => {
-                    close(true);
-                  }}
-                />
-              ))
-            : sections(items).map((section) => (
-                // A section in one piece, in the column the masonry gives it.
-                <div key={section[0]?.key} role="group" aria-label={section[0]?.heading} className="break-inside-avoid">
-                  {section.map((item) => (
+          {filterable && (
+            <div className="px-1 pt-1 pb-2">
+              {/* A search field, not a login one: the password managers leave it alone. */}
+              <input
+                ref={filterField}
+                type="search"
+                role="searchbox"
+                name="menu-filter"
+                aria-label={filterLabel}
+                placeholder={filterLabel}
+                value={query}
+                onChange={(event) => {
+                  setQuery(event.target.value);
+                }}
+                onKeyDown={onFilterKeyDown}
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck={false}
+                data-protonpass-ignore="true"
+                data-1p-ignore="true"
+                data-lpignore="true"
+                data-bwignore="true"
+                data-form-type="other"
+                className="h-7 w-full rounded-(--radius-control) border border-line bg-surface px-2 outline-none placeholder:text-ink-muted focus:border-accent"
+              />
+            </div>
+          )}
+          {columns === undefined && !filterable ? (
+            items.map((item) => (
+              <MenuEntry
+                key={item.key}
+                item={item}
+                onChosen={() => {
+                  close(true);
+                }}
+              />
+            ))
+          ) : (
+            <div className={columns === undefined ? "" : `gap-x-1 ${COLUMNS[columns]}`}>
+              {shown.map((section) => (
+                // A section in one piece, under its heading, in the column the masonry gives it.
+                <div key={section.key} role="group" aria-label={section.heading} className="break-inside-avoid">
+                  {section.heading !== undefined && (
+                    <div role="presentation" data-menu-heading="" className={HEADING}>
+                      {section.heading}
+                    </div>
+                  )}
+                  {section.items.map((item) => (
                     <MenuEntry
                       key={item.key}
-                      item={item}
+                      item={{ ...item, heading: undefined }}
                       onChosen={() => {
                         close(true);
                       }}
@@ -345,6 +461,9 @@ export function MenuButton({
                   ))}
                 </div>
               ))}
+            </div>
+          )}
+          {filterable && shown.length === 0 && <p className="px-2 py-1.5 text-ink-muted">{filterEmpty}</p>}
         </div>,
         document.body,
       )}
@@ -357,9 +476,18 @@ export function MenuButton({
  * whole, a short one under another rather than a column of its own left half empty.
  */
 const COLUMNS: Record<2 | 3, string> = {
-  2: "md:w-[32rem] md:columns-2",
-  3: "md:w-[46rem] md:columns-3",
+  2: "md:columns-2",
+  3: "md:columns-3",
 };
+
+/** The width of a mega menu, as wide as its columns need. */
+const WIDTHS: Record<2 | 3, string> = {
+  2: "md:w-[32rem]",
+  3: "md:w-[46rem]",
+};
+
+/** The heading of a section, over its entries: not an entry. */
+const HEADING = "px-2 pt-2 pb-1 text-xs font-semibold tracking-wide text-ink-muted uppercase";
 
 /** The sections of a menu: each starts at an entry with a heading. */
 function sections(items: MenuItem[]): MenuItem[][] {
@@ -414,6 +542,12 @@ function MenuEntry({ item, onChosen }: { item: MenuItem; onChosen: () => void })
   // Named by its label, its description describing it: not read as part of its name.
   const labelId = useId();
   const descriptionId = useId();
+  const badgesId = useId();
+  const badges = item.badges ?? [];
+  // Named by its label alone; its badges and its description describe it.
+  const described = [badges.length > 0 ? badgesId : null, item.description !== undefined ? descriptionId : null]
+    .filter((id) => id !== null)
+    .join(" ");
   const sub = item.items;
   // Shift keeping the submenu in the window, measured before it is painted.
   const [shift, setShift] = useState<{ up: number; flip: boolean } | null>(null);
@@ -491,7 +625,7 @@ function MenuEntry({ item, onChosen }: { item: MenuItem; onChosen: () => void })
         <div role="separator" className="my-1 border-t border-line" />
       )}
       {item.heading !== undefined && (
-        <div role="presentation" data-menu-heading="" className="px-2 pt-2 pb-1 text-xs font-semibold tracking-wide text-ink-muted uppercase">
+        <div role="presentation" data-menu-heading="" className={HEADING}>
           {item.heading}
         </div>
       )}
@@ -504,8 +638,8 @@ function MenuEntry({ item, onChosen }: { item: MenuItem; onChosen: () => void })
         aria-haspopup={sub === undefined ? undefined : "menu"}
         aria-expanded={sub === undefined ? undefined : open}
         aria-controls={sub === undefined ? undefined : subId}
-        aria-labelledby={item.description === undefined ? undefined : labelId}
-        aria-describedby={item.description === undefined ? undefined : descriptionId}
+        aria-labelledby={described === "" ? undefined : labelId}
+        aria-describedby={described === "" ? undefined : described}
         onClick={() => {
           if (sub !== undefined) {
             openSub(true);
@@ -521,11 +655,34 @@ function MenuEntry({ item, onChosen }: { item: MenuItem; onChosen: () => void })
             openSub(true);
           }
         }}
-        className={cn(ITEM, item.description !== undefined && "items-start", item.danger === true && "text-state-down")}
+        className={cn(ITEM, (item.description !== undefined || badges.length > 0) && "items-start", item.danger === true && "text-state-down")}
       >
         {item.icon}
         <span className="flex-1">
-          <span id={labelId} className="block">{item.label}</span>
+          <span className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+            <span id={labelId}>{item.label}</span>
+            {badges.length > 0 && (
+              <span id={badgesId} className="inline-flex flex-wrap gap-1">
+                {badges.map((badge) => (
+                  <span
+                    key={badge.key}
+                    data-badge={badge.key}
+                    className={cn(
+                      "rounded-(--radius-control) border px-1 text-[0.625rem] leading-4 font-medium whitespace-nowrap",
+                      // Greyed with the entry when it cannot be chosen.
+                      item.disabled === true
+                        ? "border-line text-ink-muted/60"
+                        : badge.tone === "down"
+                          ? "border-state-down text-state-down"
+                          : "border-state-warn text-state-warn",
+                    )}
+                  >
+                    {badge.label}
+                  </span>
+                ))}
+              </span>
+            )}
+          </span>
           {item.description !== undefined && <span id={descriptionId} className="block text-data text-ink-muted">{item.description}</span>}
         </span>
         {sub !== undefined && <CaretRightIcon className="h-3.5 w-3.5 text-ink-muted" />}

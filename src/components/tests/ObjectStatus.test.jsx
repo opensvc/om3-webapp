@@ -556,13 +556,14 @@ describe('ObjectStatus', () => {
             await waitFor(() => expect(screen.queryByRole('button', {name: /^Actions on/})).not.toBeInTheDocument());
         });
 
-        test('instances alone: the instance actions, a failed one cleared first', async () => {
+        test('instances alone: the instance actions, a failed one offered its clear, after unfreeze', async () => {
             await ready();
             pickNode('dev3n1');
             pickNode('dev3n2');
             expect(selectionButton()).toHaveAccessibleName('Actions on 2 instances');
             fireEvent.click(selectionButton());
-            expect(screen.getAllByRole('menuitem')[0]).toHaveTextContent('Clear');
+            const names = screen.getAllByRole('menuitem').map((item) => document.getElementById(item.getAttribute('aria-labelledby'))?.textContent ?? item.textContent);
+            expect(names.indexOf('Clear')).toBe(names.indexOf('Unfreeze') + 1);
             pick('Start');
             expect(screen.getByRole('dialog', {name: /start/i})).toHaveTextContent('system/svc/dns on all nodes');
             confirm('start');
@@ -629,7 +630,7 @@ describe('ObjectStatus', () => {
             await waitFor(() => expect(posted).toEqual(['POST /api/node/name/dev3n1/instance/path/system/svc/dns/clear']));
         });
 
-        test('an instance not failed has nothing to clear, and freezes', async () => {
+        test('an instance not failed has nothing to clear; freeze and unfreeze both offered', async () => {
             const idle = structuredClone(dns);
             idle.instances.dev3n2.monitor.state = 'idle';
             await ready(idle);
@@ -637,7 +638,7 @@ describe('ObjectStatus', () => {
             fireEvent.click(selectionButton());
             expect(screen.queryByRole('menuitem', {name: 'Clear'})).not.toBeInTheDocument();
             expect(screen.getByRole('menuitem', {name: 'Freeze'})).toBeInTheDocument();
-            expect(screen.queryByRole('menuitem', {name: 'Unfreeze'})).not.toBeInTheDocument();
+            expect(screen.getByRole('menuitem', {name: 'Unfreeze'})).toBeInTheDocument();
         });
 
         test('a container on one node opens a console; a volume has none', async () => {
@@ -684,8 +685,8 @@ describe('ObjectStatus', () => {
                 useEventStore.setState({objectInstanceStatus: {}});
                 pickNode('dev3n2');
                 fireEvent.click(selectionButton());
-                // dev3n2 is not frozen: nothing to unfreeze, and no service action.
-                expect(screen.queryByRole('menuitem', {name: 'Unfreeze'})).not.toBeInTheDocument();
+                // Freeze and unfreeze the node both, no service action.
+                expect(screen.getByRole('menuitem', {name: 'Unfreeze'})).toBeInTheDocument();
                 expect(screen.queryByRole('menuitem', {name: 'Start'})).not.toBeInTheDocument();
                 pick('Freeze');
                 const dialog = screen.getByRole('dialog', {name: /freeze/i});

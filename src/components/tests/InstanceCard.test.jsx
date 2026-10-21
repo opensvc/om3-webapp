@@ -115,8 +115,11 @@ describe('InstanceCard Component', () => {
         renderCard({actions: ACTIONS, onAction});
         await user.click(screen.getByRole('button', {name: /Node node1 actions/i}));
         const menu = screen.getByRole('menu', {name: 'Node node1 actions'});
+        // Each its icon and label, what it does under it.
         expect(within(menu).getAllByRole('menuitem').map((i) => i.textContent)).toEqual([
-            'StartIconStart', 'StopIconStop', 'PurgeIconPurge',
+            'StartIconStartBring up the instance resources on this node.',
+            'StopIconStopdown-timeBring down the instance resources on this node.',
+            'PurgeIconPurge',
         ]);
         await user.click(within(menu).getByRole('menuitem', {name: 'Stop'}));
         expect(onAction).toHaveBeenCalledWith('node1', 'stop');

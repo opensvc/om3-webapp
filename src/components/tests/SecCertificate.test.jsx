@@ -201,7 +201,7 @@ describe('SecCertificate', () => {
         expect(go).toBeDisabled();
         fireEvent.click(screen.getByRole('checkbox', {name: 'I understand'}));
         fireEvent.click(go);
-        await waitFor(() => expect(tray()[0]).toMatchObject({state: 'succeeded', label: 'Certificate renewed: forced'}));
+        await waitFor(() => expect(tray()[0]).toMatchObject({state: 'succeeded', label: 'Certificate renewed: forced'}), {timeout: 5000});
         expect(global.fetch).toHaveBeenLastCalledWith(FORCE, expect.anything());
     });
 

@@ -179,6 +179,8 @@ function NamespaceActions({namespace}) {
             items={[{
                 key: "delete",
                 label: actionLabel("delete"),
+                description: t("namespaces.panel.deleteDescription"),
+                danger: exists && mayWrite,
                 icon: actionIcon({icon: <TrashIcon className="h-4 w-4"/>, color: exists && mayWrite ? "red" : undefined}),
                 disabled: !exists || !mayWrite,
                 onSelect: () => ask("delete", {

@@ -89,6 +89,11 @@ import {useMediaQuery} from '../../ui/lib/media';
 import {useLocation} from 'react-router-dom';
 import {useActionTracker} from '../../app/action-tracker';
 
+// The name of a menu entry: its label, without what it does under it.
+const entryName = (item) => (item.getAttribute('aria-labelledby')
+    ? document.getElementById(item.getAttribute('aria-labelledby')).textContent
+    : item.textContent);
+
 /** What the actions tray holds, the latest first: action, subject, state, reason. */
 const tray = () => useActionTracker.getState().tracked.map((e) => [e.action, e.subject, e.state, e.error ?? null]);
 
@@ -618,7 +623,7 @@ describe('Objects Component', () => {
         selectRow('test-ns/cfg/conf1');
         openActionsMenu();
         const menu = await screen.findByRole('menu');
-        expect(within(menu).getAllByRole('menuitem').map((i) => i.textContent)).toEqual(['Abort', 'Delete', 'Purge']);
+        expect(within(menu).getAllByRole('menuitem').map(entryName)).toEqual(['Abort', 'Delete', 'Purge']);
         expect(within(menu).getByRole('menuitem', {name: 'Delete'})).toBeEnabled();
         expect(within(menu).getByRole('menuitem', {name: 'Abort'})).toBeEnabled();
     });
@@ -635,7 +640,7 @@ describe('Objects Component', () => {
         selectRow('test-ns/sec/sec1');
         openActionsMenu();
         const menu = await screen.findByRole('menu');
-        expect(within(menu).getAllByRole('menuitem').map((i) => i.textContent)).toEqual(['Abort', 'Delete']);
+        expect(within(menu).getAllByRole('menuitem').map(entryName)).toEqual(['Abort', 'Delete']);
     });
 
     describe('tabs', () => {
@@ -1602,6 +1607,9 @@ describe('Objects Component', () => {
             expect(objectNamesInOrder()).toEqual(['dev/svc/x', 'prod/svc/web']);
             const prod = namespaceRows().find((row) => row.dataset.namespaceRow === 'prod');
             expect(prod).toHaveAttribute('title', 'Open the configuration of prod');
+            // Hovered, a deeper grey of its own, its name underlined: still a band, not a row.
+            expect(prod).toHaveClass('bg-surface-sunken', 'hover:bg-band-hover');
+            expect(prod.querySelector('th .group-hover\\/band\\:underline')).toHaveTextContent('prod');
             fireEvent.click(prod);
             await waitFor(() => expect(screen.getByTestId('router-search')).toHaveTextContent('peek=namespace:prod&peektab=config'));
             // dev has none: its line opens nothing, nothing offered without the grant.

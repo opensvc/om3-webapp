@@ -116,6 +116,7 @@ vi.mock('../../constants/actions', async (importOriginal) => ({
         {name: 'start', icon: 'StartIcon', endpoint: 'start'},
         {name: 'stop', icon: 'StopIcon', endpoint: 'stop'},
         {name: 'freeze', icon: 'FreezeIcon', endpoint: 'freeze'},
+        {name: 'unfreeze', icon: 'UnfreezeIcon', endpoint: 'unfreeze'},
         {name: 'unprovision', icon: 'UnprovisionIcon', endpoint: 'unprovision'},
         {name: 'purge', icon: 'PurgeIcon', endpoint: 'purge'},
         {name: 'start standby', icon: 'StartStandbyIcon', endpoint: 'startstandby'},
@@ -771,14 +772,15 @@ describe('ObjectDetail Component', () => {
         });
     });
 
-    test('individual node menu offers freeze only on a node that is not frozen', async () => {
+    test('individual node menu offers freeze and unfreeze both, frozen or not', async () => {
         const state = buildState();
         state.objectInstanceStatus['root/svc/svc1'].node1.frozen_at = '2023-01-01T12:00:00Z';
         setStoreState(state);
         await renderReadySvc();
         await user.click(screen.getByRole('button', {name: /Node node1 actions/i}));
         let menu = screen.getByRole('menu', {name: 'Node node1 actions'});
-        expect(within(menu).queryByRole('menuitem', {name: /^freeze/i})).not.toBeInTheDocument();
+        expect(within(menu).getByRole('menuitem', {name: /^freeze/i})).toBeInTheDocument();
+        expect(within(menu).getByRole('menuitem', {name: /^unfreeze/i})).toBeInTheDocument();
         expect(getMenuItemByLabel('Start', menu)).toBeInTheDocument();
         await user.click(document.body);
         await user.click(screen.getByRole('button', {name: /Node node2 actions/i}));
@@ -1254,12 +1256,12 @@ describe('ObjectDetail Component', () => {
             false,
         ],
         [
-            'hides freeze when all selected nodes are already frozen',
+            'keeps freeze when all selected nodes are already frozen: harmless, never missing',
             {
                 node1: {avail: 'up', frozen_at: '2023-01-01T12:00:00Z', resources: {}},
                 node2: {avail: 'up', frozen_at: '2023-01-01T12:00:00Z', resources: {}}
             },
-            false,
+            true,
             true,
         ],
     ])('batch menu %s', async (label, nodeStates, expectFreeze, expectStart) => {

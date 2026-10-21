@@ -6,6 +6,7 @@
 
 import {URL_CLUSTER, URL_NODE} from "../config/apiPath.js";
 import {NODE_ACTION_GROUPS, NODE_ACTIONS} from "../constants/actions";
+import {impactBadges} from "./action-menu";
 
 /** The key of an action in the texts of the node actions: "restart daemon" is restartDaemon. */
 export const nodeActionKey = (name) => name.replace(/\s+(\w)/g, (_, c) => c.toUpperCase());
@@ -27,8 +28,8 @@ export function nodeActionRequest(node, name) {
 
 /**
  * The entries of the menu of the actions on nodes, their groups in a masonry in a wide window,
- * each group under its heading, each entry with what it does. `offered`, whether an
- * action is offered (freeze or unfreeze, by their state); `apiNode`, the node serving
+ * each group under its heading, each entry with what it does, freeze and unfreeze
+ * both. `offered`, whether an action is offered; `apiNode`, the node serving
  * the webapp, which cannot be asked to leave: another of the cluster evicts it.
  */
 export function nodeMenuItems({t, nodes, offered = () => true, apiNode, renderIcon, onSelect}) {
@@ -44,6 +45,7 @@ export function nodeMenuItems({t, nodes, offered = () => true, apiNode, renderIc
                 description: fromHere ? t("nodeActions.leave.fromHere") : t(`nodeActions.${key}.description`),
                 icon: renderIcon(action),
                 danger: action.color === "red",
+                badges: impactBadges(t, action.impacts),
                 disabled: fromHere,
                 ...(i === 0 ? {heading: t(`nodeActions.groups.${group}`)} : {}),
                 onSelect: () => onSelect(action.name),

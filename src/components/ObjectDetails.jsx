@@ -23,6 +23,7 @@ import {orchestrationOf} from "./OrchestrationBadge";
 import {trackRefused, trackResponse} from "../app/action-tracker";
 import {actionSubject, refusalReason} from "./objectActions";
 import logger from "../utils/logger";
+import {explainedMenu} from "../app/action-menu";
 
 const DEFAULT_CHECKBOXES = {failover: false};
 const DEFAULT_STOP_CHECKBOX = false;
@@ -453,30 +454,8 @@ const ObjectDetail = ({path, embedded = false, onOpenLogs, onViewInstance, onOrc
         return {avail, frozen, state, isStopped, isLagging};
     }, [objectInstanceStatus, instanceMonitor, decodedObjectName]);
 
-    const filterActionsForNode = useCallback((actions, node) => {
-        const {frozen} = getNodeState(node);
-        return actions.filter(({name}) => {
-            if (name === 'freeze') return frozen !== 'frozen';
-            if (name === 'unfreeze') return frozen === 'frozen';
-            return true;
-        });
-    }, [getNodeState]);
-
-    const filterActionsForMultipleNodes = useCallback((actions, nodes) => {
-        if (!nodes || nodes.length === 0) return actions;
-        const states = nodes.map(node => getNodeState(node).frozen);
-        const allFrozen = states.every(f => f === 'frozen');
-        const allUnfrozen = states.every(f => f !== 'frozen');
-        return actions.filter(({name}) => {
-            if (name === 'freeze') return !allFrozen;
-            if (name === 'unfreeze') return !allUnfrozen;
-            return true;
-        });
-    }, [getNodeState]);
-
-    const batchFilteredActions = useMemo(() => {
-        return filterActionsForMultipleNodes(INSTANCE_ACTIONS, selectedNodes);
-    }, [selectedNodes, filterActionsForMultipleNodes]);
+    // Freeze and unfreeze both, as on an object: either is harmless where it changes nothing.
+    const batchFilteredActions = INSTANCE_ACTIONS;
 
     useEffect(() => {
         let unsubscribe = null;
@@ -636,13 +615,13 @@ const ObjectDetail = ({path, embedded = false, onOpenLogs, onViewInstance, onOrc
                             disabled={selectedNodes.length === 0}
                             className="ml-auto"
                             align="end"
-                            items={batchFilteredActions.map(({name, icon, color}) => ({
+                            {...explainedMenu(t, "instance", batchFilteredActions.map(({name, icon, color}) => ({
                                 key: name,
                                 label: actionLabel(name),
                                 icon: <span aria-hidden="true" className={color === "red" ? DANGER_ICON : ICON}>{icon}</span>,
                                 disabled: actionInProgress,
                                 onSelect: () => handleBatchNodeActionClick(name),
-                            }))}
+                            })))}
                         />
                     </div>
                     <div className="divide-y divide-line">
@@ -654,7 +633,7 @@ const ObjectDetail = ({path, embedded = false, onOpenLogs, onViewInstance, onOrc
                                 selectedNodes={selectedNodes}
                                 toggleNode={toggleNode}
                                 actionInProgress={actionInProgress}
-                                actions={filterActionsForNode(INSTANCE_ACTIONS, node)}
+                                actions={INSTANCE_ACTIONS}
                                 onAction={handleIndividualNodeActionClick}
                                 getNodeState={getNodeState}
                                 instanceName={name}

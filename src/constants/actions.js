@@ -31,6 +31,7 @@ import {
     ToggleOffIcon,
     ToggleOnIcon,
     TrashIcon,
+    UploadIcon,
 } from "../ui/icons";
 import i18n from "../i18n";
 
@@ -104,10 +105,17 @@ export const INSTANCE_ACTIONS = [
     // Provisioning
     {name: "provision", icon: icon(GearIcon), endpoint: "provision"},
     {name: "unprovision", icon: icon(BanIcon), endpoint: "unprovision"},
+    // What the volumes and filesystems declare, installed again, nothing started.
+    {name: "install", icon: icon(DownloadIcon), endpoint: "install"},
 
-    // Replication
+    // Replication, as om <path> sync <action>: the changes copied to the peers, the
+    // whole dataset, the synchronization restored or split; the files received ingested.
     {name: "prstart", icon: icon(StepForwardIcon), endpoint: "prstart"},
     {name: "prstop", icon: icon(StepBackwardIcon), endpoint: "prstop"},
+    {name: "sync update", icon: icon(UploadIcon), endpoint: "update"},
+    {name: "sync full", icon: icon(DatabaseIcon), endpoint: "full"},
+    {name: "sync resync", icon: icon(SwapIcon), endpoint: "resync"},
+    {name: "sync split", icon: icon(CloseIcon), endpoint: "split"},
     {name: "sync ingest", icon: icon(DownloadIcon), endpoint: "ingest"},
 
     // Placement groups

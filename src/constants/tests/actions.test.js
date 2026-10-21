@@ -54,6 +54,12 @@ describe('INSTANCE_ACTIONS', () => {
     test('sync ingest posts to action/ingest, its path since om3 named the paths after the actions', () => {
         expect(INSTANCE_ACTIONS.find((a) => a.name === 'sync ingest').endpoint).toBe('ingest');
     });
+
+    test('the replication as om <path> sync does it, and the install, each on its path', () => {
+        const endpoint = (name) => INSTANCE_ACTIONS.find((a) => a.name === name)?.endpoint;
+        expect(['sync update', 'sync full', 'sync resync', 'sync split', 'install'].map(endpoint))
+            .toEqual(['update', 'full', 'resync', 'split', 'install']);
+    });
 });
 
 describe('objectActionsFor the key kinds', () => {

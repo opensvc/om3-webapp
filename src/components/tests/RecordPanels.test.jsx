@@ -18,6 +18,11 @@ vi.mock('../ObjectStatus', () => ({default: ({path, openCell}) => (
     </div>
 )}));
 vi.mock('../ObjectConfig', () => ({default: ({path}) => <div data-testid="object-config">{path}</div>}));
+// The capacity tab is tested on its own: here, the object and the nodes it is shown for.
+vi.mock('../ObjectCapacity', () => ({
+    CAPACITY_KINDS: ['svc', 'vol'],
+    ObjectCapacity: ({path, nodes}) => <div data-testid="object-capacity">{`${path} on ${nodes.join('+')}`}</div>,
+}));
 vi.mock('../ObjectTabs', () => ({
     ObjectResources: ({path}) => <div data-testid="object-resources">{path}</div>,
     ObjectSchedules: ({path}) => <div data-testid="object-schedules">{path}</div>,
@@ -106,7 +111,7 @@ describe('record panels', () => {
         renderPeek('/nodes?peek=object:ns1/svc/web');
         const panel = screen.getByRole('dialog', {name: 'ns1/svc/web'});
         expect(within(panel).getAllByRole('tab').map((tab) => tab.textContent))
-            .toEqual(['Status', 'Usage', 'Schedules', 'Configuration', 'Logs', 'Events']);
+            .toEqual(['Status', 'Usage', 'Capacity', 'Schedules', 'Configuration', 'Logs', 'Events']);
         expect(within(panel).getByRole('tab', {name: 'Status'})).toHaveAttribute('aria-selected', 'true');
         expect(within(panel).getByTestId('object-status')).toBeVisible();
         expect(within(panel).queryByTestId('object-details')).not.toBeInTheDocument();
@@ -118,12 +123,26 @@ describe('record panels', () => {
         expect(within(panel).getByTestId('object-status')).not.toBeVisible();
     });
 
-    test.each([['ns1/svc/web', 6], ['ns1/sec/key', 4]])('the %s tabs are titled by their name alone, no icon', (path, count) => {
+    test.each([['ns1/svc/web', 7], ['ns1/sec/key', 4]])('the %s tabs are titled by their name alone, no icon', (path, count) => {
         renderPeek(`/nodes?peek=object:${path}`);
         const panel = screen.getByRole('dialog', {name: path});
         const tabs = within(panel).getAllByRole('tab');
         expect(tabs).toHaveLength(count);
         for (const tab of tabs) expect(tab.querySelector('svg')).toBeNull();
+    });
+
+    test('a volume has its capacity on a tab, for its nodes', () => {
+        store.set({objectInstanceStatus: {'ns1/vol/data': {n1: {}, n2: {}}}});
+        renderPeek('/nodes?peek=object:ns1/vol/data&peektab=capacity');
+        const panel = screen.getByRole('dialog', {name: 'ns1/vol/data'});
+        expect(within(panel).getByRole('tab', {name: 'Capacity'})).toHaveAttribute('aria-selected', 'true');
+        expect(within(panel).getByTestId('object-capacity')).toHaveTextContent('ns1/vol/data on n1+n2');
+    });
+
+    test('a datastore has no capacity tab', () => {
+        renderPeek('/nodes?peek=object:ns1/cfg/settings');
+        const panel = screen.getByRole('dialog', {name: 'ns1/cfg/settings'});
+        expect(within(panel).queryByRole('tab', {name: 'Capacity'})).not.toBeInTheDocument();
     });
 
     test('a resource on a node, from the board: its panel on that instance alone', () => {

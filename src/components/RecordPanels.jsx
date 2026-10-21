@@ -11,6 +11,7 @@ import NetworkDetails from "./NetworkDetails";
 import {NamespaceConfig, NamespaceUsage} from "./NamespacePanel";
 import {NamespaceClaims} from "./NamespaceClaims";
 import {ObjectUsage} from "./InstanceRecord";
+import {CAPACITY_KINDS, ObjectCapacity} from "./ObjectCapacity";
 import {InstanceLink, ResourceLink} from "./RecordLinks";
 import {CrossLink} from "../app/CrossLink";
 import {usePeek} from "../app/panel-search";
@@ -98,6 +99,8 @@ export function ObjectDetailPanel({path, tab, onTabChange, onClose}) {
         : [
             {key: "status", label: t("panel.tabs.status")},
             {key: "usage", label: t("panel.tabs.usage")},
+            // Its size and its caps: a service's and a volume's.
+            ...(CAPACITY_KINDS.includes(kind) ? [{key: "capacity", label: t("panel.tabs.capacity")}] : []),
             {key: "schedules", label: t("panel.tabs.schedules")},
             {key: "config", label: t("panel.tabs.config")},
             {key: "logs", label: t("panel.tabs.logs")},
@@ -126,6 +129,7 @@ export function ObjectDetailPanel({path, tab, onTabChange, onClose}) {
                                             linkNode={linkNode} linkResource={linkResource} openCell={openCell}/>}
                     </div>
                     {active === "usage" && <ObjectUsage key={path} path={path}/>}
+                    {active === "capacity" && <ObjectCapacity key={path} path={path} nodes={nodes}/>}
                     {active === "schedules" && <ObjectSchedules key={path} path={path}/>}
                     {active === "events" && (
                         <div className="h-[calc(100dvh-10rem)]">

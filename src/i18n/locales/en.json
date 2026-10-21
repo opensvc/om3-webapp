@@ -171,7 +171,9 @@
       "pkg": "Pkg",
       "capabilities": "Capabilities",
       "sysreport": "Sysreport",
-      "restartDaemon": "Restart daemon"
+      "restartDaemon": "Restart daemon",
+      "resize": "Resize",
+      "cap": "Cap"
     }
   },
   "alerts": {
@@ -1475,6 +1477,7 @@
     "tabs": {
       "status": "Status",
       "usage": "Usage",
+      "capacity": "Capacity",
       "events": "Events",
       "logs": "Logs",
       "resources": "Resources",
@@ -1840,5 +1843,38 @@
       "namespaceConfigCreate": "Create the configuration of the namespace"
     },
     "noNews": "no news of it within {{seconds}} s"
+  },
+  "paramActions": {
+    "resize": {
+      "heading": "Size",
+      "intro": "The volume grows to the size asked, or by the amount asked, as om <path> resize does: the size is written to its configuration, then every node converges to it. A resize only grows.",
+      "current": "Size configured:",
+      "none": "none",
+      "size": "New size",
+      "sizeHint": "A size to reach, as 20g or 12Gi, or an amount to add, as +1g. Empty: the size configured, which finishes a resize that stopped part way.",
+      "invalid": "A size, as 20g, 12Gi or +1g",
+      "submit": "Resize"
+    },
+    "cap": {
+      "heading": "Process group caps",
+      "intro": "The process group caps are written to the configuration, then applied to every running instance, as om <path> cap does. An instance not running applies them when it starts.",
+      "section": "Section",
+      "sectionHint": "DEFAULT when empty; a subset#<name> or a resource id.",
+      "node": "Node",
+      "nodeHint": "The value for one node, or for all.",
+      "allNodes": "All nodes",
+      "loading": "Reading the caps",
+      "table": "Process group caps",
+      "keyword": "Keyword",
+      "configured": "Configured",
+      "value": "New value",
+      "valueOf": "New value of {{keyword}}",
+      "lift": "Lift",
+      "liftHint": "Lift sets a cap to default: where a node that never capped anything leaves it.",
+      "nothingSet": "Nothing changed: the caps configured are applied again.",
+      "apply": "Apply the caps configured",
+      "submit_one": "Set {{count}} cap",
+      "submit_other": "Set {{count}} caps"
+    }
   }
 }

@@ -429,7 +429,8 @@
       "id": "ID",
       "show": "Afficher les filtres",
       "hide": "Masquer les filtres",
-      "clearLink": "Retirer le filtre {{link}}"
+      "driver": "Pilote",
+      "clearAll": "Effacer tous les filtres"
     },
     "marks": {
       "healthySingleNode": "Sain (nœud unique)",
@@ -439,16 +440,32 @@
     "empty": "Aucun heartbeat ne correspond aux filtres actuels.",
     "mesh": {
       "title": "Maillage",
-      "desc": "Description",
-      "lastBeat": "Dernier battement",
-      "heartbeat": "Heartbeat",
-      "side": "Côté",
       "groupLabel_one": "de {{from}} vers {{to}} : {{beating}} lien sur {{count}} en battement",
       "groupLabel_other": "de {{from}} vers {{to}} : {{beating}} liens sur {{count}} en battement",
       "beatingOf_one": "{{beating}} sur {{count}} en battement",
-      "beatingOf_other": "{{beating}} sur {{count}} en battement"
+      "beatingOf_other": "{{beating}} sur {{count}} en battement",
+      "legend": {
+        "direction": "→ le sens des battements : depuis l'émetteur son tx, puis après l'espace vers le récepteur son rx",
+        "up": "tous battent",
+        "warn": "certains battent",
+        "down": "aucun ne bat"
+      },
+      "half": {
+        "tx": "Vu de {{node}}, sortant vers {{peer}}",
+        "rx": "Vu de {{node}}, entrant de {{peer}}"
+      },
+      "noLink": "Aucun flux de cette extrémité ne signale ce pair.",
+      "routinesStopped_one": "{{stopped}} routine sur {{count}} arrêtée",
+      "routinesStopped_other": "{{stopped}} routines sur {{count}} arrêtées",
+      "details": "Flux",
+      "detailsHint": "Survolez une flèche ou un nœud pour ses détails ; cliquez une flèche pour les garder, le fond du maillage pour les relâcher.",
+      "overall": {
+        "operational": "flux opérationnels",
+        "up": "optimal",
+        "warn": "dégradé",
+        "down": "critique"
+      }
     },
-    "streams": "Flux",
     "actions": {
       "stop": "Arrêter",
       "start": "Démarrer",
@@ -472,7 +489,13 @@
           "text_one": "Redémarrer ce flux ? Il s'arrête puis redémarre : le pair peut manquer un instant.",
           "text_other": "Redémarrer ces flux ? Chacun s'arrête puis redémarre : les pairs peuvent manquer un instant."
         }
-      }
+      },
+      "confirmTitle": "Arrêter un flux de heartbeat",
+      "confirmStop": "Arrêter le flux {{id}} de {{node}} ? Le nœud cesse d'y émettre ou d'y recevoir jusqu'à ce qu'il soit redémarré.",
+      "startRoutine": "Démarrer {{name}}",
+      "stopRoutine": "Arrêter {{name}}",
+      "confirmStart": "Démarrer le flux {{id}} de {{node}} ? Le nœud émet ou reçoit de nouveau sur lui.",
+      "confirmTitleStart": "Démarrer un flux de heartbeat"
     },
     "routine": {
       "running": "démarrée",
@@ -481,6 +504,73 @@
     "direction": {
       "tx": "envoie à",
       "rx": "reçoit de"
+    },
+    "summary": {
+      "list": "Heartbeats",
+      "layer": {
+        "network": "réseau",
+        "storage": "stockage",
+        "relay": "relais",
+        "other": "autre"
+      },
+      "side": {
+        "tx": "↑ tx",
+        "rx": "↓ rx"
+      },
+      "routines": "Routines",
+      "toggleHint": "Cliquez une routine pour l'arrêter, ou pour la démarrer.",
+      "beatingOf": "{{beating}}/{{count}} battent"
+    },
+    "tabs": {
+      "label": "Vues des heartbeats",
+      "data": "Données",
+      "logs": "Journaux",
+      "overview": "Vue d'ensemble"
+    },
+    "logs": {
+      "changes": "Changements d'état seulement"
+    },
+    "config": {
+      "title": "Configuration de {{name}}",
+      "open": "Afficher la configuration de {{name}}",
+      "edit": "Modifier avec l'assistant",
+      "new": "Nouveau heartbeat",
+      "none": "Pas de section [{{name}}] dans la configuration du cluster.",
+      "readFailed": "La configuration du cluster n'a pas pu être lue : {{message}}",
+      "delete": "Supprimer",
+      "deleting": "Suppression…",
+      "confirmDelete": "Supprimer [{{name}}] de la configuration du cluster ? Ses flux s’arrêtent sur tous les nœuds.",
+      "deleteFailed": "Le heartbeat n'a pas pu être supprimé : {{message}}",
+      "notDeletable": "Il pourra être supprimé quand un autre heartbeat aura tous ses flux actifs."
+    },
+    "wizard": {
+      "newTitle": "Nouveau heartbeat {{name}}",
+      "editTitle": "Modifier le heartbeat {{name}}",
+      "steps": "Étapes",
+      "step": {
+        "type": "Pilote",
+        "settings": "Réglages",
+        "review": "Vérification"
+      },
+      "typeQuestion": "Comment les nœuds battent-ils entre eux ?",
+      "types": {
+        "unicast": "Par le réseau, de nœud à nœud : une adresse de chaque nœud.",
+        "multicast": "Par le réseau, vers un groupe multicast que tous les nœuds écoutent.",
+        "disk": "Sur un disque partagé par les nœuds, un emplacement chacun.",
+        "relay": "Par un relais, un site tiers que les nœuds joignent."
+      },
+      "perNode": "Une adresse sur chaque nœud, celle à laquelle les autres envoient : la même sur tous ne conviendrait pas.",
+      "onNode": "{{key}} sur {{node}}",
+      "required": "{{key}} (requis)",
+      "written": "Écrit dans la configuration du cluster, que les démons appliquent :",
+      "rewrite": "Le pilote passe de {{from}} à {{to}} : la section est réécrite, les mots-clés de {{from}} abandonnés.",
+      "unchanged": "Rien de changé : rien à écrire.",
+      "back": "Retour",
+      "next": "Suivant",
+      "save": "Écrire",
+      "saving": "Écriture…",
+      "saveFailed": "Le heartbeat n'a pas pu être écrit : {{message}}",
+      "trayLabel": "Configurer"
     }
   },
   "instance": {
@@ -599,7 +689,8 @@
       "datastores": "Magasins de données",
       "actions": "Actions sur l'instance",
       "selectResource": "Sélectionner {{rid}}",
-      "selectionHelp": "Cochez des ressources pour les sélectionner."
+      "selectionHelp": "Cochez des ressources pour les sélectionner.",
+      "volumes": "Volumes"
     },
     "on": "sur {{node}}"
   },
@@ -1531,7 +1622,8 @@
     "datastores": "Magasins de données",
     "refresh": "Rafraîchir l'état",
     "refreshAll": "Rafraîchir l'état de toutes les instances",
-    "refreshFailed": "Rafraîchissement refusé : {{detail}}"
+    "refreshFailed": "Rafraîchissement refusé : {{detail}}",
+    "volumes": "Volumes"
   },
   "shortcuts": {
     "title": "Raccourcis clavier",

@@ -18,6 +18,8 @@ vi.mock('../ObjectStatus', () => ({default: ({path, openCell}) => (
     </div>
 )}));
 vi.mock('../ObjectConfig', () => ({default: ({path}) => <div data-testid="object-config">{path}</div>}));
+// The locks of the cluster are tested on their own: here, where they show.
+vi.mock('../ClusterLocks', () => ({ClusterLocks: () => <div data-testid="cluster-locks">locks</div>}));
 // The capacity tab is tested on its own: here, the object and the nodes it is shown for.
 vi.mock('../ObjectCapacity', () => ({
     CAPACITY_KINDS: ['svc', 'vol'],
@@ -112,6 +114,7 @@ describe('record panels', () => {
         const panel = screen.getByRole('dialog', {name: 'ns1/svc/web'});
         expect(within(panel).getAllByRole('tab').map((tab) => tab.textContent))
             .toEqual(['Status', 'Usage', 'Capacity', 'Schedules', 'Configuration', 'Logs', 'Events']);
+        expect(within(panel).queryByRole('tab', {name: 'Locks'})).not.toBeInTheDocument();
         expect(within(panel).getByRole('tab', {name: 'Status'})).toHaveAttribute('aria-selected', 'true');
         expect(within(panel).getByTestId('object-status')).toBeVisible();
         expect(within(panel).queryByTestId('object-details')).not.toBeInTheDocument();
@@ -137,6 +140,15 @@ describe('record panels', () => {
         const panel = screen.getByRole('dialog', {name: 'ns1/vol/data'});
         expect(within(panel).getByRole('tab', {name: 'Capacity'})).toHaveAttribute('aria-selected', 'true');
         expect(within(panel).getByTestId('object-capacity')).toHaveTextContent('ns1/vol/data on n1+n2');
+    });
+
+    test('the cluster has its locks on a tab, as om cluster lock list; an object none', () => {
+        renderPeek('/nodes?peek=object:cluster&peektab=locks');
+        const panel = screen.getByRole('dialog', {name: 'cluster'});
+        expect(within(panel).getAllByRole('tab').map((tab) => tab.textContent))
+            .toEqual(['Status', 'Usage', 'Schedules', 'Locks', 'Configuration', 'Logs', 'Events']);
+        expect(within(panel).getByRole('tab', {name: 'Locks'})).toHaveAttribute('aria-selected', 'true');
+        expect(within(panel).getByTestId('cluster-locks')).toBeInTheDocument();
     });
 
     test('a datastore has no capacity tab', () => {

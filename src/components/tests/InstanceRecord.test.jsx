@@ -383,4 +383,50 @@ describe('ResourceStatus', () => {
         act(() => useEventStore.setState({objectInstanceStatus: {}}));
         expect(onClose).toHaveBeenCalled();
     });
+
+    describe('on the instance of one node', () => {
+        test('titled by the resource, its object and its node; its status there alone, the instance a badge', () => {
+            useEventStore.setState((state) => ({objectInstanceStatus: {'prod/svc/web': {
+                ...state.objectInstanceStatus['prod/svc/web'],
+                n4: {avail: 'up', resources: {'app#1': {status: 'up', type: 'app.simple', label: 'run'}}},
+            }}}));
+            inRouter(<ResourceDetailPanel id="prod/svc/web:app#1@n4" onTabChange={vi.fn()} onClose={vi.fn()}/>);
+            const panel = screen.getByRole('dialog', {name: 'app#1 of prod/svc/web on n4'});
+            const rows = within(within(panel).getByRole('table', {name: 'The resource on each node'})).getAllByRole('row').slice(1)
+                .map((row) => within(row).getAllByRole('cell').map((c) => c.textContent));
+            expect(rows).toEqual([['on n4', 'upup', '-', 'run', '-']]);
+            const instance = within(panel).getByText('Instance', {selector: 'dt'}).nextElementSibling;
+            fireEvent.click(within(instance).getByRole('button', {name: 'on n4'}));
+            expect(screen.getByTestId('search')).toHaveTextContent('peek=instance%3Aprod%2Fsvc%2Fweb%40n4');
+        });
+
+        test('its info and its logs, of that node alone', async () => {
+            const {unmount} = render(<MemoryRouter><ResourceDetailPanel id="prod/svc/web:app#1@n2" tab="info" onTabChange={vi.fn()} onClose={vi.fn()}/></MemoryRouter>);
+            const table = await screen.findByRole('table', {name: 'Resource information'});
+            expect(within(table).getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['Key', 'on n2']);
+            expect(within(table).getByRole('row', {name: /pid/})).toHaveTextContent('pid43');
+            unmount();
+            render(<MemoryRouter><ResourceDetailPanel id="prod/svc/web:app#1@n2" tab="logs" onTabChange={vi.fn()} onClose={vi.fn()}/></MemoryRouter>);
+            expect(screen.getByTestId('logs')).toHaveTextContent(/^prod\/svc\/web on n2 where RID=app#1$/);
+        });
+
+        test('a container: what it writes on that node alone', () => {
+            useEventStore.setState({objectInstanceStatus: {'prod/svc/web': {
+                n1: {avail: 'down', resources: {'container#1': {status: 'down', type: 'container.docker'}}},
+                n2: {avail: 'up', resources: {'container#1': {status: 'up', type: 'container.docker'}}},
+            }}});
+            render(<MemoryRouter><ResourceDetailPanel id="prod/svc/web:container#1@n1" tab="container" onTabChange={vi.fn()} onClose={vi.fn()}/></MemoryRouter>);
+            expect(screen.getByTestId('container-logs')).toHaveTextContent('prod/svc/web container#1 on n1, up on');
+        });
+
+        test('closed once its instance is gone, the others kept', () => {
+            const onClose = vi.fn();
+            render(<MemoryRouter><ResourceDetailPanel id="prod/svc/web:app#1@n1" onClose={onClose}/></MemoryRouter>);
+            act(() => useEventStore.setState((state) => {
+                const {n1, ...others} = state.objectInstanceStatus['prod/svc/web'];
+                return {objectInstanceStatus: {'prod/svc/web': others}};
+            }));
+            expect(onClose).toHaveBeenCalled();
+        });
+    });
 });

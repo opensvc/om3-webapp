@@ -138,6 +138,7 @@
       "unfreeze": "Dégeler",
       "provision": "Provisionner",
       "unprovision": "Déprovisionner",
+      "install": "Installer",
       "switch": "Basculer",
       "giveback": "Restituer",
       "abort": "Abandonner",
@@ -152,6 +153,10 @@
       "prstart": "Prstart",
       "prstop": "Prstop",
       "syncIngest": "Ingérer la synchronisation",
+      "syncUpdate": "Synchroniser les changements",
+      "syncFull": "Synchronisation complète",
+      "syncResync": "Resynchroniser",
+      "syncSplit": "Séparer la réplication",
       "pgReset": "Réinitialiser le groupe de placement",
       "pgUpdate": "Mettre à jour le groupe de placement",
       "info": "Infos",
@@ -166,7 +171,9 @@
       "pkg": "Paquets",
       "capabilities": "Capacités",
       "sysreport": "Rapport système",
-      "restartDaemon": "Redémarrer le démon"
+      "restartDaemon": "Redémarrer le démon",
+      "resize": "Redimensionner",
+      "cap": "Plafonner"
     }
   },
   "alerts": {
@@ -1470,6 +1477,7 @@
     "tabs": {
       "status": "État",
       "usage": "Usage",
+      "capacity": "Capacité",
       "events": "Événements",
       "logs": "Journaux",
       "resources": "Ressources",
@@ -1614,6 +1622,7 @@
     "selectInstance": "Sélectionner l'instance sur {{node}}",
     "selectResource": "Sélectionner {{rid}} sur tous ses nœuds",
     "selectCell": "Sélectionner {{rid}} sur {{node}}",
+    "openCell": "Ouvrir {{rid}} sur {{node}}",
     "policies": "Politiques",
     "issues": "Problèmes",
     "details": {
@@ -1772,6 +1781,8 @@
   "resource": {
     "panel": {
       "title": "{{rid}} de {{path}}",
+      "titleOnNode": "{{rid}} de {{path}} sur {{node}}",
+      "instance": "Instance",
       "nodes": "La ressource sur chaque nœud",
       "flags": "Options",
       "log": "Dernier message",
@@ -1832,5 +1843,37 @@
       "namespaceConfigCreate": "Créer la configuration du namespace"
     },
     "noNews": "aucune nouvelle sous {{seconds}} s"
+  },
+  "paramActions": {
+    "resize": {
+      "heading": "Taille",
+      "intro": "Le volume grandit jusqu’à la taille demandée, ou de la quantité demandée, comme le fait om <path> resize : la taille est écrite dans sa configuration, puis chaque nœud y converge. Un redimensionnement ne fait que grandir.",
+      "current": "Taille configurée :",
+      "none": "aucune",
+      "size": "Nouvelle taille",
+      "sizeHint": "Une taille à atteindre, comme 20g ou 12Gi, ou une quantité à ajouter, comme +1g. Vide : la taille configurée, ce qui termine un redimensionnement arrêté en chemin.",
+      "invalid": "Une taille, comme 20g, 12Gi ou +1g",
+      "submit": "Redimensionner"
+    },
+    "cap": {
+      "heading": "Plafonds du groupe de processus",
+      "intro": "Les plafonds du groupe de processus sont écrits dans la configuration, puis appliqués à chaque instance en cours d’exécution, comme le fait om <path> cap. Une instance arrêtée les applique à son démarrage.",
+      "section": "Section",
+      "sectionHint": "DEFAULT si vide ; un subset#<nom> ou un identifiant de ressource.",
+      "node": "Nœud",
+      "nodeHint": "La valeur pour un nœud, ou pour tous.",
+      "allNodes": "Tous les nœuds",
+      "loading": "Lecture des plafonds",
+      "table": "Plafonds du groupe de processus",
+      "keyword": "Mot-clé",
+      "configured": "Configuré",
+      "value": "Nouvelle valeur",
+      "valueOf": "Nouvelle valeur de {{keyword}}",
+      "liftHint": "La valeur default lève un plafond : là où le laisse un nœud qui n’a jamais rien plafonné.",
+      "nothingSet": "Rien de changé : les plafonds configurés sont appliqués à nouveau.",
+      "apply": "Appliquer les plafonds configurés",
+      "submit_one": "Régler {{count}} plafond",
+      "submit_other": "Régler {{count}} plafonds"
+    }
   }
 }

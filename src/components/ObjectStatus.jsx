@@ -57,7 +57,7 @@ const REFRESH_DELAY_MS = 300;
  * status for the frozen nodes and the agent versions. Read again on each event
  * about the object.
  */
-const ObjectStatus = ({path, onOrchestrationLogs, linkNode, linkResource}) => {
+const ObjectStatus = ({path, onOrchestrationLogs, linkNode, linkResource, openCell}) => {
     const {t} = useTranslation();
     const [digest, setDigest] = useState(null);
     const [error, setError] = useState(null);
@@ -441,6 +441,7 @@ const ObjectStatus = ({path, onOrchestrationLogs, linkNode, linkResource}) => {
                 toolbar={toolbar}
                 linkNode={linkNode}
                 linkResource={linkResource}
+                openCell={openCell}
                 facts={facts}
             />
             <ActionDialogManager

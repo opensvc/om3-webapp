@@ -19,7 +19,8 @@ export interface PeekStep {
  * - `network`: a network, by its name;
  * - `namespace`: the usage of a namespace, by its name;
  * - `instance`: the instance of an object on a node, by `path@node` (`instanceId`);
- * - `resource`: a resource of an object on all its nodes, by `path:rid` (`resourceId`).
+ * - `resource`: a resource of an object on all its nodes, by `path:rid`, or on
+ *   the instance of one node, by `path:rid@node` (`resourceId`).
  */
 export type PeekKind = "node" | "object" | "network" | "namespace" | "instance" | "resource";
 
@@ -32,14 +33,23 @@ const PEEK_KINDS: ReadonlySet<string> = new Set<PeekKind>([
   "resource",
 ]);
 
-/** The id of a resource of an object: "path:rid"; an object path holds no colon. */
-export const resourceId = (path: string, rid: string) => `${path}:${rid}`;
+/**
+ * The id of a resource of an object: "path:rid" on all its nodes, "path:rid@node"
+ * on the instance of `node`; an object path holds no colon, a rid no "@".
+ */
+export const resourceId = (path: string, rid: string, node?: string) =>
+  node === undefined ? `${path}:${rid}` : `${path}:${rid}@${node}`;
 
-/** The object and the resource of a resource id. */
-export function parseResourceId(id: string): { path: string; rid: string } | null {
+/** The object, the resource, and the node of its instance if any, of a resource id. */
+export function parseResourceId(id: string): { path: string; rid: string; node?: string } | null {
   const cut = id.indexOf(":");
   if (cut <= 0 || cut === id.length - 1) return null;
-  return { path: id.slice(0, cut), rid: id.slice(cut + 1) };
+  const rest = id.slice(cut + 1);
+  const at = rest.lastIndexOf("@");
+  if (at === 0 || at === rest.length - 1) return null;
+  return at < 0
+    ? { path: id.slice(0, cut), rid: rest }
+    : { path: id.slice(0, cut), rid: rest.slice(0, at), node: rest.slice(at + 1) };
 }
 
 /** The id of the instance of an object on a node: "path@node". */

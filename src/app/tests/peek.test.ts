@@ -2,7 +2,9 @@ import { describe, expect, test } from "vitest";
 import {
   instanceId,
   parseInstanceId,
+  parseResourceId,
   parseStep,
+  resourceId,
   serialiseStep,
   stepIcon,
   stepLabel,
@@ -28,6 +30,17 @@ describe("peek steps", () => {
     expect(parseInstanceId("@n1")).toBeNull();
     expect(parseInstanceId("ns1/svc/web@")).toBeNull();
     expect(stepIcon({ kind: "instance", id: "ns1/svc/web@n1" })).toBe("instance");
+  });
+
+  test("a resource by the path of its object and its rid: path:rid on all its nodes, path:rid@node on one instance", () => {
+    expect(resourceId("ns1/svc/web", "fs#1")).toBe("ns1/svc/web:fs#1");
+    expect(resourceId("ns1/svc/web", "fs#1", "n1")).toBe("ns1/svc/web:fs#1@n1");
+    expect(parseResourceId("ns1/svc/web:fs#1")).toEqual({ path: "ns1/svc/web", rid: "fs#1" });
+    expect(parseResourceId("ns1/svc/web:fs#1@n1")).toEqual({ path: "ns1/svc/web", rid: "fs#1", node: "n1" });
+    expect(parseStep("resource:ns1/svc/web:fs#1@n1")).toEqual({ kind: "resource", id: "ns1/svc/web:fs#1@n1" });
+    for (const id of ["ns1/svc/web", ":fs#1", "ns1/svc/web:", "ns1/svc/web:@n1", "ns1/svc/web:fs#1@"]) {
+      expect(parseResourceId(id)).toBeNull();
+    }
   });
 
   test("a record shows the icon of its kind, an object the one of its object kind", () => {

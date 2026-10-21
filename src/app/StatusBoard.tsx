@@ -307,7 +307,8 @@ function SelectBox({
  * shown on hover of their cell and kept shown once checked: a resource on a node
  * in its cell, on all its nodes by its name, an instance by the header of its
  * node. The caller acts on what is picked, from its `toolbar`. Every node has its
- * instance to pick, reported or not. The names are the caller's badges
+ * instance to pick, reported or not. With `openCell`, the value of a resource on a
+ * node opens what the caller shows of it: the resource on that instance alone. The names are the caller's badges
  * (`linkNode`, `linkResource`): a click on one opens its record. `facts`, what the
  * caller adds to the summary, a line each after the count of the instances up.
  */
@@ -317,6 +318,7 @@ export function StatusBoard({
   toolbar,
   linkNode,
   linkResource,
+  openCell,
   facts = [],
 }: {
   board: Board;
@@ -327,6 +329,8 @@ export function StatusBoard({
   linkNode?: (node: string) => ReactNode;
   /** The id of a resource as a badge opening its record; plain text without. */
   linkResource?: (rid: string) => ReactNode;
+  /** Opens the record of a resource on the instance of a node; its cell plain without. */
+  openCell?: (rid: string, node: string) => void;
   /** More lines of the summary, after the count of the instances up. */
   facts?: { label: string; value: ReactNode }[];
 }) {
@@ -543,6 +547,8 @@ export function StatusBoard({
                   // A resource cell selects the resource on its node, by its checkbox.
                   const pickCell = pickRow && nodesOfRow.includes(node);
                   const picked = pickCell && selection.isCell(r.name, node);
+                  // A resource cell opens the resource on its node, by its value.
+                  const openable = openCell !== undefined && r.kind === "resource" && rowNodes(board, r).includes(node);
                   const look = selectedLook(v, j + FIRST_NODE);
                   return (
                     <Cell
@@ -563,7 +569,20 @@ export function StatusBoard({
                             // instances under the resources' checkboxes.
                             selection !== undefined && <span aria-hidden="true" data-checkbox-room className="h-3.5 w-3.5 shrink-0" />
                           )}
-                          <Pieces text={c} kind={r.kind} />
+                          {openable ? (
+                            // The value opens the resource on this instance; the checkbox, apart, selects it.
+                            // A badge, as the names that open their records: seen as such before a hover.
+                            <button
+                              type="button"
+                              aria-label={t("statusBoard.openCell", { rid: r.name, node })}
+                              onClick={() => openCell?.(r.name, node)}
+                              className="inline-flex min-h-5 max-w-full min-w-9 cursor-pointer items-center justify-center gap-1 rounded-full border border-line bg-surface px-1.5 py-px text-left hover:border-line-strong hover:bg-surface-sunken focus-visible:outline-2 focus-visible:outline-(--focus-ring)"
+                            >
+                              <Pieces text={c} kind={r.kind} />
+                            </button>
+                          ) : (
+                            <Pieces text={c} kind={r.kind} />
+                          )}
                         </span>
                       </HoverNotes>
                     </Cell>

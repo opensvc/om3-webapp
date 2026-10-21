@@ -287,13 +287,13 @@ const FLAGS = ["disable", "monitor", "optional", "standby", "encap"];
  * A resource of an object on all its nodes: its object, a badge, its type, the
  * datastores it uses, a badge each, then its state node by node, each node the
  * badge of the instance there: its status, provisioning, flags, label and its last
- * log message.
+ * log message. With `node`, on the instance of that node alone, a badge too.
  */
-export function ResourceStatus({path, rid}) {
+export function ResourceStatus({path, rid, node: onNode}) {
     const {t} = useTranslation();
     const instances = useEventStore((s) => s.objectInstanceStatus?.[path]) ?? EMPTY;
     const rows = Object.entries(instances)
-        .filter(([, status]) => status?.resources?.[rid] !== undefined)
+        .filter(([node, status]) => (onNode === undefined || node === onNode) && status?.resources?.[rid] !== undefined)
         .sort(([a], [b]) => a.localeCompare(b))
         .map(([node, status]) => ({node, r: status.resources[rid]}));
     const type = rows.find(({r}) => r.type)?.r.type;
@@ -304,6 +304,9 @@ export function ResourceStatus({path, rid}) {
             <div className="flex items-start justify-between gap-2">
                 <dl className="grid w-max grid-cols-[auto_auto] items-center gap-x-3 gap-y-1">
                     <Fact label={t("instance.panel.object")}><CrossLink kind="object" id={path}>{path}</CrossLink></Fact>
+                    {onNode !== undefined && (
+                        <Fact label={t("resource.panel.instance")}><InstanceLink path={path} node={onNode}/></Fact>
+                    )}
                     <Fact label={t("instance.panel.rid")}><span className="font-medium">{rid}</span></Fact>
                     <Fact label={t("common.type")}>{type ?? "-"}</Fact>
                     {datastores.length > 0 && (
@@ -409,15 +412,21 @@ export function InstanceDetailPanel({id, tab, onTabChange, onClose}) {
  * then what it reports on each (`om <path> resource info list`, ObjectResources),
  * then its logs on all of them, merged, then its section of the configuration of
  * the object; a container, what it writes too (ContainerLogs), on the nodes it is
- * on. It closes once the object is gone.
+ * on. By `path:rid@node`, the same on the instance of that node alone. It closes
+ * once the object, or that instance, is gone.
  */
 export function ResourceDetailPanel({id, tab, onTabChange, onClose}) {
     const {t} = useTranslation();
     const parsed = id === undefined ? null : parseResourceId(id);
-    const known = useEventStore((s) => parsed !== null && s.objectInstanceStatus?.[parsed.path] !== undefined);
+    const onNode = parsed?.node;
+    const known = useEventStore((s) => parsed !== null && s.objectInstanceStatus?.[parsed.path] !== undefined
+        && (onNode === undefined || s.objectInstanceStatus[parsed.path][onNode] !== undefined));
     useCloseWhenGone(id, known, onClose);
     const instances = useEventStore((s) => (parsed === null ? undefined : s.objectInstanceStatus?.[parsed.path]));
-    const nodes = useMemo(() => Object.keys(instances ?? {}).sort(), [instances]);
+    const nodes = useMemo(
+        () => Object.keys(instances ?? {}).filter((node) => onNode === undefined || node === onNode).sort(),
+        [instances, onNode],
+    );
     // The nodes the resource is on, and those where it is up: a container's logs read there.
     const rid = parsed?.rid;
     const resourceNodes = useMemo(() => nodes.filter((node) => instances?.[node]?.resources?.[rid] !== undefined), [nodes, instances, rid]);
@@ -436,7 +445,9 @@ export function ResourceDetailPanel({id, tab, onTabChange, onClose}) {
             open={parsed !== null}
             kind="resource"
             recordId={id}
-            title={parsed ? t("resource.panel.title", {path: parsed.path, rid: parsed.rid}) : ""}
+            title={parsed === null ? ""
+                : onNode === undefined ? t("resource.panel.title", {path: parsed.path, rid: parsed.rid})
+                    : t("resource.panel.titleOnNode", {path: parsed.path, rid: parsed.rid, node: onNode})}
             onClose={onClose}
             tabs={tabs}
             tab={tab}
@@ -450,8 +461,8 @@ export function ResourceDetailPanel({id, tab, onTabChange, onClose}) {
                 : active === "container" && container
                 ? <ContainerLogs key={id} path={parsed.path} rid={parsed.rid} nodes={resourceNodes.length > 0 ? resourceNodes : nodes} upNodes={upNodes}/>
                 : active === "info"
-                ? <ObjectResources key={id} path={parsed.path} rid={parsed.rid}/>
-                : <ResourceStatus key={id} path={parsed.path} rid={parsed.rid}/>)}
+                ? <ObjectResources key={id} path={parsed.path} rid={parsed.rid} node={onNode}/>
+                : <ResourceStatus key={id} path={parsed.path} rid={parsed.rid} node={onNode}/>)}
         </RecordPanel>
     );
 }

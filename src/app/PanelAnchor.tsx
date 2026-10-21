@@ -6,7 +6,6 @@ import { HistoryIcon } from "../ui/icons";
 import { useShortcut } from "../ui/lib/shortcuts";
 import { usePeek } from "./panel-search";
 import { isPeekStep, stepLabel } from "./peek";
-import { requestHistoryMenu } from "./PanelHistory";
 import { readLastRecord, useRecordHistory } from "./record-history";
 
 /**
@@ -33,8 +32,7 @@ function useMenuEdge(active: boolean): number {
 
 /**
  * Anchor on the edge of the window the panels open against while no side panel is
- * open, as in oc3: it brings back the record panel and its history, on the record
- * shown last, or on the first of the history when that one is no longer listed.
+ * open, as in oc3: it brings back the record panel, on the record shown last, or on the first of the history when that one is no longer listed.
  * Nothing to reopen, no anchor. The "p" key does the same from the keyboard; with a
  * record panel open, it closes it (`SlideOver`). On the left, it stands against the
  * side menu, not over it. In a narrow window, where no gutter is spared for it, it is
@@ -59,13 +57,10 @@ export function PanelAnchor({ inBar = false }: { inBar?: boolean }) {
   });
 
   if (anyOpen || target === undefined) return null;
-  const label = `${t("panelHistory.reopen", { name: stepLabel(target), count: steps.length })} (p)`;
+  const label = `${t("panelHistory.reopen", { name: stepLabel(target) })} (p)`;
   const content = (
     <>
       <HistoryIcon className="h-4 w-4" />
-      <span aria-hidden="true" className="text-data tabular-nums">
-        {steps.length}
-      </span>
       <span className="sr-only">{label}</span>
     </>
   );
@@ -77,11 +72,9 @@ export function PanelAnchor({ inBar = false }: { inBar?: boolean }) {
         title={label}
         aria-keyshortcuts="p"
         onClick={() => {
-          // No room for the rail: the panel opens on its history list, the history asked.
-          requestHistoryMenu();
           peek(target.kind, target.id);
         }}
-        className="flex h-7 shrink-0 items-center gap-1 rounded-(--radius-control) px-1.5 text-ink-muted hover:bg-surface-sunken hover:text-ink"
+        className="flex h-7 shrink-0 items-center gap-1 rounded-(--radius-control) border border-line px-1.5 text-ink-muted hover:bg-surface-sunken hover:text-ink"
       >
         {content}
       </button>

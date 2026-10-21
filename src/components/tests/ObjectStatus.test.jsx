@@ -116,7 +116,7 @@ describe('ObjectStatus', () => {
         expect(screen.getByRole('button', {name: 'Actions'})).toBeInTheDocument();
     });
 
-    test('in a panel: the policies over the summary, the actions a solid button of the title bar', async () => {
+    test('in a panel: the policies over the summary, the actions an outlined button of the title bar', async () => {
         answer(dns);
         function InPanel() {
             const [title, setTitle] = React.useState(null);
@@ -138,7 +138,7 @@ describe('ObjectStatus', () => {
         expect(screen.getByTestId('body')).toContainElement(screen.getByLabelText('Policies'));
         expect(screen.getByTestId('bar-title')).toBeEmptyDOMElement();
         const actions = within(screen.getByTestId('bar-actions')).getByRole('button', {name: 'Actions'});
-        expect(actions).toHaveClass('max-md:w-7', 'bg-accent');
+        expect(actions).toHaveClass('max-md:w-7', 'border', 'border-line');
         expect(actions).not.toHaveClass('rounded-(--radius-pill)');
     });
 

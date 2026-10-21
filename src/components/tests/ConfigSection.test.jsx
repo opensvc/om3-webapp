@@ -374,6 +374,48 @@ describe('ConfigSection Component', () => {
         }
     });
 
+    describe('no configuration yet', () => {
+        const posts = () => global.fetch.mock.calls.filter(([, options]) => options?.method === 'POST');
+
+        test('said, the file edited from empty: saved, the object created with it, an id of its own', async () => {
+            renderConfig({inline: true, configNode: null, decodedObjectName: 'dev/nscfg/namespace', absent: true});
+            expect(screen.getByText('No configuration yet: it is created with the first change written.')).toBeInTheDocument();
+            expect(screen.queryByRole('button', {name: /secrets/i})).toBeNull();
+            await act(() => user.click(screen.getByRole('button', {name: 'Edit configuration file'})));
+            const editor = screen.getByRole('textbox', {name: 'Configuration file'});
+            expect(editor).toHaveValue('');
+            // Nothing read: there is nothing yet.
+            expect(configFileGets()).toHaveLength(0);
+            fireEvent.change(editor, {target: {value: '[claim#1]\ntype = memory\nlimit = 4g\n'}});
+            await act(() => user.click(screen.getByRole('button', {name: 'Save'})));
+            await waitFor(() => expect(posts()).toHaveLength(1));
+            const [url, options] = posts()[0];
+            expect(url).toBe(`${URL_OBJECT}/dev/nscfg/namespace/config/file`);
+            expect(options.body).toMatch(/^\[DEFAULT\]\nid = [0-9a-f-]{36}\n\n\[claim#1\]\ntype = memory\nlimit = 4g\n$/);
+            await waitFor(() => expect(tray()).toEqual([['Create the configuration', 'dev/nscfg/namespace', 'succeeded', null]]));
+        });
+
+        test('the parameters set in the wizard: the object created with them all, in one request', async () => {
+            renderConfig({inline: true, configNode: null, decodedObjectName: 'dev/nscfg/namespace', absent: true});
+            await act(() => user.click(getManageButton()));
+            await waitFor(() => expect(queryLoading()).not.toBeInTheDocument());
+            // Nothing set yet to read.
+            expect(global.fetch.mock.calls.some(([u, o]) => /\/config$/.test(u) && (o?.method ?? 'GET') === 'GET')).toBe(false);
+            await act(() => user.type(getAddInput(), 'DEFAULT.orchestrate{Enter}'));
+            await act(() => user.click(screen.getByRole('button', {name: /Add Parameter/i})));
+            await waitFor(() => expect(within(getParamsTable()).getByText('orchestrate')).toBeInTheDocument());
+            await user.clear(screen.getByLabelText('Value'));
+            await user.type(screen.getByLabelText('Value'), 'no');
+            await act(() => user.click(screen.getByRole('button', {name: /Apply/i})));
+            await waitFor(() => expect(posts()).toHaveLength(1));
+            const [url, options] = posts()[0];
+            expect(url).toBe(`${URL_OBJECT}/dev/nscfg/namespace/config/file?set=orchestrate%3Dno`);
+            expect(options.body).toMatch(/^\[DEFAULT\]\nid = /);
+            expect(global.fetch.mock.calls.some(([, o]) => o?.method === 'PATCH')).toBe(false);
+            await waitFor(() => expect(tray()).toEqual([['Create the configuration', 'dev/nscfg/namespace', 'succeeded', null]]));
+        });
+    });
+
     // ── Secrets ──────────────────────────────────────────────────────────
     describe('editing the file', () => {
         // The daemon file: `stored`, redacted on demand; a PUT answers `putResponse`.

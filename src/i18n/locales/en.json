@@ -163,7 +163,6 @@
       "status": "Status",
       "console": "Console",
       "clear": "Clear",
-      "dequeue": "Dequeue",
       "drain": "Drain",
       "scsiScan": "Scsi scan",
       "asset": "Asset",
@@ -173,7 +172,8 @@
       "sysreport": "Sysreport",
       "restartDaemon": "Restart daemon",
       "resize": "Resize",
-      "cap": "Cap"
+      "cap": "Cap",
+      "leave": "Leave"
     }
   },
   "alerts": {
@@ -323,7 +323,8 @@
       "loading": "Loading configuration",
       "empty": "No configuration available.",
       "noSection": "No section [{{section}}] in the configuration.",
-      "copy": "Copy the configuration shown"
+      "copy": "Copy the configuration shown",
+      "absent": "No configuration yet: it is created with the first change written."
     },
     "feedback": {
       "tokenNotFound": "Auth token not found.",
@@ -944,10 +945,6 @@
       "nothing": "No pool, network, cpu or memory used.",
       "pgNode": "CPU and memory are those of the objects on the node serving this page.",
       "byObject": "CPU and memory by object",
-      "noConfig": "The {{namespace}} namespace has no configuration object yet: its claims and pg settings are written there.",
-      "create": "Create its configuration",
-      "creating": "Creating…",
-      "createFailed": "The configuration could not be created: {{message}}",
       "actions": "Namespace actions",
       "configOf": "the configuration of {{namespace}}"
     },
@@ -1407,10 +1404,10 @@
       "namespace": "namespace"
     },
     "openNamespaceConfig": "Open the configuration of {{namespace}}",
-    "createNamespaceConfig": "Create its configuration",
-    "createNamespaceConfigTitle": "Create the configuration of {{namespace}}",
-    "createNamespaceConfigText": "The namespace {{namespace}} gets its configuration object, empty: its claims are set next.",
-    "createNamespaceConfigConfirm": "Create"
+    "configure": "Configure",
+    "configureNamespace": "Configure the namespace {{namespace}}",
+    "createIn": "Create",
+    "createInNamespace": "Create an object in {{namespace}}"
   },
   "pools": {
     "columns": {
@@ -1501,22 +1498,13 @@
     }
   },
   "panelHistory": {
-    "label": "Panel history",
-    "title": "History",
     "clear": "Clear the history",
     "remove": "Remove {{name}} from the history",
-    "menu_one": "History: {{count}} record",
-    "menu_other": "History: {{count}} records",
-    "show": "Show {{name}}",
-    "reopen_one": "Reopen {{name}}",
-    "reopen_other": "Reopen {{name}} and the history ({{count}} records)",
     "grouping": {
       "label": "Group the history",
       "time": "By time",
       "kind": "By kind"
     },
-    "shownAt": "{{name}} · shown {{when}}",
-    "shownWhen": "shown {{when}}",
     "sections": {
       "now": "Now",
       "hour": "Last hour",
@@ -1536,7 +1524,8 @@
       "namespace": "Namespaces",
       "instance": "Instances",
       "resource": "Resources"
-    }
+    },
+    "reopen": "Reopen {{name}}"
   },
   "statusBoard": {
     "caption": "Status of {{path}} by node",
@@ -1661,13 +1650,34 @@
     "keys": {
       "move": "to move",
       "open": "to open",
-      "close": "to close"
+      "close": "to close",
+      "remove": "to remove"
     },
     "kinds": {
       "object": "Objects",
       "namespace": "Namespaces",
       "node": "Nodes",
       "network": "Networks"
+    },
+    "recent": {
+      "title": "Recently opened",
+      "clear": "Clear",
+      "current": "open",
+      "noneOfKind": "Nothing of this kind opened recently.",
+      "types": {
+        "node": "Node",
+        "svc": "Service",
+        "vol": "Volume",
+        "cfg": "Configuration",
+        "sec": "Secret",
+        "usr": "User",
+        "nscfg": "Namespace configuration",
+        "ccfg": "Cluster",
+        "network": "Network",
+        "namespace": "Namespace",
+        "instance": "Instance",
+        "resource": "Resource"
+      }
     }
   },
   "orchestration": {
@@ -1840,7 +1850,7 @@
       "claimsUpdate": "Update the claims",
       "claimDelete": "Remove claim {{section}}",
       "objectCreate": "Create",
-      "namespaceConfigCreate": "Create the configuration of the namespace"
+      "configCreate": "Create the configuration"
     },
     "noNews": "no news of it within {{seconds}} s"
   },
@@ -1874,6 +1884,115 @@
       "apply": "Apply the caps configured",
       "submit_one": "Set {{count}} cap",
       "submit_other": "Set {{count}} caps"
+    }
+  },
+  "nodeActions": {
+    "groups": {
+      "node": "Node",
+      "inventory": "Inventory",
+      "daemon": "Daemon"
+    },
+    "confirmTitle": "{{label}}: {{target}}",
+    "understood": "I understand",
+    "freeze": {
+      "label": "Freeze",
+      "description": "Stop the daemon orchestrating the instances of the node."
+    },
+    "unfreeze": {
+      "label": "Unfreeze",
+      "description": "Let the daemon orchestrate the instances of the node again."
+    },
+    "abort": {
+      "label": "Abort",
+      "description": "Abort the orchestration of the node in progress."
+    },
+    "asset": {
+      "label": "Asset",
+      "description": "Push the hardware and system inventory to the collector."
+    },
+    "capabilities": {
+      "label": "Capabilities",
+      "description": "Scan what the node can run: the drivers it supports."
+    },
+    "disk": {
+      "label": "Disks",
+      "description": "Push the disks and their usage to the collector."
+    },
+    "pkg": {
+      "label": "Packages",
+      "description": "Push the packages installed to the collector."
+    },
+    "scsiScan": {
+      "label": "SCSI",
+      "description": "Scan the SCSI buses for new disks."
+    },
+    "sysreport": {
+      "label": "Sysreport",
+      "description": "Push the system report, the changes of the files tracked, to the collector."
+    },
+    "clear": {
+      "label": "Clear monitor",
+      "description": "Clear the failed state of the monitor of the node."
+    },
+    "restartDaemon": {
+      "label": "Restart",
+      "description": "Restart the daemon; the instances keep running."
+    },
+    "shutdown": {
+      "label": "Shutdown",
+      "description": "Shut down all the instances hosted, then stop the daemon.",
+      "warning": "All the instances hosted on the node shut down. Starting the daemon again needs a console access to the node."
+    },
+    "stop": {
+      "label": "Stop",
+      "description": "Stop the daemon; the instances keep running, unwatched.",
+      "warning": "Starting the daemon again needs a console access to the node."
+    },
+    "drain": {
+      "label": "Drain",
+      "description": "Freeze the node and shut down all the instances it hosts.",
+      "warning": "All the instances hosted on the node shut down."
+    },
+    "leave": {
+      "label": "Leave",
+      "description": "Evict the node from the cluster, once drained.",
+      "warning": "All the instances hosted on the node shut down and are deleted from it: the node leaves the cluster, restarting alone in a cluster of its own, with no credential to reach its api.",
+      "fromHere": "Ask it from the webapp of another node: this one serves the webapp."
+    }
+  },
+  "secCertificate": {
+    "menu": "Certificate",
+    "confirmTitle": "{{label}}: {{path}}",
+    "create": {
+      "label": "Create",
+      "busy": "Creating the certificate…",
+      "description": "Generate the certificate, self-signed or signed by the ca of the sec, with its private key if none.",
+      "replace": "The current certificate is replaced.",
+      "replaceKeepKey": "The current certificate is replaced; the private key is kept."
+    },
+    "renew": {
+      "label": "Renew",
+      "busy": "Renewing the certificate…",
+      "description": "Renew the certificate when it is due: from the ACME directory the sec names, or generated."
+    },
+    "force": {
+      "label": "Force renew",
+      "busy": "Renewing the certificate…",
+      "description": "Renew the certificate now, even when it is not due.",
+      "warning": "The current certificate is replaced, even one not issued by this sec."
+    },
+    "renewed": "Certificate renewed: {{reason}}",
+    "notRenewed": "Certificate not renewed: {{reason}}",
+    "timeout": "No answer within {{seconds}} s: the keys of the sec say whether a certificate was issued.",
+    "ca": {
+      "legend": "Signed by",
+      "cluster": "Sign with the <a>cluster ca</a>",
+      "other": "or with an <a>other ca</a>",
+      "pick": "Ca of the namespace",
+      "none": "No other sec in the namespace.",
+      "signedBy": "Signed by {{ca}}, written as the ca of the sec.",
+      "selfSigned": "No ca: self-signed.",
+      "reading": "Reading the ca of the sec…"
     }
   }
 }

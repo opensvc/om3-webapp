@@ -13,17 +13,14 @@ import CreateObjectDialog from "./CreateObjectDialog";
 import {useObjectData} from "../hooks/useObjectData";
 import {useNodeData} from "../hooks/useNodeData";
 import {useClusterNodeOrder} from "../hooks/useClusterNodeOrder";
-import {Table, HeaderRow, HeaderCell, Row, Cell, EmptyRow} from "../ui/components/Table";
+import {Table, HeaderRow, HeaderCell, Row, Cell, EmptyRow, toggleCheckbox} from "../ui/components/Table";
 import {NotProvisionedMark as PMark, StoppedMark, RpoBreachedMark} from "../ui/components/StateMarks";
 import {StatusMark} from "../ui/components/StatusMark";
 import {isQuietDown} from "../ui/components/status";
 import {FrozenMark} from "../ui/components/FrozenMark";
 import {MenuButton} from "../ui/components/MenuButton";
-import {Button} from "../ui/components/Button";
+import {Button, IconButton} from "../ui/components/Button";
 import {cn} from "../ui/cn";
-import {Dialog} from "../ui/components/Dialog";
-import {Alert} from "../ui/components/Alert";
-import {createNamespaceConfig} from "../app/object-create";
 import {Checkbox, Input} from "../ui/components/Field";
 import {useMediaQuery} from "../ui/lib/media";
 import {BADGE, KeyCells, NotProvisionedMark, OrchestrateBadge, PropertyCells, SideText, StatusMarks, markState} from "./ObjectCells";
@@ -32,7 +29,7 @@ import {canWriteClaims} from "../app/namespace-claims";
 import {Pager} from "../ui/components/Pager";
 import {usePaging} from "../app/paging";
 import {ALL_LIST, OBJECT_LISTS, OBJECTS_TABS, listOfKind} from "../utils/objectLists";
-import {BoltIcon, ChevronDownIcon, FilterIcon, PlusIcon, SearchIcon} from "../ui/icons";
+import {BoltIcon, ChevronDownIcon, FilterIcon, GearIcon, PlusIcon, SearchIcon} from "../ui/icons";
 
 // The breakpoints of the MUI theme the view used: below md (900px) the filters fold
 // behind a button, from lg (1200px) the node columns are shown.
@@ -163,11 +160,32 @@ const isNscfg = (objectName) => parseObjectName(objectName).kind === "nscfg";
  * The line opening the objects of a namespace in the list: its name across the
  * row, and a checkbox selecting all its objects the filters keep, on every page;
  * mixed when some of them only are selected. It stands for the configuration of the
- * namespace, which has no line of its own: a click opens it. None yet, those who may
- * write it (root, a squatter) are offered to create it. Narrow, a small badge over
- * the name, for the line to be as high as the others.
+ * namespace, which has no line of its own: a click opens it. Configure opens it too,
+ * offered with none yet to those who may write it (root, a squatter), created by
+ * its first change; Create, the wizard of a new object, in the namespace. Narrow, a
+ * small badge over the name, for the line to be as high as the others, the buttons
+ * their icons alone.
  */
-const NamespaceRow = ({namespace, colSpan, selectedCount, total, onToggle, onOpen, onCreate, narrow}) => {
+/**
+ * A button of the line of a namespace, outlined, or of the accent fill when it
+ * creates (`create`), low enough for the line to stay as high as the others: its icon and word, its icon alone when narrow; not a click of
+ * the line.
+ */
+const RowButton = ({narrow, icon, text, label, onClick, create = false}) => {
+    const click = (event) => {
+        event.stopPropagation();
+        onClick();
+    };
+    return narrow ? (
+        <IconButton label={label} tone={create ? "create" : undefined} className="h-6 w-6" onClick={click} onKeyDown={stopPropagation}>{icon}</IconButton>
+    ) : (
+        <Button size="sm" variant={create ? "create" : "secondary"} className="h-6 font-normal" icon={icon} aria-label={label} title={label} onClick={click} onKeyDown={stopPropagation}>
+            {text}
+        </Button>
+    );
+};
+
+const NamespaceRow = ({namespace, colSpan, selectedCount, total, onToggle, onOpen, mayConfigure, onCreate, narrow}) => {
     const {t} = useTranslation();
     const box = useRef(null);
     const exists = useEventStore((s) => s.objectStatus?.[nscfgPath(namespace)] !== undefined);
@@ -186,7 +204,9 @@ const NamespaceRow = ({namespace, colSpan, selectedCount, total, onToggle, onOpe
             onKeyDown={exists ? (event) => {
                 if (event.target !== event.currentTarget || (event.key !== "Enter" && event.key !== " ")) return;
                 event.preventDefault();
-                open();
+                // Space selects its objects, as the checkbox; Enter opens the configuration.
+                if (event.key === " ") toggleCheckbox(event.currentTarget);
+                else open();
             } : undefined}
             className={cn(
                 "h-[1.875rem] border-b border-line bg-surface-sunken",
@@ -202,29 +222,36 @@ const NamespaceRow = ({namespace, colSpan, selectedCount, total, onToggle, onOpe
                     aria-label={t("objects.selectNamespace", {namespace})}
                 />
             </td>
-            <th scope="rowgroup" colSpan={colSpan} className="px-2 py-1 text-left font-semibold text-ink">
-                <span className="flex items-center gap-2">
-                    {narrow ? (
-                        <span className="flex flex-col items-start gap-0.5">
-                            <span className="flex h-4 items-center"><span className={cn(BADGE, "font-normal")}>{t("objects.badges.namespace")}</span></span>
-                            {namespace}
-                        </span>
-                    ) : namespace}
-                    {!exists && onCreate && (
-                        <Button
-                            size="sm"
-                            variant="ghost"
-                            className="ml-auto font-normal"
-                            onClick={(event) => {
-                                event.stopPropagation();
-                                onCreate(namespace);
-                            }}
-                        >
-                            {t("objects.createNamespaceConfig")}
-                        </Button>
-                    )}
-                </span>
+            {/* The name alone names the line; its buttons in the last cell, out of its name. */}
+            <th scope="rowgroup" colSpan={colSpan - 1} className="px-2 py-1 text-left font-semibold text-ink">
+                {narrow ? (
+                    <span className="flex flex-col items-start gap-0.5">
+                        <span className="flex h-4 items-center"><span className={cn(BADGE, "font-normal")}>{t("objects.badges.namespace")}</span></span>
+                        {namespace}
+                    </span>
+                ) : namespace}
             </th>
+            <td className="px-2 py-1">
+                <span className="flex items-center justify-end gap-1 whitespace-nowrap">
+                    {(exists || mayConfigure) && (
+                        <RowButton
+                            narrow={narrow}
+                            icon={<GearIcon/>}
+                            text={t("objects.configure")}
+                            label={t("objects.configureNamespace", {namespace})}
+                            onClick={open}
+                        />
+                    )}
+                    <RowButton
+                        narrow={narrow}
+                        create
+                        icon={<PlusIcon/>}
+                        text={t("objects.createIn")}
+                        label={t("objects.createInNamespace", {namespace})}
+                        onClick={() => onCreate(namespace)}
+                    />
+                </span>
+            </td>
         </tr>
     );
 };
@@ -431,15 +458,14 @@ const Objects = () => {
     const [selectedKinds, setSelectedKinds] = useState(rawKinds);
     const [selectedGlobalStates, setSelectedGlobalStates] = useState(rawGlobalStates);
     const [createOpen, setCreateOpen] = useState(false);
-    // The configuration of a namespace to create, confirmed first; then its claims.
-    const mayWriteNscfg = canWriteClaims(useGrants());
-    const [nscfgToCreate, setNscfgToCreate] = useState(null);
-    const [nscfgCreating, setNscfgCreating] = useState(false);
-    const [nscfgError, setNscfgError] = useState(null);
-    const createNscfg = useCallback((namespace) => {
-        setNscfgError(null);
-        setNscfgToCreate(namespace);
+    // The namespace a new object is created in, from the line of a namespace; else that of the filter.
+    const [createIn, setCreateIn] = useState(null);
+    const createInNamespace = useCallback((namespace) => {
+        setCreateIn(namespace);
+        setCreateOpen(true);
     }, []);
+    // The configuration of a namespace, none yet, offered to those who may write it.
+    const mayWriteNscfg = canWriteClaims(useGrants());
     const [searchQuery, setSearchQuery] = useState(rawSearchQuery);
     const isWideScreen = useMediaQuery(WIDE_QUERY);
     const isMobile = useMediaQuery(MOBILE_QUERY);
@@ -811,7 +837,6 @@ const Objects = () => {
             <div className="flex shrink-0 flex-wrap items-center gap-3">
                 {isMobile && (
                     <Button
-                        variant="ghost"
                         size="sm"
                         icon={<FilterIcon className="h-4 w-4"/>}
                         onClick={toggleShowFilters}
@@ -864,7 +889,10 @@ const Objects = () => {
                     </div>
                 )}
                 <div className="ml-auto flex items-center gap-3">
-                    <Button size="sm" icon={<PlusIcon className="h-4 w-4"/>} onClick={() => setCreateOpen(true)}>
+                    <Button size="sm" variant="create" icon={<PlusIcon className="h-4 w-4"/>} onClick={() => {
+                        setCreateIn(null);
+                        setCreateOpen(true);
+                    }}>
                         {t("createObject.open")}
                     </Button>
                     {/* Nothing selected, nothing to act on: how to select, in the place of the actions. */}
@@ -937,7 +965,8 @@ const Objects = () => {
                                         selectedCount={members.filter((name) => selectedObjects.includes(name)).length}
                                         onToggle={handleSelectNamespace}
                                         onOpen={handleObjectClick}
-                                        onCreate={mayWriteNscfg ? createNscfg : undefined}
+                                        mayConfigure={mayWriteNscfg}
+                                        onCreate={createInNamespace}
                                         narrow={isMobile}
                                     />
                                 )}
@@ -969,56 +998,11 @@ const Objects = () => {
                 open={createOpen}
                 onClose={() => setCreateOpen(false)}
                 defaultKind={LIST_KIND[list]}
-                defaultNamespace={selectedNamespaces.length === 1 ? selectedNamespaces[0] : "root"}
+                defaultNamespace={createIn ?? (selectedNamespaces.length === 1 ? selectedNamespaces[0] : "root")}
                 namespaces={allNamespaces}
                 paths={allObjectNames}
                 onCreated={handleCreated}
             />
-
-            {/* The configuration of a namespace: nothing to choose, a confirmation, then its claims. */}
-            <Dialog
-                open={nscfgToCreate !== null}
-                onClose={() => setNscfgToCreate(null)}
-                title={t("objects.createNamespaceConfigTitle", {namespace: nscfgToCreate ?? ""})}
-                footer={
-                    <>
-                        <Button variant="secondary" onClick={() => setNscfgToCreate(null)} disabled={nscfgCreating}>
-                            {t("common.cancel")}
-                        </Button>
-                        <Button
-                            variant="primary"
-                            disabled={nscfgCreating}
-                            onClick={async () => {
-                                const namespace = nscfgToCreate;
-                                setNscfgCreating(true);
-                                setNscfgError(null);
-                                try {
-                                    const refused = await createNamespaceConfig(namespace);
-                                    if (refused === null) {
-                                        setNscfgToCreate(null);
-                                        panel.openPeek({kind: "namespace", id: namespace}, "claims");
-                                    } else {
-                                        setNscfgError(refused.status === 409
-                                            ? t("createObject.errors.exists", {path: nscfgPath(namespace)})
-                                            : t("createObject.feedback.failed", {message: refused.message}));
-                                    }
-                                } catch (err) {
-                                    setNscfgError(t("createObject.feedback.failed", {message: err.message}));
-                                } finally {
-                                    setNscfgCreating(false);
-                                }
-                            }}
-                        >
-                            {t("objects.createNamespaceConfigConfirm")}
-                        </Button>
-                    </>
-                }
-            >
-                <div className="space-y-2">
-                    <p>{t("objects.createNamespaceConfigText", {namespace: nscfgToCreate ?? ""})}</p>
-                    {nscfgError && <Alert>{nscfgError}</Alert>}
-                </div>
-            </Dialog>
 
             <ObjectDetailPanel
                 path={panel.sel}

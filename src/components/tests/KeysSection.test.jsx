@@ -1373,6 +1373,42 @@ describe('KeysSection', () => {
     });
 });
 
+describe('KeysSection keyboard', () => {
+    test('the arrows walk the keys, Enter shows the one reached', async () => {
+        mockFetch({keys: [{name: 'a', node: 'n', size: 1}, {name: 'b', node: 'n', size: 1}, {name: 'c', node: 'n', size: 1}]});
+        await renderAndWait('root/sec/s1', 3);
+        const row = (name) => screen.getByRole('rowheader', {name}).closest('tr');
+        row('a').focus();
+        fireEvent.keyDown(row('a'), {key: 'ArrowDown'});
+        expect(row('b')).toHaveFocus();
+        fireEvent.keyDown(row('b'), {key: 'ArrowDown'});
+        expect(row('c')).toHaveFocus();
+        fireEvent.keyDown(row('c'), {key: 'ArrowUp'});
+        expect(row('b')).toHaveFocus();
+        fireEvent.keyDown(row('b'), {key: 'Enter'});
+        expect(await screen.findByRole('dialog', {name: 'View Key: b'})).toBeInTheDocument();
+    });
+});
+
+describe('KeysSection certificate', () => {
+    test('a sec: its certificate created or renewed from the menu of its keys; written, its keys read again', async () => {
+        mockFetch({keys: [{name: 'certificate', node: 'node1', size: 1200}]});
+        await renderAndWait('root/sec/tls', 1);
+        fireEvent.click(screen.getByRole('button', {name: 'Certificate'}));
+        fireEvent.click(screen.getByRole('menuitem', {name: 'Renew'}));
+        await waitFor(() => expect(global.fetch).toHaveBeenCalledWith(
+            '/api/object/path/root/sec/tls/certificate/renew?force=false', expect.objectContaining({method: 'POST'})));
+        // Answered, the keys read again: the one listing them, then once more.
+        await waitFor(() => expect(global.fetch.mock.calls.filter(([url]) => url.includes('/data/keys'))).toHaveLength(2));
+    });
+
+    test('a cfg: no certificate', async () => {
+        mockFetch({keys: [{name: 'key1', node: 'node1', size: 12}]});
+        await renderAndWait('root/cfg/cfg1', 1);
+        expect(screen.queryByRole('button', {name: 'Certificate'})).toBeNull();
+    });
+});
+
 describe('KeysSection in French', () => {
     afterEach(async () => {
         await i18n.changeLanguage('en');

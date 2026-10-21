@@ -30,8 +30,8 @@ vi.mock('../LogsViewer', () => ({
     ),
 }));
 // The confirmation dialogs are tested on their own: here, the action confirmed.
-vi.mock('../ActionDialogManager', () => ({
-    default: ({pendingAction, handleConfirm, target}) => (pendingAction === null ? null : (
+vi.mock('../NodeActionDialog', () => ({
+    NodeActionDialog: ({pending: pendingAction, onConfirm: handleConfirm, target}) => (pendingAction === null ? null : (
         <div role="alertdialog" aria-label={`${pendingAction.action} ${target}`}>
             <button type="button" onClick={() => handleConfirm(pendingAction.action)}>Confirm</button>
         </div>
@@ -117,10 +117,10 @@ describe('NodeDetailPanel', () => {
         expect(within(properties).getByRole('row', {name: /enclosure not implemented/})).toBeInTheDocument();
     });
 
-    test('its actions stand in the title bar, a solid button the size of the close one, each confirmed then posted', async () => {
+    test('its actions stand in the title bar, an outlined button the size of the close one, each confirmed then posted', async () => {
         renderPanel();
         const actions = within(panel()).getByRole('button', {name: 'Node actions'});
-        expect(actions).toHaveClass('max-md:w-7', 'bg-accent');
+        expect(actions).toHaveClass('max-md:w-7', 'border', 'border-line');
         expect(actions).not.toHaveClass('rounded-(--radius-pill)');
         expect(actions).toHaveAttribute('title', 'Node actions');
         // "Actions" in a wide window, the bolt alone in a narrow one.

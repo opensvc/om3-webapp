@@ -10,7 +10,7 @@ const labelOf = (t, action) => t(`actions.labels.${action.replace(/\s+(\w)/g, (_
     {defaultValue: action.charAt(0).toUpperCase() + action.slice(1)});
 
 // Cancel and confirm buttons at the foot of a dialog.
-const DialogFooter = ({onClose, cancelDisabled = false, onConfirm, confirmDisabled, confirmLabel, variant = 'primary', children}) => {
+const DialogFooter = ({onClose, cancelDisabled = false, onConfirm, confirmDisabled, confirmLabel, variant = 'secondary', children}) => {
     const {t} = useTranslation();
     return (
         <>
@@ -56,7 +56,7 @@ const Acknowledgements = ({children}) => <div className="flex flex-col gap-2 tex
 const SingleCheckDialog = ({
                                open, onClose, onConfirm, checked, setChecked, disabled,
                                target, names, title, checkboxLabel, checkboxAriaLabel, confirmAriaLabel, confirmText,
-                               variant = 'primary', cancelDisabled = false,
+                               variant = 'secondary', cancelDisabled = false,
                            }) => (
     <Dialog
         open={open}
@@ -143,7 +143,6 @@ export const StopDialog = ({open, onClose, onConfirm, checked, setChecked, disab
             checkboxLabel={t('actionDialogs.acknowledge.mayInterrupt')}
             confirmAriaLabel={t('actionDialogs.stop.confirmAria')}
             confirmText={t('actionDialogs.stop.confirm')}
-            variant="danger"
         />
     );
 };
@@ -169,7 +168,6 @@ export const ShutdownDialog = ({open, onClose, onConfirm, checkboxes, setCheckbo
                         disabled
                     }
                     confirmLabel={t('actionDialogs.shutdown.confirmAria')}
-                    variant="danger"
                 >
                     {t('actionDialogs.shutdown.confirm')}
                 </DialogFooter>
@@ -211,7 +209,6 @@ export const RestartDialog = ({open, onClose, onConfirm, checked, setChecked, di
             checkboxLabel={t('actionDialogs.acknowledge.mayInterrupt')}
             confirmAriaLabel={t('actionDialogs.restart.confirmAria')}
             confirmText={t('actionDialogs.restart.confirm')}
-            variant="danger"
         />
     );
 };
@@ -272,7 +269,7 @@ export const UnprovisionDialog = ({open, onClose, onConfirm, checkboxes, setChec
                         disabled
                     }
                     confirmLabel={t('actionDialogs.unprovision.confirmAria')}
-                    variant="danger"
+                    variant="delete"
                 >
                     {t('common.confirm')}
                 </DialogFooter>
@@ -333,7 +330,7 @@ export const PurgeDialog = ({open, onClose, onConfirm, checkboxes, setCheckboxes
                         disabled
                     }
                     confirmLabel={t('actionDialogs.purge.confirmAria')}
-                    variant="danger"
+                    variant="delete"
                 >
                     {t('common.confirm')}
                 </DialogFooter>
@@ -389,7 +386,7 @@ export const DeleteDialog = ({open, onClose, onConfirm, checkboxes, setCheckboxe
                     onConfirm={onConfirm}
                     confirmDisabled={!checkboxes.configLoss || !checkboxes.clusterwide || disabled}
                     confirmLabel={t('actionDialogs.delete.confirmAria')}
-                    variant="danger"
+                    variant="delete"
                 >
                     {t('common.delete')}
                 </DialogFooter>
@@ -473,7 +470,7 @@ export const DeleteKeyDialog = ({
                     onConfirm={onConfirm}
                     confirmDisabled={disabled}
                     confirmLabel={t('actionDialogs.deleteKey.confirmAria')}
-                    variant="danger"
+                    variant="delete"
                 >
                     {t('common.delete')}
                 </DialogFooter>
@@ -509,6 +506,7 @@ export const CreateKeyDialog = ({
             title={t('actionDialogs.createKey.title')}
             footer={
                 <DialogFooter
+                    variant="create"
                     onClose={onClose}
                     onConfirm={onConfirm}
                     confirmDisabled={disabled || !newKeyName || !newKeyFile}

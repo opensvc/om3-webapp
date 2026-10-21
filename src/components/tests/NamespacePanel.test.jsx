@@ -8,7 +8,7 @@ vi.mock('../NamespaceMetrics', () => ({
     default: ({namespace}) => <div data-testid="namespace-metrics">{namespace}</div>,
 }));
 vi.mock('../ObjectConfig', () => ({
-    default: ({path, statusPath}) => <div data-testid="object-config">{`${path} ${statusPath}`}</div>,
+    default: ({path, statusPath, absent}) => <div data-testid="object-config">{`${path} ${statusPath}${absent ? ' absent' : ''}`}</div>,
 }));
 
 const GiB = 1024 ** 3;
@@ -91,21 +91,8 @@ describe('NamespaceConfig', () => {
         expect(screen.getByTestId('object-config')).toHaveTextContent('root/nscfg/namespace /');
     });
 
-    test('none yet: offered to create it, with an id of its own', async () => {
+    test('none yet: the configuration edited from empty, created by its first change', () => {
         render(<NamespaceConfig namespace="dev"/>);
-        expect(screen.getByText(/has no configuration object yet/)).toBeInTheDocument();
-        fireEvent.click(screen.getByRole('button', {name: 'Create its configuration'}));
-        await waitFor(() => expect(requests).toContainEqual(expect.objectContaining({
-            url: '/api/object/path/dev/nscfg/namespace/config/file', method: 'POST',
-        })));
-        const {body} = requests.find((r) => r.method === 'POST');
-        expect(body).toMatch(/^\[DEFAULT\]\nid = [0-9a-f-]{36}\n/);
-    });
-
-    test('a refused creation says why', async () => {
-        global.fetch = vi.fn(async () => new Response(JSON.stringify({detail: 'forbidden'}), {status: 403}));
-        render(<NamespaceConfig namespace="dev"/>);
-        fireEvent.click(screen.getByRole('button', {name: 'Create its configuration'}));
-        expect(await screen.findByText(/could not be created: .*forbidden/)).toBeInTheDocument();
+        expect(screen.getByTestId('object-config')).toHaveTextContent('dev/nscfg/namespace dev/ absent');
     });
 });

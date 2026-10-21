@@ -30,7 +30,9 @@ describe('ActionDialogs', () => {
             expect(within(dialog).getByLabelText(checkboxText)).toBe(checkbox);
             const confirmBtn = within(dialog).getByRole('button', {name: confirmName});
             expect(confirmBtn).toHaveTextContent(confirmText);
-            expect(confirmBtn).toHaveClass(danger ? 'bg-state-down' : 'bg-accent');
+            // None of them deletes: outlined, stop and restart too.
+            expect(confirmBtn).toHaveClass('border', 'border-line');
+            expect(confirmBtn).not.toHaveClass('bg-state-down', 'bg-accent');
             expect(within(dialog).getByRole('button', {name: 'Cancel'})).toBeEnabled();
         });
 
@@ -162,7 +164,7 @@ describe('ActionDialogs', () => {
 
         afterEach(() => jest.clearAllMocks());
 
-        test('asks to acknowledge the instances shutdown and the peer takeover before a danger confirm', () => {
+        test('asks to acknowledge the instances shutdown and the peer takeover before it confirms', () => {
             let checkboxes = {instancesDown: false, peerTakeover: false};
             const setCb = jest.fn(updater => {
                 checkboxes = updater(checkboxes);
@@ -175,7 +177,8 @@ describe('ActionDialogs', () => {
             ]);
             const confirmBtn = screen.getByRole('button', {name: 'Confirm shutdown action'});
             expect(confirmBtn).toBeDisabled();
-            expect(confirmBtn).toHaveClass('bg-state-down');
+            // A shutdown deletes nothing: outlined.
+            expect(confirmBtn).toHaveClass('border', 'border-line');
 
             fireEvent.click(screen.getByLabelText(/all svc and vol instances on this node will be shut down/i));
             expect(checkboxes).toEqual({instancesDown: true, peerTakeover: false});

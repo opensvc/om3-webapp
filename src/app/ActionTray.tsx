@@ -223,7 +223,7 @@ export function ActionTray() {
             type="button"
             title={t("actionTray.clear")}
             onClick={clearEnded}
-            className="shrink-0 rounded-(--radius-control) p-1 text-ink-muted hover:text-ink"
+            className="shrink-0 rounded-(--radius-control) border border-line p-1 text-ink-muted hover:bg-surface-sunken hover:text-ink"
           >
             <TrashIcon className="h-3.5 w-3.5" />
             <span className="sr-only">{t("actionTray.clear")}</span>

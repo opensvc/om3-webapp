@@ -10,6 +10,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { CaretRightIcon, ChevronDownIcon } from "../icons";
+import { cn } from "../cn";
 
 export interface MenuItem {
   key: string;
@@ -18,6 +19,14 @@ export interface MenuItem {
   disabled?: boolean;
   /** Separator line before this entry, to mark a group. */
   separatorBefore?: boolean;
+  /** The title of the group this entry opens, over it, as a separator saying its name. */
+  heading?: string;
+  /** What the entry does, in a light line under its label. */
+  description?: string;
+  /** An entry that harms: its label and icon in the tint of down. */
+  danger?: boolean;
+  /** Its column, from 1, in a menu of `columns` in a wide window: its group's. */
+  column?: number;
   /** Entries of a submenu: the entry then opens it rather than being chosen. */
   items?: MenuItem[];
   onSelect?: () => void;
@@ -38,15 +47,15 @@ const ITEM =
  * the right arrow; within it the arrows walk its own entries, and the left arrow
  * or Escape give the focus back to the entry that opened it.
  *
- * `prominent` draws a menu the page is used for, such as the actions: a pill of
- * the accent fill, brighter when hovered or open, its
- * label and chevron in a wide window, its `icon` alone in a narrow one, the label
- * then its accessible name and tooltip.
+ * `prominent` draws a menu the page is used for, such as the actions: outlined, as
+ * every button that neither creates nor deletes (`Button`), in the ink rather than
+ * muted, its label and chevron in a wide window, its `icon` alone in a narrow one,
+ * the label then its accessible name and tooltip.
  *
  * om3 additions: `icon` without `prominent` makes the trigger an icon alone, `label`
- * staying its accessible name and tooltip; with `solid`, of the accent fill, as the
- * actions, its `text` (the label without) shown in a wide window, its icon alone in a
- * narrow one; `compact` makes it small and borderless, for a table
+ * staying its accessible name and tooltip; with `solid`, drawn as the actions, its
+ * `text` (the label without) shown in a wide window, its icon alone in a narrow one;
+ * `compact` makes it small, for a table
  * row; `align="end"` lines the menu up with the right edge of the trigger. The menu
  * is placed against the window, so that a scrolling container (a table) cannot cut
  * it, and closes when the page scrolls or resizes rather than drift from its button.
@@ -63,18 +72,19 @@ export function MenuButton({
   compact = false,
   trigger,
   align = "start",
+  columns,
 }: {
   label: string;
   items: MenuItem[];
   disabled?: boolean;
   className?: string;
   /**
-   * A menu the page is used for, such as the actions on the selection: a pill,
-   * outlined and tinted with the accent, filled when hovered or open. The plain one, for a
-   * secondary menu, is muted. A primary button, filled, stays apart from both.
+   * A menu the page is used for, such as the actions on the selection: outlined, in
+   * the ink, tinted when hovered or open. The plain one, for a secondary menu, is
+   * muted. Only a button creating or deleting something is filled (`Button`).
    */
   prominent?: boolean;
-  /** The accent fill, as the actions: its text in a wide window, its icon alone in a narrow one. */
+  /** Drawn as the actions: its text in a wide window, its icon alone in a narrow one. */
   solid?: boolean;
   /** With `solid`, the word shown in a wide window, shorter than the label naming it. */
   text?: string;
@@ -91,6 +101,11 @@ export function MenuButton({
    */
   trigger?: ReactNode;
   align?: "start" | "end";
+  /**
+   * The groups of the entries side by side in a wide window, a column each (the
+   * `column` of an entry), as a mega menu; one under the other in a narrow one.
+   */
+  columns?: 2 | 3;
 }) {
   const [open, setOpen] = useState(false);
   const iconOnly = icon !== undefined && !prominent;
@@ -238,17 +253,18 @@ export function MenuButton({
         title={iconOnly || (prominent && icon !== undefined) ? label : undefined}
         aria-label={iconOnly || trigger !== undefined ? label : undefined}
         className={
+          // A menu acts, it does not create nor delete: outlined, as every such button.
           prominent
-            ? `flex h-7 items-center gap-1.5 rounded-(--radius-pill) border border-accent bg-accent pr-2.5 pl-3 font-medium text-accent-ink hover:brightness-110 disabled:opacity-60 disabled:hover:brightness-100 aria-expanded:brightness-110 ${
+            ? `flex h-7 items-center gap-1.5 rounded-(--radius-control) border border-line bg-surface-raised px-2.5 font-medium text-ink hover:bg-surface-sunken disabled:opacity-60 aria-expanded:bg-surface-sunken ${
                 icon !== undefined ? "max-md:w-7 max-md:justify-center max-md:px-0" : ""
               }`
             : trigger !== undefined
             ? // Drawn as the other menu triggers, lighter: a border and a chevron say it opens.
               "inline-flex h-6 cursor-pointer items-center gap-1 rounded-(--radius-control) border border-line pr-0.5 pl-1 hover:border-line-strong hover:bg-surface-sunken disabled:cursor-default disabled:opacity-60 aria-expanded:border-line-strong aria-expanded:bg-surface-sunken"
             : compact
-            ? "flex h-5 w-5 items-center justify-center rounded-(--radius-control) text-ink-muted hover:bg-surface-sunken hover:text-ink disabled:opacity-60 aria-expanded:bg-surface-sunken aria-expanded:text-ink"
+            ? "flex h-5 w-5 items-center justify-center rounded-(--radius-control) border border-line text-ink-muted hover:bg-surface-sunken hover:text-ink disabled:opacity-60 aria-expanded:bg-surface-sunken aria-expanded:text-ink"
             : iconOnly && solid
-            ? "flex h-7 items-center gap-1.5 rounded-(--radius-control) border border-accent bg-accent px-2.5 font-medium text-accent-ink hover:brightness-110 disabled:opacity-60 disabled:hover:brightness-100 aria-expanded:brightness-110 max-md:w-7 max-md:justify-center max-md:px-0"
+            ? "flex h-7 items-center gap-1.5 rounded-(--radius-control) border border-line bg-surface-raised px-2.5 font-medium text-ink hover:bg-surface-sunken disabled:opacity-60 aria-expanded:bg-surface-sunken max-md:w-7 max-md:justify-center max-md:px-0"
             : `flex h-7 items-center gap-1.5 rounded-(--radius-control) border border-line text-ink-muted hover:border-line-strong hover:text-ink disabled:opacity-60 aria-expanded:text-ink ${
                 iconOnly ? "w-7 justify-center" : "px-2"
               }`
@@ -299,12 +315,15 @@ export function MenuButton({
           aria-label={label}
           onKeyDown={onMenuKeyDown}
           style={position ?? { visibility: "hidden" }}
-          className="fixed z-[1200] min-w-56 rounded-(--radius-panel) border border-line bg-surface-raised p-1 text-left text-ui font-normal shadow-lg"
+          className={`fixed z-[1200] min-w-56 rounded-(--radius-panel) border border-line bg-surface-raised p-1 text-left text-ui font-normal shadow-lg ${
+            columns === undefined ? "" : `max-w-[calc(100vw-1rem)] gap-x-1 md:grid md:grid-flow-dense ${COLUMNS[columns]}`
+          }`}
         >
           {items.map((item) => (
             <MenuEntry
               key={item.key}
               item={item}
+              columns={columns}
               onChosen={() => {
                 close(true);
               }}
@@ -316,6 +335,14 @@ export function MenuButton({
     </div>
   );
 }
+
+/** The grid of a mega menu, a column a group, as wide as they need. */
+const COLUMNS: Record<2 | 3, string> = {
+  2: "md:w-[32rem] md:grid-cols-2",
+  3: "md:w-[46rem] md:grid-cols-3",
+};
+/** The column of an entry: its group's, its entries one under the other (the grid filling dense). */
+const COLUMN_START: Record<number, string> = { 1: "md:col-start-1", 2: "md:col-start-2", 3: "md:col-start-3" };
 
 /** Space kept between a menu and the edges of the window. */
 const WINDOW_MARGIN = 8;
@@ -352,11 +379,14 @@ export function submenuShift(rect: DOMRect): { up: number; flip: boolean } {
 /**
  * An entry of a menu: a choice, or the opener of a submenu shown beside it.
  */
-function MenuEntry({ item, onChosen }: { item: MenuItem; onChosen: () => void }) {
+function MenuEntry({ item, onChosen, columns }: { item: MenuItem; onChosen: () => void; columns?: number }) {
   const [open, setOpen] = useState(false);
   const opener = useRef<HTMLButtonElement>(null);
   const submenu = useRef<HTMLDivElement>(null);
   const subId = useId();
+  // Named by its label, its description describing it: not read as part of its name.
+  const labelId = useId();
+  const descriptionId = useId();
   const sub = item.items;
   // Shift keeping the submenu in the window, measured before it is painted.
   const [shift, setShift] = useState<{ up: number; flip: boolean } | null>(null);
@@ -422,7 +452,7 @@ function MenuEntry({ item, onChosen }: { item: MenuItem; onChosen: () => void })
 
   return (
     <div
-      className="relative"
+      className={`relative ${columns !== undefined && item.column !== undefined ? COLUMN_START[item.column] ?? "" : ""}`}
       onPointerEnter={() => {
         if (sub !== undefined) setOpen(true);
       }}
@@ -433,6 +463,11 @@ function MenuEntry({ item, onChosen }: { item: MenuItem; onChosen: () => void })
       {item.separatorBefore === true && (
         <div role="separator" className="my-1 border-t border-line" />
       )}
+      {item.heading !== undefined && (
+        <div role="presentation" data-menu-heading="" className="px-2 pt-2 pb-1 text-xs font-semibold tracking-wide text-ink-muted uppercase">
+          {item.heading}
+        </div>
+      )}
       <button
         ref={opener}
         type="button"
@@ -442,6 +477,8 @@ function MenuEntry({ item, onChosen }: { item: MenuItem; onChosen: () => void })
         aria-haspopup={sub === undefined ? undefined : "menu"}
         aria-expanded={sub === undefined ? undefined : open}
         aria-controls={sub === undefined ? undefined : subId}
+        aria-labelledby={item.description === undefined ? undefined : labelId}
+        aria-describedby={item.description === undefined ? undefined : descriptionId}
         onClick={() => {
           if (sub !== undefined) {
             openSub(true);
@@ -457,10 +494,13 @@ function MenuEntry({ item, onChosen }: { item: MenuItem; onChosen: () => void })
             openSub(true);
           }
         }}
-        className={ITEM}
+        className={cn(ITEM, item.description !== undefined && "items-start", item.danger === true && "text-state-down")}
       >
         {item.icon}
-        <span className="flex-1">{item.label}</span>
+        <span className="flex-1">
+          <span id={labelId} className="block">{item.label}</span>
+          {item.description !== undefined && <span id={descriptionId} className="block text-data text-ink-muted">{item.description}</span>}
+        </span>
         {sub !== undefined && <CaretRightIcon className="h-3.5 w-3.5 text-ink-muted" />}
       </button>
       {sub !== undefined && open && (

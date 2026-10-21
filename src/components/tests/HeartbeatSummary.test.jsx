@@ -159,7 +159,7 @@ describe('HeartbeatSummary', () => {
         expect(within(heartbeats).queryByRole('button', {name: 'New heartbeat'})).toBeNull();
         rerender(<HeartbeatSummary heartbeatStatus={STATUS} onOpenHeartbeat={onOpen} onNewHeartbeat={onNew}/>);
         const plus = within(heartbeats).getByRole('button', {name: 'New heartbeat'});
-        // Light: dashed, after the heartbeats.
+        // Light: dashed, after the heartbeats; a plus card, out of the rule of the buttons.
         expect(plus).toHaveClass('border-dashed');
         expect(plus.closest('li').previousElementSibling).toHaveAttribute('data-card', 'hb#2');
         fireEvent.click(plus);

@@ -158,10 +158,39 @@ export function SortHeaderCell({
   );
 }
 
+/** Checks or unchecks the checkbox of `row`, as a click would: false when it has none to. */
+export function toggleCheckbox(row: HTMLElement): boolean {
+  const box = row.querySelector<HTMLInputElement>("input[type='checkbox']:not(:disabled)");
+  if (box === null) return false;
+  box.click();
+  return true;
+}
+
+/** The next row of `row`'s body that opens something, by `key`: Up, Down, Home or End; null if none. */
+function rowBy(row: HTMLElement, key: string): HTMLElement | null {
+  const rows = [...(row.parentElement?.querySelectorAll<HTMLElement>(":scope > tr[tabindex='0']") ?? [])];
+  const at = rows.indexOf(row);
+  switch (key) {
+    case "ArrowDown":
+      return rows[at + 1] ?? null;
+    case "ArrowUp":
+      return at > 0 ? (rows[at - 1] ?? null) : null;
+    case "Home":
+      return rows[0] ?? null;
+    case "End":
+      return rows[rows.length - 1] ?? null;
+    default:
+      return null;
+  }
+}
+
 /**
  * Body row. With `onActivate` the row opens something, by click as by keyboard
- * (Enter, Space): it takes the focus and the pointer, and a click on a control
- * inside a cell must stop its propagation. `selected` marks the row on display.
+ * (Enter; Space too when it has no checkbox): it takes the focus and the pointer,
+ * and a click on a control inside a cell must stop its propagation. Space checks or
+ * unchecks the checkbox of the row, the one selecting it. Up and Down move the focus
+ * to the row before or after, Home and End to the first or the last. `selected`
+ * marks the row on display.
  */
 export function Row({
   onActivate,
@@ -178,9 +207,19 @@ export function Row({
         interactive
           ? (event: KeyboardEvent<HTMLTableRowElement>) => {
               if (event.target !== event.currentTarget) return;
-              if (event.key !== "Enter" && event.key !== " ") return;
+              if (event.key === " " && toggleCheckbox(event.currentTarget)) {
+                event.preventDefault();
+                return;
+              }
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                onActivate();
+                return;
+              }
+              if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+              // Handled, past the end too: the page does not scroll under the rows.
               event.preventDefault();
-              onActivate();
+              rowBy(event.currentTarget, event.key)?.focus();
             }
           : undefined
       }

@@ -19,6 +19,7 @@ import {trackRefused, trackWrite} from "../app/action-tracker";
 import {refusalReason} from "./objectActions";
 import {hasPemCertificate} from "../utils/x509";
 import CertificateDetails from "./CertificateDetails";
+import {SecCertificate} from "./SecCertificate";
 import {Trans, useTranslation} from "react-i18next";
 
 const getAuthToken = () => {
@@ -266,13 +267,13 @@ const KeyFormDialog = ({
                 <>
                     {/* The key edited, removed from here: the confirmation in the place of this dialog. */}
                     {onRemove && (
-                        <Button variant="danger" className="mr-auto" onClick={onRemove} disabled={loading}>
+                        <Button variant="delete" className="mr-auto" onClick={onRemove} disabled={loading}>
                             {t("common.remove")}
                         </Button>
                     )}
                     <Button onClick={close} disabled={loading}>{t("common.cancel")}</Button>
                     <Button
-                        variant="primary"
+                        variant={mode === 'create' ? "create" : "secondary"}
                         onClick={handleSubmit}
                         disabled={loading || initialLoading || !name || tooLarge || waiting}
                     >
@@ -302,7 +303,7 @@ const KeyFormDialog = ({
                     <div className="flex items-center justify-between gap-2">
                         <span className="font-medium">{t("keys.form.content")}</span>
                         {!file && (
-                            <Button variant="ghost" size="sm" onClick={() => setFullscreen((f) => !f)}>
+                            <Button size="sm" onClick={() => setFullscreen((f) => !f)}>
                                 {fullscreen ? t("keys.form.exitFullScreen") : t("keys.form.fullScreen")}
                             </Button>
                         )}
@@ -664,7 +665,7 @@ const KeysSection = ({decodedObjectName, openSnackbar, refreshKey}) => {
                     {!keysLoading && !hasKeysError && safeKeys.length > 0 && (pickedKeys.length > 0 ? (
                         <Button
                             size="sm"
-                            variant="danger"
+                            variant="delete"
                             icon={<TrashIcon/>}
                             disabled={actionLoading}
                             onClick={() => {
@@ -678,6 +679,14 @@ const KeysSection = ({decodedObjectName, openSnackbar, refreshKey}) => {
                         <p className="text-data text-ink-muted">{t("keys.selectionHelp")}</p>
                     ))}
                 </div>
+                {kind === "sec" && (
+                    <SecCertificate
+                        path={decodedObjectName}
+                        keyNames={safeKeys.map((key) => key.name)}
+                        disabled={actionLoading || keysLoading}
+                        onWritten={fetchKeys}
+                    />
+                )}
                 <IconButton
                     label={t("keys.add")}
                     text={t("common.add")}
@@ -760,7 +769,7 @@ const KeysSection = ({decodedObjectName, openSnackbar, refreshKey}) => {
                     // The key shown, edited or removed from here: its dialog then in the place of this one.
                     <>
                         <Button
-                            variant="danger"
+                            variant="delete"
                             className="mr-auto"
                             disabled={actionLoading || keyToView === null}
                             onClick={() => {
@@ -858,7 +867,7 @@ const KeysSection = ({decodedObjectName, openSnackbar, refreshKey}) => {
                     <>
                         <Button onClick={() => setDeleteDialogOpen(false)} disabled={actionLoading}>{t("common.cancel")}</Button>
                         <Button
-                            variant="danger"
+                            variant="delete"
                             icon={<TrashIcon/>}
                             onClick={handleDeleteKey}
                             disabled={actionLoading}

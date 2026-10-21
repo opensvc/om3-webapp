@@ -54,6 +54,20 @@ describe('CreateObjectDialog', () => {
     const create = () => fireEvent.click(screen.getByRole('button', {name: 'Create'}));
     const posts = () => requests.filter((r) => r.method === 'POST');
 
+    test('cancel closes at the first click: pressed, it leaves the name focused, no error to grow the dialog', () => {
+        const onClose = vi.fn();
+        open({defaultKind: 'sec', onClose});
+        const name = screen.getByLabelText('Name');
+        expect(name).toHaveFocus();
+        const cancel = screen.getByRole('button', {name: 'Cancel'});
+        // The press keeps the focus: fireEvent says false when the default is prevented.
+        expect(fireEvent.mouseDown(cancel)).toBe(false);
+        expect(name).toHaveFocus();
+        expect(screen.queryByRole('alert')).toBeNull();
+        fireEvent.click(cancel);
+        expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
     test('opens on the kind it is given, the name focused', () => {
         open({defaultKind: 'cfg', defaultNamespace: 'ns1'});
         expect(screen.getByRole('dialog', {name: 'New object'})).toBeInTheDocument();

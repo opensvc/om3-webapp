@@ -1493,11 +1493,11 @@ describe('EventLogger Component', () => {
             expect(screen.getByLabelText(/Resize handle/i)).toBeInTheDocument();
         });
 
-        test('trigger is a raised pill with the feed icon and the label', () => {
+        test('trigger is an outlined button with the feed icon and the label', () => {
             renderWithTheme(<EventLogger title="Node Events" buttonLabel="Nodes Events"/>);
             const trigger = screen.getByRole('button', {name: 'Nodes Events'});
             expect(trigger).toHaveAttribute('title', 'Node Events');
-            expect(trigger).toHaveClass('rounded-full', 'bg-surface-raised', 'border-line');
+            expect(trigger).toHaveClass('rounded-(--radius-control)', 'bg-surface-raised', 'border-line');
             expect(trigger.querySelector('svg')).toBeInTheDocument();
         });
 

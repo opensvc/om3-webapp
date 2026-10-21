@@ -71,7 +71,6 @@ function AuthChoice({authInfo: authInfoProp}) {
                 <div className="flex flex-col gap-2">
                     {authInfo.openid?.issuer && (
                         <Button
-                            variant="primary"
                             icon={<KeyIcon/>}
                             className="w-full"
                             onClick={() => handleAuthChoice("openid")}

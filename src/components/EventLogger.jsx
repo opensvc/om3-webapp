@@ -159,7 +159,6 @@ const SubscriptionDialog = ({
                     </div>
                     <div className="sticky bottom-0 mt-auto bg-surface-raised pt-2">
                         <Button
-                            variant="primary"
                             className="w-full"
                             onClick={() => {
                                 setManualSubscriptions(tempSubscribedEventTypes);
@@ -691,7 +690,6 @@ const EventDrawerContent = ({
                     {/* Following is about the view, the pause about the stream. */}
                     <Button
                         size="sm"
-                        variant={following ? "primary" : "secondary"}
                         aria-pressed={following}
                         onClick={() => (following ? follow(false) : toEnd())}
                     >
@@ -797,7 +795,6 @@ const EventDrawerContent = ({
                             {feed && (
                                 <Button
                                     size="sm"
-                                    variant={following ? "primary" : "secondary"}
                                     aria-pressed={following}
                                     onClick={() => (following ? follow(false) : toEnd())}
                                 >
@@ -895,7 +892,7 @@ const EventDrawerContent = ({
                                 {/* The older events kept, shown on demand at the top. */}
                                 {filteredLogs.length > shown.length && (
                                     <div className="flex justify-center py-1">
-                                        <Button size="sm" variant="ghost" onClick={showOlder}>{t("events.showOlder")}</Button>
+                                        <Button size="sm" onClick={showOlder}>{t("events.showOlder")}</Button>
                                     </div>
                                 )}
                                 <div className="grid gap-x-2" style={{gridTemplateColumns: "max-content max-content minmax(0, 1fr)"}}>
@@ -1077,7 +1074,7 @@ const EventLogger = React.memo(({
                     type="button"
                     title={title}
                     onClick={() => setDrawerOpen(true)}
-                    className="fixed right-4 bottom-4 z-[1200] inline-flex h-8 items-center gap-1.5 rounded-full border border-line bg-surface-raised px-3 font-medium text-ink shadow hover:bg-surface-sunken max-md:h-9"
+                    className="fixed right-4 bottom-4 z-[1200] inline-flex h-8 items-center gap-1.5 rounded-(--radius-control) border border-line bg-surface-raised px-3 font-medium text-ink shadow hover:bg-surface-sunken max-md:h-9"
                 >
                     <RssIcon className="shrink-0 text-ink-muted"/>
                     {buttonLabel}

@@ -23,7 +23,6 @@ export function FollowOverlay({scrollAge, following, shown, onEnd, label}) {
             {!following && shown && (
                 <Button
                     size="sm"
-                    variant="primary"
                     className="absolute bottom-3 left-1/2 -translate-x-1/2 shadow-lg"
                     icon={<ChevronDownIcon className="h-3.5 w-3.5"/>}
                     onClick={onEnd}

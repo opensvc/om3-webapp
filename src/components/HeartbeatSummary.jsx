@@ -220,7 +220,7 @@ export function HeartbeatSummary({heartbeatStatus, onToggle, busy, onOpenHeartbe
                             openLabel={t("heartbeats.config.open", {name: h.hb})}
                         />
                     ))}
-                    {/* A new one, root only: a light card, its wizard. */}
+                    {/* A new one, root only: a light card, its wizard. A plus card adding to a card list keeps this look, out of the rule of the buttons (`Button`). */}
                     {onNewHeartbeat && (
                         <li className="min-w-0">
                             <button

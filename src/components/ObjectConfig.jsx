@@ -16,9 +16,10 @@ const TONES = ["error", "warning", "info", "success"];
  * an instance has it, its tools in place (ConfigSection, inline), read again when
  * an event says it changed. `statusPath` is the key the cluster status lists the
  * object under, when it is not its path: "ns1/" for ns1/nscfg/namespace. `section`,
- * the section of a resource alone, shown and edited in place in the file.
+ * the section of a resource alone, shown and edited in place in the file. `absent`,
+ * no configuration yet: created by the first change written.
  */
-const ObjectConfig = ({path, statusPath = path, section = null}) => {
+const ObjectConfig = ({path, statusPath = path, section = null, absent = false}) => {
     const {t} = useTranslation();
     const instances = useEventStore((s) => s.objectInstanceStatus?.[statusPath]);
     const configs = useEventStore((s) => s.instanceConfig?.[statusPath]);
@@ -56,7 +57,7 @@ const ObjectConfig = ({path, statusPath = path, section = null}) => {
                 <Alert
                     tone={feedback.tone}
                     action={
-                        <IconButton label={t("common.close")} bare onClick={() => setFeedback(null)}>
+                        <IconButton label={t("common.close")} onClick={() => setFeedback(null)}>
                             <CloseIcon className="h-4 w-4"/>
                         </IconButton>
                     }
@@ -74,6 +75,7 @@ const ObjectConfig = ({path, statusPath = path, section = null}) => {
                 configRefreshTrigger={refresh}
                 inline
                 section={section}
+                absent={absent}
             />
         </div>
     );

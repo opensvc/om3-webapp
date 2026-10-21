@@ -115,18 +115,14 @@ describe("record panels", () => {
     expect(screen.queryByText(/content of/)).not.toBeInTheDocument();
   });
 
-  test("the records shown fill the history, which reopens them", () => {
+  test("the records shown fill the history, the panel itself without one", () => {
     renderView();
     fireEvent.click(screen.getByRole("button", { name: "lo" }));
     fireEvent.click(screen.getByRole("button", { name: "web" }));
     expect(readLastRecord()).toEqual({ kind: "object", id: "ns1/svc/web" });
-
     const panel = screen.getByRole("dialog", { name: "ns1/svc/web" });
-    const history = within(panel).getByRole("navigation", { name: "Panel history" });
-    expect(within(history).getByText("ns1/svc/web").closest("[aria-current]")).not.toBeNull();
-    fireEvent.click(within(history).getByRole("button", { name: "lo" }));
-    expect(screen.getByTestId("search")).toHaveTextContent("peek=network:lo");
-    expect(screen.getByRole("dialog", { name: "lo" })).toBeInTheDocument();
+    expect(within(panel).queryByRole("navigation")).not.toBeInTheDocument();
+    expect(JSON.parse(sessionStorage.getItem("om3.history") ?? "{}").records.map((r: { id: string }) => r.id)).toEqual(["ns1/svc/web", "lo"]);
   });
 
   test("closed, the anchor brings back the last record, and so does p", () => {
@@ -137,8 +133,7 @@ describe("record panels", () => {
     fireEvent.click(within(screen.getByRole("dialog", { name: "ns1/svc/web" })).getAllByRole("button", { name: "Close" })[0]!);
     expect(screen.getByTestId("search")).toHaveTextContent("?kind=svc");
 
-    const anchor = screen.getByRole("button", { name: /Reopen ns1\/svc\/web/ });
-    expect(anchor).toHaveTextContent("2");
+    const anchor = screen.getByRole("button", { name: "Reopen ns1/svc/web (p)" });
     fireEvent.click(anchor);
     expect(screen.getByRole("dialog", { name: "ns1/svc/web" })).toBeInTheDocument();
 
@@ -154,7 +149,6 @@ describe("record panels", () => {
     fireEvent.click(within(screen.getByRole("dialog", { name: "ns1/svc/web" })).getAllByRole("button", { name: "Close" })[0]!);
     const anchor = screen.getByRole("button", { name: /Reopen ns1\/svc\/web/ });
     expect(anchor).not.toHaveClass("fixed");
-    expect(anchor).toHaveTextContent("1");
     fireEvent.click(anchor);
     expect(screen.getByRole("dialog", { name: "ns1/svc/web" })).toBeInTheDocument();
   });
@@ -181,14 +175,12 @@ describe("record panels", () => {
     expect(actions.closest("[role=dialog] > div > div:first-child")).toContainElement(screen.getByRole("button", { name: "Close" }));
     // What qualifies the record, by its name.
     expect(screen.getByRole("heading", { name: "lo" }).nextElementSibling).toHaveTextContent("flex");
-    // The actions, then the history where its rail has no room, then the close button.
+    // The actions, then the close button: no history there, the search palette proposes it.
     const bar = actions.closest("[role=dialog] > div > div:first-child") as HTMLElement;
     const names = within(bar)
       .getAllByRole("button")
       .map((button) => button.getAttribute("title") ?? button.textContent);
-    const at = (pattern: RegExp) => names.findIndex((name) => pattern.test(name ?? ""));
-    expect(at(/^Actions$/)).toBeLessThan(at(/^History:/));
-    expect(at(/^History:/)).toBeLessThan(at(/^Close$/));
+    expect(names).toEqual(["Actions", "Close"]);
   });
 
   test("the panels open on the right, no control to move them, whatever an earlier choice", () => {

@@ -3,22 +3,19 @@ import { useTranslation } from "react-i18next";
 import { SlideOver } from "../ui/components/SlideOver";
 import { TabList, type TabItem } from "../ui/components/Tabs";
 import { tabPanelProps, useTabsId } from "../ui/components/tabs-ids";
-import { RAIL_FALLBACK, type SlideOverSize } from "../ui/components/slide-over-layout";
+import { type SlideOverSize } from "../ui/components/slide-over-layout";
 import { ObjectIcon } from "../ui/components/ObjectIcon";
-import { PanelHistoryMenu, PanelHistoryRail } from "./PanelHistory";
-import { openedFromHistory, recordKey } from "./panel-history";
+import { recordKey } from "./panel-history";
 import { isPeekStep, stepIcon, type PeekKind } from "./peek";
 import { rememberLastRecord, useRecordHistory } from "./record-history";
 import { PanelHeaderContext } from "./panel-header";
 import { TableCardsContext } from "../ui/components/table-cards";
 
 /**
- * Title of a record panel: the icon of its kind and its name. Where the window leaves
- * no room for the history rail, a button next to the title opens it as a list.
+ * Title of a record panel: the icon of its kind and its name.
  *
  * The title also records the record it shows in the history, whatever opened it —
- * a list row, a badge, the history itself: it enters, or comes back, in front. Only
- * a record picked in the history stays where it stands.
+ * a list row, a badge, the search palette: it enters, or comes back, in front.
  */
 export function PanelTitle({
   kind,
@@ -43,7 +40,7 @@ export function PanelTitle({
     if (!open || recordId === undefined) return;
     const step = { kind, id: recordId };
     if (!isPeekStep(step)) return;
-    record.current(step.kind, step.id, !openedFromHistory(currentKey));
+    record.current(step.kind, step.id);
     rememberLastRecord(step);
     // The step is derived from currentKey.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -61,8 +58,8 @@ export function PanelTitle({
 
 /**
  * Detail panel of a record, the shape every record takes, as oc3 gives it: a side
- * panel over the view, its title, its tabs under the title, and the history of the
- * records shown on its right. The open tab is held by the view, in the URL (`tab`
+ * panel over the view, its title, its tabs under the title. The records shown are
+ * proposed again by the search palette (`GlobalSearch`). The open tab is held by the view, in the URL (`tab`
  * or `peektab`), so that a link, a reload or the Back button reopen it; an unknown
  * tab falls back to the first one. The caller renders the content of the active tab.
  */
@@ -112,19 +109,8 @@ export function RecordPanel({
       resizeLabel={t("panel.resize")}
       closeOnOutsideClick={closeOnOutsideClick}
       heading={<PanelTitle kind={kind} title={title} recordId={recordId} open={open} slotRef={setTitleSlot} />}
-      rail={<PanelHistoryRail currentKey={recordKey(kind, recordId)} />}
-      actions={
-        <>
-          <div ref={setActionsSlot} className="flex items-center gap-2" />
-          {/* The history, where the window leaves no room for its rail: between the
-              actions and the close button, buttons alike. */}
-          {open && (
-            <div className={RAIL_FALLBACK[size]}>
-              <PanelHistoryMenu currentKey={recordKey(kind, recordId)} />
-            </div>
-          )}
-        </>
-      }
+      reopenable
+      actions={<div ref={setActionsSlot} className="flex items-center gap-2" />}
       subheader={
         open && items.length > 1 ? (
           <TabList

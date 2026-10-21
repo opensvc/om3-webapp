@@ -163,7 +163,6 @@
       "status": "Statut",
       "console": "Console",
       "clear": "Effacer",
-      "dequeue": "Retirer de la file",
       "drain": "Drainer",
       "scsiScan": "Scan SCSI",
       "asset": "Inventaire",
@@ -173,7 +172,8 @@
       "sysreport": "Rapport système",
       "restartDaemon": "Redémarrer le démon",
       "resize": "Redimensionner",
-      "cap": "Plafonner"
+      "cap": "Plafonner",
+      "leave": "Quitter"
     }
   },
   "alerts": {
@@ -323,7 +323,8 @@
       "loading": "Chargement de la configuration",
       "empty": "Aucune configuration disponible.",
       "noSection": "Pas de section [{{section}}] dans la configuration.",
-      "copy": "Copier la configuration affichée"
+      "copy": "Copier la configuration affichée",
+      "absent": "Pas encore de configuration : elle est créée avec la première modification écrite."
     },
     "feedback": {
       "tokenNotFound": "Jeton d'authentification introuvable.",
@@ -944,10 +945,6 @@
       "nothing": "Aucun pool, réseau, cpu ni mémoire utilisé.",
       "pgNode": "Le CPU et la mémoire sont ceux des objets du nœud qui sert cette page.",
       "byObject": "CPU et mémoire par objet",
-      "noConfig": "Le namespace {{namespace}} n'a pas encore d'objet de configuration : ses réclamations et ses réglages pg s'y écrivent.",
-      "create": "Créer sa configuration",
-      "creating": "Création…",
-      "createFailed": "La configuration n'a pas pu être créée : {{message}}",
       "actions": "Actions sur le namespace",
       "configOf": "la configuration de {{namespace}}"
     },
@@ -1407,10 +1404,10 @@
       "namespace": "namespace"
     },
     "openNamespaceConfig": "Ouvrir la configuration de {{namespace}}",
-    "createNamespaceConfig": "Créer sa configuration",
-    "createNamespaceConfigTitle": "Créer la configuration de {{namespace}}",
-    "createNamespaceConfigText": "Le namespace {{namespace}} reçoit son objet de configuration, vide : ses réclamations se règlent ensuite.",
-    "createNamespaceConfigConfirm": "Créer"
+    "configure": "Configurer",
+    "configureNamespace": "Configurer le namespace {{namespace}}",
+    "createIn": "Créer",
+    "createInNamespace": "Créer un objet dans {{namespace}}"
   },
   "pools": {
     "columns": {
@@ -1501,22 +1498,13 @@
     }
   },
   "panelHistory": {
-    "label": "Historique des panneaux",
-    "title": "Historique",
     "clear": "Vider l'historique",
     "remove": "Retirer {{name}} de l'historique",
-    "menu_one": "Historique : {{count}} fiche",
-    "menu_other": "Historique : {{count}} fiches",
-    "show": "Afficher {{name}}",
-    "reopen_one": "Rouvrir {{name}}",
-    "reopen_other": "Rouvrir {{name}} et l'historique ({{count}} fiches)",
     "grouping": {
       "label": "Regrouper l'historique",
       "time": "Par date",
       "kind": "Par type"
     },
-    "shownAt": "{{name}} · affiché {{when}}",
-    "shownWhen": "affiché {{when}}",
     "sections": {
       "now": "Maintenant",
       "hour": "Dernière heure",
@@ -1536,7 +1524,8 @@
       "namespace": "Namespaces",
       "instance": "Instances",
       "resource": "Ressources"
-    }
+    },
+    "reopen": "Rouvrir {{name}}"
   },
   "statusBoard": {
     "caption": "État de {{path}} par nœud",
@@ -1661,13 +1650,34 @@
     "keys": {
       "move": "pour se déplacer",
       "open": "pour ouvrir",
-      "close": "pour fermer"
+      "close": "pour fermer",
+      "remove": "pour retirer"
     },
     "kinds": {
       "object": "Objets",
       "namespace": "Espaces de noms",
       "node": "Nœuds",
       "network": "Réseaux"
+    },
+    "recent": {
+      "title": "Ouverts récemment",
+      "clear": "Effacer",
+      "current": "ouvert",
+      "noneOfKind": "Rien de ce type ouvert récemment.",
+      "types": {
+        "node": "Nœud",
+        "svc": "Service",
+        "vol": "Volume",
+        "cfg": "Configuration",
+        "sec": "Secret",
+        "usr": "Utilisateur",
+        "nscfg": "Configuration de namespace",
+        "ccfg": "Cluster",
+        "network": "Réseau",
+        "namespace": "Namespace",
+        "instance": "Instance",
+        "resource": "Ressource"
+      }
     }
   },
   "orchestration": {
@@ -1840,7 +1850,7 @@
       "claimsUpdate": "Mettre à jour les réclamations",
       "claimDelete": "Retirer la réclamation {{section}}",
       "objectCreate": "Créer",
-      "namespaceConfigCreate": "Créer la configuration du namespace"
+      "configCreate": "Créer la configuration"
     },
     "noNews": "aucune nouvelle sous {{seconds}} s"
   },
@@ -1874,6 +1884,115 @@
       "apply": "Appliquer les plafonds configurés",
       "submit_one": "Régler {{count}} plafond",
       "submit_other": "Régler {{count}} plafonds"
+    }
+  },
+  "nodeActions": {
+    "groups": {
+      "node": "Nœud",
+      "inventory": "Inventaire",
+      "daemon": "Démon"
+    },
+    "confirmTitle": "{{label}} : {{target}}",
+    "understood": "J'ai compris",
+    "freeze": {
+      "label": "Geler",
+      "description": "Le démon cesse d'orchestrer les instances du nœud."
+    },
+    "unfreeze": {
+      "label": "Dégeler",
+      "description": "Le démon orchestre de nouveau les instances du nœud."
+    },
+    "abort": {
+      "label": "Annuler",
+      "description": "Annuler l'orchestration du nœud en cours."
+    },
+    "asset": {
+      "label": "Matériel",
+      "description": "Envoyer l'inventaire matériel et système au collecteur."
+    },
+    "capabilities": {
+      "label": "Capacités",
+      "description": "Recenser ce que le nœud peut exécuter : les pilotes qu’il prend en charge."
+    },
+    "disk": {
+      "label": "Disques",
+      "description": "Envoyer les disques et leur usage au collecteur."
+    },
+    "pkg": {
+      "label": "Paquets",
+      "description": "Envoyer les paquets installés au collecteur."
+    },
+    "scsiScan": {
+      "label": "SCSI",
+      "description": "Rechercher de nouveaux disques sur les bus SCSI."
+    },
+    "sysreport": {
+      "label": "Sysreport",
+      "description": "Envoyer le rapport système, les changements des fichiers suivis, au collecteur."
+    },
+    "clear": {
+      "label": "Effacer le moniteur",
+      "description": "Effacer l'état en échec du moniteur du nœud."
+    },
+    "restartDaemon": {
+      "label": "Redémarrer",
+      "description": "Redémarrer le démon ; les instances continuent de tourner."
+    },
+    "shutdown": {
+      "label": "Éteindre",
+      "description": "Éteindre toutes les instances hébergées, puis arrêter le démon.",
+      "warning": "Toutes les instances hébergées sur le nœud s’arrêtent. Redémarrer le démon demande un accès console au nœud."
+    },
+    "stop": {
+      "label": "Arrêter",
+      "description": "Arrêter le démon ; les instances continuent de tourner, sans surveillance.",
+      "warning": "Redémarrer le démon demande un accès console au nœud."
+    },
+    "drain": {
+      "label": "Vider",
+      "description": "Geler le nœud et éteindre toutes les instances qu’il héberge.",
+      "warning": "Toutes les instances hébergées sur le nœud s’arrêtent."
+    },
+    "leave": {
+      "label": "Quitter",
+      "description": "Retirer le nœud du cluster, une fois vidé.",
+      "warning": "Toutes les instances hébergées sur le nœud s’arrêtent et en sont supprimées : le nœud quitte le cluster et redémarre seul dans son propre cluster, sans identifiant pour joindre son api.",
+      "fromHere": "Demandez-le depuis la webapp d’un autre nœud : celui-ci sert la webapp."
+    }
+  },
+  "secCertificate": {
+    "menu": "Certificat",
+    "confirmTitle": "{{label}} : {{path}}",
+    "create": {
+      "label": "Créer",
+      "busy": "Création du certificat…",
+      "description": "Générer le certificat, auto-signé ou signé par le ca du sec, avec sa clé privée s'il n'y en a pas.",
+      "replace": "Le certificat actuel est remplacé.",
+      "replaceKeepKey": "Le certificat actuel est remplacé ; la clé privée est conservée."
+    },
+    "renew": {
+      "label": "Renouveler",
+      "busy": "Renouvellement du certificat…",
+      "description": "Renouveler le certificat quand il est à échéance : auprès de l'annuaire ACME que nomme le sec, ou généré."
+    },
+    "force": {
+      "label": "Forcer le renouvellement",
+      "busy": "Renouvellement du certificat…",
+      "description": "Renouveler le certificat maintenant, même s'il n'est pas à échéance.",
+      "warning": "Le certificat actuel est remplacé, même s'il n'a pas été émis par ce sec."
+    },
+    "renewed": "Certificat renouvelé : {{reason}}",
+    "notRenewed": "Certificat non renouvelé : {{reason}}",
+    "timeout": "Pas de réponse en {{seconds}} s : les clés du sec disent si un certificat a été émis.",
+    "ca": {
+      "legend": "Signé par",
+      "cluster": "Signer avec le <a>ca du cluster</a>",
+      "other": "ou avec un <a>autre ca</a>",
+      "pick": "Ca du namespace",
+      "none": "Pas d'autre sec dans le namespace.",
+      "signedBy": "Signé par {{ca}}, écrit comme ca du sec.",
+      "selfSigned": "Pas de ca : auto-signé.",
+      "reading": "Lecture du ca du sec…"
     }
   }
 }

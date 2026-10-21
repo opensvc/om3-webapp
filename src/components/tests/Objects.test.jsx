@@ -1610,7 +1610,12 @@ describe('Objects Component', () => {
             // Its checkbox selects, it does not open.
             fireEvent.click(within(dev).getByRole('checkbox', {name: /dev/}));
             expect(screen.getByTestId('router-search')).not.toHaveTextContent('peek=namespace:dev');
-            expect(within(dev).queryByRole('button', {name: 'Create its configuration'})).toBeNull();
+            // None and no grant: nothing to configure; an object still created in it.
+            expect(within(dev).queryByRole('button', {name: 'Configure the namespace dev'})).toBeNull();
+            expect(within(dev).getByRole('button', {name: 'Create an object in dev'})).toBeInTheDocument();
+            // prod has one: configured from its line too.
+            fireEvent.click(within(prod).getByRole('button', {name: 'Configure the namespace prod'}));
+            expect(screen.getByTestId('router-search')).toHaveTextContent('peek=namespace:prod&peektab=config');
         });
 
         test('a configuration alone in its namespace: the line of the namespace kept, alone', async () => {
@@ -1621,33 +1626,57 @@ describe('Objects Component', () => {
             expect(objectNamesInOrder()).toEqual(['prod/svc/web']);
         });
 
-        test('a namespace without its configuration: those who may write it offered to create it', async () => {
+        test('a namespace without its configuration: those who may write it offered to configure it, created by its first change', async () => {
             mockGrants.value = {squatter: null};
             try {
                 setup({objectStatus: {'dev/svc/x': {avail: 'up'}}, objectInstanceStatus: {}}, '?list=any', {isWideScreen: true, isMobile: false});
                 await waitForLoad();
                 const dev = namespaceRows().find((row) => row.dataset.namespaceRow === 'dev');
-                fireEvent.click(within(dev).getByRole('button', {name: 'Create its configuration'}));
-                // Nothing to choose: a confirmation, then created, its claims shown.
-                const dialog = await screen.findByRole('dialog', {name: 'Create the configuration of dev'});
-                expect(within(dialog).queryByRole('textbox')).toBeNull();
-                global.fetch = vi.fn(() => Promise.resolve({ok: true, status: 200, json: () => Promise.resolve({})}));
-                fireEvent.click(within(dialog).getByRole('button', {name: 'Create'}));
-                await waitFor(() => expect(screen.getByTestId('router-search')).toHaveTextContent('peek=namespace:dev&peektab=claims'));
-                const [url, options] = global.fetch.mock.calls.find(([u]) => u.includes('/nscfg/'));
-                expect(url).toBe('/api/object/path/dev/nscfg/namespace/config/file');
-                expect(options.method).toBe('POST');
-                expect(options.body).toMatch(/id = /);
-                expect(screen.queryByRole('dialog', {name: 'Create the configuration of dev'})).toBeNull();
+                const configure = within(dev).getByRole('button', {name: 'Configure the namespace dev'});
+                expect(configure).toHaveTextContent('Configure');
+                // Outlined, as high as fits the line.
+                expect(configure).toHaveClass('border', 'h-6');
+                expect(within(dev).getByRole('button', {name: 'Create an object in dev'})).toHaveClass('bg-accent', 'h-6');
+                global.fetch.mockClear();
+                fireEvent.click(configure);
+                // Its configuration tab: nothing written until a change is.
+                await waitFor(() => expect(screen.getByTestId('router-search')).toHaveTextContent('peek=namespace:dev&peektab=config'));
+                expect(global.fetch.mock.calls.filter(([, options]) => options?.method === 'POST')).toEqual([]);
             } finally {
                 mockGrants.value = {};
             }
         });
 
+        test('create from the line of a namespace: the wizard in that namespace', async () => {
+            setup({objectStatus: {'dev/svc/x': {avail: 'up'}, 'prod/svc/web': {avail: 'up'}}, objectInstanceStatus: {}}, '?list=any', {isWideScreen: true, isMobile: false});
+            await waitForLoad();
+            const dev = namespaceRows().find((row) => row.dataset.namespaceRow === 'dev');
+            fireEvent.click(within(dev).getByRole('button', {name: 'Create an object in dev'}));
+            const dialog = screen.getByRole('dialog', {name: 'New object'});
+            expect(within(dialog).getByLabelText('Namespace')).toHaveValue('dev');
+            // The line is not opened by it.
+            expect(screen.getByTestId('router-search')).not.toHaveTextContent('peek=namespace:dev');
+            fireEvent.click(within(dialog).getByRole('button', {name: 'Cancel'}));
+            // The top button: no namespace filtered on, root again.
+            fireEvent.click(screen.getByRole('button', {name: 'New object'}));
+            expect(within(screen.getByRole('dialog', {name: 'New object'})).getByLabelText('Namespace')).toHaveValue('root');
+        });
+
+        test('narrow, the buttons of the line of a namespace their icons alone', async () => {
+            setup({objectStatus: {'prod/svc/web': {avail: 'up'}, 'prod/': {avail: 'n/a'}}, objectInstanceStatus: {}}, '', {isWideScreen: false, isMobile: true});
+            await waitFor(() => expect(screen.getByRole('table')).toBeInTheDocument());
+            const create = within(namespaceRows()[0]).getByRole('button', {name: 'Create an object in prod'});
+            expect(create.querySelector('svg')).not.toBeNull();
+            expect(create).toHaveTextContent(/^Create an object in prod$/);
+            // It creates: the accent fill; Configure outlined.
+            expect(create).toHaveClass('bg-accent', 'h-6', 'w-6');
+            expect(within(namespaceRows()[0]).getByRole('button', {name: 'Configure the namespace prod'})).toBeInTheDocument();
+        });
+
         test('narrow, a small badge over the name of the namespace, its line as high as the others', async () => {
             setup({objectStatus: {'prod/svc/web': {avail: 'up'}}, objectInstanceStatus: {}}, '', {isWideScreen: false, isMobile: true});
             await waitFor(() => expect(screen.getByRole('table')).toBeInTheDocument());
-            expect(namespaceRows()[0].querySelector('th')).toHaveTextContent(/^namespaceprod$/);
+            expect(namespaceRows()[0].querySelector('th')).toHaveTextContent(/^namespaceprod/);
         });
 
         test('the short paths of the root namespace kept together under it', async () => {
@@ -1655,7 +1684,7 @@ describe('Objects Component', () => {
                 'b-ns/svc/x': {avail: 'up'}, 'cluster': {avail: 'n/a'}, 'svc/dns': {avail: 'up'}, 'a-ns/vol/v': {avail: 'up'},
             }, objectInstanceStatus: {}}, '?list=any', {isWideScreen: true, isMobile: false});
             await waitForLoad();
-            expect(namespaceRows().map((row) => row.textContent)).toEqual(['a-ns', 'b-ns', 'root']);
+            expect(namespaceRows().map((row) => row.dataset.namespaceRow)).toEqual(['a-ns', 'b-ns', 'root']);
             expect(objectNamesInOrder()).toEqual(['a-ns/vol/v', 'b-ns/svc/x', 'cluster', 'svc/dns']);
         });
 
@@ -1667,7 +1696,8 @@ describe('Objects Component', () => {
             const rows = within(screen.getByRole('table', {name: 'Objects'})).getAllByRole('row').slice(1);
             expect(rows.map((row) => row.getAttribute('data-namespace-row') ?? 'object')).toEqual(['dev', 'object', 'prod', 'object', 'object']);
             const line = namespaceRows()[1];
-            expect(within(line).getByRole('rowheader', {name: 'prod'})).toHaveAttribute('colspan', String(rowCells(objectRows()[0]).length - 1));
+            // Across the row but the checkbox and the last cell, its buttons'.
+            expect(within(line).getByRole('rowheader', {name: 'prod'})).toHaveAttribute('colspan', String(rowCells(objectRows()[0]).length - 2));
             fireEvent.click(within(line).getByRole('rowheader'));
             expect(mockNavigate).not.toHaveBeenCalled();
         });
@@ -1719,9 +1749,9 @@ describe('Objects Component', () => {
         test('a page starting inside a namespace opens with its line; its checkbox selects the objects of every page', async () => {
             setup(makeMany(60), '', {isWideScreen: true, isMobile: false});
             await waitForLoad();
-            expect(namespaceRows().map((row) => row.textContent)).toEqual(['test-ns']);
+            expect(namespaceRows().map((row) => row.dataset.namespaceRow)).toEqual(['test-ns']);
             fireEvent.click(screen.getByRole('button', {name: 'Next'}));
-            expect(namespaceRows().map((row) => row.textContent)).toEqual(['test-ns']);
+            expect(namespaceRows().map((row) => row.dataset.namespaceRow)).toEqual(['test-ns']);
             fireEvent.click(screen.getByRole('checkbox', {name: 'Select the objects of test-ns'}));
             expect(screen.getByText('60 selected')).toBeInTheDocument();
         });

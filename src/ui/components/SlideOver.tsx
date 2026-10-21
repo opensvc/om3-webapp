@@ -67,6 +67,7 @@ export function SlideOver({
   actions,
   heading,
   rail,
+  reopenable = false,
   resizeLabel,
   children,
 }: {
@@ -106,6 +107,11 @@ export function SlideOver({
    * the panel: it does not close it.
    */
   rail?: ReactNode;
+  /**
+   * A record panel, which the "p" key reopens (`PanelAnchor`) and puts away: a form
+   * being filled is not closed by a stray key.
+   */
+  reopenable?: boolean;
   /**
    * Name of the handle on the inner edge — the left one of a panel on the right —
    * which makes the panel resizable: dragged
@@ -237,11 +243,9 @@ export function SlideOver({
     };
   }, [open]);
 
-  // "p" opens the record panel from the keyboard (`PanelAnchor`) and puts it away
-  // again. Only a panel with a rail — a record, with its history — answers it: a
-  // form being filled is not closed by a stray key.
+  // "p" opens the record panel from the keyboard (`PanelAnchor`) and puts it away again.
   useShortcut("p", () => {
-    if (!open || rail === undefined) return false;
+    if (!open || !reopenable) return false;
     onClose();
     return true;
   });
@@ -261,6 +265,30 @@ export function SlideOver({
       opener.current = null;
     }
   }, [open]);
+
+  // Another record in the panel already open, chosen from what left the page (the
+  // search palette, gone with the choice): the panel takes the focus back, for the
+  // keyboard to go on from there. A focus kept inside the panel stays where it is.
+  const shown = useRef(title);
+  useEffect(() => {
+    if (shown.current === title) return;
+    shown.current = title;
+    if (!open || panel.current === null) return;
+    const focused = document.activeElement;
+    if (focused === null || focused === document.body || !document.contains(focused)) panel.current.focus();
+  }, [open, title]);
+
+  /**
+   * Up and Down from the panel itself go to the first or the last row it lists
+   * that opens something (`Row`), the rows then walked with the arrows.
+   */
+  function onPanelKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
+    if (event.target !== event.currentTarget || (event.key !== "ArrowDown" && event.key !== "ArrowUp")) return;
+    const rows = main.current?.querySelectorAll<HTMLElement>("tr[tabindex='0']");
+    if (rows === undefined || rows.length === 0) return;
+    event.preventDefault();
+    rows[event.key === "ArrowDown" ? 0 : rows.length - 1]?.focus();
+  }
 
   useEffect(() => {
     if (!open) return;
@@ -307,6 +335,7 @@ export function SlideOver({
       aria-label={title}
       aria-modal="false"
       tabIndex={-1}
+      onKeyDown={onPanelKeyDown}
       inert={!open}
       style={
         width === undefined

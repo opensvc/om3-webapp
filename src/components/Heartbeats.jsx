@@ -628,7 +628,6 @@ const Heartbeats = () => {
                     <div className="flex shrink-0 flex-wrap items-center gap-3">
                         {isMobile && (
                             <Button
-                                variant="ghost"
                                 size="sm"
                                 icon={<FilterIcon className="h-4 w-4"/>}
                                 onClick={toggleShowFilters}
@@ -658,7 +657,6 @@ const Heartbeats = () => {
                             {/* Any filter set, a tool clearing them all. */}
                             {filtered && (
                                 <Button
-                                    variant="ghost"
                                     size="sm"
                                     icon={<CloseIcon className="h-3.5 w-3.5"/>}
                                     onClick={clearAllFilters}
@@ -741,7 +739,6 @@ const Heartbeats = () => {
                     <>
                         <Button variant="secondary" onClick={() => setPending(null)}>{t("common.cancel")}</Button>
                         <Button
-                            variant={pending?.action === "start" ? "primary" : "danger"}
                             onClick={() => {
                                 const confirmed = pending;
                                 setPending(null);

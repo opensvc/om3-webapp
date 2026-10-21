@@ -40,6 +40,7 @@ const NodeRow = ({
                      stats,
                      status,
                      monitor,
+                     info,
                      isSelected,
                      daemonNodename,
                      onSelect,
@@ -84,6 +85,8 @@ const NodeRow = ({
                 <Cell numeric>{unknown}</Cell>
                 <Cell numeric>{unknown}</Cell>
                 <Cell numeric>{unknown}</Cell>
+                <Cell>{unknown}</Cell>
+                <Cell>{unknown}</Cell>
                 <Cell>{unknown}</Cell>
                 <Cell>{unknown}</Cell>
                 <Cell>{unknown}</Cell>
@@ -147,6 +150,19 @@ const NodeRow = ({
                 {typeof stats?.swap_avail === "number" && stats?.swap_total !== 0 ? `${stats.swap_avail}%` : "-"}
             </Cell>
             <Cell className="whitespace-nowrap">{status?.agent || notAvailable}</Cell>
+            <Cell className="whitespace-nowrap">{info?.env || "-"}</Cell>
+            {/* Its labels, a tag each, as the node configuration sets them. */}
+            <Cell>
+                {Object.keys(info?.labels ?? {}).length === 0 ? "-" : (
+                    <span className="flex flex-wrap gap-1" aria-label={t("nodes.columns.labels")}>
+                        {Object.entries(info.labels).sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => (
+                            <span key={k} className="rounded-full border border-line px-1.5 text-data text-ink-muted">
+                                {v === "" ? k : `${k}=${v}`}
+                            </span>
+                        ))}
+                    </span>
+                )}
+            </Cell>
             <Cell className="whitespace-nowrap"><AgeTime value={status?.booted_at}/></Cell>
             <Cell className="whitespace-nowrap"><AgeTime value={monitor?.updated_at}/></Cell>
         </Row>

@@ -39,7 +39,7 @@ describe('NodeRow Component', () => {
         render(<NodeRow {...defaultProps} stats={undefined} status={undefined} monitor={undefined}/>);
         const row = screen.getByRole('row', {name: /Node node1 row/i});
         expect(within(row).getByTitle('No status: the node is gone or not heard from')).toHaveClass('text-state-down');
-        expect(within(row).getAllByText('?')).toHaveLength(8);
+        expect(within(row).getAllByText('?')).toHaveLength(10);
         expect(within(row).getByRole('checkbox')).toBeDisabled();
     });
 
@@ -301,11 +301,22 @@ describe('NodeRow Component', () => {
         expect(cells[1]).toHaveTextContent('-');
     });
 
+    test('its env, and its labels a tag each, by key; none, a dash', () => {
+        const {rerender} = render(<NodeRow {...defaultProps} info={{env: 'TST', labels: {zone: 'a', gpu: ''}}}/>);
+        const cells = screen.getAllByRole('cell');
+        expect(cells[8]).toHaveTextContent('TST');
+        expect(within(cells[9]).getByLabelText('Labels').children).toHaveLength(2);
+        expect([...within(cells[9]).getByLabelText('Labels').children].map((tag) => tag.textContent)).toEqual(['gpu', 'zone=a']);
+        rerender(<NodeRow {...defaultProps} info={{env: '', labels: {}}}/>);
+        expect(screen.getAllByRole('cell')[8]).toHaveTextContent('-');
+        expect(screen.getAllByRole('cell')[9]).toHaveTextContent('-');
+    });
+
     test('keeps its cells on one line', () => {
         render(<NodeRow {...defaultProps} />);
         const row = screen.getByRole('row', {name: /Node node1 row/i});
         expect(row).toHaveClass('h-[1.875rem]');
-        expect(screen.getAllByRole('cell')).toHaveLength(10);
+        expect(screen.getAllByRole('cell')).toHaveLength(12);
     });
 
     test('marks a selected row', () => {

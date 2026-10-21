@@ -26,7 +26,7 @@ const setCompact = (compact) => {
     }));
 };
 
-const CLUSTER = ['Links', 'Nodes', 'Namespaces', 'Networks', 'Pools'];
+const CLUSTER = ['Links', 'Nodes', 'Namespaces', 'Networks', 'Pools', 'Resources'];
 const OBJECTS = ['Services', 'Volumes', 'Configurations', 'Secrets', 'Users'];
 const section = (name) => screen.getByRole('region', {name});
 /** The entries of a section: the links of its list, not its title. */
@@ -38,7 +38,7 @@ describe('Sidebar', () => {
         mockPills.current = {};
     });
 
-    test('two sections: the cluster, its links, nodes, namespaces, networks and pools; the objects, their title all of them, then by kind', () => {
+    test('two sections: the cluster, its links, nodes, namespaces, networks, pools and resources; the objects, their title all of them, then by kind', () => {
         renderSidebar();
         expect(screen.getAllByRole('heading').map((h) => h.textContent)).toEqual(['Cluster', 'Objects']);
         expect(linkNames(section('Cluster'))).toEqual(CLUSTER);
@@ -55,7 +55,7 @@ describe('Sidebar', () => {
         renderSidebar();
         const hrefs = Object.fromEntries(screen.getAllByRole('link').map((link) => [link.textContent, link.getAttribute('href')]));
         expect(hrefs).toEqual({
-            Links: '/heartbeats', Nodes: '/nodes', Namespaces: '/namespaces', Networks: '/network', Pools: '/pools',
+            Links: '/heartbeats', Nodes: '/nodes', Namespaces: '/namespaces', Networks: '/network', Pools: '/pools', Resources: '/resources',
             Objects: '/objects?list=any', Services: '/objects', Volumes: '/objects?list=volumes',
             Configurations: '/objects?list=configs', Secrets: '/objects?list=secrets', Users: '/objects?list=users',
         });

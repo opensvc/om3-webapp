@@ -1082,7 +1082,8 @@
       "objects": "Objects",
       "kinds": "Kinds",
       "namespaces": "Namespaces",
-      "pools": "Pools"
+      "pools": "Pools",
+      "resources": "Resources"
     },
     "main": "Main",
     "loading": "Loading...",
@@ -1106,7 +1107,8 @@
         "nodes": "nodes",
         "objects": "objects",
         "pools": "pools",
-        "whoami": "whoami"
+        "whoami": "whoami",
+        "resources": "resources"
       }
     },
     "sections": {
@@ -1144,7 +1146,9 @@
       "swapAvail": "Swap Avail",
       "version": "Version",
       "bootedAt": "Booted At",
-      "updatedAt": "Updated At"
+      "updatedAt": "Updated At",
+      "env": "Env",
+      "labels": "Labels"
     },
     "bulkActions": "Actions",
     "selectAll": "Select all nodes",
@@ -1518,7 +1522,8 @@
       "keys": "Keys",
       "config": "Configuration",
       "info": "Info",
-      "containerLogs": "Container logs"
+      "containerLogs": "Container logs",
+      "locks": "Locks"
     },
     "crossLink": "Show the {{kind}} here",
     "kinds": {
@@ -2248,5 +2253,56 @@
     "show": "Show the data of {{title}} as JSON",
     "title": "{{title}} as JSON",
     "copy": "Copy the JSON"
+  },
+  "clusterLocks": {
+    "intro": "The locks the node speaking for the cluster granted, whose holder has neither released them nor seen their lease end, as om cluster lock list shows them. A lock serializes what reads the state of the cluster and changes it on the strength of that reading.",
+    "refresh": "Refresh",
+    "loading": "Reading the locks",
+    "table": "Cluster locks",
+    "holder": "Holder",
+    "acquired": "Acquired",
+    "lease": "Lease left",
+    "id": "Id",
+    "actions": "Actions",
+    "none": "No lock is held.",
+    "forbidden": "Reading the cluster locks takes the root role.",
+    "footer": "Read again every {{seconds}} s: no event tells a lock taken or released.",
+    "leftSeconds": "{{seconds}} s",
+    "leftMinutes": "{{minutes}} min {{seconds}} s",
+    "release": "Release",
+    "releaseOne": "Release {{name}}",
+    "subject": "the lock {{name}}",
+    "confirmTitle": "Release the lock {{name}}?",
+    "confirm": "The lock {{name}} is taken back from {{holder}}, as om cluster lock release does.",
+    "warning": "Its holder is not told: it goes on as if it held the lock. Release it only from a holder known to be stuck, or gone before its lease ends.",
+    "byId": "Released only while still held under {{id}}: granted to another meanwhile, it is left to that one."
+  },
+  "resources": {
+    "caption": "The resources of the cluster",
+    "loading": "Reading the resources",
+    "loadError": "The resources could not be read: {{message}}",
+    "filter": "Filter the resources",
+    "group": "Driver",
+    "all": "All",
+    "count": "{{shown}} / {{total}}",
+    "refresh": "Refresh",
+    "empty": "No resource reported.",
+    "noMatch": "No resource matches.",
+    "notProvisioned": "not provisioned",
+    "restarts_one": "{{count}} restart left",
+    "restarts_other": "{{count}} restarts left",
+    "columns": {
+      "object": "Object",
+      "resource": "Resource",
+      "flags": "Flags",
+      "label": "Label"
+    },
+    "flags": {
+      "disabled": "disabled",
+      "standby": "standby",
+      "monitored": "monitored",
+      "optional": "optional",
+      "encap": "encapsulated"
+    }
   }
 }

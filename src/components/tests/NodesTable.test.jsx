@@ -6,6 +6,9 @@ import NodesTable from '../NodesTable.jsx';
 import i18n from '../../i18n';
 import {useActionTracker} from '../../app/action-tracker';
 
+/** The actions posted, not the reads of the view (its node info). */
+const actionPosts = () => global.fetch.mock.calls.filter(([, options]) => options?.method === 'POST');
+
 /** What the actions tray holds, the latest first: action, subject, state, reason. */
 const tray = () => useActionTracker.getState().tracked.map((e) => [e.action, e.subject, e.state, e.error ?? null]);
 
@@ -238,6 +241,25 @@ describe('NodesTable', () => {
         }
     });
 
+    test('the env and the labels of each node read once, a column each, sorted by them', async () => {
+        global.fetch = vi.fn(async () => ({
+            ok: true,
+            json: async () => ({
+                'node-1': {env: 'PRD', labels: {zone: 'b'}},
+                'node-2': {env: 'DEV', labels: {}},
+                'node-3': {env: 'TST', labels: {zone: 'a'}},
+            }),
+        }));
+        renderWithRouter(<NodesTable/>);
+        await screen.findByText('node-1');
+        await waitFor(() => expect(global.fetch).toHaveBeenCalledWith('/api/node/info', expect.objectContaining({headers: {Authorization: 'Bearer test-token'}})));
+        const order = () => screen.getAllByRole('row').slice(1).map((row) => within(row).getAllByRole('cell')[1].textContent);
+        fireEvent.click(screen.getByRole('button', {name: /^Env/}));
+        await waitFor(() => expect(order()).toEqual(['node-2', 'node-1', 'node-3']));
+        fireEvent.click(screen.getByRole('button', {name: /^Labels/}));
+        await waitFor(() => expect(order()).toEqual(['node-2', 'node-3', 'node-1']));
+    });
+
     test('renders all node names', async () => {
         renderWithRouter(<NodesTable/>);
         expect(await screen.findByText('node-1')).toBeInTheDocument();
@@ -344,8 +366,8 @@ describe('NodesTable', () => {
             await actOnFirstNode('Freeze');
             fireEvent.click(screen.getByRole('button', {name: 'Confirm'}));
             await waitFor(() => expect(tray()).toEqual([['freeze', 'node-1', 'refused', 'already frozen']]));
-            expect(global.fetch).toHaveBeenCalledTimes(1);
-            expect(global.fetch.mock.calls[0][0]).toContain('/node-2/');
+            expect(actionPosts()).toHaveLength(1);
+            expect(actionPosts()[0][0]).toContain('/node-2/');
         });
 
         test('handles HTTP error response', async () => {
@@ -455,7 +477,7 @@ describe('NodesTable', () => {
             renderWithRouter(<NodesTable/>);
             await actOnFirstNode('Freeze');
             fireEvent.click(screen.getByText('Cancel'));
-            expect(global.fetch).not.toHaveBeenCalled();
+            expect(actionPosts()).toEqual([]);
         });
 
         test('the feedback closes with its Close button', async () => {
@@ -511,7 +533,7 @@ describe('NodesTable', () => {
         test('passes each row its data and callbacks: no row actions, the panel holds them', async () => {
             renderWithRouter(<NodesTable/>);
             expect(await screen.findByTestId('props-node-1')).toHaveTextContent(
-                'daemonNodename,isOpen,isSelected,monitor,nodename,onOpen,onSelect,stats,status'
+                'daemonNodename,info,isOpen,isSelected,monitor,nodename,onOpen,onSelect,stats,status'
             );
         });
 

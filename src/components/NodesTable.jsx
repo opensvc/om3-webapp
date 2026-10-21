@@ -8,6 +8,7 @@ import {refusalReason} from "./objectActions";
 import {getResponseErrorMessage} from "../services/api.jsx";
 import NodeRow from "../components/NodeRow.jsx";
 import logger from '../utils/logger.js';
+import {URL_NODE_INFO} from "../config/apiPath.js";
 import {nodeActionRequest, nodeMenuItems} from "../app/node-actions";
 import {useTranslation} from "react-i18next";
 import {NodeActionDialog} from "./NodeActionDialog";
@@ -28,6 +29,12 @@ const ZERO_DATE = "0001-01-01T00:00:00Z";
 /** How long a feedback message stays, as the snackbar it replaces. */
 const FEEDBACK_DURATION_MS = 4000;
 
+/** The labels of a node in words, "key=value" by key, for its column and its sort. */
+export const labelsText = (labels) => Object.entries(labels ?? {})
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([k, v]) => (v === "" ? k : `${k}=${v}`))
+    .join(" ");
+
 const isNodeFrozen = (status) => !!status?.frozen_at && status?.frozen_at !== ZERO_DATE;
 
 const SORT_COLUMNS = [
@@ -38,6 +45,8 @@ const SORT_COLUMNS = [
     {key: "mem_avail", labelKey: "nodes.columns.memAvail"},
     {key: "swap_avail", labelKey: "nodes.columns.swapAvail"},
     {key: "version", labelKey: "nodes.columns.version"},
+    {key: "env", labelKey: "nodes.columns.env"},
+    {key: "labels", labelKey: "nodes.columns.labels"},
     {key: "booted_at", labelKey: "nodes.columns.bootedAt"},
     {key: "updated_at", labelKey: "nodes.columns.updatedAt"},
 ];
@@ -67,6 +76,28 @@ const NodesTable = () => {
 
     // The node whose panel is open, and its tab, in the URL as on the other views.
     const panel = usePanelSearch();
+
+    // What each node says of itself beyond its status (GET /node/info): its env and
+    // its labels, read once, and again as the nodes of the cluster change.
+    const [nodeInfo, setNodeInfo] = useState({});
+    const nodeNames = Object.keys(nodeStatus).sort().join(",");
+    useEffect(() => {
+        let live = true;
+        // Not read, the columns stay empty: a failure to read it never fails the view.
+        Promise.resolve()
+            .then(() => fetch(URL_NODE_INFO, {headers: {Authorization: `Bearer ${localStorage.getItem("authToken") || ""}`}, cache: "no-cache"}))
+            .then((response) => (response?.ok ? response.json() : null))
+            .then((body) => {
+                if (!live || !body || typeof body !== "object") return;
+                // A map by node, as the daemon answers; a list of items, as its spec says.
+                const list = Array.isArray(body.items) ? body.items : null;
+                setNodeInfo(list ? Object.fromEntries(list.map((i) => [i.nodename, i])) : body);
+            })
+            .catch((error) => logger.warn("Failed to read the node info:", error));
+        return () => {
+            live = false;
+        };
+    }, [nodeNames]);
 
     const nodeEventTypes = useMemo(() => [
         "NodeStatusUpdated",
@@ -202,6 +233,10 @@ const NodesTable = () => {
                 diff = (nodeStats[a]?.swap_avail || 0) - (nodeStats[b]?.swap_avail || 0);
             } else if (sortColumn === "version") {
                 diff = (nodeStatus[a]?.agent || '').localeCompare(nodeStatus[b]?.agent || '');
+            } else if (sortColumn === "env") {
+                diff = (nodeInfo[a]?.env || '').localeCompare(nodeInfo[b]?.env || '');
+            } else if (sortColumn === "labels") {
+                diff = labelsText(nodeInfo[a]?.labels).localeCompare(labelsText(nodeInfo[b]?.labels));
             } else if (sortColumn === "booted_at") {
                 const bootedA = nodeStatus[a]?.booted_at || ZERO_DATE;
                 const bootedB = nodeStatus[b]?.booted_at || ZERO_DATE;
@@ -213,7 +248,7 @@ const NodesTable = () => {
             }
             return sortDirection === "asc" ? diff : -diff;
         });
-    }, [clusterNodes, nodeStatus, nodeStats, nodeMonitor, sortColumn, sortDirection]);
+    }, [clusterNodes, nodeStatus, nodeStats, nodeMonitor, nodeInfo, sortColumn, sortDirection]);
 
     const handleSort = (column) => {
         if (sortColumn === column) {
@@ -323,6 +358,7 @@ const NodesTable = () => {
                             stats={nodeStats[nodename]}
                             status={nodeStatus[nodename]}
                             monitor={nodeMonitor[nodename]}
+                            info={nodeInfo[nodename]}
                             isSelected={selectedNodes.includes(nodename)}
                             daemonNodename={daemon.nodename}
                             onSelect={handleSelectNode}

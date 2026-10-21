@@ -1082,7 +1082,8 @@
       "objects": "Objets",
       "kinds": "Kinds",
       "namespaces": "Namespaces",
-      "pools": "Pools"
+      "pools": "Pools",
+      "resources": "Ressources"
     },
     "main": "Principal",
     "loading": "Chargement...",
@@ -1106,7 +1107,8 @@
         "nodes": "nœuds",
         "objects": "objets",
         "pools": "pools",
-        "whoami": "utilisateur"
+        "whoami": "utilisateur",
+        "resources": "ressources"
       }
     },
     "sections": {
@@ -1144,7 +1146,9 @@
       "swapAvail": "Swap dispo",
       "version": "Version",
       "bootedAt": "Démarré",
-      "updatedAt": "Mis à jour"
+      "updatedAt": "Mis à jour",
+      "env": "Env",
+      "labels": "Étiquettes"
     },
     "bulkActions": "Actions",
     "selectAll": "Sélectionner tous les nœuds",
@@ -1518,7 +1522,8 @@
       "keys": "Clés",
       "config": "Configuration",
       "info": "Infos",
-      "containerLogs": "Journaux du conteneur"
+      "containerLogs": "Journaux du conteneur",
+      "locks": "Verrous"
     },
     "crossLink": "Afficher la fiche ici ({{kind}})",
     "kinds": {
@@ -2248,5 +2253,56 @@
     "show": "Voir les données de {{title}} en JSON",
     "title": "{{title}} en JSON",
     "copy": "Copier le JSON"
+  },
+  "clusterLocks": {
+    "intro": "Les verrous accordés par le nœud qui parle pour le cluster, que leur détenteur n’a ni relâchés ni vu expirer, tels que om cluster lock list les montre. Un verrou sérialise ce qui lit l’état du cluster et le change sur la foi de cette lecture.",
+    "refresh": "Rafraîchir",
+    "loading": "Lecture des verrous",
+    "table": "Verrous du cluster",
+    "holder": "Détenteur",
+    "acquired": "Acquis",
+    "lease": "Bail restant",
+    "id": "Id",
+    "actions": "Actions",
+    "none": "Aucun verrou n’est tenu.",
+    "forbidden": "Lire les verrous du cluster demande le rôle root.",
+    "footer": "Relus toutes les {{seconds}} s : aucun événement ne signale un verrou pris ou relâché.",
+    "leftSeconds": "{{seconds}} s",
+    "leftMinutes": "{{minutes}} min {{seconds}} s",
+    "release": "Relâcher",
+    "releaseOne": "Relâcher {{name}}",
+    "subject": "le verrou {{name}}",
+    "confirmTitle": "Relâcher le verrou {{name}} ?",
+    "confirm": "Le verrou {{name}} est repris à {{holder}}, comme le fait om cluster lock release.",
+    "warning": "Son détenteur n’est pas prévenu : il continue comme s’il tenait le verrou. Ne le relâchez que pour un détenteur bloqué, ou parti avant la fin de son bail.",
+    "byId": "Relâché seulement s’il est encore tenu sous {{id}} : accordé à un autre entre-temps, il lui est laissé."
+  },
+  "resources": {
+    "caption": "Les ressources du cluster",
+    "loading": "Lecture des ressources",
+    "loadError": "Les ressources n’ont pas pu être lues : {{message}}",
+    "filter": "Filtrer les ressources",
+    "group": "Pilote",
+    "all": "Tous",
+    "count": "{{shown}} / {{total}}",
+    "refresh": "Rafraîchir",
+    "empty": "Aucune ressource signalée.",
+    "noMatch": "Aucune ressource ne correspond.",
+    "notProvisioned": "non provisionnée",
+    "restarts_one": "{{count}} redémarrage restant",
+    "restarts_other": "{{count}} redémarrages restants",
+    "columns": {
+      "object": "Objet",
+      "resource": "Ressource",
+      "flags": "Options",
+      "label": "Libellé"
+    },
+    "flags": {
+      "disabled": "désactivée",
+      "standby": "standby",
+      "monitored": "surveillée",
+      "optional": "facultative",
+      "encap": "encapsulée"
+    }
   }
 }

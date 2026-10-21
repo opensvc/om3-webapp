@@ -163,7 +163,6 @@
       "status": "Status",
       "console": "Console",
       "clear": "Clear",
-      "dequeue": "Dequeue",
       "drain": "Drain",
       "scsiScan": "Scsi scan",
       "asset": "Asset",
@@ -173,7 +172,8 @@
       "sysreport": "Sysreport",
       "restartDaemon": "Restart daemon",
       "resize": "Resize",
-      "cap": "Cap"
+      "cap": "Cap",
+      "leave": "Leave"
     }
   },
   "alerts": {
@@ -1874,6 +1874,80 @@
       "apply": "Apply the caps configured",
       "submit_one": "Set {{count}} cap",
       "submit_other": "Set {{count}} caps"
+    }
+  },
+  "nodeActions": {
+    "groups": {
+      "node": "Node",
+      "inventory": "Inventory",
+      "daemon": "Daemon"
+    },
+    "confirmTitle": "{{label}}: {{target}}",
+    "understood": "I understand",
+    "freeze": {
+      "label": "Freeze",
+      "description": "Stop the daemon orchestrating the instances of the node."
+    },
+    "unfreeze": {
+      "label": "Unfreeze",
+      "description": "Let the daemon orchestrate the instances of the node again."
+    },
+    "abort": {
+      "label": "Abort",
+      "description": "Abort the orchestration of the node in progress."
+    },
+    "asset": {
+      "label": "Asset",
+      "description": "Push the hardware and system inventory to the collector."
+    },
+    "capabilities": {
+      "label": "Capabilities",
+      "description": "Scan what the node can run: the drivers it supports."
+    },
+    "disk": {
+      "label": "Disks",
+      "description": "Push the disks and their usage to the collector."
+    },
+    "pkg": {
+      "label": "Packages",
+      "description": "Push the packages installed to the collector."
+    },
+    "scsiScan": {
+      "label": "SCSI",
+      "description": "Scan the SCSI buses for new disks."
+    },
+    "sysreport": {
+      "label": "Sysreport",
+      "description": "Push the system report, the changes of the files tracked, to the collector."
+    },
+    "clear": {
+      "label": "Clear monitor",
+      "description": "Clear the failed state of the monitor of the node."
+    },
+    "restartDaemon": {
+      "label": "Restart",
+      "description": "Restart the daemon; the instances keep running."
+    },
+    "shutdown": {
+      "label": "Shutdown",
+      "description": "Shut down all the instances hosted, then stop the daemon.",
+      "warning": "All the instances hosted on the node shut down. Starting the daemon again needs a console access to the node."
+    },
+    "stop": {
+      "label": "Stop",
+      "description": "Stop the daemon; the instances keep running, unwatched.",
+      "warning": "Starting the daemon again needs a console access to the node."
+    },
+    "drain": {
+      "label": "Drain",
+      "description": "Freeze the node and shut down all the instances it hosts.",
+      "warning": "All the instances hosted on the node shut down."
+    },
+    "leave": {
+      "label": "Leave",
+      "description": "Evict the node from the cluster, once drained.",
+      "warning": "All the instances hosted on the node shut down and are deleted from it: the node leaves the cluster, restarting alone in a cluster of its own, with no credential to reach its api.",
+      "fromHere": "Ask it from the webapp of another node: this one serves the webapp."
     }
   }
 }

@@ -7,8 +7,9 @@ import useEventStore from "../hooks/useEventStore.js";
 import {retainEventReception} from "../eventSourceManager";
 import {URL_NODE} from "../config/apiPath.js";
 import {getResponseErrorMessage} from "../services/api.jsx";
-import {NODE_ACTIONS, actionLabel} from "../constants/actions";
-import ActionDialogManager from "./ActionDialogManager";
+import {nodeActionRequest, nodeMenuItems} from "../app/node-actions";
+import {useApiNode} from "../hooks/useApiNode";
+import {NodeActionDialog} from "./NodeActionDialog";
 import LogsViewer from "./LogsViewer";
 import {EventLog, NODE_EVENT_TYPES} from "./EventLogger";
 import {ConfigText} from "./ConfigText";
@@ -173,32 +174,33 @@ export const matches = (filter, ...values) => {
 
 /**
  * The actions on the node, in the title bar of its panel as oc3 places them: the
- * node actions of the Nodes view, each confirmed first. Freeze or unfreeze, by its
- * state. Abort is no action of the menu: the badge of the orchestration in progress
- * offers it, with its logs.
+ * node actions of the Nodes view, by group, each confirmed first. Freeze or unfreeze,
+ * by its state. Abort is no action of the menu: the badge of the orchestration in
+ * progress offers it, with its logs.
  */
 function NodeActions({node, frozen, monitor, onOrchestrationLogs}) {
     const {t} = useTranslation();
     const [pending, setPending] = useState(null);
     const {globalExpect, orchestrationId} = orchestrationOf([monitor]);
-    const items = NODE_ACTIONS
-        .filter(({name}) => name !== "abort")
-        .filter(({name}) => !(name === "freeze" && frozen) && !(name === "unfreeze" && !frozen))
-        .map(({name, icon, color}) => ({
-            key: name,
-            label: actionLabel(name),
-            icon: <span aria-hidden="true" className={color === "red" ? DANGER_ICON : ICON}>{icon}</span>,
-            onSelect: () => setPending({action: name, node}),
-        }));
+    const apiNode = useApiNode();
+    const items = nodeMenuItems({
+        t,
+        nodes: [node],
+        offered: (name) => !(name === "freeze" && frozen) && !(name === "unfreeze" && !frozen),
+        apiNode,
+        renderIcon: ({icon, color}) => <span aria-hidden="true" className={color === "red" ? DANGER_ICON : ICON}>{icon}</span>,
+        onSelect: (name) => setPending({action: name, node}),
+    });
 
     const run = async (action) => {
         setPending(null);
         // What comes of it, accepted or refused, the actions tray says.
-        const endpoint = NODE_ACTIONS.find((a) => a.name === action)?.endpoint ?? `action/${action}`;
+        const {url, body} = nodeActionRequest(node, action);
         try {
-            const response = await fetch(nodeUrl(node, endpoint), {
+            const response = await fetch(url, {
                 method: "POST",
                 headers: {...authHeaders(), "Content-Type": "application/json"},
+                ...(body === undefined ? {} : {body}),
             });
             if (!response.ok) {
                 const detail = await getResponseErrorMessage(response);
@@ -226,13 +228,14 @@ function NodeActions({node, frozen, monitor, onOrchestrationLogs}) {
                 icon={<BoltIcon className="h-3.5 w-3.5"/>}
                 label={t("nodePanel.actions")}
                 align="end"
+                // The node, its inventory, its daemon: a column each in a wide window.
+                columns={3}
                 items={items}
             />
-            <ActionDialogManager
-                pendingAction={pending}
-                handleConfirm={run}
+            <NodeActionDialog
+                pending={pending}
+                onConfirm={run}
                 target={t("nodes.target.node", {node})}
-                supportedActions={NODE_ACTIONS.map((a) => a.name)}
                 onClose={() => setPending(null)}
             />
         </>

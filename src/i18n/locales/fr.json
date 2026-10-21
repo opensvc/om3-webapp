@@ -163,7 +163,6 @@
       "status": "Statut",
       "console": "Console",
       "clear": "Effacer",
-      "dequeue": "Retirer de la file",
       "drain": "Drainer",
       "scsiScan": "Scan SCSI",
       "asset": "Inventaire",
@@ -173,7 +172,8 @@
       "sysreport": "Rapport système",
       "restartDaemon": "Redémarrer le démon",
       "resize": "Redimensionner",
-      "cap": "Plafonner"
+      "cap": "Plafonner",
+      "leave": "Quitter"
     }
   },
   "alerts": {
@@ -1874,6 +1874,80 @@
       "apply": "Appliquer les plafonds configurés",
       "submit_one": "Régler {{count}} plafond",
       "submit_other": "Régler {{count}} plafonds"
+    }
+  },
+  "nodeActions": {
+    "groups": {
+      "node": "Nœud",
+      "inventory": "Inventaire",
+      "daemon": "Démon"
+    },
+    "confirmTitle": "{{label}} : {{target}}",
+    "understood": "J'ai compris",
+    "freeze": {
+      "label": "Geler",
+      "description": "Le démon cesse d'orchestrer les instances du nœud."
+    },
+    "unfreeze": {
+      "label": "Dégeler",
+      "description": "Le démon orchestre de nouveau les instances du nœud."
+    },
+    "abort": {
+      "label": "Annuler",
+      "description": "Annuler l'orchestration du nœud en cours."
+    },
+    "asset": {
+      "label": "Matériel",
+      "description": "Envoyer l'inventaire matériel et système au collecteur."
+    },
+    "capabilities": {
+      "label": "Capacités",
+      "description": "Recenser ce que le nœud peut exécuter : les pilotes qu’il prend en charge."
+    },
+    "disk": {
+      "label": "Disques",
+      "description": "Envoyer les disques et leur usage au collecteur."
+    },
+    "pkg": {
+      "label": "Paquets",
+      "description": "Envoyer les paquets installés au collecteur."
+    },
+    "scsiScan": {
+      "label": "SCSI",
+      "description": "Rechercher de nouveaux disques sur les bus SCSI."
+    },
+    "sysreport": {
+      "label": "Sysreport",
+      "description": "Envoyer le rapport système, les changements des fichiers suivis, au collecteur."
+    },
+    "clear": {
+      "label": "Effacer le moniteur",
+      "description": "Effacer l'état en échec du moniteur du nœud."
+    },
+    "restartDaemon": {
+      "label": "Redémarrer",
+      "description": "Redémarrer le démon ; les instances continuent de tourner."
+    },
+    "shutdown": {
+      "label": "Éteindre",
+      "description": "Éteindre toutes les instances hébergées, puis arrêter le démon.",
+      "warning": "Toutes les instances hébergées sur le nœud s’arrêtent. Redémarrer le démon demande un accès console au nœud."
+    },
+    "stop": {
+      "label": "Arrêter",
+      "description": "Arrêter le démon ; les instances continuent de tourner, sans surveillance.",
+      "warning": "Redémarrer le démon demande un accès console au nœud."
+    },
+    "drain": {
+      "label": "Vider",
+      "description": "Geler le nœud et éteindre toutes les instances qu’il héberge.",
+      "warning": "Toutes les instances hébergées sur le nœud s’arrêtent."
+    },
+    "leave": {
+      "label": "Quitter",
+      "description": "Retirer le nœud du cluster, une fois vidé.",
+      "warning": "Toutes les instances hébergées sur le nœud s’arrêtent et en sont supprimées : le nœud quitte le cluster et redémarre seul dans son propre cluster, sans identifiant pour joindre son api.",
+      "fromHere": "Demandez-le depuis la webapp d’un autre nœud : celui-ci sert la webapp."
     }
   }
 }

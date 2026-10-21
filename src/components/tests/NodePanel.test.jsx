@@ -30,8 +30,8 @@ vi.mock('../LogsViewer', () => ({
     ),
 }));
 // The confirmation dialogs are tested on their own: here, the action confirmed.
-vi.mock('../ActionDialogManager', () => ({
-    default: ({pendingAction, handleConfirm, target}) => (pendingAction === null ? null : (
+vi.mock('../NodeActionDialog', () => ({
+    NodeActionDialog: ({pending: pendingAction, onConfirm: handleConfirm, target}) => (pendingAction === null ? null : (
         <div role="alertdialog" aria-label={`${pendingAction.action} ${target}`}>
             <button type="button" onClick={() => handleConfirm(pendingAction.action)}>Confirm</button>
         </div>

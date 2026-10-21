@@ -379,3 +379,43 @@ describe("MenuButton prominent", () => {
     expect(button).toHaveAttribute("title", "Actions");
   });
 });
+
+describe("MenuButton groups", () => {
+  test("a mega menu: its groups under their headings, a column each, each entry with what it does, the harmful ones red", async () => {
+    const user = userEvent.setup();
+    const go = vi.fn();
+    render(
+      <MenuButton
+        label="Node"
+        columns={3}
+        items={[
+          { key: "freeze", label: "Freeze", description: "Stop orchestrating.", heading: "Node", column: 1, onSelect: go },
+          { key: "asset", label: "Asset", description: "Push the inventory.", heading: "Inventory", column: 2 },
+          { key: "stop", label: "Stop", description: "Stop the daemon.", heading: "Daemon", column: 3, danger: true },
+          { key: "drain", label: "Drain", column: 3, danger: true },
+        ]}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "Node" }));
+    const menu = screen.getByRole("menu", { name: "Node" });
+    expect(menu).toHaveClass("md:grid", "md:grid-cols-3", "md:grid-flow-dense");
+    // The headings: not entries, said before their group.
+    expect([...menu.querySelectorAll("[data-menu-heading]")].map((h) => h.textContent)).toEqual(["Node", "Inventory", "Daemon"]);
+    expect(screen.getAllByRole("menuitem")).toHaveLength(4);
+    // Named by its label, described by its description.
+    const stop = screen.getByRole("menuitem", { name: "Stop" });
+    expect(stop).toHaveAccessibleDescription("Stop the daemon.");
+    expect(stop).toHaveClass("text-state-down");
+    expect(screen.getByRole("menuitem", { name: "Freeze" })).not.toHaveClass("text-state-down");
+    // Each in the column of its group.
+    expect(stop.parentElement).toHaveClass("md:col-start-3");
+    expect(screen.getByRole("menuitem", { name: "Asset" }).parentElement).toHaveClass("md:col-start-2");
+    // The arrows walk them in their order, group after group.
+    await user.keyboard("{ArrowDown}");
+    expect(screen.getByRole("menuitem", { name: "Freeze" })).toHaveFocus();
+    await user.keyboard("{ArrowDown}");
+    expect(screen.getByRole("menuitem", { name: "Asset" })).toHaveFocus();
+    await user.click(screen.getByRole("menuitem", { name: "Freeze" }));
+    expect(go).toHaveBeenCalled();
+  });
+});

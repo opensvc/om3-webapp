@@ -8,10 +8,10 @@ import {refusalReason} from "./objectActions";
 import {getResponseErrorMessage} from "../services/api.jsx";
 import NodeRow from "../components/NodeRow.jsx";
 import logger from '../utils/logger.js';
-import {URL_NODE} from "../config/apiPath.js";
-import {NODE_ACTIONS, actionLabel} from "../constants/actions";
+import {NODE_ACTIONS} from "../constants/actions";
+import {nodeActionRequest, nodeMenuItems} from "../app/node-actions";
 import {useTranslation} from "react-i18next";
-import ActionDialogManager from "./ActionDialogManager";
+import {NodeActionDialog} from "./NodeActionDialog";
 import {Table, HeaderRow, HeaderCell, SortHeaderCell} from "../ui/components/Table";
 import {Checkbox} from "../ui/components/Field";
 import {IconButton} from "../ui/components/Button";
@@ -120,12 +120,6 @@ const NodesTable = () => {
         }
     };
 
-    const postActionUrl = (node, action) => {
-        const def = NODE_ACTIONS.find((a) => a.name === action);
-        const endpoint = def?.endpoint ?? `action/${action}`;
-        return `${URL_NODE}/${node}/${endpoint}`;
-    };
-
     const handleDialogConfirm = async (action) => {
         if (!pendingAction) return;
 
@@ -155,7 +149,7 @@ const NodesTable = () => {
                 refuse(node, t("actionTray.reasons.alreadyUnfrozen"));
                 return;
             }
-            const url = postActionUrl(node, action);
+            const {url, body} = nodeActionRequest(node, action);
             try {
                 const response = await fetch(url, {
                     method: "POST",
@@ -163,6 +157,7 @@ const NodesTable = () => {
                         Authorization: `Bearer ${token}`,
                         "Content-Type": "application/json",
                     },
+                    ...(body === undefined ? {} : {body}),
                 });
                 if (!response.ok) {
                     logger.error(`Failed to execute ${action} on ${node}: HTTP error! status: ${response.status}`);
@@ -250,12 +245,16 @@ const NodesTable = () => {
                             icon={<BoltIcon className="h-3.5 w-3.5"/>}
                             label={t("nodes.bulkActions")}
                             align="end"
-                            items={filteredMenuItems.map(({name, icon, color}) => ({
-                                key: name,
-                                label: actionLabel(name),
-                                icon: <span aria-hidden="true" className={color === "red" ? DANGER_ICON : ICON}>{icon}</span>,
-                                onSelect: () => handleAction(name),
-                            }))}
+                            // The node, its inventory, its daemon: a column each in a wide window.
+                            columns={3}
+                            items={nodeMenuItems({
+                                t,
+                                nodes: selectedNodes,
+                                offered: (name) => filteredMenuItems.some((action) => action.name === name),
+                                apiNode: daemon?.nodename,
+                                renderIcon: ({icon, color}) => <span aria-hidden="true" className={color === "red" ? DANGER_ICON : ICON}>{icon}</span>,
+                                onSelect: handleAction,
+                            })}
                         />
                     </>
                 ) : (
@@ -325,14 +324,12 @@ const NodesTable = () => {
                 </Table>
             )}
 
-            <ActionDialogManager
-                pendingAction={pendingAction}
-                handleConfirm={handleDialogConfirm}
+            <NodeActionDialog
+                pending={pendingAction}
+                onConfirm={handleDialogConfirm}
                 target={pendingAction?.node
                     ? t("nodes.target.node", {node: pendingAction.node})
                     : t("nodes.target.selected", {count: selectedNodes.length})}
-                names={pendingAction?.node ? undefined : selectedNodes}
-                supportedActions={NODE_ACTIONS.map((action) => action.name)}
                 onClose={() => setPendingAction(null)}
             />
 

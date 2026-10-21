@@ -20,6 +20,7 @@ import {
     RefreshIcon,
     ResetIcon,
     SearchIcon,
+    SignOutIcon,
     SnowflakeIcon,
     StateIcon,
     StepBackwardIcon,
@@ -138,24 +139,30 @@ export const RESOURCE_ACTIONS = [
     {name: 'console', icon: icon(TerminalIcon)},
 ];
 
+/**
+ * The actions on a node, in the groups of its menu, in their order: the node, its
+ * inventory pushed to the collector, its daemon. `menu: false`, offered elsewhere (abort,
+ * by the badge of the orchestration). `cluster`, an action of the cluster on the node,
+ * posted to the api node rather than to it (leave: the cluster evicts it).
+ */
+export const NODE_ACTION_GROUPS = ["node", "inventory", "daemon"];
+
 export const NODE_ACTIONS = [
+    {name: "freeze", group: "node", icon: icon(SnowflakeIcon), endpoint: "action/freeze"},
+    {name: "unfreeze", group: "node", icon: icon(SunIcon), endpoint: "action/unfreeze"},
+    {name: "abort", icon: icon(CloseIcon), endpoint: "action/abort", menu: false},
 
-    // Node-level actions
-    {name: "freeze", icon: icon(SnowflakeIcon), endpoint: "action/freeze"},
-    {name: "unfreeze", icon: icon(SunIcon), endpoint: "action/unfreeze"},
-    {name: "abort", icon: icon(CloseIcon), endpoint: "action/abort"},
-    {name: "clear", icon: icon(CheckIcon), endpoint: "action/clear"},
-    {name: "dequeue", icon: icon(BanIcon), endpoint: "action/dequeue"},
-    {name: "drain", icon: icon(DropIcon), endpoint: "action/drain"},
-    {name: "scsi scan", icon: icon(SearchIcon), endpoint: "action/scsi/scan"},
-    {name: "asset", icon: icon(CpuIcon), endpoint: "action/push/asset"},
-    {name: "disk", icon: icon(DatabaseIcon), endpoint: "action/push/disk"},
-    {name: "pkg", icon: icon(CubeIcon), endpoint: "action/push/pkg"},
-    {name: "capabilities", icon: icon(PuzzleIcon), endpoint: "action/scan/capabilities"},
-    {name: "sysreport", icon: icon(FileIcon), endpoint: "action/sysreport"},
+    {name: "asset", group: "inventory", icon: icon(CpuIcon), endpoint: "action/push/asset"},
+    {name: "capabilities", group: "inventory", icon: icon(PuzzleIcon), endpoint: "action/scan/capabilities"},
+    {name: "disk", group: "inventory", icon: icon(DatabaseIcon), endpoint: "action/push/disk"},
+    {name: "pkg", group: "inventory", icon: icon(CubeIcon), endpoint: "action/push/pkg"},
+    {name: "scsi scan", group: "inventory", icon: icon(SearchIcon), endpoint: "action/scsi/scan"},
+    {name: "sysreport", group: "inventory", icon: icon(FileIcon), endpoint: "action/sysreport"},
 
-    // Daemon-level actions
-    {name: "restart daemon", icon: icon(RefreshIcon), endpoint: "daemon/action/restart"},
-    {name: "stop", icon: icon(StopIcon), endpoint: "daemon/action/stop", color: "red"},
-    {name: "shutdown", icon: icon(PowerOffIcon), endpoint: "daemon/action/shutdown", color: "red"},
+    {name: "clear", group: "daemon", icon: icon(CheckIcon), endpoint: "action/clear"},
+    {name: "restart daemon", group: "daemon", icon: icon(RefreshIcon), endpoint: "daemon/action/restart"},
+    {name: "shutdown", group: "daemon", icon: icon(PowerOffIcon), endpoint: "daemon/action/shutdown", color: "red"},
+    {name: "stop", group: "daemon", icon: icon(StopIcon), endpoint: "daemon/action/stop", color: "red"},
+    {name: "drain", group: "daemon", icon: icon(DropIcon), endpoint: "action/drain", color: "red"},
+    {name: "leave", group: "daemon", icon: icon(SignOutIcon), cluster: "evict", color: "red"},
 ];

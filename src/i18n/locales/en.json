@@ -429,7 +429,8 @@
       "id": "ID",
       "show": "Show filters",
       "hide": "Hide filters",
-      "clearLink": "Remove the {{link}} filter"
+      "driver": "Driver",
+      "clearAll": "Clear all filters"
     },
     "marks": {
       "healthySingleNode": "Healthy (single node)",
@@ -439,16 +440,32 @@
     "empty": "No heartbeats found matching the current filters.",
     "mesh": {
       "title": "Mesh",
-      "desc": "Description",
-      "lastBeat": "Last beat",
-      "heartbeat": "Heartbeat",
-      "side": "Side",
       "groupLabel_one": "{{from}} to {{to}}: {{beating}} of {{count}} link beating",
       "groupLabel_other": "{{from}} to {{to}}: {{beating}} of {{count}} links beating",
       "beatingOf_one": "{{beating}} of {{count}} beating",
-      "beatingOf_other": "{{beating}} of {{count}} beating"
+      "beatingOf_other": "{{beating}} of {{count}} beating",
+      "legend": {
+        "direction": "→ the way the beats go: from the sender its tx, then past the gap into the receiver its rx",
+        "up": "all beating",
+        "warn": "some beating",
+        "down": "none beating"
+      },
+      "half": {
+        "tx": "Seen from {{node}}, outgoing to {{peer}}",
+        "rx": "Seen from {{node}}, incoming from {{peer}}"
+      },
+      "noLink": "No stream of this end reports this peer.",
+      "routinesStopped_one": "{{stopped}} of {{count}} routine stopped",
+      "routinesStopped_other": "{{stopped}} of {{count}} routines stopped",
+      "details": "Streams",
+      "detailsHint": "Hover an arrow or a node for its details; click an arrow to keep them, the ground of the mesh to let them go.",
+      "overall": {
+        "operational": "streams operational",
+        "up": "optimal",
+        "warn": "degraded",
+        "down": "critical"
+      }
     },
-    "streams": "Streams",
     "actions": {
       "stop": "Stop",
       "start": "Start",
@@ -472,7 +489,13 @@
           "text_one": "Restart this stream? It stops, then starts again: the peer may be missed for a moment.",
           "text_other": "Restart these streams? Each stops, then starts again: the peers may be missed for a moment."
         }
-      }
+      },
+      "confirmTitle": "Stop a heartbeat stream",
+      "confirmStop": "Stop the {{id}} stream of {{node}}? The node stops sending or receiving on it until it is started again.",
+      "startRoutine": "Start {{name}}",
+      "stopRoutine": "Stop {{name}}",
+      "confirmStart": "Start the {{id}} stream of {{node}}? The node sends or receives on it again.",
+      "confirmTitleStart": "Start a heartbeat stream"
     },
     "routine": {
       "running": "started",
@@ -481,6 +504,73 @@
     "direction": {
       "tx": "sends to",
       "rx": "receives from"
+    },
+    "summary": {
+      "list": "Heartbeats",
+      "layer": {
+        "network": "network",
+        "storage": "storage",
+        "relay": "relay",
+        "other": "other"
+      },
+      "side": {
+        "tx": "↑ tx",
+        "rx": "↓ rx"
+      },
+      "routines": "Routines",
+      "toggleHint": "Click a routine to stop it, or to start it.",
+      "beatingOf": "{{beating}}/{{count}} beating"
+    },
+    "tabs": {
+      "label": "Heartbeats views",
+      "data": "Data",
+      "logs": "Logs",
+      "overview": "Overview"
+    },
+    "logs": {
+      "changes": "State changes only"
+    },
+    "config": {
+      "title": "{{name}} configuration",
+      "open": "Show the configuration of {{name}}",
+      "edit": "Edit with the wizard",
+      "new": "New heartbeat",
+      "none": "No [{{name}}] section in the cluster configuration.",
+      "readFailed": "The cluster configuration could not be read: {{message}}",
+      "delete": "Delete",
+      "deleting": "Deleting…",
+      "confirmDelete": "Delete [{{name}}] from the cluster configuration? Its streams stop on every node.",
+      "deleteFailed": "The heartbeat could not be deleted: {{message}}",
+      "notDeletable": "It may be deleted once another heartbeat has all its streams up."
+    },
+    "wizard": {
+      "newTitle": "New heartbeat {{name}}",
+      "editTitle": "Edit heartbeat {{name}}",
+      "steps": "Steps",
+      "step": {
+        "type": "Driver",
+        "settings": "Settings",
+        "review": "Review"
+      },
+      "typeQuestion": "How do the nodes beat to one another?",
+      "types": {
+        "unicast": "Over the network, node to node: an address of each node.",
+        "multicast": "Over the network, to a multicast group all the nodes listen to.",
+        "disk": "On a disk shared by the nodes, a slot each.",
+        "relay": "Through a relay, a third site the nodes reach."
+      },
+      "perNode": "An address on each node, the one the others send to: the same on every node would not do.",
+      "onNode": "{{key}} on {{node}}",
+      "required": "{{key}} (required)",
+      "written": "Written to the cluster configuration, the daemons applying it:",
+      "rewrite": "The driver changes from {{from}} to {{to}}: the section is rewritten, the keywords of {{from}} dropped.",
+      "unchanged": "Nothing changed: nothing to write.",
+      "back": "Back",
+      "next": "Next",
+      "save": "Write",
+      "saving": "Writing…",
+      "saveFailed": "The heartbeat could not be written: {{message}}",
+      "trayLabel": "Configure"
     }
   },
   "instance": {
@@ -599,7 +689,8 @@
       "datastores": "Datastores",
       "actions": "Instance actions",
       "selectResource": "Select {{rid}}",
-      "selectionHelp": "Check resources to select them."
+      "selectionHelp": "Check resources to select them.",
+      "volumes": "Volumes"
     },
     "on": "on {{node}}"
   },
@@ -1531,7 +1622,8 @@
     "datastores": "Datastores",
     "refresh": "Refresh the status",
     "refreshAll": "Refresh the status of all the instances",
-    "refreshFailed": "Refresh refused: {{detail}}"
+    "refreshFailed": "Refresh refused: {{detail}}",
+    "volumes": "Volumes"
   },
   "shortcuts": {
     "title": "Keyboard shortcuts",

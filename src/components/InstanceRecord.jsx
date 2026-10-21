@@ -20,7 +20,7 @@ import {ContainerLogs, isContainerResource} from "./ContainerLogs";
 import {InstanceLink, ResourceLink} from "./RecordLinks";
 import {ObjectLogs} from "./ObjectLogs";
 import ObjectConfig from "./ObjectConfig";
-import {DatastoreLinks, RefreshStatusButton, actionIcon, datastoresOf, useActionRunner} from "./InstanceActions";
+import {DatastoreLinks, RefreshStatusButton, actionIcon, datastoresOf, useActionRunner, volumesOf} from "./InstanceActions";
 import {CLEAR_ACTION, resourceActions} from "./objectActions";
 import {usePanelHeader} from "../app/panel-header";
 import {MenuButton} from "../ui/components/MenuButton";
@@ -157,6 +157,7 @@ export function InstanceStatus({path, node}) {
     const frozen = !!status.frozen_at && status.frozen_at !== ZERO_TIME;
     const notProvisioned = status.provisioned === "false" || status.provisioned === false;
     const datastores = datastoresOf(resources.map(([, r]) => r));
+    const volumes = volumesOf(resources.map(([, r]) => r));
     const header = usePanelHeader();
     const {ask, running, dialogs} = useActionRunner(path);
     const [picked, setPicked] = useState([]);
@@ -219,6 +220,9 @@ export function InstanceStatus({path, node}) {
                     <Fact label={t("instance.panel.monitor")}>{monitor.state || "-"}</Fact>
                     {datastores.length > 0 && (
                         <Fact label={t("instance.panel.datastores")}><DatastoreLinks paths={datastores}/></Fact>
+                    )}
+                    {volumes.length > 0 && (
+                        <Fact label={t("instance.panel.volumes")}><DatastoreLinks paths={volumes}/></Fact>
                     )}
                 </dl>
                 <RefreshStatusButton path={path} nodes={[node]}/>
@@ -294,6 +298,7 @@ export function ResourceStatus({path, rid}) {
         .map(([node, status]) => ({node, r: status.resources[rid]}));
     const type = rows.find(({r}) => r.type)?.r.type;
     const datastores = datastoresOf(rows.map(({r}) => r));
+    const volumes = volumesOf(rows.map(({r}) => r));
     return (
         <div className="space-y-4" data-testid="resource-status">
             <div className="flex items-start justify-between gap-2">
@@ -303,6 +308,9 @@ export function ResourceStatus({path, rid}) {
                     <Fact label={t("common.type")}>{type ?? "-"}</Fact>
                     {datastores.length > 0 && (
                         <Fact label={t("instance.panel.datastores")}><DatastoreLinks paths={datastores}/></Fact>
+                    )}
+                    {volumes.length > 0 && (
+                        <Fact label={t("instance.panel.volumes")}><DatastoreLinks paths={volumes}/></Fact>
                     )}
                 </dl>
                 {/* A resource has no status of its own: the instances holding it refreshed whole. */}

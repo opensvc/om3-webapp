@@ -119,8 +119,20 @@ export interface Point {
 }
 
 /**
+ * A half of the line of a direction: the side of one end, its links only. Tinted
+ * by them, "none" when that end reports none.
+ */
+export interface MeshHalf {
+  path: string;
+  links: MeshLink[];
+  state: GroupState | "none";
+}
+
+/**
  * A direction between two nodes: the links from one to the other, drawn as one
- * straight line, tinted as one (groupState), its card listing each link.
+ * straight line cut in two halves, a gap between them: from the sender, its tx
+ * streams, their arrow toward the receiver; into the receiver, its rx streams. Its
+ * card lists each link.
  */
 export interface MeshGroup {
   key: string;
@@ -128,8 +140,11 @@ export interface MeshGroup {
   to: string;
   links: MeshLink[];
   state: GroupState;
-  /** The line, from the edge of the sender to the edge of the receiver. */
+  /** The line, from the edge of the sender to the edge of the receiver, gap included. */
   path: string;
+  /** The half of the sender, its tx; the half of the receiver, its rx. */
+  tx: MeshHalf;
+  rx: MeshHalf;
   /** The middle of the line, where its card shows. */
   label: Point;
 }
@@ -161,6 +176,14 @@ const MIN_NODE_WIDTH = 64;
 export const MAX_LABEL = 28;
 /** The room between the two parallel lines of a pair of nodes, one each way. */
 export const DIRECTION_OFFSET = 12;
+/**
+ * The gap between the two halves of a line, on a ring of more than three nodes: a
+ * part of the line. The lines across the ring meet at its centre; their tx arrows
+ * end that far before it, spread on a circle around it rather than piled on it.
+ */
+export const RING_GAP_RATIO = 0.3;
+/** The gap between the two halves of a line of two or three nodes, which do not cross. */
+export const SMALL_GAP = 24;
 
 const round = (n: number) => Math.round(n * 10) / 10;
 
@@ -189,8 +212,8 @@ function exitDistance(box: MeshNode, from: Point, along: Point): number {
 }
 
 /**
- * Where the nodes and the lines go. Two nodes face each other, more stand on a
- * circle wide enough for their boxes. Between two nodes, a line each way, straight
+ * Where the nodes and the lines go, in a square. The nodes stand on a circle wide
+ * enough for their boxes, two of them one over the other. Between two nodes, a line each way, straight
  * and parallel, one on each side of the line between their centres, so the two
  * directions never overlap; each line holds all the links of its direction, and
  * runs from the edge of the box of the sender to the edge of the box of the receiver.
@@ -204,22 +227,18 @@ export function meshLayout(nodes: string[], links: MeshLink[]): MeshLayout {
   const place = (name: string, x: number, y: number) => {
     boxes[name] = { x, y, width: widths[name], height: NODE_HEIGHT, label: nodeLabel(name) };
   };
-  if (nodes.length <= 2) {
-    // Room between the two boxes for the lines and their arrows.
-    const gap = 360;
-    width = Math.max(720, nodes.reduce((sum, name) => sum + widths[name], 0) + gap + 2 * 40);
-    height = Math.max(160, 2 * DIRECTION_OFFSET + NODE_HEIGHT + 100);
-    const y = height / 2;
-    if (nodes.length === 1) place(nodes[0], width / 2, y);
-    else if (nodes.length === 2) {
-      place(nodes[0], 40 + widths[nodes[0]] / 2, y);
-      place(nodes[1], width - 40 - widths[nodes[1]] / 2, y);
-    }
+  // A square, whatever the nodes: the mesh as high as wide beside the summary, which
+  // takes the rest of the width.
+  if (nodes.length <= 1) {
+    width = Math.max(240, widest + 80);
+    height = width;
+    if (nodes.length === 1) place(nodes[0], width / 2, height / 2);
   } else {
-    // The circle long enough for the boxes side by side, and room for the lines.
+    // The circle long enough for the boxes side by side, and room for the lines; two
+    // nodes on it face each other, one over the other.
     const radius = Math.max(200, nodes.length * 50, (nodes.length * (widest + 60)) / (2 * Math.PI));
-    width = 2 * (radius + widest / 2 + 40);
-    height = 2 * (radius + NODE_HEIGHT / 2 + 60);
+    width = 2 * (radius + Math.max(widest / 2 + 40, NODE_HEIGHT / 2 + 60));
+    height = width;
     nodes.forEach((name, i) => {
       const angle = -Math.PI / 2 + (2 * Math.PI * i) / nodes.length;
       place(name, width / 2 + radius * Math.cos(angle), height / 2 + radius * Math.sin(angle));
@@ -258,14 +277,24 @@ export function meshLayout(nodes: string[], links: MeshLink[]): MeshLayout {
     const start = { x: startFrom.x + along.x * out, y: startFrom.y + along.y * out };
     const end = { x: endFrom.x + back.x * into, y: endFrom.y + back.y * into };
     const label = { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 };
+    // The two halves, the gap between them centred on the middle of the line.
+    const visible = Math.hypot(end.x - start.x, end.y - start.y);
+    const gap = Math.min(visible / 2, nodes.length > 3 ? visible * RING_GAP_RATIO : SMALL_GAP);
+    const at = (d: number) => ({ x: start.x + along.x * d, y: start.y + along.y * d });
+    const segment = (a: Point, b: Point) => `M ${round(a.x)} ${round(a.y)} L ${round(b.x)} ${round(b.y)}`;
+    // By heartbeat, the sender's tx before the receiver's rx.
+    const sorted = [...members].sort((l, m) => l.hb.localeCompare(m.hb) || (l.dir === "tx" ? -1 : 0) - (m.dir === "tx" ? -1 : 0));
+    const half = (of: MeshLink[], path: string): MeshHalf => ({ path, links: of, state: of.length > 0 ? groupState(of) : "none" });
     groups.push({
       key,
       from,
       to,
-      // By heartbeat, the sender's tx before the receiver's rx.
-      links: [...members].sort((l, m) => l.hb.localeCompare(m.hb) || (l.dir === "tx" ? -1 : 0) - (m.dir === "tx" ? -1 : 0)),
+      links: sorted,
       state: groupState(members),
-      path: `M ${round(start.x)} ${round(start.y)} L ${round(end.x)} ${round(end.y)}`,
+      path: segment(start, end),
+      // A stream of no side sends, as meshLinks reads it.
+      tx: half(sorted.filter((l) => l.dir !== "rx"), segment(start, at((visible - gap) / 2))),
+      rx: half(sorted.filter((l) => l.dir === "rx"), segment(at((visible + gap) / 2), end)),
       label: { x: round(label.x), y: round(label.y) },
     });
   }

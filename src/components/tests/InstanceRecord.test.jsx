@@ -172,9 +172,32 @@ describe('InstanceStatus', () => {
         expect(screen.getByTestId('search')).toHaveTextContent('peek=object%3Aprod%2Fsec%2Fweb');
     });
 
+    test('the volumes its resources use, a badge each opening its object', () => {
+        useEventStore.setState((state) => ({objectInstanceStatus: {'prod/svc/web': {
+            ...state.objectInstanceStatus['prod/svc/web'],
+            n1: {
+                ...state.objectInstanceStatus['prod/svc/web'].n1,
+                resources: {
+                    ...state.objectInstanceStatus['prod/svc/web'].n1.resources,
+                    'volume#1': {status: 'up', type: 'volume', label: 'data', volumes: ['prod/vol/data']},
+                },
+            },
+        }}}));
+        inRouter(<InstanceStatus path="prod/svc/web" node="n1"/>);
+        const fact = screen.getByText('Volumes', {selector: 'dt'}).nextElementSibling;
+        expect(within(fact).getAllByRole('button').map((b) => b.textContent)).toEqual(['prod/vol/data']);
+        fireEvent.click(within(fact).getByRole('button', {name: 'prod/vol/data'}));
+        expect(screen.getByTestId('search')).toHaveTextContent('peek=object%3Aprod%2Fvol%2Fdata');
+        // The volume of a volume resource, in its own status too.
+        inRouter(<ResourceStatus path="prod/svc/web" rid="volume#1"/>);
+        const facts = screen.getAllByText('Volumes', {selector: 'dt'});
+        expect(within(facts.at(-1).nextElementSibling).getByRole('button', {name: 'prod/vol/data'})).toBeInTheDocument();
+    });
+
     test('no datastore, no line', () => {
         inRouter(<InstanceStatus path="prod/svc/web" node="n2"/>);
         expect(screen.queryByText('Datastores', {selector: 'dt'})).toBeNull();
+        expect(screen.queryByText('Volumes', {selector: 'dt'})).toBeNull();
     });
 
     test('its actions: freeze as it is not frozen, each confirmed then posted to the instance', async () => {

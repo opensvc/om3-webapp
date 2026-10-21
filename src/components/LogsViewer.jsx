@@ -17,6 +17,10 @@ import {useTranslation} from "react-i18next";
 
 /** The lines a stream starts with, as the daemon sends them by default. */
 const STREAM_LINES = 50;
+// A stream lost (ended, its connection cut) is read again a second later, then
+// twice as late each time it is lost again without bringing anything, up to 30s.
+const RECONNECT_BASE_MS = 1000;
+const RECONNECT_MAX_MS = 30000;
 /** The older lines asked for at once, on demand. */
 const BACKLOG_STEP = 200;
 /** Past this many nodes, the marker would be wider than it helps: their names alone. */
@@ -67,6 +71,10 @@ const LogsViewer = ({
     const logsContainerRef = useRef(null);
     const isPausedRef = useRef(false);
     const abortControllerRef = useRef(null);
+    // The nodes whose stream is open: connected, all of them.
+    const streamingRef = useRef(new Set());
+    const nodesRef = useRef([]);
+    const fetchLogsRef = useRef(null);
     const logBufferRef = useRef([]);
     const seenLogsRef = useRef(new Set());
     const scrollToLogTimeoutRef = useRef(null);
@@ -83,6 +91,7 @@ const LogsViewer = ({
     });
     const nodesKey = (nodenames?.length ? nodenames : nodename ? [nodename] : []).join(",");
     const nodes = useMemo(() => (nodesKey === "" ? [] : nodesKey.split(",")), [nodesKey]);
+    nodesRef.current = nodes;
     const merged = nodes.length > 1;
     // The nodes merged, in the order of the cluster, as om numbers them: each its column in the marker.
     const clusterOrder = useClusterNodeOrder(merged);
@@ -209,9 +218,27 @@ const LogsViewer = ({
         });
     }, [merged, countNew]);
 
+    /** The stream of a node open or not, said by the reading still current alone. */
+    const markStream = useCallback((signal, nodename, open) => {
+        if (abortControllerRef.current?.signal !== signal) return;
+        if (open) streamingRef.current.add(nodename);
+        else streamingRef.current.delete(nodename);
+        setIsConnected(nodesRef.current.length > 0 && nodesRef.current.every((node) => streamingRef.current.has(node)));
+    }, []);
+
     const fetchLogs = useCallback(
-        async (signal, nodename) => {
+        async (signal, nodename, attempt = 0) => {
             if (isPausedRef.current || !nodename) return;
+            // The stream lost, said and read again, the reading not stopped meanwhile.
+            const reconnect = (next) => {
+                markStream(signal, nodename, false);
+                if (signal.aborted) return;
+                setErrorMessage(t("logs.errors.reconnecting", {node: nodename}));
+                const timer = setTimeout(() => {
+                    if (!signal.aborted) void fetchLogsRef.current(signal, nodename, next);
+                }, Math.min(RECONNECT_BASE_MS * 2 ** Math.min(next, 5), RECONNECT_MAX_MS));
+                signal.addEventListener("abort", () => clearTimeout(timer), {once: true});
+            };
             if (type === "instance" && (!instanceName || instanceName.trim() === "")) {
                 setErrorMessage(t("logs.errors.instanceRequired"));
                 return;
@@ -219,9 +246,11 @@ const LogsViewer = ({
             const token = localStorage.getItem("authToken");
             if (!token) {
                 setErrorMessage(t("logs.errors.tokenNotFound"));
-                setIsConnected(false);
+                markStream(signal, nodename, false);
                 return;
             }
+            // Lines brought by this connection: lost after, it is read again at once.
+            let received = false;
             try {
                 const url = buildLogUrl(nodename);
                 const response = await fetch(url, {
@@ -234,15 +263,15 @@ const LogsViewer = ({
                 });
                 if (!response.ok) {
                     setErrorMessage(t("logs.errors.http", {status: response.status}));
-                    setIsConnected(false);
+                    markStream(signal, nodename, false);
                     return;
                 }
                 if (!response.body) {
                     setErrorMessage(t("logs.errors.noStream"));
-                    setIsConnected(false);
+                    markStream(signal, nodename, false);
                     return;
                 }
-                setIsConnected(true);
+                markStream(signal, nodename, true);
                 setErrorMessage("");
                 setIsLoading(false);
                 const reader = response.body.getReader();
@@ -255,6 +284,7 @@ const LogsViewer = ({
                         reader.releaseLock();
                         return;
                     }
+                    received = true;
                     buffer += decoder.decode(value, {stream: true});
                     const lines = buffer.split("\n");
                     buffer = lines.pop() || "";
@@ -283,10 +313,17 @@ const LogsViewer = ({
                 }
                 updateLogs();
                 reader.releaseLock();
+                // Ended by the daemon (restarted, a proxy closing it idle): not followed any more.
+                reconnect(received ? 0 : attempt + 1);
             } catch (error) {
-                if (error.name === "AbortError") return;
+                if (error.name === "AbortError" || signal.aborted) return;
                 logger.error("Failed to fetch logs:", error);
-                setIsConnected(false);
+                // The connection cut (the daemon or the network gone): read again.
+                if (error instanceof TypeError) {
+                    reconnect(received ? 0 : attempt + 1);
+                    return;
+                }
+                markStream(signal, nodename, false);
                 if (error.message.includes("401")) {
                     setErrorMessage(t("logs.errors.authFailed"));
                 } else if (error.message.includes("404")) {
@@ -302,8 +339,9 @@ const LogsViewer = ({
                 setIsLoading(false);
             }
         },
-        [type, instanceName, buildLogUrl, parseLogMessage, updateLogs, t]
+        [type, instanceName, buildLogUrl, parseLogMessage, updateLogs, markStream, t]
     );
+    fetchLogsRef.current = fetchLogs;
 
     const startStreaming = useCallback(() => {
         if (abortControllerRef.current) {
@@ -313,6 +351,8 @@ const LogsViewer = ({
         setErrorMessage("");
         const controller = new AbortController();
         abortControllerRef.current = controller;
+        streamingRef.current = new Set();
+        setIsConnected(false);
         for (const node of nodes) void fetchLogs(controller.signal, node);
     }, [fetchLogs, nodes]);
 

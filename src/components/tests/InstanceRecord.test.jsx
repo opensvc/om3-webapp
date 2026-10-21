@@ -12,6 +12,13 @@ vi.mock('../LogsViewer', () => ({
         <div data-testid="logs">{`${namespace}/${kind}/${instanceName} on ${nodenames.join('+')}${filters.length ? ` where ${filters.join(', ')}` : ''}`}</div>
     ),
 }));
+// The container logs are tested on their own: here, the container and the nodes it reads.
+vi.mock('../ContainerLogs', async (importOriginal) => ({
+    ...(await importOriginal()),
+    ContainerLogs: ({path, rid, nodes, upNodes}) => (
+        <div data-testid="container-logs">{`${path} ${rid} on ${nodes.join('+')}, up on ${upNodes.join('+')}`}</div>
+    ),
+}));
 // The configuration tab is tested on its own: here, the object and the section it shows.
 vi.mock('../ObjectConfig', () => ({
     default: ({path, section}) => <div data-testid="config">{`${path} [${section}]`}</div>,
@@ -305,6 +312,26 @@ describe('ResourceStatus', () => {
     test('its configuration tab: its section of the configuration of the object', () => {
         render(<MemoryRouter><ResourceDetailPanel id="prod/svc/web:app#1" tab="config" onTabChange={vi.fn()} onClose={vi.fn()}/></MemoryRouter>);
         expect(screen.getByTestId('config')).toHaveTextContent('prod/svc/web [app#1]');
+    });
+
+    test('a container: what it writes in a tab of its own, on the nodes it is on, up first', () => {
+        useEventStore.setState({objectInstanceStatus: {'prod/svc/web': {
+            n1: {avail: 'down', resources: {'container#1': {status: 'down', type: 'container.docker'}}},
+            n2: {avail: 'up', resources: {'container#1': {status: 'up', type: 'container.docker'}}},
+            n3: {avail: 'up', resources: {'app#1': {status: 'up', type: 'app.simple'}}},
+        }}});
+        render(<MemoryRouter><ResourceDetailPanel id="prod/svc/web:container#1" tab="container" onTabChange={vi.fn()} onClose={vi.fn()}/></MemoryRouter>);
+        const panel = screen.getByRole('dialog', {name: 'container#1 of prod/svc/web'});
+        expect(within(panel).getAllByRole('tab').map((tab) => tab.textContent))
+            .toEqual(['Status', 'Info', 'Logs', 'Container logs', 'Configuration']);
+        expect(screen.getByTestId('container-logs')).toHaveTextContent('prod/svc/web container#1 on n1+n2, up on n2');
+    });
+
+    test('a resource not a container: no container logs', () => {
+        render(<MemoryRouter><ResourceDetailPanel id="prod/svc/web:app#1" tab="container" onTabChange={vi.fn()} onClose={vi.fn()}/></MemoryRouter>);
+        const panel = screen.getByRole('dialog', {name: 'app#1 of prod/svc/web'});
+        expect(within(panel).getAllByRole('tab').map((tab) => tab.textContent)).not.toContain('Container logs');
+        expect(screen.queryByTestId('container-logs')).not.toBeInTheDocument();
     });
 
     test('its logs tab: the logs of the object on all its nodes, merged, of the resource alone', () => {

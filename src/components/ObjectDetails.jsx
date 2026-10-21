@@ -20,6 +20,8 @@ import LogsViewer from "./LogsViewer";
 import {INSTANCE_ACTIONS, KEY_KINDS, OBJECT_ACTIONS, actionLabel} from "../constants/actions";
 import {parseObjectPath} from "../utils/objectUtils.jsx";
 import {orchestrationOf} from "./OrchestrationBadge";
+import {trackRefused, trackResponse} from "../app/action-tracker";
+import {actionSubject, refusalReason} from "./objectActions";
 import logger from "../utils/logger";
 
 const DEFAULT_CHECKBOXES = {failover: false};
@@ -180,31 +182,32 @@ const ObjectDetail = ({path, embedded = false, onOpenLogs, onViewInstance, onOrc
         const encodedName = encodeURIComponent(objName);
 
         try {
+            // The object and its instances in one answer: the status of the object in
+            // `data`, each instance's status, configuration and monitor under `data.instances`.
             const objRes = await fetch(
                 `${URL_OBJECT}/${encodedNamespace}/${encodedKind}/${encodedName}`,
                 {headers: {Authorization: `Bearer ${token}`}, cache: "no-cache"}
             );
-            let objectData = null;
-            if (objRes.ok) objectData = await objRes.json();
-
-            const instRes = await fetch(
-                `${URL_NODE}/all/instance/path/${encodedNamespace}/${encodedKind}/${encodedName}`,
-                {headers: {Authorization: `Bearer ${token}`}, cache: "no-cache"}
-            );
-            let instancesData = {};
-            if (instRes.ok) instancesData = await instRes.json();
+            if (!objRes.ok) throw new Error(t("objectDetails.fallbackFailed", {status: objRes.status}));
+            const {instances = {}, ...objectStatus} = (await objRes.json())?.data ?? {};
 
             const currentState = useEventStore.getState();
             const hasInstances = currentState.objectInstanceStatus[decodedObjectName] &&
                 Object.keys(currentState.objectInstanceStatus[decodedObjectName]).length > 0;
 
+            // The stream may have brought them meanwhile: it is newer. This object alone
+            // set, the others kept: a panel stands over a list of them.
             if (!hasInstances) {
-                if (objectData) currentState.setObjectStatuses({[decodedObjectName]: objectData});
-                if (instancesData) {
-                    currentState.setInstanceStatuses({[decodedObjectName]: instancesData}, true);
-                } else {
-                    currentState.setInstanceStatuses({[decodedObjectName]: {}}, true);
+                currentState.setObjectStatuses({...currentState.objectStatus, [decodedObjectName]: objectStatus});
+                const statuses = {};
+                const monitors = {...currentState.instanceMonitor};
+                for (const [node, instance] of Object.entries(instances)) {
+                    if (instance?.status) statuses[node] = instance.status;
+                    if (instance?.config) currentState.setInstanceConfig(decodedObjectName, node, instance.config);
+                    if (instance?.monitor) monitors[`${node}:${decodedObjectName}`] = instance.monitor;
                 }
+                currentState.setInstanceStatuses({[decodedObjectName]: statuses}, true);
+                currentState.setInstanceMonitors(monitors);
             }
         } catch (err) {
             logger.error("Fallback fetch failed:", err);
@@ -302,53 +305,49 @@ const ObjectDetail = ({path, embedded = false, onOpenLogs, onViewInstance, onOrc
         return `${URL_NODE}/${encodeURIComponent(node)}/instance/path/${encodeURIComponent(namespace)}/${encodeURIComponent(kind)}/${encodeURIComponent(name)}/action/${endpoint}`;
     }, []);
 
-    /** The message of an action the API refused, with the reason it gave if any. */
-    const failedMessage = useCallback((action, status, detail) => detail
-        ? t("objectDetails.feedback.failedWithDetail", {action, status, detail})
-        : t("objectDetails.feedback.failed", {action, status}), [t]);
-
+    // What comes of an action, accepted or refused, the actions tray says.
     const postObjectAction = useCallback(async ({action}) => {
         const token = localStorage.getItem("authToken");
         if (!token) return openSnackbar(t("objectDetails.feedback.authTokenNotFound"), "error");
         setActionInProgress(true);
-        openSnackbar(t("objectDetails.feedback.executingOnObject", {action}), "info");
         const endpoint = OBJECT_ACTIONS.find((a) => a.name === action)?.endpoint ?? `action/${action}`;
         const url = `${URL_OBJECT}/${encodeURIComponent(namespace)}/${encodeURIComponent(kind)}/${encodeURIComponent(name)}/${endpoint}`;
+        const subject = decodedObjectName;
         try {
             const res = await fetch(url, {method: "POST", headers: {Authorization: `Bearer ${token}`}});
             if (!res.ok) {
-                const serverError = await getResponseErrorMessage(res);
-                openSnackbar(failedMessage(action, res.status, serverError), "error");
+                const detail = await getResponseErrorMessage(res);
+                trackRefused({action, subject, reason: refusalReason({status: res.status, detail})});
                 return;
             }
-            openSnackbar(t("objectDetails.feedback.succeededOnObject", {action}));
+            await trackResponse(res, {action, subject, path: decodedObjectName});
         } catch (err) {
-            openSnackbar(t("objectDetails.feedback.error", {message: err.message}), "error");
+            trackRefused({action, subject, reason: err.message});
         } finally {
             setActionInProgress(false);
         }
-    }, [decodedObjectName, openSnackbar, namespace, kind, name, failedMessage, t]);
+    }, [decodedObjectName, openSnackbar, namespace, kind, name, t]);
 
     const postNodeAction = useCallback(async ({node, action}) => {
         const token = localStorage.getItem("authToken");
         if (!token) return openSnackbar(t("objectDetails.feedback.authTokenNotFound"), "error");
         setActionInProgress(true);
-        openSnackbar(t("objectDetails.feedback.executingOnNode", {action, node}), "info");
         const url = postActionUrl({node, objectName: decodedObjectName, action});
+        const subject = actionSubject({path: decodedObjectName, node});
         try {
             const res = await fetch(url, {method: "POST", headers: {Authorization: `Bearer ${token}`}});
             if (!res.ok) {
-                const serverError = await getResponseErrorMessage(res);
-                openSnackbar(failedMessage(action, res.status, serverError), "error");
+                const detail = await getResponseErrorMessage(res);
+                trackRefused({action, subject, reason: refusalReason({status: res.status, detail})});
                 return;
             }
-            openSnackbar(t("objectDetails.feedback.succeededOnNode", {action, node}));
+            await trackResponse(res, {action, subject, node});
         } catch (err) {
-            openSnackbar(t("objectDetails.feedback.error", {message: err.message}), "error");
+            trackRefused({action, subject, reason: err.message});
         } finally {
             setActionInProgress(false);
         }
-    }, [decodedObjectName, openSnackbar, postActionUrl, failedMessage, t]);
+    }, [decodedObjectName, openSnackbar, postActionUrl, t]);
 
     const openActionDialog = useCallback((action, context = null) => {
         setPendingAction({action, ...(context ? context : {})});
@@ -584,7 +583,13 @@ const ObjectDetail = ({path, embedded = false, onOpenLogs, onViewInstance, onOrc
                 <ActionDialogManager
                     pendingAction={pendingAction}
                     handleConfirm={handleDialogConfirm}
-                    target={t("objectDetails.dialogTarget", {name: decodedObjectName})}
+                    target={pendingAction?.batch === "nodes"
+                        ? t("statusBoard.subjects.instance", {path: decodedObjectName, where: t("nodes.target.selected", {count: selectedNodes.length})})
+                        : pendingAction?.node
+                            ? t("statusBoard.subjects.instance", {path: decodedObjectName, where: t("nodes.target.node", {node: pendingAction.node})})
+                            : t("objectDetails.dialogTarget", {name: decodedObjectName})}
+                    names={pendingAction?.batch === "nodes" ? selectedNodes : undefined}
+                    instances={pendingAction?.batch === "nodes" || Boolean(pendingAction?.node)}
                     supportedActions={
                         pendingAction?.batch === "nodes" || pendingAction?.node
                             ? INSTANCE_ACTIONS.map(a => a.name)

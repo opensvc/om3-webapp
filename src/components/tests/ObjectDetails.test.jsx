@@ -6,6 +6,10 @@ import {vi} from 'vitest';
 import ObjectDetail, {getResourceType, parseProvisionedState} from '../ObjectDetails';
 import useEventStore from '../../hooks/useEventStore.js';
 import logger from '../../utils/logger';
+import {useActionTracker} from '../../app/action-tracker';
+
+/** What the actions tray holds, the latest first: action, state, reason. */
+const tray = () => useActionTracker.getState().tracked.map((e) => [e.action, e.state, e.error ?? null]);
 
 // ── Hoisted variables for use in vi.mock factories ──────────────────────
 const {
@@ -152,6 +156,8 @@ const BASE_FNS = () => ({
     removeObject: vi.fn(),
     setObjectStatuses: vi.fn(),
     setInstanceStatuses: vi.fn(),
+    setInstanceConfig: vi.fn(),
+    setInstanceMonitors: vi.fn(),
 });
 
 const emptyState = () => ({
@@ -445,6 +451,7 @@ describe('ObjectDetail Component', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
+        useActionTracker.setState({tracked: [], revealed: 0});
         mockUseNavigate.mockReturnValue(mockNavigate);
         mockLocalStorage.getItem.mockReturnValue('mock-token');
         global.fetch = vi.fn(defaultFetchMock);
@@ -800,9 +807,7 @@ describe('ObjectDetail Component', () => {
             await openMenu();
             await userEvent.click(getMenuItemByLabel('Start'));
             await confirmDialog(await findActionDialog());
-            await waitFor(() =>
-                expect(screen.getAllByRole('alert').some((a) => a.textContent.includes('Network error'))).toBe(true)
-            );
+            await waitFor(() => expect(tray()).toEqual([['start', 'refused', expect.stringContaining('Network error')]]));
         });
 
         test.each([[403, 'Forbidden'], [500, 'Server error']])('HTTP %i', async (status, msg) => {
@@ -811,9 +816,7 @@ describe('ObjectDetail Component', () => {
             await openMenu();
             await userEvent.click(getMenuItemByLabel('Start'));
             await confirmDialog(await findActionDialog());
-            await waitFor(() =>
-                expect(screen.getAllByRole('alert').some((a) => a.textContent.includes(`could not be requested: HTTP ${status}`))).toBe(true)
-            );
+            await waitFor(() => expect(tray()).toEqual([['start', 'refused', expect.stringMatching(new RegExp(`^HTTP ${status}`))]]));
         });
 
         test('missing auth token', async () => {
@@ -911,13 +914,14 @@ describe('ObjectDetail Component', () => {
 
     test('closes snackbar via close button', async () => {
         await renderReadySvc();
+        mockLocalStorage.getItem.mockReturnValue(null);
         await userEvent.click(screen.getByRole('button', {name: /object actions/i}));
         await screen.findByRole('menu');
         await userEvent.click(getMenuItemByLabel('Start'));
         await confirmDialog(await findActionDialog());
-        await waitFor(() => expect(feedbackWith("'start' requested on the object")).toBeInTheDocument());
-        await user.click(within(feedbackWith("'start' requested on the object")).getByRole('button', {name: 'Close'}));
-        await waitFor(() => expect(feedbackWith("'start' requested on the object")).toBeUndefined());
+        await waitFor(() => expect(feedbackWith('Auth token not found')).toBeInTheDocument());
+        await user.click(within(feedbackWith('Auth token not found')).getByRole('button', {name: 'Close'}));
+        await waitFor(() => expect(feedbackWith('Auth token not found')).toBeUndefined());
     });
 
     // ── Logs drawer ──────────────────────────────────────────────────────
@@ -1293,10 +1297,6 @@ describe('ObjectDetail Component', () => {
                     expect.stringMatching(/\/api\/object\/path\/root(%2F|\/)svc(%2F|\/)svc1/),
                     expect.any(Object)
                 );
-                expect(global.fetch).toHaveBeenCalledWith(
-                    expect.stringMatching(/\/api\/node\/name\/all\/instance\/path\/root(%2F|\/)svc(%2F|\/)svc1/),
-                    expect.any(Object)
-                );
             });
         });
 
@@ -1339,15 +1339,21 @@ describe('ObjectDetail Component', () => {
             errorSpy.mockRestore();
         });
 
-        test('sets empty instance statuses when instance endpoint returns null body', async () => {
+        test('the object alone read: its instances out of its answer, none read apart', async () => {
+            setStoreState(emptyState());
+            renderSvc();
+            act(() => vi.advanceTimersByTime(5000));
+            await waitFor(() => expect(screen.queryByText(/Loading object data.../i)).not.toBeInTheDocument());
+            expect(global.fetch.mock.calls.map(([url]) => url).filter((url) => url.includes('/api/object/path/'))).toHaveLength(1);
+            expect(global.fetch.mock.calls.map(([url]) => url).filter((url) => url.includes('/instance/path/'))).toEqual([]);
+        });
+
+        test('an object without instances: none set', async () => {
             const s = emptyState();
             setStoreState(s);
             global.fetch.mockImplementation((url) => {
                 if (url.includes('/api/object/path')) {
-                    return Promise.resolve({ok: true, json: () => Promise.resolve({avail: 'up'})});
-                }
-                if (url.includes('/api/node/name/all/instance/path')) {
-                    return Promise.resolve({ok: true, json: () => Promise.resolve(null)});
+                    return Promise.resolve({ok: true, json: () => Promise.resolve({kind: 'ObjectItem', data: {avail: 'n/a'}})});
                 }
                 return Promise.resolve({ok: true, json: () => Promise.resolve({}), text: () => Promise.resolve('')});
             });
@@ -1356,6 +1362,56 @@ describe('ObjectDetail Component', () => {
             await waitFor(() => {
                 expect(s.setInstanceStatuses).toHaveBeenCalledWith({'root/svc/svc1': {}}, true);
             });
+        });
+
+        test('this object set out of its answer, the others kept', async () => {
+            const s = {
+                ...emptyState(),
+                objectStatus: {'root/svc/other': {avail: 'up'}},
+                instanceMonitor: {'n1:root/svc/other': {state: 'idle'}},
+            };
+            setStoreState(s);
+            global.fetch.mockImplementation((url) => {
+                if (url.includes('/api/object/path')) {
+                    return Promise.resolve({ok: true, json: () => Promise.resolve({
+                        kind: 'ObjectItem',
+                        meta: {object: 'root/svc/svc1'},
+                        data: {
+                            avail: 'up',
+                            overall: 'up',
+                            instances: {n1: {status: {avail: 'up'}, config: {csum: 'abc'}, monitor: {state: 'idle'}}},
+                        },
+                    })});
+                }
+                return Promise.resolve({ok: true, json: () => Promise.resolve({}), text: () => Promise.resolve('')});
+            });
+            renderSvc();
+            act(() => vi.advanceTimersByTime(5000));
+            await waitFor(() => expect(s.setObjectStatuses).toHaveBeenCalled());
+            // Its status, not the envelope of the answer nor its instances; the other object kept.
+            expect(s.setObjectStatuses).toHaveBeenCalledWith({
+                'root/svc/other': {avail: 'up'},
+                'root/svc/svc1': {avail: 'up', overall: 'up'},
+            });
+            expect(s.setInstanceStatuses).toHaveBeenCalledWith({'root/svc/svc1': {n1: {avail: 'up'}}}, true);
+            expect(s.setInstanceConfig).toHaveBeenCalledWith('root/svc/svc1', 'n1', {csum: 'abc'});
+            expect(s.setInstanceMonitors).toHaveBeenCalledWith({
+                'n1:root/svc/other': {state: 'idle'},
+                'n1:root/svc/svc1': {state: 'idle'},
+            });
+        });
+
+        test('the object not read (an HTTP error): nothing set', async () => {
+            const s = emptyState();
+            setStoreState(s);
+            global.fetch.mockImplementation((url) => Promise.resolve(url.includes('/api/object/path')
+                ? {ok: false, status: 500, json: () => Promise.resolve({})}
+                : {ok: true, json: () => Promise.resolve({}), text: () => Promise.resolve('')}));
+            renderSvc();
+            act(() => vi.advanceTimersByTime(5000));
+            await waitFor(() => expect(screen.queryByText(/Loading object data.../i)).not.toBeInTheDocument());
+            expect(s.setObjectStatuses).not.toHaveBeenCalled();
+            expect(s.setInstanceStatuses).not.toHaveBeenCalled();
         });
 
         test('hasInstances short-circuit: does not overwrite store if getState() already has instances at fallback time', async () => {
@@ -1373,10 +1429,6 @@ describe('ObjectDetail Component', () => {
             await waitFor(() => {
                 expect(global.fetch).toHaveBeenCalledWith(
                     expect.stringMatching(/\/api\/object\/path\/root(%2F|\/)svc(%2F|\/)svc1/),
-                    expect.any(Object)
-                );
-                expect(global.fetch).toHaveBeenCalledWith(
-                    expect.stringMatching(/\/api\/node\/name\/all\/instance\/path\/root(%2F|\/)svc(%2F|\/)svc1/),
                     expect.any(Object)
                 );
             });

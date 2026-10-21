@@ -1554,7 +1554,7 @@ describe('EventLog', () => {
             fireEvent.scroll(container);
         };
 
-        test('the oldest at the top, the newest at the end; a line its time and type, its badges, its data', async () => {
+        test('the oldest at the top, the newest at the end; a line its time and type, its node, its badge, its data', async () => {
             useEventLogStore.mockReturnValue(mockStore({eventLogs: [event('2', 2, 'ns1/svc/b'), event('1', 1, 'ns1/svc/a')]}));
             render(<EventLog eventTypes={OBJECT_EVENT_TYPES} label="Events"/>);
             await waitFor(() => expect(lines()).toHaveLength(2));
@@ -1562,13 +1562,63 @@ describe('EventLog', () => {
             const first = lines()[0];
             // The type under the time, in its tone; the badges, then the data.
             expect(first.querySelector('[data-tone]').previousElementSibling.textContent).toMatch(/\d/);
-            expect([...first.querySelector('[data-meta]').children].map((b) => b.textContent)).toEqual(['ns1/svc/a', 'n1']);
+            // As the logs of several nodes: the node on a column of its own, the object a badge.
+            expect(first.querySelector('[data-node]')).toHaveTextContent('n1');
+            expect([...first.querySelector('[data-meta]').children].map((b) => b.textContent)).toEqual(['ns1/svc/a']);
             expect(first.querySelector('[data-text]')).toHaveTextContent('"path":"ns1/svc/a"');
             expect(first).toHaveClass('border-line/40');
-            // Opened by a click, its data in full.
+            // A caret before the time says it opens; opened by a click, its data in full, the caret turned.
             const toggle = within(first).getByRole('button');
+            const caret = first.querySelector('[data-caret]');
+            expect(caret).not.toHaveClass('rotate-90');
+            expect(toggle).toHaveClass('cursor-pointer', 'hover:bg-surface-sunken');
             fireEvent.click(toggle);
             expect(toggle).toHaveAttribute('aria-expanded', 'true');
+            expect(first.querySelector('[data-caret]')).toHaveClass('rotate-90');
+        });
+
+        test('read as the logs: what is followed and the connection, the actions; a search, the types, the count', async () => {
+            const typed = (id, seconds, path, eventType) => makeLog({id, eventType, timestamp: at(seconds), data: {path, node: 'n1'}});
+            const store = mockStore({
+                connected: true,
+                eventLogs: [
+                    typed('3', 3, 'ns1/svc/a', 'InstanceStatusUpdated'),
+                    typed('2', 2, 'ns1/svc/a', 'ObjectStatusUpdated'),
+                    typed('1', 1, 'ns1/svc/a', 'InstanceStatusUpdated'),
+                ],
+            });
+            useEventLogStore.mockImplementation((selector) => (typeof selector === 'function' ? selector(store) : store));
+            render(<EventLog eventTypes={OBJECT_EVENT_TYPES} objectName="ns1/svc/a" label="Events"/>);
+            await waitFor(() => expect(lines()).toHaveLength(3));
+            // What is followed, out of the list, as the logs say it.
+            const list = screen.getByRole('region', {name: 'Event list'});
+            expect(screen.getAllByText('ns1/svc/a').filter((el) => !list.contains(el))).toHaveLength(1);
+            expect(screen.getByText('Connected')).toBeInTheDocument();
+            ['Following', 'Pause', 'Clear logs', 'Download the events shown', 'Manage subscriptions']
+                .forEach((name) => expect(screen.getByRole('button', {name})).toBeInTheDocument());
+            expect(screen.getByText('3 / 3 events')).toBeInTheDocument();
+            // The types as the levels of the logs: a list of checkboxes, with their counts.
+            fireEvent.click(within(screen.getByRole('group', {name: 'Filter by type'})).getByRole('checkbox', {name: 'ObjectStatusUpdated (1)'}));
+            await waitFor(() => expect(lines()).toHaveLength(1));
+            expect(screen.getByText('1 / 3 events')).toBeInTheDocument();
+            fireEvent.click(screen.getByRole('button', {name: 'Reset the filters'}));
+            await waitFor(() => expect(lines()).toHaveLength(3));
+            // A search through the type, the object, the node and the data.
+            fireEvent.change(screen.getByPlaceholderText('Search events…'), {target: {value: 'objectstatus'}});
+            await waitFor(() => expect(lines()).toHaveLength(1));
+            expect(screen.getByText('Filters active')).toBeInTheDocument();
+            useEventLogStore.mockReset();
+        });
+
+        test('opened at the end, as the logs: the events read while it loads followed once shown', async () => {
+            useEventLogStore.mockReturnValue(mockStore({eventLogs: [event('2', 2, 'ns1/svc/b'), event('1', 1, 'ns1/svc/a')]}));
+            render(<EventLog eventTypes={OBJECT_EVENT_TYPES} label="Events"/>);
+            // Read before the lines show: the first loading under way.
+            const container = screen.getByRole('region', {name: 'Event list'});
+            expect(lines()).toHaveLength(0);
+            Object.defineProperty(container, 'scrollHeight', {value: 1000, configurable: true});
+            await waitFor(() => expect(lines()).toHaveLength(2));
+            expect(container.scrollTop).toBe(1000);
         });
 
         test('followed at the end; scrolled up, the new events counted on a button back to the end', async () => {

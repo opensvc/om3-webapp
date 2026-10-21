@@ -13,6 +13,7 @@ import {useTranslation} from "react-i18next";
 import {ConfigText} from "./ConfigText";
 import {CopyButton} from "../ui/components/CopyButton";
 import {extractSection, replaceSection} from "../utils/configSections";
+import {trackDone, trackRefused, trackWrite} from "../app/action-tracker";
 
 /**
  * The object configuration file, its secrets redacted unless `showSecrets`: the
@@ -230,6 +231,12 @@ const problemMessage = async (response) => {
         // Not a problem document: the status says enough.
     }
     return `HTTP ${response.status}`;
+};
+
+/** A refusal in words, for the actions tray: its status, and the detail the daemon gave. */
+const refusal = async (response) => {
+    const message = await problemMessage(response);
+    return message.startsWith("HTTP ") ? message : `HTTP ${response.status} ${message}`;
 };
 
 const keywordLabel = (keyword) => `${keyword.section ? `${keyword.section}.` : ""}${keyword.option}`;
@@ -754,15 +761,21 @@ const ConfigSection = ({
                 // A section edited goes back in its place in the file as it was.
                 body: section === null ? edit.text : replaceSection(edit.file, section, edit.text),
             });
+            // What came of it, the actions tray says; refused, the editor stays open and says why.
+            const label = t("actionTray.writes.configFile");
             if (!response.ok) {
                 if (response.status === 409) setEditConflict(true);
-                setEditError(t("config.feedback.updateFailed", {message: await problemMessage(response)}));
+                const message = await problemMessage(response);
+                const reason = message.startsWith("HTTP ") ? message : `HTTP ${response.status} ${message}`;
+                trackRefused({action: "config", label, subject: decodedObjectName, reason});
+                setEditError(t("config.feedback.updateFailed", {message}));
                 return;
             }
+            trackDone({action: "config", label, subject: decodedObjectName, path: decodedObjectName});
             setEdit(null);
-            openSnackbar(t("config.feedback.updated"));
             if (configNode) await fetchConfig(configNode, true);
         } catch (err) {
+            trackRefused({action: "config", label: t("actionTray.writes.configFile"), subject: decodedObjectName, reason: err.message});
             setEditError(t("config.feedback.updateFailed", {message: err.message}));
         } finally {
             setActionLoading(false);
@@ -788,7 +801,8 @@ const ConfigSection = ({
         }
         const {namespace, kind, name} = parseObjectPath(decodedObjectName);
         setActionLoading(true);
-        openSnackbar(t("config.feedback.updating"), "info");
+        // What came of it, the actions tray says.
+        const write = {action: "config", label: t("actionTray.writes.configFile"), subject: decodedObjectName, path: decodedObjectName};
         try {
             const response = await fetch(`${URL_OBJECT}/${namespace}/${kind}/${name}/config/file`, {
                 method: "PUT",
@@ -798,23 +812,24 @@ const ConfigSection = ({
                 },
                 body: newConfigFile,
             });
-            if (!response.ok) {
-                openSnackbar(t("config.feedback.updateFailedStatus", {status: response.status}), "error");
-                return;
-            }
-            openSnackbar(t("config.feedback.updated"));
+            if (!(await trackWrite(response, write, refusal))) return;
             if (configNode) {
                 await fetchConfig(configNode, true);
                 setConfigDialogOpen(true);
             }
         } catch (err) {
-            openSnackbar(t("config.feedback.error", {message: err.message}), "error");
+            trackRefused({...write, reason: err.message});
         } finally {
             setActionLoading(false);
             setUpdateConfigDialogOpen(false);
             setNewConfigFile(null);
         }
     };
+
+    /** A keyword set, unset or a section deleted, as the actions tray says it. */
+    const write = (kind, values) => ({
+        action: "config", label: t(`actionTray.writes.${kind}`, values), subject: decodedObjectName, path: decodedObjectName,
+    });
 
     const handleAddParams = async () => {
         /* istanbul ignore next */
@@ -861,18 +876,12 @@ const ConfigSection = ({
                     method: "PATCH",
                     headers: {Authorization: `Bearer ${token}`},
                 });
-                if (!response.ok) {
-                    const error = new Error(`HTTP ${response.status}`);
-                    openSnackbar(t("config.feedback.addError", {keyword: fullKeyword, message: error.message}), "error");
-                    continue;
-                }
-                successCount++;
+                if (await trackWrite(response, write("set", {keyword: fullKeyword, value}), refusal)) successCount++;
             } catch (err) {
-                openSnackbar(t("config.feedback.addError", {keyword: fullKeyword, message: err.message}), "error");
+                trackRefused({...write("set", {keyword: fullKeyword, value}), reason: err.message});
             }
         }
         if (successCount > 0) {
-            openSnackbar(t("config.feedback.added", {count: successCount}), "success");
             if (configNode) {
                 await fetchConfig(configNode, true);
                 await fetchExistingParams();
@@ -907,17 +916,12 @@ const ConfigSection = ({
                     method: "PATCH",
                     headers: {Authorization: `Bearer ${token}`},
                 });
-                if (!response.ok) {
-                    openSnackbar(t("config.feedback.unsetFailedStatus", {keyword: fullKeyword, status: response.status}), "error");
-                    continue;
-                }
-                successCount++;
+                if (await trackWrite(response, write("unset", {keyword: fullKeyword}), refusal)) successCount++;
             } catch (err) {
-                openSnackbar(t("config.feedback.unsetError", {keyword: option || t("config.feedback.unknownParam"), message: err.message}), "error");
+                trackRefused({...write("unset", {keyword: section ? `${section}.${option}` : option}), reason: err.message});
             }
         }
         if (successCount > 0) {
-            openSnackbar(t("config.feedback.unset", {count: successCount}), "success");
             if (configNode) {
                 await fetchConfig(configNode, true);
                 await fetchExistingParams();
@@ -945,17 +949,12 @@ const ConfigSection = ({
                     method: "PATCH",
                     headers: {Authorization: `Bearer ${token}`},
                 });
-                if (!response.ok) {
-                    openSnackbar(t("config.feedback.deleteFailedStatus", {section, status: response.status}), "error");
-                    continue;
-                }
-                successCount++;
+                if (await trackWrite(response, write("deleteSection", {section}), refusal)) successCount++;
             } catch (err) {
-                openSnackbar(t("config.feedback.deleteError", {section, message: err.message}), "error");
+                trackRefused({...write("deleteSection", {section}), reason: err.message});
             }
         }
         if (successCount > 0) {
-            openSnackbar(t("config.feedback.deleted", {count: successCount}), "success");
             if (configNode) {
                 await fetchConfig(configNode, true);
                 await fetchExistingParams();

@@ -46,9 +46,21 @@ const GLYPH_INK: Record<ObjectState, string> = {
   unknown: "text-state-unknown",
 };
 
-/** A status as the other views draw it: the glyph of its state, gray when no issue; n/a as om writes it, "/". */
+/**
+ * A status as the other views draw it: the glyph of its state, gray when no issue; n/a
+ * as om writes it, "/". Unknown, a red "?" as om draws it: an instance of the object
+ * that tells nothing, its node gone or not heard from.
+ */
 function Status({ span }: { span: Span }) {
   const badge = statusBadge(span.status);
+  if (span.status === "undef") {
+    return (
+      <span data-state="unknown" className="inline-flex w-4 shrink-0 items-center justify-center font-semibold text-state-down">
+        <span aria-hidden="true">?</span>
+        <span className="sr-only">{badge.label ?? span.status}</span>
+      </span>
+    );
+  }
   // om grays a down where the object misses no instance: it is no issue.
   const muted = span.tone === "secondary" && badge.state !== "unknown" && badge.state !== "na";
   return (
@@ -251,8 +263,9 @@ const FIRST_NODE = 3;
 const NODES_START = "border-l border-line";
 
 /**
- * What selects, out of the way until wanted: a checkbox the cell holding it shows
- * on hover, or when it has the focus, and keeps shown once checked, or partly. A
+ * What selects, out of the way until wanted: a checkbox drawn light, that the cell
+ * holding it shows in full on hover, or when it has the focus, and keeps so once
+ * checked, or partly. A
  * click elsewhere in the cell selects nothing: its badges open their records.
  */
 function SelectBox({
@@ -271,7 +284,7 @@ function SelectBox({
       type="checkbox"
       className={cn(
         "h-3.5 w-3.5 shrink-0 cursor-pointer accent-(--accent)",
-        !checked && !indeterminate && "opacity-0 group-hover:opacity-100 focus-visible:opacity-100",
+        !checked && !indeterminate && "opacity-30 group-hover:opacity-100 focus-visible:opacity-100",
       )}
       checked={checked}
       ref={(el) => {
@@ -368,50 +381,54 @@ export function StatusBoard({
 
   return (
     <div className="space-y-3">
-      {/* The summary: the statuses of the object, one a line, then what is wrong with it, if anything. */}
-      <dl className="grid w-max grid-cols-[auto_auto] items-center gap-x-3 gap-y-1">
-        {avail !== undefined && (
-          <>
-            <dt className="text-ink-muted">{t("statusBoard.avail")}</dt>
-            <dd><SummaryStatus status={avail.status} /></dd>
-          </>
-        )}
-        {overall !== undefined && (
-          <>
-            <dt className="text-ink-muted">{t("statusBoard.overall")}</dt>
-            <dd><SummaryStatus status={overall.status} /></dd>
-          </>
-        )}
-        {count !== undefined && (
-          <>
-            <dt className="text-ink-muted">{t("statusBoard.instancesUp")}</dt>
-            <dd className={cn("font-medium tabular-nums", count.tone === "error" && "text-state-down")}>{count.text}</dd>
-          </>
-        )}
-        {facts.map(({ label, value }) => (
-          <Fragment key={label}>
-            <dt className="text-ink-muted">{label}</dt>
-            <dd>{value}</dd>
-          </Fragment>
-        ))}
-      </dl>
-      {states.length > 0 && (
-        <ul aria-label={t("statusBoard.issues")} className="flex flex-col items-start gap-y-1">
-          {states.map((s) =>
-            s.text === "frozen" || s.text === "mixed-frozen" ? (
-              <li key={s.text} className="inline-flex items-center gap-1 text-icon-network">
-                <FrozenMark frozen />
-                {t(`statusBoard.states.${s.text}`)}
-              </li>
-            ) : (
-              <li key={s.text} className={cn("inline-flex items-center gap-1", TONES[s.tone ?? "secondary"])}>
-                <AlertTriangleIcon className="h-3.5 w-3.5" />
-                {t(`statusBoard.states.${s.text}`)}
-              </li>
-            ),
+      {/* The summary: the statuses of the object, one a line, and beside them what is
+          wrong with it, if anything: a state coming or going (frozen, not provisioned)
+          moves nothing below. Short of room, the states go under. */}
+      <div className="flex flex-wrap items-start gap-x-10 gap-y-3">
+        <dl className="grid w-max grid-cols-[auto_auto] items-center gap-x-3 gap-y-1">
+          {avail !== undefined && (
+            <>
+              <dt className="text-ink-muted">{t("statusBoard.avail")}</dt>
+              <dd><SummaryStatus status={avail.status} /></dd>
+            </>
           )}
-        </ul>
-      )}
+          {overall !== undefined && (
+            <>
+              <dt className="text-ink-muted">{t("statusBoard.overall")}</dt>
+              <dd><SummaryStatus status={overall.status} /></dd>
+            </>
+          )}
+          {count !== undefined && (
+            <>
+              <dt className="text-ink-muted">{t("statusBoard.instancesUp")}</dt>
+              <dd className={cn("font-medium tabular-nums", count.tone === "error" && "text-state-down")}>{count.text}</dd>
+            </>
+          )}
+          {facts.map(({ label, value }) => (
+            <Fragment key={label}>
+              <dt className="text-ink-muted">{label}</dt>
+              <dd>{value}</dd>
+            </Fragment>
+          ))}
+        </dl>
+        {states.length > 0 && (
+          <ul aria-label={t("statusBoard.issues")} className="flex flex-col items-start gap-y-1">
+            {states.map((s) =>
+              s.text === "frozen" || s.text === "mixed-frozen" ? (
+                <li key={s.text} className="inline-flex items-center gap-1 text-icon-network">
+                  <FrozenMark frozen />
+                  {t(`statusBoard.states.${s.text}`)}
+                </li>
+              ) : (
+                <li key={s.text} className={cn("inline-flex items-center gap-1", TONES[s.tone ?? "secondary"])}>
+                  <AlertTriangleIcon className="h-3.5 w-3.5" />
+                  {t(`statusBoard.states.${s.text}`)}
+                </li>
+              ),
+            )}
+          </ul>
+        )}
+      </div>
 
       {toolbar}
 

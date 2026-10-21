@@ -15,6 +15,10 @@ import {getResponseErrorMessage} from "../services/api.jsx";
 import logger from '../utils/logger.js';
 import {parseObjectPath} from '../utils/objectUtils';
 import {KEY_KINDS} from "../constants/actions";
+import {trackRefused, trackWrite} from "../app/action-tracker";
+import {refusalReason} from "./objectActions";
+import {hasPemCertificate} from "../utils/x509";
+import CertificateDetails from "./CertificateDetails";
 import {Trans, useTranslation} from "react-i18next";
 
 const getAuthToken = () => {
@@ -30,6 +34,9 @@ const buildObjectUrl = (decodedObjectName) => {
     const {namespace, kind, name} = parseObjectPath(decodedObjectName);
     return `${URL_OBJECT}/${namespace}/${kind}/${name}`;
 };
+
+/** A refusal in words, for the actions tray: its status, and the detail the daemon gave. */
+const keyRefusal = async (response) => refusalReason({status: response.status, detail: await getResponseErrorMessage(response)});
 
 const formatResponseError = async (response, defaultMessage) => {
     const serverError = await getResponseErrorMessage(response);
@@ -118,8 +125,9 @@ const readKeyFile = async (file) => {
  * is empty. The name of a new key is that of the file, when not typed first.
  *
  * `hidden` is why the content of the key to update is not in the form: "secret", a
- * secret is never read back; "binary", it does not read as text. The update then
- * waits for new content. `maxSize`, the largest key the API takes, in bytes: a
+ * secret is never read back; "binary", it does not read as text; "unread", it could
+ * not be read. The update then waits for new content: an empty form never empties
+ * a key it does not show. `maxSize`, the largest key the API takes, in bytes: a
  * larger one is said, and not sent.
  */
 const KeyFormDialog = ({
@@ -181,7 +189,8 @@ const KeyFormDialog = ({
 
     const placeholder = hidden === "secret"
         ? t("keys.form.hiddenSecret")
-        : hidden === "binary" ? t("keys.form.hiddenBinary") : t("keys.form.contentPlaceholder");
+        : hidden === "binary" ? t("keys.form.hiddenBinary")
+            : hidden === "unread" ? t("keys.form.hiddenUnread") : t("keys.form.contentPlaceholder");
 
     const sizeLine = (
         <p className={tooLarge ? "text-data text-state-down" : "text-data text-ink-muted"} aria-live="polite">
@@ -371,6 +380,8 @@ const KeysSection = ({decodedObjectName, openSnackbar, refreshKey}) => {
         : {by, direction: by === "size" ? "desc" : "asc"}));
     const [keyToView, setKeyToView] = useState(null);
     const [keyViewContent, setKeyViewContent] = useState(null);
+    // The certificates of the key shown decoded, in the place of its text.
+    const [showCertificate, setShowCertificate] = useState(false);
     const [keyViewLoading, setKeyViewLoading] = useState(false);
     const [revealSecret, setRevealSecret] = useState(false);
     // A revealed secret is masked again on its own after a few seconds.
@@ -379,8 +390,10 @@ const KeysSection = ({decodedObjectName, openSnackbar, refreshKey}) => {
 
     const [updateInitialName, setUpdateInitialName] = useState("");
     const [updateInitialContent, setUpdateInitialContent] = useState("");
-    // Why the content of the key to update is not in its form: "secret" or "binary".
+    // Why the content of the key to update is not in its form: "secret", "binary" or "unread".
     const [updateHidden, setUpdateHidden] = useState(null);
+    // The last update form opened: the content read for one before it, arriving late, is dropped.
+    const updateRequest = useRef(0);
     const maxKeySize = useMaxKeySize(createDialogOpen || updateDialogOpen);
     const [updateContentLoading, setUpdateContentLoading] = useState(false);
     const titleId = useId();
@@ -457,7 +470,12 @@ const KeysSection = ({decodedObjectName, openSnackbar, refreshKey}) => {
         }
     }, [decodedObjectName, openSnackbar, t]);
 
-    /** Deletes the keys confirmed, one after the other: the first refused stops it, said. */
+    /** A key written, as the actions tray says it. */
+    const keyWrite = (kind, key) => ({
+        action: "config", label: t(`actionTray.writes.${kind}`, {key}), subject: decodedObjectName, path: decodedObjectName,
+    });
+
+    /** Deletes the keys confirmed, one after the other, each said in the actions tray: one refused, the others still go. */
     const handleDeleteKey = async () => {
         if (keysToDelete.length === 0) return;
         const token = getAuthToken();
@@ -467,33 +485,25 @@ const KeysSection = ({decodedObjectName, openSnackbar, refreshKey}) => {
             return;
         }
 
-        const one = keysToDelete.length === 1;
+        // What came of each key, the actions tray says.
         setActionLoading(true);
-        openSnackbar(one
-            ? t("keys.feedback.deleting", {key: keysToDelete[0]})
-            : t("keys.feedback.deletingMany", {count: keysToDelete.length}), "info");
         try {
             const baseUrl = buildObjectUrl(decodedObjectName);
+            const deleted = [];
             for (const name of keysToDelete) {
-                const url = `${baseUrl}/data/key?name=${encodeURIComponent(name)}`;
-                const response = await fetch(url, {
-                    method: "DELETE",
-                    headers: {Authorization: `Bearer ${token}`},
-                });
-                if (!response.ok) {
-                    const errorMessage = await formatResponseError(response, t("keys.errors.delete", {status: response.status}));
-                    openSnackbar(errorMessage, "error");
-                    await fetchKeys();
-                    return;
+                const write = keyWrite("keyDelete", name);
+                try {
+                    const response = await fetch(`${baseUrl}/data/key?name=${encodeURIComponent(name)}`, {
+                        method: "DELETE",
+                        headers: {Authorization: `Bearer ${token}`},
+                    });
+                    if (await trackWrite(response, write, keyRefusal)) deleted.push(name);
+                } catch (err) {
+                    trackRefused({...write, reason: err.message});
                 }
             }
-            openSnackbar(one
-                ? t("keys.feedback.deleted", {key: keysToDelete[0]})
-                : t("keys.feedback.deletedMany", {count: keysToDelete.length}));
-            setPicked((l) => l.filter((name) => !keysToDelete.includes(name)));
+            setPicked((l) => l.filter((name) => !deleted.includes(name)));
             await fetchKeys();
-        } catch (err) {
-            openSnackbar(t("keys.errors.generic", {message: err.message}), "error");
         } finally {
             setActionLoading(false);
             setDeleteDialogOpen(false);
@@ -509,12 +519,12 @@ const KeysSection = ({decodedObjectName, openSnackbar, refreshKey}) => {
             return;
         }
 
+        // What came of it, the actions tray says.
         setActionLoading(true);
-        openSnackbar(t("keys.feedback.creating", {key: name}), "info");
+        const write = keyWrite("keyCreate", name);
         try {
             const baseUrl = buildObjectUrl(decodedObjectName);
-            const url = `${baseUrl}/data/key?name=${encodeURIComponent(name)}`;
-            const response = await fetch(url, {
+            const response = await fetch(`${baseUrl}/data/key?name=${encodeURIComponent(name)}`, {
                 method: "POST",
                 headers: {
                     Authorization: `Bearer ${token}`,
@@ -522,15 +532,9 @@ const KeysSection = ({decodedObjectName, openSnackbar, refreshKey}) => {
                 },
                 body: contentBlob,
             });
-            if (!response.ok) {
-                const errorMessage = await formatResponseError(response, t("keys.errors.create", {status: response.status}));
-                openSnackbar(errorMessage, "error");
-                return;
-            }
-            openSnackbar(t("keys.feedback.created", {key: name}));
-            await fetchKeys();
+            if (await trackWrite(response, write, keyRefusal)) await fetchKeys();
         } catch (err) {
-            openSnackbar(t("keys.errors.generic", {message: err.message}), "error");
+            trackRefused({...write, reason: err.message});
         } finally {
             setActionLoading(false);
             setCreateDialogOpen(false);
@@ -545,12 +549,12 @@ const KeysSection = ({decodedObjectName, openSnackbar, refreshKey}) => {
             return;
         }
 
+        // What came of it, the actions tray says.
         setActionLoading(true);
-        openSnackbar(t("keys.feedback.updating", {key: name}), "info");
+        const write = keyWrite("keyUpdate", name);
         try {
             const baseUrl = buildObjectUrl(decodedObjectName);
-            const url = `${baseUrl}/data/key?name=${encodeURIComponent(name)}`;
-            const response = await fetch(url, {
+            const response = await fetch(`${baseUrl}/data/key?name=${encodeURIComponent(name)}`, {
                 method: "PUT",
                 headers: {
                     Authorization: `Bearer ${token}`,
@@ -558,15 +562,9 @@ const KeysSection = ({decodedObjectName, openSnackbar, refreshKey}) => {
                 },
                 body: contentBlob,
             });
-            if (!response.ok) {
-                const errorMessage = await formatResponseError(response, t("keys.errors.update", {status: response.status}));
-                openSnackbar(errorMessage, "error");
-                return;
-            }
-            openSnackbar(t("keys.feedback.updated", {key: name}));
-            await fetchKeys();
+            if (await trackWrite(response, write, keyRefusal)) await fetchKeys();
         } catch (err) {
-            openSnackbar(t("keys.errors.generic", {message: err.message}), "error");
+            trackRefused({...write, reason: err.message});
         } finally {
             setActionLoading(false);
             setUpdateDialogOpen(false);
@@ -578,6 +576,7 @@ const KeysSection = ({decodedObjectName, openSnackbar, refreshKey}) => {
         setKeyViewLoading(true);
         setViewDialogOpen(true);
         setKeyViewContent(null);
+        setShowCertificate(false);
         setRevealSecret(false);
 
         const result = await fetchKeyContent(keyName);
@@ -591,6 +590,9 @@ const KeysSection = ({decodedObjectName, openSnackbar, refreshKey}) => {
         setKeyViewLoading(false);
     };
 
+    // A key holding PEM certificates, a chain or one with its private key, offers to decode them.
+    const isCertificate = keyViewContent?.type === "text" && hasPemCertificate(keyViewContent.content);
+
     // Closed, a revealed value is masked: it is not shown again on reopening before it is read.
     const closeViewDialog = () => {
         setViewDialogOpen(false);
@@ -598,6 +600,7 @@ const KeysSection = ({decodedObjectName, openSnackbar, refreshKey}) => {
     };
 
     const openUpdateDialog = async (keyName) => {
+        const request = ++updateRequest.current;
         setUpdateInitialName(keyName);
         setUpdateDialogOpen(true);
         setUpdateInitialContent("");
@@ -612,10 +615,14 @@ const KeysSection = ({decodedObjectName, openSnackbar, refreshKey}) => {
 
         setUpdateContentLoading(true);
         const result = await fetchKeyContent(keyName);
+        if (request !== updateRequest.current) return;
         if (result.type === "text") {
             setUpdateInitialContent(result.content);
         } else if (result.type === "binary") {
             setUpdateHidden("binary");
+        } else {
+            // Not read: the form shows none of it, and waits for new content to replace it.
+            setUpdateHidden("unread");
         }
         setUpdateContentLoading(false);
     };
@@ -792,6 +799,11 @@ const KeysSection = ({decodedObjectName, openSnackbar, refreshKey}) => {
                                 {isSecret && revealSecret && ` · ${t("keys.view.maskedAgain", {count: secondsLeft})}`}
                             </p>
                             <div className="flex items-center gap-1">
+                                {isCertificate && (
+                                    <Button size="sm" onClick={() => setShowCertificate((shown) => !shown)}>
+                                        {showCertificate ? t("keys.view.showContent") : t("keys.view.decodeCertificate")}
+                                    </Button>
+                                )}
                                 {/* A secret copied masked too: pasted where needed, never shown. */}
                                 {keyViewContent.type === "text" && (
                                     <CopyButton text={keyViewContent.content} label={t("keys.view.copy")}/>
@@ -816,7 +828,10 @@ const KeysSection = ({decodedObjectName, openSnackbar, refreshKey}) => {
                                 )}
                             </div>
                         </div>
-                        {isSecret && !revealSecret ? (
+                        {/* A certificate is public: decoded, it is shown even with the secret masked. */}
+                        {isCertificate && showCertificate ? (
+                            <CertificateDetails text={keyViewContent.content}/>
+                        ) : isSecret && !revealSecret ? (
                             <div className="flex flex-col items-center gap-1 rounded-(--radius-control) border border-dashed border-line bg-surface-sunken p-6 text-center text-ink-muted">
                                 <LockIcon/>
                                 <p>{t("keys.view.hidden")}</p>

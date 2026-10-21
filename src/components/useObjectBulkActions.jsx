@@ -4,8 +4,10 @@ import useEventStore from "../hooks/useEventStore.js";
 import {forceFlush} from "../eventSourceManager";
 import logger from "../utils/logger.js";
 import {isActionAllowedForSelection, parseObjectPath} from "../utils/objectUtils";
-import {KEY_KINDS, OBJECT_ACTIONS, actionLabel} from "../constants/actions";
-import {actionUrl} from "./objectActions";
+import {KEY_KINDS, OBJECT_ACTIONS, actionLabel, isKeyKindAction} from "../constants/actions";
+import {trackRefused, trackResponse} from "../app/action-tracker";
+import {actionUrl, refusalReason} from "./objectActions";
+import {getResponseErrorMessage} from "../services/api.jsx";
 import ActionDialogManager from "./ActionDialogManager";
 import {Alert} from "../ui/components/Alert";
 import {IconButton} from "../ui/components/Button";
@@ -79,18 +81,21 @@ export function useObjectBulkActions({selectedObjects, onDone}) {
             notify(t("objects.feedback.authTokenNotFound"), "error");
             return;
         }
-        notify(t("objects.feedback.executing", {action}), "info");
-        let successCount = 0;
-        let errorCount = 0;
+        // What comes of each object, accepted, refused or left alone, the actions tray says.
         const objectsToProcess = pendingAction?.target ? [pendingAction.target] : selectedObjects;
+        const refuse = (objectName, reason) => trackRefused({action, subject: objectName, reason});
         const promises = objectsToProcess.map(async (objectName) => {
             const rawObj = objectStatus[objectName];
             if (!rawObj) {
-                errorCount++;
+                refuse(objectName, t("actionTray.reasons.unknownObject"));
                 return;
             }
-            if ((action === "freeze" && rawObj.frozen === "frozen") || (action === "unfreeze" && rawObj.frozen === "unfrozen")) {
-                errorCount++;
+            if (action === "freeze" && rawObj.frozen === "frozen") {
+                refuse(objectName, t("actionTray.reasons.alreadyFrozen"));
+                return;
+            }
+            if (action === "unfreeze" && rawObj.frozen === "unfrozen") {
+                refuse(objectName, t("actionTray.reasons.alreadyUnfrozen"));
                 return;
             }
             const url = actionUrl({path: objectName, action});
@@ -100,12 +105,12 @@ export function useObjectBulkActions({selectedObjects, onDone}) {
                     headers: {Authorization: `Bearer ${token}`, "Content-Type": "application/json"},
                 });
                 if (!response.ok) {
-                    const error = new Error(`HTTP error! status: ${response.status}`);
-                    logger.error(`Failed to execute ${action} on ${objectName}:`, error);
-                    errorCount++;
+                    const detail = await getResponseErrorMessage(response);
+                    logger.error(`Failed to execute ${action} on ${objectName}: HTTP ${response.status}`);
+                    refuse(objectName, refusalReason({status: response.status, detail}));
                     return;
                 }
-                successCount++;
+                await trackResponse(response, {action, subject: objectName, path: objectName});
                 if (action === "freeze") {
                     updateFrozenStatusOptimistic(objectName, "frozen");
                 } else if (action === "unfreeze") {
@@ -115,21 +120,13 @@ export function useObjectBulkActions({selectedObjects, onDone}) {
                 }
             } catch (error) {
                 logger.error(`Failed to execute ${action} on ${objectName}:`, error);
-                errorCount++;
+                refuse(objectName, error.message);
             }
         });
         await Promise.all(promises);
 
         forceFlush();
 
-        notify(
-            successCount && !errorCount
-                ? t("objects.feedback.succeeded", {action, count: successCount})
-                : successCount
-                    ? t("objects.feedback.partial", {action, ok: successCount, errors: errorCount})
-                    : t("objects.feedback.failed", {action, count: objectsToProcess.length}),
-            successCount && !errorCount ? "success" : successCount ? "warning" : "error",
-        );
         onDone?.();
         setPendingAction(null);
     }, [pendingAction, selectedObjects, objectStatus, removeObject, notify, onDone, t]);
@@ -140,7 +137,8 @@ export function useObjectBulkActions({selectedObjects, onDone}) {
         // Keys held on all the nodes are deleted, or the orchestration on them aborted: nothing else.
         const keysOnly = selectedKinds.size > 0 && [...selectedKinds].every((kind) => KEY_KINDS.includes(kind));
         return OBJECT_ACTIONS
-            .filter((action) => !keysOnly || ["delete", "purge", "abort"].includes(action.name))
+            .filter((action) => !keysOnly || action.name === "abort"
+                || [...selectedKinds].every((kind) => isKeyKindAction(kind, action.name)))
             .filter((action) => !action.kinds ||
                 (selectedKinds.size > 0 && [...selectedKinds].every((kind) => action.kinds.includes(kind))))
             .map((action) => ({
@@ -174,6 +172,7 @@ export function useObjectBulkActions({selectedObjects, onDone}) {
             target={pendingAction?.target
                 ? t("objects.dialogTarget.object", {name: pendingAction.target})
                 : t("objects.dialogTarget.objects", {count: selectedObjects.length})}
+            names={pendingAction?.target ? undefined : selectedObjects}
             supportedActions={OBJECT_ACTIONS.map((action) => action.name)}
             onClose={() => setPendingAction(null)}
         />

@@ -44,6 +44,43 @@ const NodeRow = ({
     const loadState = stats?.load_15m > 4 ? "down" : stats?.load_15m > 2 ? "warn" : "up";
     const memState = stats?.mem_avail < 20 ? "down" : stats?.mem_avail < 50 ? "warn" : "up";
 
+    // A node of the cluster that reports nothing, dropped or not heard from yet: a
+    // "?" for each of its values, as om mon shows it; no action reaches it.
+    if (status === undefined && monitor === undefined && stats === undefined) {
+        const unknown = <span className="text-ink-muted">?</span>;
+        return (
+            <Row
+                aria-label={t("nodes.row.label", {node: nodename})}
+                onActivate={onOpen ? () => onOpen(nodename) : undefined}
+                selected={isOpen}
+            >
+                <Cell className="w-8">
+                    <Checkbox
+                        checked={false}
+                        disabled
+                        onChange={() => {}}
+                        aria-label={t("nodes.row.select", {node: nodename})}
+                        onClick={(e) => e.stopPropagation()}
+                    />
+                </Cell>
+                <Cell className="font-medium whitespace-nowrap">{nodename}</Cell>
+                <Cell className="whitespace-nowrap">
+                    <span title={t("nodes.row.lost")} className="flex justify-center font-semibold text-state-down">
+                        <span aria-hidden="true">?</span>
+                        <span className="sr-only">{t("nodes.row.lost")}</span>
+                    </span>
+                </Cell>
+                <Cell numeric>{unknown}</Cell>
+                <Cell numeric>{unknown}</Cell>
+                <Cell numeric>{unknown}</Cell>
+                <Cell numeric>{unknown}</Cell>
+                <Cell>{unknown}</Cell>
+                <Cell>{unknown}</Cell>
+                <Cell>{unknown}</Cell>
+            </Row>
+        );
+    }
+
     return (
         <Row
             aria-label={t("nodes.row.label", {node: nodename})}

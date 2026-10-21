@@ -45,6 +45,9 @@ vi.mock('../../hooks/useEventStore', async (importOriginal) => {
 });
 
 const mockGrants = vi.hoisted(() => ({value: {}}));
+// The nodes of the cluster configuration; null, not read: the nodes reporting an instance.
+const mockClusterOrder = vi.hoisted(() => ({value: null}));
+vi.mock('../../hooks/useClusterNodeOrder', () => ({useClusterNodeOrder: () => mockClusterOrder.value}));
 vi.mock('../../hooks/useGrants', () => ({useGrants: () => mockGrants.value}));
 vi.mock('../../hooks/useFetchDaemonStatus', () => ({
     default: vi.fn(() => ({daemon: {cluster: {object: {}}}})),
@@ -84,6 +87,10 @@ import {clearKeyStats} from '../../hooks/useKeyStats';
 import useFetchDaemonStatus from '../../hooks/useFetchDaemonStatus';
 import {useMediaQuery} from '../../ui/lib/media';
 import {useLocation} from 'react-router-dom';
+import {useActionTracker} from '../../app/action-tracker';
+
+/** What the actions tray holds, the latest first: action, subject, state, reason. */
+const tray = () => useActionTracker.getState().tracked.map((e) => [e.action, e.subject, e.state, e.error ?? null]);
 
 // ---------- helpers ----------
 let originalConsoleError;
@@ -292,6 +299,7 @@ beforeEach(() => {
     mockRemoveObject.mockClear();
     mockSetObjectStatuses.mockClear();
     vi.mocked(useMediaQuery).mockReset();
+    useActionTracker.setState({tracked: [], revealed: 0});
     cleanup();
 });
 
@@ -311,6 +319,8 @@ describe('Objects Component', () => {
         expect(screen.getByText('Object')).toBeInTheDocument();
         expect(screen.getByRole('table')).toBeInTheDocument();
         expect(mockRetainEventReception).toHaveBeenCalledWith('mock-token', expect.any(Array));
+        // The instances of a node dropped are deleted: the list hears it, for its "?".
+        expect(mockRetainEventReception.mock.calls[0][1]).toContain('InstanceConfigDeleted');
         unmount();
         expect(mockReleaseEventReception).toHaveBeenCalled();
     });
@@ -476,6 +486,33 @@ describe('Objects Component', () => {
         });
     });
 
+    test('a node gone keeps its column, a "?" for the objects it runs, as om mon', async () => {
+        // node3, of the cluster, reports nothing: dropped, its instances deleted.
+        mockClusterOrder.value = ['node2', 'node1', 'node3'];
+        try {
+            setup({
+                objectStatus: {
+                    ...defaultState.objectStatus,
+                    'test-ns/svc/test1': {...defaultState.objectStatus['test-ns/svc/test1'], scope: ['node1', 'node2', 'node3']},
+                    'root/svc/test3': {...defaultState.objectStatus['root/svc/test3'], scope: ['node2']},
+                },
+            }, '', {isWideScreen: true, isMobile: false});
+            await waitForLoad();
+            // In the order of the cluster configuration.
+            const headers = within(screen.getByRole('table', {name: 'Objects'})).getAllByRole('columnheader')
+                .map((h) => h.textContent).filter((text) => /^node/.test(text));
+            expect(headers).toEqual(['node2', 'node1', 'node3']);
+            const gone = nodeCell(objectRow('test-ns/svc/test1'), 2);
+            expect(gone).toHaveTextContent('?');
+            expect(within(gone).getByTitle('No status from node3: the node is gone or not heard from')).toHaveClass('text-state-down');
+            // Not of its scope: nothing.
+            expect(nodeCell(objectRow('root/svc/test3'), 2)).toHaveTextContent(/^$/);
+            expect(nodeCell(objectRow('root/svc/test3'), 1)).toHaveTextContent(/^$/);
+        } finally {
+            mockClusterOrder.value = null;
+        }
+    });
+
     test('per-node cells show avail, frozen, not provisioned and monitor state', async () => {
         setup({}, '', {isWideScreen: true, isMobile: false});
         await waitForLoad();
@@ -541,6 +578,21 @@ describe('Objects Component', () => {
         expect(screen.getByText('1 selected')).toBeInTheDocument();
     });
 
+    test('an object a filter hides leaves the selection, and stays out when the filter goes', async () => {
+        setup();
+        await waitForLoad();
+        selectRow('test-ns/svc/test1');
+        selectRow('test-ns/svc/test2');
+        expect(screen.getByText('2 selected')).toBeInTheDocument();
+        fireEvent.change(screen.getByLabelText('Name'), {target: {value: 'test1'}});
+        await waitFor(() => expect(rowCheckboxes()).toHaveLength(1));
+        expect(screen.getByText('1 selected')).toBeInTheDocument();
+        fireEvent.change(screen.getByLabelText('Name'), {target: {value: ''}});
+        await waitFor(() => expect(rowCheckboxes().length).toBeGreaterThan(1));
+        expect(screen.getByText('1 selected')).toBeInTheDocument();
+        expect(screen.getByRole('checkbox', {name: 'Select object test-ns/svc/test2'})).not.toBeChecked();
+    });
+
     test('actions menu opens and lists actions', async () => {
         setup();
         await waitForLoad();
@@ -569,6 +621,21 @@ describe('Objects Component', () => {
         expect(within(menu).getAllByRole('menuitem').map((i) => i.textContent)).toEqual(['Abort', 'Delete', 'Purge']);
         expect(within(menu).getByRole('menuitem', {name: 'Delete'})).toBeEnabled();
         expect(within(menu).getByRole('menuitem', {name: 'Abort'})).toBeEnabled();
+    });
+
+    test('a selection of secrets offers no purge: a secret is deleted', async () => {
+        setup({
+            objectStatus: {
+                ...defaultState.objectStatus,
+                'test-ns/cfg/conf1': {avail: 'n/a', frozen: 'unfrozen', provisioned: 'true'},
+                'test-ns/sec/sec1': {avail: 'n/a', frozen: 'unfrozen', provisioned: 'true'},
+            },
+        }, '?list=secrets');
+        await waitForLoad();
+        selectRow('test-ns/sec/sec1');
+        openActionsMenu();
+        const menu = await screen.findByRole('menu');
+        expect(within(menu).getAllByRole('menuitem').map((i) => i.textContent)).toEqual(['Abort', 'Delete']);
     });
 
     describe('tabs', () => {
@@ -728,7 +795,9 @@ describe('Objects Component', () => {
             await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/objects?name=t&list=secrets&sel=test-ns%2Fsec%2Ftls&tab=keys'));
             expect(global.fetch).toHaveBeenCalledWith('/api/object/path/test-ns/sec/tls/config/file', expect.objectContaining({method: 'POST'}));
             expect(screen.queryByRole('dialog', {name: 'New object'})).not.toBeInTheDocument();
-            expect(screen.getByText('test-ns/sec/tls created.')).toBeInTheDocument();
+            // Its creation, the actions tray says: no message of the list's own.
+            expect(tray()).toContainEqual(['create', 'test-ns/sec/tls', 'succeeded', null]);
+            expect(screen.queryByText('test-ns/sec/tls created.')).not.toBeInTheDocument();
         });
 
         test('created from All, the object opens over All, which lists it too', async () => {
@@ -1009,11 +1078,9 @@ describe('Objects Component', () => {
                     expect.any(Object)
                 )
             );
-            await waitFor(() =>
-                expect(screen.getByRole('status')).toHaveTextContent(/'restart' requested on 1 object\./i)
-            );
-            expect(getFeedback()).toHaveClass('text-state-up');
-            expect(mockForceFlush).toHaveBeenCalled();
+            // Its progress, the actions tray says: no message of its own.
+            await waitFor(() => expect(mockForceFlush).toHaveBeenCalled());
+            expect(screen.queryByRole('status', {name: /requested/i})).not.toBeInTheDocument();
             expect(screen.queryByRole('checkbox', {checked: true})).not.toBeInTheDocument();
         });
 
@@ -1057,7 +1124,7 @@ describe('Objects Component', () => {
             expect(callArg['test-ns/svc/test1'].frozen).toBe('frozen');
         });
 
-        test('freezing an already frozen object is counted as error', async () => {
+        test('an object already frozen is not frozen again, said so in the actions tray', async () => {
             setup();
             await waitForLoad();
             selectRow('test-ns/svc/test1');
@@ -1066,11 +1133,7 @@ describe('Objects Component', () => {
             await clickMenuItem('Freeze');
             await confirmDialog();
             expect(global.fetch).toHaveBeenCalledTimes(1);
-            await waitFor(() =>
-                expect(screen.getByRole('alert')).toHaveTextContent(
-                    /requested on 1 object\(s\), not on 1/i
-                )
-            );
+            await waitFor(() => expect(tray()).toContainEqual(['freeze', 'test-ns/svc/test2', 'refused', 'already frozen']));
             expect(mockSetObjectStatuses).toHaveBeenCalled();
         });
 
@@ -1095,7 +1158,7 @@ describe('Objects Component', () => {
             expect(mockForceFlush).toHaveBeenCalled();
         });
 
-        test('failed action shows error alert', async () => {
+        test('an action refused is said in the actions tray, with its status', async () => {
             setup();
             global.fetch = vi.fn(() => Promise.resolve({ok: false, status: 500}));
             await waitForLoad();
@@ -1103,27 +1166,26 @@ describe('Objects Component', () => {
             openActionsMenu();
             await clickMenuItem('Restart');
             await confirmDialog();
-            await waitFor(() =>
-                expect(screen.getByRole('alert')).toHaveTextContent(/could not be requested/i)
-            );
+            await waitFor(() => expect(tray()).toEqual([['restart', 'test-ns/svc/test1', 'refused', expect.stringMatching(/^HTTP 500/)]]));
         });
 
-        test('partial success shows warning', async () => {
+        test('of several objects, the one refused is said in the actions tray, the other followed', async () => {
             setup();
             await waitForLoad();
             selectRow('test-ns/svc/test1');
             selectRow('test-ns/svc/test2');
             global.fetch = vi.fn()
-                .mockResolvedValueOnce({ok: true})
-                .mockResolvedValueOnce({ok: false, status: 500});
+                .mockResolvedValueOnce({ok: true, clone: () => ({json: async () => ({orchestration_id: 'o1', node: 'node1'})})})
+                .mockResolvedValueOnce({ok: false, status: 500})
+                .mockImplementation(() => new Promise(() => undefined));
             openActionsMenu();
             await clickMenuItem('Restart');
             await confirmDialog();
-            await waitFor(() =>
-                expect(screen.getByRole('alert')).toHaveTextContent(
-                    /requested on 1 object\(s\), not on 1/i
-                )
-            );
+            await waitFor(() => expect(tray()).toHaveLength(2));
+            expect(tray()).toEqual(expect.arrayContaining([
+                ['restart', 'test-ns/svc/test1', 'running', null],
+                ['restart', 'test-ns/svc/test2', 'refused', expect.stringMatching(/^HTTP 500/)],
+            ]));
         });
 
         test('network error', async () => {
@@ -1134,11 +1196,7 @@ describe('Objects Component', () => {
             openActionsMenu();
             await clickMenuItem('Restart');
             await confirmDialog();
-            await waitFor(() =>
-                expect(screen.getByRole('alert')).toHaveTextContent(
-                    /could not be requested on the object/i
-                )
-            );
+            await waitFor(() => expect(tray()).toEqual([['restart', 'test-ns/svc/test1', 'refused', 'Network error']]));
         });
 
         test('token missing prevents action', async () => {
@@ -1154,7 +1212,7 @@ describe('Objects Component', () => {
             );
         });
 
-        test('action on an object missing from objectStatus is counted as an error', async () => {
+        test('the objects acted on are the ones the list holds, whatever getState says', async () => {
             setup();
             await waitForLoad();
             selectRow('test-ns/svc/test1');
@@ -1167,10 +1225,15 @@ describe('Objects Component', () => {
             openActionsMenu();
             await clickMenuItem('Restart');
             await confirmDialog();
-            await waitFor(() => expect(getFeedback()).toHaveTextContent(/'restart'/));
+            await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(2));
+            // Answered with nothing to follow: done.
+            await waitFor(() => expect(tray()).toEqual(expect.arrayContaining([
+                ['restart', 'test-ns/svc/test1', 'succeeded', null],
+                ['restart', 'test-ns/svc/test2', 'succeeded', null],
+            ])));
         });
 
-        test('object removed from objectStatus after selection is treated as an error (rawObj missing)', async () => {
+        test('an object gone after its selection leaves it: the action acts on the others only', async () => {
             const {rerender} = setup();
             await waitForLoad();
             selectRow('test-ns/svc/test1');
@@ -1190,15 +1253,13 @@ describe('Objects Component', () => {
                 </MemoryRouter>
             );
 
+            await waitFor(() => expect(screen.getByText('1 selected')).toBeInTheDocument());
             openActionsMenu();
             await clickMenuItem('Restart');
             await confirmDialog();
             await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(1));
-            await waitFor(() =>
-                expect(screen.getByRole('alert')).toHaveTextContent(
-                    /requested on 1 object\(s\), not on 1/i
-                )
-            );
+            expect(global.fetch.mock.calls[0][0]).toContain('test1');
+            expect(tray().some(([, path]) => path === 'test-ns/svc/test2')).toBe(false);
         });
 
 
@@ -1248,6 +1309,8 @@ describe('Objects Component', () => {
                     expect.any(Object)
                 )
             );
+            // Done by the time the daemon answers (204): succeeded at once in the actions tray.
+            await waitFor(() => expect(tray()).toEqual([['enable', 'test-ns/svc/test1', 'succeeded', null]]));
         });
 
         test('Disable URL uses the object-path endpoint (no /action prefix)', async () => {
@@ -1663,6 +1726,20 @@ describe('Objects Component', () => {
             expect(screen.getByText('60 selected')).toBeInTheDocument();
         });
 
+        test('select all selects the rows of the page shown, unticked it leaves the other pages selected', async () => {
+            setup(makeMany(60), '', {isWideScreen: true, isMobile: false});
+            await waitForLoad();
+            const selectAll = () => screen.getByRole('checkbox', {name: 'Select all objects'});
+            fireEvent.click(selectAll());
+            expect(screen.getByText('50 selected')).toBeInTheDocument();
+            fireEvent.click(screen.getByRole('button', {name: 'Next'}));
+            expect(selectAll()).not.toBeChecked();
+            fireEvent.click(selectAll());
+            expect(screen.getByText('60 selected')).toBeInTheDocument();
+            fireEvent.click(selectAll());
+            expect(screen.getByText('50 selected')).toBeInTheDocument();
+        });
+
         test('a filter changed starts the list over from its first page', async () => {
             vi.useFakeTimers();
             try {
@@ -1776,12 +1853,13 @@ describe('Objects Component', () => {
         setup();
         await waitForLoad();
         selectRow('test-ns/svc/test1');
+        Storage.prototype.getItem = vi.fn().mockReturnValue(null);
         openActionsMenu();
         await clickMenuItem('Restart');
         await confirmDialog();
-        await waitFor(() => expect(getFeedback()).toHaveTextContent(/requested/i));
+        await waitFor(() => expect(getFeedback()).toHaveTextContent(/token not found/i));
         fireEvent.click(screen.getByRole('button', {name: 'Close'}));
-        await waitFor(() => expect(screen.queryByText(/requested/i)).not.toBeInTheDocument());
+        await waitFor(() => expect(screen.queryByText(/token not found/i)).not.toBeInTheDocument());
     });
 
     test('feedback hides itself after 4 seconds', async () => {
@@ -1790,21 +1868,22 @@ describe('Objects Component', () => {
         vi.useFakeTimers();
         try {
             selectRow('test-ns/svc/test1');
+            Storage.prototype.getItem = vi.fn().mockReturnValue(null);
             openActionsMenu();
             await clickMenuItem('Restart');
             fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', {name: /Confirm/i}));
             await act(async () => {
                 await vi.advanceTimersByTimeAsync(0);
             });
-            expect(getFeedback()).toHaveTextContent(/requested/i);
+            expect(getFeedback()).toHaveTextContent(/token not found/i);
             await act(async () => {
                 await vi.advanceTimersByTimeAsync(3900);
             });
-            expect(screen.getByText(/requested/i)).toBeInTheDocument();
+            expect(screen.getByText(/token not found/i)).toBeInTheDocument();
             await act(async () => {
                 await vi.advanceTimersByTimeAsync(200);
             });
-            expect(screen.queryByText(/requested/i)).not.toBeInTheDocument();
+            expect(screen.queryByText(/token not found/i)).not.toBeInTheDocument();
         } finally {
             vi.useRealTimers();
         }

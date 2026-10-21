@@ -8,6 +8,10 @@ import useEventLogStore from '../../hooks/useEventLogStore';
 import {reloadRecordHistory} from '../../app/record-history';
 import node from './fixtures/node-dev3n1.json';
 import daemon from './fixtures/daemon-dev3n1.json';
+import {useActionTracker} from '../../app/action-tracker';
+
+/** What the actions tray holds, the latest first: label, subject, state, reason. */
+const trayEntries = () => useActionTracker.getState().tracked.map((e) => [e.label, e.subject, e.state, e.error ?? null]);
 
 const {mockRetain, mockRelease, mockStartLogger} = vi.hoisted(() => ({mockRetain: vi.fn(), mockRelease: vi.fn(), mockStartLogger: vi.fn()}));
 
@@ -56,6 +60,7 @@ describe('NodeDetailPanel', () => {
     let api;
 
     beforeEach(() => {
+        useActionTracker.setState({tracked: [], revealed: 0});
         vi.clearAllMocks();
         localStorage.setItem('authToken', 'tok');
         sessionStorage.clear();
@@ -130,7 +135,8 @@ describe('NodeDetailPanel', () => {
         await waitFor(() => expect(requests).toContainEqual(expect.objectContaining({
             method: 'POST', url: '/api/node/name/dev3n1/action/freeze',
         })));
-        expect(await within(panel()).findByText(/'Freeze' requested on 1 node/)).toBeInTheDocument();
+        // What comes of it, the actions tray says: no message in the panel.
+        expect(within(panel()).queryByText(/requested on 1 node/)).not.toBeInTheDocument();
     });
 
     test('no abort in its menu: the orchestration in progress offers it, and its logs', async () => {
@@ -253,8 +259,10 @@ describe('NodeDetailPanel', () => {
         await waitFor(() => expect(requests).toContainEqual({
             method: 'PUT', url: '/api/node/name/dev3n1/config/file', body: `${CONFIG}max_parallel = 4\n`,
         }));
-        expect(await within(panel()).findByText('Configuration updated successfully')).toBeInTheDocument();
-        expect(within(panel()).getByLabelText('Node configuration file')).toHaveTextContent('max_parallel = 4');
+        // Written, said in the actions tray; the file shown again.
+        await waitFor(() => expect(useActionTracker.getState().tracked.map((e) => [e.label, e.subject, e.state]))
+            .toEqual([['Update the configuration', 'dev3n1', 'succeeded']]));
+        expect(await within(panel()).findByLabelText('Node configuration file')).toHaveTextContent('max_parallel = 4');
     });
 
     test('its secrets redacted, node.uuid, until shown for a while; edited, the file read whole', async () => {
@@ -437,12 +445,12 @@ describe('NodeDetailPanel', () => {
             await waitFor(() => expect(requests).toContainEqual(expect.objectContaining({
                 method: 'POST', url: '/api/node/name/dev3n1/daemon/hb/name/1.rx/action/restart',
             })));
-            // Said in the heartbeats section, where the action was asked: the top of the tab is out of sight.
-            expect(await within(section('Heartbeats')).findByText('Restart hb#1.rx requested.')).toBeInTheDocument();
-            expect(within(section('Components')).queryByText('Restart hb#1.rx requested.')).not.toBeInTheDocument();
+            // Queued by the daemon: followed in the actions tray until the stream runs anew.
+            await waitFor(() => expect(trayEntries()).toEqual([['Restart', 'the hb#1.rx heartbeat stream of dev3n1', 'running', null]]));
+            expect(within(panel()).queryByText(/requested/)).not.toBeInTheDocument();
         });
 
-        test('a disk heartbeat is signed and wiped as a whole; the others offer neither', async () => {
+        test('a disk heartbeat is signed and wiped as a whole; the others offer neither, done when the daemon answers', async () => {
             api['cluster/status'].cluster.node.dev3n1.daemon.heartbeat.streams.push(
                 {id: 'hb#3.rx', type: 'disk', state: 'running', peers: {dev3n2: {is_beating: true}}});
             await openDaemon();
@@ -456,6 +464,7 @@ describe('NodeDetailPanel', () => {
             await waitFor(() => expect(requests).toContainEqual(expect.objectContaining({
                 method: 'POST', url: '/api/node/name/dev3n1/daemon/hb/name/3/action/wipe',
             })));
+            await waitFor(() => expect(trayEntries()).toEqual([['Wipe', 'the hb#3 disk heartbeat of dev3n1', 'succeeded', null]]));
         });
 
         test('the listener stopped, from its line of the components, warned that the API stops answering', async () => {
@@ -488,13 +497,26 @@ describe('NodeDetailPanel', () => {
             expect(within(execs).getAllByRole('button', {name: 'Terminate'})).toHaveLength(1);
         });
 
-        test('a request refused says why, in the section it was asked from', async () => {
+        test('the listener restarted, followed until its status says so: its update time, its creation time kept', async () => {
+            await openDaemon();
+            fireEvent.click(within(panel()).getByRole('button', {name: 'Actions on the listener api.inet'}));
+            fireEvent.click(within(screen.getByRole('menu')).getByRole('menuitem', {name: 'Restart'}));
+            confirm();
+            await waitFor(() => expect(trayEntries()).toEqual([['Restart', 'the api.inet listener of dev3n1', 'running', null]]));
+            // Restarted: the daemon updates it, created as it was.
+            api['cluster/status'].cluster.node.dev3n1.daemon.listener.updated_at = '2026-10-19T16:30:09Z';
+            await waitFor(() => expect(trayEntries()).toEqual([['Restart', 'the api.inet listener of dev3n1', 'succeeded', null]]), {timeout: 5000});
+        });
+
+        test('a request refused is said in the actions tray, with why', async () => {
             await openDaemon();
             global.fetch.mockImplementationOnce(async () => new Response(JSON.stringify({detail: 'listener busy'}), {status: 409}));
             fireEvent.click(within(panel()).getByRole('button', {name: 'Actions on the listener api.inet'}));
             fireEvent.click(within(screen.getByRole('menu')).getByRole('menuitem', {name: 'Restart'}));
             confirm();
-            expect(await within(section('Components')).findByText(/Restart api.inet could not be requested: .*listener busy/)).toBeInTheDocument();
+            await waitFor(() => expect(trayEntries()).toEqual([
+                ['Restart', 'the api.inet listener of dev3n1', 'refused', expect.stringMatching(/^HTTP 409 .*listener busy/)],
+            ]));
         });
     });
 });

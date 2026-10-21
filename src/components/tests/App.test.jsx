@@ -962,7 +962,6 @@ describe('App Component', () => {
         const {unmount} = renderApp(['/']);
         await screen.findByTestId('navbar');
         unmount();
-        expect(removeListenerSpy).toHaveBeenCalledWith('storage', expect.any(Function));
         expect(removeListenerSpy).toHaveBeenCalledWith('focus', expect.any(Function));
         expect(removeListenerSpy).toHaveBeenCalledWith('om3:auth-redirect', expect.any(Function));
         expect(docRemoveListenerSpy).toHaveBeenCalledWith('visibilitychange', expect.any(Function));

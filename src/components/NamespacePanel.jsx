@@ -1,17 +1,13 @@
 import React, {useState} from "react";
 import {useTranslation} from "react-i18next";
 import useEventStore from "../hooks/useEventStore.js";
-import {URL_OBJECT} from "../config/apiPath.js";
-import {getResponseErrorMessage} from "../services/api.jsx";
 import {nscfgOf} from "../app/namespace-usage";
-import {newId, withId} from "../app/object-create";
+import {createNamespaceConfig} from "../app/object-create";
 import {Alert} from "../ui/components/Alert";
 import {Button} from "../ui/components/Button";
 import {Section} from "./NodePanel";
 import NamespaceMetrics from "./NamespaceMetrics";
 import ObjectConfig from "./ObjectConfig";
-
-const authHeaders = () => ({Authorization: `Bearer ${localStorage.getItem("authToken") || ""}`});
 
 /**
  * The first tab of a namespace: the cpu and memory its objects use, object by object
@@ -46,13 +42,10 @@ export function NamespaceConfig({namespace}) {
     const create = async () => {
         setCreating(true);
         setError(null);
+        // What came of it, the actions tray says; refused, it is said here too.
         try {
-            const response = await fetch(`${URL_OBJECT}/${encodeURIComponent(namespace)}/nscfg/namespace/config/file`, {
-                method: "POST",
-                headers: {...authHeaders(), "Content-Type": "application/octet-stream"},
-                body: withId("", newId()),
-            });
-            if (!response.ok) setError((await getResponseErrorMessage(response)) || `HTTP ${response.status}`);
+            const refused = await createNamespaceConfig(namespace);
+            if (refused !== null) setError(refused.message);
         } catch (err) {
             setError(err.message);
         } finally {

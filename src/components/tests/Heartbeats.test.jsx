@@ -6,6 +6,7 @@ import Heartbeats, {linkMatches} from "../Heartbeats";
 import {clearGrants} from "../../hooks/useGrants";
 import i18n from "../../i18n";
 import useEventStore from "../../hooks/useEventStore.js";
+import {useActionTracker} from "../../app/action-tracker";
 import {vi} from "vitest";
 
 const mockNavigate = vi.fn();
@@ -142,17 +143,33 @@ describe("Heartbeats Component", () => {
         mockLocalStorage.getItem.mockReturnValue("valid-token");
         mockNavigate.mockClear();
         setMedia();
+        useActionTracker.setState({tracked: [], revealed: 0});
+        storeListeners.clear();
     });
 
     afterEach(() => {
         delete window.matchMedia;
     });
 
+    // The store as the page and the actions tray read it: selected, read, and listened to.
+    let storeState = {heartbeatStatus: {}};
+    const storeListeners = new Set();
     const mockHeartbeatStore = (heartbeatStatus) => {
-        useEventStore.mockImplementation((selector) =>
-            selector({heartbeatStatus})
-        );
+        storeState = {heartbeatStatus};
+        useEventStore.mockImplementation((selector) => selector(storeState));
+        useEventStore.getState = () => storeState;
+        useEventStore.subscribe = (listener) => {
+            storeListeners.add(listener);
+            return () => storeListeners.delete(listener);
+        };
     };
+    /** The status the events bring next, heard by the listeners. */
+    const pushHeartbeatStatus = (heartbeatStatus) => act(() => {
+        storeState = {heartbeatStatus};
+        storeListeners.forEach((listener) => listener(storeState));
+    });
+    /** What the actions tray holds, the latest first: label, subject, state, reason. */
+    const tray = () => useActionTracker.getState().tracked.map((e) => [e.label, e.subject, e.state, e.error ?? null]);
 
     // ==================== STRUCTURE & BASIC RENDER ====================
     test("renders table structure and basic heartbeat rows", async () => {
@@ -957,6 +974,12 @@ describe("Heartbeats Component", () => {
         ]},
     ]);
 
+    /** A status with a stream of a node changed, as the events bring it. */
+    const withStream = (status, node, id, change) => ({
+        ...status,
+        [node]: {...status[node], streams: status[node].streams.map((s) => (s.id === id ? {...s, ...change} : s))},
+    });
+
     /** The API: whoami saying the grants given, the stream actions answered ok. */
     const mockApi = (grant) => {
         clearGrants();
@@ -999,37 +1022,127 @@ describe("Heartbeats Component", () => {
         expect(getDataRows()).toHaveLength(4);
     });
 
-    test("root stops a running stream, confirmed first, and starts a stopped one, by the API of the daemon thread", async () => {
+    test("root selects streams and starts, stops or restarts them, stop and restart confirmed first", async () => {
         const calls = mockApi({root: null});
         mockHeartbeatStore(TWO_NODES());
         renderWithRouter(<Heartbeats/>);
-        await waitFor(() => expect(screen.getAllByRole("button", {name: "started, Stop"}).length).toBeGreaterThan(0));
-        const row = (id, node) => getDataRows().find((r) => {
-            const cells = within(r).getAllByRole("cell").map((c) => c.textContent);
-            return `${cells[0].replace(/^hb#/, "")}.${sideOf(cells)}` === id && cells[2] === node;
-        });
-        // The routine word is the button of its action: started stops, stopped starts.
-        const routineCell = within(row("1.tx", "n1")).getAllByRole("cell")[6];
-        expect(within(routineCell).getByRole("button", {name: "started, Stop"})).toHaveTextContent(/^started$/);
-        expect(within(within(row("1.tx", "n2")).getAllByRole("cell")[6]).getByRole("button", {name: "stopped, Start"}))
-            .toHaveTextContent(/^stopped$/);
-        // The direction between the node and the peer: n1 sends on its tx, receives on its rx.
-        expect(within(row("1.tx", "n1")).getAllByRole("cell")[3]).toHaveTextContent(/^sends to$/);
-        expect(within(row("1.rx", "n1")).getAllByRole("cell")[3]).toHaveTextContent(/^receives from$/);
-        // Started is the normal state, in the ink of the text; stopped in the tint of down.
-        expect(within(row("1.tx", "n1")).getByRole("button", {name: "started, Stop"})).toHaveClass("text-ink");
-        expect(within(row("1.tx", "n2")).getByRole("button", {name: "stopped, Start"})).toHaveClass("text-state-down");
-        // The table names a stream as om does, "1.tx", the "hb#" left out.
-        fireEvent.click(within(row("1.tx", "n1")).getByRole("button", {name: "started, Stop"}));
-        const dialog = screen.getByRole("dialog", {name: "Stop a heartbeat stream"});
-        expect(dialog).toHaveTextContent("Stop the 1.tx stream of n1?");
-        expect(calls.some((c) => c.method === "POST")).toBe(false);
+        const select = (id, node) => screen.getByRole("checkbox", {name: `Select the ${id} stream of ${node}`});
+        await waitFor(() => expect(select("1.tx", "n1")).toBeInTheDocument());
+        const posts = () => calls.filter((c) => c.method === "POST").map((c) => c.url);
+        // Nothing selected: how to act, in the place of the actions.
+        expect(screen.getByText("Select streams to start, stop or restart them")).toBeInTheDocument();
+        // The routine is a word: the actions are the menu's.
+        expect(screen.getAllByText("started").length).toBeGreaterThan(0);
+        expect(screen.queryByRole("button", {name: /started/})).not.toBeInTheDocument();
+
+        // A started stream: nothing to start; stop confirmed, naming the stream.
+        fireEvent.click(select("1.tx", "n1"));
+        expect(screen.getByText("1 selected")).toBeInTheDocument();
+        fireEvent.click(screen.getByRole("button", {name: "Actions"}));
+        let menu = await screen.findByRole("menu");
+        expect(within(menu).getAllByRole("menuitem").map((i) => i.textContent)).toEqual(["Start", "Stop", "Restart"]);
+        expect(within(menu).getByRole("menuitem", {name: "Start"})).toBeDisabled();
+        fireEvent.click(within(menu).getByRole("menuitem", {name: "Stop"}));
+        let dialog = screen.getByRole("dialog", {name: "Stop a heartbeat stream"});
+        expect(dialog).toHaveTextContent("the 1.tx stream of n1");
+        expect(posts()).toEqual([]);
         fireEvent.click(within(dialog).getByRole("button", {name: "Stop"}));
-        await waitFor(() => expect(calls).toContainEqual({url: "/api/node/name/n1/daemon/hb/name/1.tx/action/stop", method: "POST"}));
-        expect(await screen.findByText("Stop of the 1.tx stream of n1 requested.")).toBeInTheDocument();
-        // A stopped stream: Start, without confirmation.
-        fireEvent.click(within(row("1.tx", "n2")).getByRole("button", {name: "stopped, Start"}));
-        await waitFor(() => expect(calls).toContainEqual({url: "/api/node/name/n2/daemon/hb/name/1.tx/action/start", method: "POST"}));
+        await waitFor(() => expect(posts()).toEqual(["/api/node/name/n1/daemon/hb/name/1.tx/action/stop"]));
+        // Queued by the daemon: followed in the actions tray until the stream is seen stopped.
+        await waitFor(() => expect(tray()).toEqual([["Stop", "the 1.tx stream of n1", "running", null]]));
+        expect(screen.queryByText(/requested/)).not.toBeInTheDocument();
+        pushHeartbeatStatus(withStream(TWO_NODES(), "n1", "hb#1.tx", {state: "stopped"}));
+        expect(tray()).toEqual([["Stop", "the 1.tx stream of n1", "succeeded", null]]);
+        pushHeartbeatStatus(TWO_NODES());
+        // Done, the selection is cleared.
+        expect(select("1.tx", "n1")).not.toBeChecked();
+
+        // Two streams restarted, confirmed; a cancel posts nothing.
+        fireEvent.click(select("1.tx", "n1"));
+        fireEvent.click(select("1.rx", "n2"));
+        fireEvent.click(screen.getByRole("button", {name: "Actions"}));
+        menu = await screen.findByRole("menu");
+        fireEvent.click(within(menu).getByRole("menuitem", {name: "Restart"}));
+        dialog = screen.getByRole("dialog", {name: "Restart 2 heartbeat streams"});
+        fireEvent.click(within(dialog).getByRole("button", {name: "Cancel"}));
+        expect(posts()).toHaveLength(1);
+        fireEvent.click(screen.getByRole("button", {name: "Actions"}));
+        menu = await screen.findByRole("menu");
+        fireEvent.click(within(menu).getByRole("menuitem", {name: "Restart"}));
+        fireEvent.click(within(screen.getByRole("dialog", {name: "Restart 2 heartbeat streams"})).getByRole("button", {name: "Restart"}));
+        await waitFor(() => expect(posts().slice(1)).toEqual([
+            "/api/node/name/n1/daemon/hb/name/1.tx/action/restart",
+            "/api/node/name/n2/daemon/hb/name/1.rx/action/restart",
+        ]));
+        await waitFor(() => expect(tray().slice(0, 2).map(([, subject, state]) => [subject, state])).toEqual(expect.arrayContaining([
+            ["the 1.tx stream of n1", "running"],
+            ["the 1.rx stream of n2", "running"],
+        ])));
+        // Restarted: running again, created anew.
+        pushHeartbeatStatus(withStream(TWO_NODES(), "n1", "hb#1.tx", {created_at: "2026-10-19T12:00:00Z"}));
+        expect(tray().filter(([, , state]) => state === "succeeded").map(([, subject]) => subject)).toContain("the 1.tx stream of n1");
+        expect(tray().find(([, subject]) => subject === "the 1.rx stream of n2")[2]).toBe("running");
+
+        // A stopped stream starts at once, without confirmation.
+        fireEvent.click(select("1.tx", "n2"));
+        fireEvent.click(screen.getByRole("button", {name: "Actions"}));
+        menu = await screen.findByRole("menu");
+        expect(within(menu).getByRole("menuitem", {name: "Stop"})).toBeDisabled();
+        fireEvent.click(within(menu).getByRole("menuitem", {name: "Start"}));
+        expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+        await waitFor(() => expect(posts()).toContain("/api/node/name/n2/daemon/hb/name/1.tx/action/start"));
+    });
+
+    test("a stream never seen in the state asked: its outcome unknown after a while", async () => {
+        mockApi({root: null});
+        mockHeartbeatStore(TWO_NODES());
+        renderWithRouter(<Heartbeats/>);
+        const select = (id, node) => screen.getByRole("checkbox", {name: `Select the ${id} stream of ${node}`});
+        await waitFor(() => expect(select("1.tx", "n2")).toBeInTheDocument());
+        fireEvent.click(select("1.tx", "n2"));
+        vi.useFakeTimers();
+        try {
+            fireEvent.click(screen.getByRole("button", {name: "Actions"}));
+            fireEvent.click(within(screen.getByRole("menu")).getByRole("menuitem", {name: "Start"}));
+            await act(async () => {
+                await vi.advanceTimersByTimeAsync(0);
+            });
+            expect(tray()).toEqual([["Start", "the 1.tx stream of n2", "running", null]]);
+            await act(async () => {
+                await vi.advanceTimersByTimeAsync(60_000);
+            });
+            expect(tray()).toEqual([["Start", "the 1.tx stream of n2", "unknown", "no news of it within 60 s"]]);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    test("a stream refused is said in the actions tray with the daemon's reason, the selection kept", async () => {
+        clearGrants();
+        global.fetch = vi.fn(async (url, options = {}) => {
+            if (url === "/api/auth/whoami") return {ok: true, json: async () => ({grant: {root: null}})};
+            if (options.method === "POST" && url.includes("/n2/")) {
+                return {ok: false, status: 500, headers: new Headers({"content-type": "application/json"}),
+                    json: async () => ({detail: "boom"}), text: async () => JSON.stringify({detail: "boom"})};
+            }
+            return {ok: true, json: async () => ({})};
+        });
+        mockHeartbeatStore(TWO_NODES());
+        renderWithRouter(<Heartbeats/>);
+        const select = (id, node) => screen.getByRole("checkbox", {name: `Select the ${id} stream of ${node}`});
+        await waitFor(() => expect(select("1.rx", "n1")).toBeInTheDocument());
+        fireEvent.click(select("1.rx", "n1"));
+        fireEvent.click(select("1.rx", "n2"));
+        fireEvent.click(screen.getByRole("button", {name: "Actions"}));
+        fireEvent.click(within(await screen.findByRole("menu")).getByRole("menuitem", {name: "Stop"}));
+        fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", {name: "Stop"}));
+        await waitFor(() => expect(tray()).toHaveLength(2));
+        expect(tray()).toEqual(expect.arrayContaining([
+            ["Stop", "the 1.rx stream of n1", "running", null],
+            ["Stop", "the 1.rx stream of n2", "refused", "HTTP 500 boom"],
+        ]));
+        // One refused: the selection stays, to try again.
+        expect(select("1.rx", "n2")).toBeChecked();
     });
 
     test("an orange line clicked shows the stopped tx of its sender, which reports no peer", async () => {
@@ -1059,8 +1172,9 @@ describe("Heartbeats Component", () => {
         renderWithRouter(<Heartbeats/>);
         await waitFor(() => expect(calls.some((c) => c.url === "/api/auth/whoami")).toBe(true));
         await act(async () => {});
-        expect(screen.queryByRole("button", {name: /Stop$/})).not.toBeInTheDocument();
-        expect(screen.queryByRole("button", {name: /Start$/})).not.toBeInTheDocument();
+        expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+        expect(screen.queryByRole("button", {name: "Actions"})).not.toBeInTheDocument();
+        expect(screen.queryByText("Select streams to start, stop or restart them")).not.toBeInTheDocument();
         // The routine as a word only.
         expect(screen.getAllByText("started").length).toBeGreaterThan(0);
     });

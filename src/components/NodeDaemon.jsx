@@ -4,13 +4,16 @@ import {URL_CLUSTER_STATUS} from "../config/apiPath.js";
 import useEventStore from "../hooks/useEventStore.js";
 import {retainEventReception} from "../eventSourceManager";
 import {getResponseErrorMessage} from "../services/api.jsx";
+import {UNTIL_TIMEOUT_MS, trackDone, trackPoll, trackRefused, trackUntil} from "../app/action-tracker";
+import {streamOf, streamReached} from "../app/heartbeat-progress";
+import {refusalReason} from "./objectActions";
 import {Alert} from "../ui/components/Alert";
-import {Button, IconButton} from "../ui/components/Button";
+import {Button} from "../ui/components/Button";
 import {Dialog} from "../ui/components/Dialog";
 import {MenuButton} from "../ui/components/MenuButton";
 import {RelativeTime} from "../ui/components/RelativeTime";
 import {StatusMark} from "../ui/components/StatusMark";
-import {BoltIcon, CloseIcon, RefreshIcon} from "../ui/icons";
+import {BoltIcon, RefreshIcon} from "../ui/icons";
 import {CategoryCount, CategoryTabs} from "../ui/components/CategoryTabs";
 import {Pager} from "../ui/components/Pager";
 import {Table, HeaderRow, HeaderCell, Row, Cell, EmptyRow} from "../ui/components/Table";
@@ -52,6 +55,13 @@ const COMPONENTS = ["listener", "dns", "scheduler", "runner_imon", "collector", 
 /** The listener the API answers start, stop and restart for: api.ux lives as long as the daemon. */
 const LISTENER = "api.inet";
 
+/** What a read answers, as JSON; throws on a refusal, for the read to be tried again. */
+const readJson = async (url) => {
+    const response = await fetch(url, {headers: authHeaders()});
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return response.json();
+};
+
 /** A component or a stream state as a mark: running is up, stopped or failed down. */
 const markOf = (state) =>
     ["running", "speaker"].includes(state) ? "up" : ["stopped", "failed", "error"].includes(state) ? "down" : "warn";
@@ -82,7 +92,6 @@ export function NodeDaemon({node}) {
     const execs = useApiResource(nodeUrl(node, "daemon/exec"));
     const dns = useApiResource(nodeUrl(node, "daemon/dns/dump"));
 
-    const [feedback, setFeedback] = useState(null);
     // The action asked for, waiting for its confirmation: its question and its request.
     const [pending, setPending] = useState(null);
     const [busy, setBusy] = useState(false);
@@ -103,12 +112,22 @@ export function NodeDaemon({node}) {
     const when = (value) => (isSet(value) ? <RelativeTime value={value} locale={i18n.language}/> : "–");
     const reloadAll = () => [status, orchestrations, execs, dns].forEach((r) => r.reload());
 
-    /** Sends a request of the daemon, says how it went, and reads again what it changed. */
-    const send = async ({label, method = "POST", path, body, reload, section}) => {
+    /**
+     * Sends a request of the daemon and reads again what it changed; what comes of it,
+     * the actions tray says, followed as `follow` tells: a heartbeat stream until the
+     * events show it in the state asked, the listener or an exec until a read again
+     * does, a disk heartbeat signed or wiped done when the daemon answers.
+     */
+    const send = async ({action, label, subject, method = "POST", path, body, reload, follow}) => {
         setBusy(true);
-        // Said in the section acted from: the top of a long tab is out of sight there.
-        const say = (tone, message) => setFeedback({tone, message, section});
-        say("info", t("nodeDaemon.feedback.requesting", {action: label}));
+        const info = {action, label, subject};
+        const lost = t("actionTray.noNews", {seconds: UNTIL_TIMEOUT_MS / 1000});
+        // What a restart is told by, read before it is asked.
+        const streamBefore = follow.kind === "stream"
+            ? streamOf(useEventStore.getState(), node, follow.id)?.created_at ?? streams.find((s) => s.id === follow.id)?.created_at
+            : undefined;
+        // A listener restarted keeps its creation time: its update time tells it.
+        const listenerBefore = daemon?.listener;
         try {
             const response = await fetch(nodeUrl(node, path), {
                 method,
@@ -116,14 +135,32 @@ export function NodeDaemon({node}) {
                 body: body ? JSON.stringify(body) : undefined,
             });
             if (!response.ok) {
-                const message = (await getResponseErrorMessage(response)) || `HTTP ${response.status}`;
-                say("error", t("nodeDaemon.feedback.failed", {action: label, message}));
+                const detail = await getResponseErrorMessage(response);
+                trackRefused({...info, reason: refusalReason({status: response.status, detail})});
                 return;
             }
-            say("success", t("nodeDaemon.feedback.requested", {action: label}));
+            if (follow.kind === "stream") {
+                trackUntil(info, streamReached({node, id: follow.id, action, createdBefore: streamBefore}), {lost});
+            } else if (follow.kind === "listener") {
+                trackPoll(info, async () => {
+                    const listener = (await readJson(URL_CLUSTER_STATUS))?.cluster?.node?.[node]?.daemon?.listener;
+                    if (action === "stop") return listener?.state === "stopped";
+                    return listener?.state === "running" && (action === "start"
+                        || listener.created_at !== listenerBefore?.created_at || listener.updated_at !== listenerBefore?.updated_at);
+                }, {lost});
+            } else if (follow.kind === "exec") {
+                // Signaled, it is done once it runs no more; dropped by the daemon (410), long ended.
+                trackPoll(info, async () => {
+                    const response = await fetch(nodeUrl(node, `daemon/exec/id/${encodeURIComponent(follow.execId)}`), {headers: authHeaders()});
+                    if (response.status === 410) return true;
+                    return response.ok && (await response.json())?.state !== "running";
+                }, {lost});
+            } else {
+                trackDone(info);
+            }
             (reload ?? [status]).forEach((r) => r.reload());
         } catch (error) {
-            say("error", t("nodeDaemon.feedback.failed", {action: label, message: error.message}));
+            trackRefused({...info, reason: error.message});
         } finally {
             setBusy(false);
         }
@@ -177,11 +214,13 @@ export function NodeDaemon({node}) {
             key: action,
             label: t(`nodeDaemon.actions.${action}`),
             onSelect: () => ask({
-                section: "heartbeats",
-                label: t(`nodeDaemon.actions.${action}`) + ` ${stream.id}`,
+                action,
+                label: t(`nodeDaemon.actions.${action}`),
+                subject: target,
                 question: t(`nodeDaemon.heartbeats.confirm.${action}`, {target}),
                 // The name without its "hb#", which om3 accepts too but a URL must escape.
                 path: `daemon/hb/name/${encodeURIComponent(stream.id.replace(/^hb#/, ""))}/action/${action}`,
+                follow: {kind: "stream", id: stream.id},
             }),
         }));
         // A disk heartbeat is signed and wiped as a whole, both its streams.
@@ -192,10 +231,12 @@ export function NodeDaemon({node}) {
                     key: action,
                     label: t(`nodeDaemon.actions.${action}`),
                     onSelect: () => ask({
-                        section: "heartbeats",
-                        label: t(`nodeDaemon.actions.${action}`) + ` hb#${hb}`,
+                        action,
+                        label: t(`nodeDaemon.actions.${action}`),
+                        subject: t("nodeDaemon.heartbeats.diskTarget", {hb, node}),
                         question: t(`nodeDaemon.heartbeats.confirm.${action}`, {target: t("nodeDaemon.heartbeats.diskTarget", {hb, node})}),
                         path: `daemon/hb/name/${encodeURIComponent(hb)}/action/${action}`,
+                        follow: {kind: "done"},
                     }),
                 });
             }
@@ -207,26 +248,14 @@ export function NodeDaemon({node}) {
         key: action,
         label: t(`nodeDaemon.actions.${action}`),
         onSelect: () => ask({
-            section: "listener",
-            label: t(`nodeDaemon.actions.${action}`) + ` ${LISTENER}`,
+            action,
+            label: t(`nodeDaemon.actions.${action}`),
+            subject: t("nodeDaemon.listener.target", {listener: LISTENER, node}),
             question: t(`nodeDaemon.listener.confirm.${action}`, {listener: LISTENER, node}),
             path: `daemon/listener/name/${LISTENER}/action/${action}`,
+            follow: {kind: "listener"},
         }),
     }));
-
-    /** The outcome of the last action, in the section it was asked from. */
-    const feedbackIn = (section) => (feedback?.section === section ? (
-        <Alert
-            tone={feedback.tone}
-            action={
-                <IconButton label={t("common.close")} bare onClick={() => setFeedback(null)}>
-                    <CloseIcon className="h-4 w-4"/>
-                </IconButton>
-            }
-        >
-            {feedback.message}
-        </Alert>
-    ) : null);
 
     // What each view sums up, on its chip.
     const components = daemon ? COMPONENTS.filter((id) => daemon[id]).map((id) => ({...daemon[id], id})) : [];
@@ -279,7 +308,6 @@ export function NodeDaemon({node}) {
     const overview = (
         <div className="space-y-6">
             <Section id={`daemon-components-${node}`} title={t("nodeDaemon.components.title")}>
-                {feedbackIn("listener")}
                 <Loaded resource={status}>
                     <DataTable
                         label={t("nodeDaemon.components.title")}
@@ -310,7 +338,6 @@ export function NodeDaemon({node}) {
             </Section>
 
             <Section id={`daemon-heartbeats-${node}`} title={t("nodeDaemon.heartbeats.title")} count={liveHeartbeat || daemon ? streams.length : undefined}>
-                {feedbackIn("heartbeats")}
                 <Loaded resource={heartbeatSource}>
                     <DataTable
                         label={t("nodeDaemon.heartbeats.title")}
@@ -357,7 +384,6 @@ export function NodeDaemon({node}) {
             <div className="flex flex-wrap items-center gap-3">
                 <FilterField label={t("nodeDaemon.execs.filter")} value={execFilter} onChange={filterExecs}/>
             </div>
-            {feedbackIn("execs")}
             <Loaded resource={execs}>
                 <Pager paging={execPaging}/>
                 <DataTable
@@ -385,12 +411,14 @@ export function NodeDaemon({node}) {
                                 variant="secondary"
                                 disabled={busy}
                                 onClick={() => ask({
-                                    section: "execs",
+                                    action: "terminate",
                                     label: t("nodeDaemon.execs.terminate"),
+                                    subject: t("nodeDaemon.execs.target", {command: e.command, node}),
                                     question: t("nodeDaemon.execs.confirm", {command: e.command, node}),
                                     method: "DELETE",
                                     path: `daemon/exec?exec_id=${encodeURIComponent(e.exec_id)}&signal=TERM`,
                                     reload: [execs],
+                                    follow: {kind: "exec", execId: e.exec_id},
                                 })}
                             >
                                 {t("nodeDaemon.execs.terminate")}

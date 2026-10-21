@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { act, fireEvent, render, renderHook, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { PanelHistoryRail } from "../PanelHistory";
+import { PanelHistoryMenu, PanelHistoryRail, requestHistoryMenu } from "../PanelHistory";
 import { setHistoryGrouping, typeOf } from "../panel-history";
 import { reloadRecordHistory, useRecordHistory } from "../record-history";
 
@@ -101,5 +101,26 @@ describe("history grouping", () => {
       "true",
     );
     expect(localStorage.getItem("om3.panelHistory.grouping")).toBe("kind");
+  });
+});
+
+describe("PanelHistoryMenu", () => {
+  const renderMenu = () =>
+    render(
+      <MemoryRouter>
+        <PanelHistoryMenu currentKey="object:web" />
+      </MemoryRouter>,
+    );
+
+  test("asked by the history button of a narrow window, the panel shows on its history list, once", () => {
+    show(["object", "db"], ["object", "web"]);
+    requestHistoryMenu();
+    const first = renderMenu();
+    expect(screen.getByRole("button", { name: /^History: / })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("button", { name: "Remove db from the history" })).toBeInTheDocument();
+    first.unmount();
+    // The next panel opens as usual: its list closed.
+    renderMenu();
+    expect(screen.getByRole("button", { name: /^History: / })).toHaveAttribute("aria-expanded", "false");
   });
 });

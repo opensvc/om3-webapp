@@ -24,7 +24,7 @@ import {Table, HeaderRow, HeaderCell, Row, Cell, EmptyRow} from "../ui/component
 import {StatusMark} from "../ui/components/StatusMark";
 import {FrozenMark} from "../ui/components/FrozenMark";
 import {RelativeTime} from "../ui/components/RelativeTime";
-import {BoltIcon, CloseIcon, EyeIcon, EyeOffIcon, PencilIcon, SearchIcon} from "../ui/icons";
+import {BoltIcon, EyeIcon, EyeOffIcon, PencilIcon, SearchIcon} from "../ui/icons";
 import {formatSeconds, useAutoHide} from "../ui/lib/reveal";
 import {formatBytes, formatSizeMiB} from "../ui/lib/format";
 import {NodeDaemon} from "./NodeDaemon";
@@ -34,6 +34,8 @@ import {tabPanelProps} from "../ui/components/tabs-ids";
 import {Pager} from "../ui/components/Pager";
 import {useLocalPaging} from "../app/paging";
 import {usePanelSearch} from "../app/panel-search";
+import {trackDone, trackRefused, trackResponse} from "../app/action-tracker";
+import {refusalReason} from "./objectActions";
 
 /*
  * The record panel of a cluster node, as oc3 gives its nodes one: its state and
@@ -55,8 +57,6 @@ export const authHeaders = () => ({Authorization: `Bearer ${localStorage.getItem
  * (ObjectTabs): a read endpoint, its table, its filter.
  */
 
-/** Feedback tones, from the severities of the snackbar the views use. */
-const TONES = {info: "info", success: "success", warning: "warning", error: "error"};
 const ICON = "flex h-4 w-4 items-center justify-center text-ink-muted [&>svg]:h-4! [&>svg]:w-4!";
 const DANGER_ICON = "flex h-4 w-4 items-center justify-center text-state-down [&>svg]:h-4! [&>svg]:w-4!";
 
@@ -177,7 +177,7 @@ export const matches = (filter, ...values) => {
  * state. Abort is no action of the menu: the badge of the orchestration in progress
  * offers it, with its logs.
  */
-function NodeActions({node, frozen, monitor, onFeedback, onOrchestrationLogs}) {
+function NodeActions({node, frozen, monitor, onOrchestrationLogs}) {
     const {t} = useTranslation();
     const [pending, setPending] = useState(null);
     const {globalExpect, orchestrationId} = orchestrationOf([monitor]);
@@ -193,8 +193,7 @@ function NodeActions({node, frozen, monitor, onFeedback, onOrchestrationLogs}) {
 
     const run = async (action) => {
         setPending(null);
-        const label = actionLabel(action);
-        onFeedback({tone: "info", message: t("nodes.feedback.executing", {action: label})});
+        // What comes of it, accepted or refused, the actions tray says.
         const endpoint = NODE_ACTIONS.find((a) => a.name === action)?.endpoint ?? `action/${action}`;
         try {
             const response = await fetch(nodeUrl(node, endpoint), {
@@ -202,13 +201,13 @@ function NodeActions({node, frozen, monitor, onFeedback, onOrchestrationLogs}) {
                 headers: {...authHeaders(), "Content-Type": "application/json"},
             });
             if (!response.ok) {
-                const message = (await getResponseErrorMessage(response)) || `HTTP ${response.status}`;
-                onFeedback({tone: "error", message: t("nodePanel.actionFailed", {action: label, message})});
+                const detail = await getResponseErrorMessage(response);
+                trackRefused({action, subject: node, reason: refusalReason({status: response.status, detail})});
                 return;
             }
-            onFeedback({tone: "success", message: t("nodes.feedback.succeeded", {action: label, count: 1})});
+            await trackResponse(response, {action, subject: node, node});
         } catch (error) {
-            onFeedback({tone: "error", message: t("nodePanel.actionFailed", {action: label, message: error.message})});
+            trackRefused({action, subject: node, reason: error.message});
         }
     };
 
@@ -251,19 +250,12 @@ function NodeStatusTab({node, onOrchestrationLogs}) {
     const stats = useEventStore((s) => s.nodeStats?.[node]);
     const properties = useNodeResource(node, "system/property");
     const header = usePanelHeader();
-    const [feedback, setFeedback] = useState(null);
 
     useEffect(() => {
         const token = localStorage.getItem("authToken");
         const release = token ? retainEventReception(token, NODE_EVENTS) : null;
         return () => release?.();
     }, []);
-
-    useEffect(() => {
-        if (feedback === null || feedback.tone === "info") return undefined;
-        const timer = setTimeout(() => setFeedback(null), 5000);
-        return () => clearTimeout(timer);
-    }, [feedback]);
 
     const frozen = isSet(status?.frozen_at);
     const mark = monitorMark(monitor);
@@ -299,21 +291,8 @@ function NodeStatusTab({node, onOrchestrationLogs}) {
     return (
         <div className="space-y-4">
             {header.actions !== null && createPortal(
-                <NodeActions node={node} frozen={frozen} monitor={monitor} onFeedback={setFeedback}
-                             onOrchestrationLogs={onOrchestrationLogs}/>,
+                <NodeActions node={node} frozen={frozen} monitor={monitor} onOrchestrationLogs={onOrchestrationLogs}/>,
                 header.actions,
-            )}
-            {feedback !== null && (
-                <Alert
-                    tone={TONES[feedback.tone] ?? "info"}
-                    action={
-                        <IconButton label={t("common.close")} bare onClick={() => setFeedback(null)}>
-                            <CloseIcon className="h-4 w-4"/>
-                        </IconButton>
-                    }
-                >
-                    {feedback.message}
-                </Alert>
             )}
             <dl aria-label={t("nodePanel.status.title")} className="grid grid-cols-[max-content_1fr] gap-x-6 gap-y-1">
                 {facts.map(([key, value]) => (
@@ -583,7 +562,6 @@ function NodeConfig({node}) {
     const [edit, setEdit] = useState(null);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState(null);
-    const [saved, setSaved] = useState(false);
 
     // The file as stored, its secrets in clear: what an edit starts from and writes back.
     const read = async () => {
@@ -594,7 +572,6 @@ function NodeConfig({node}) {
 
     const startEdit = async () => {
         setError(null);
-        setSaved(false);
         try {
             const text = await read();
             setEdit({base: text, text});
@@ -602,6 +579,8 @@ function NodeConfig({node}) {
             setError(t("nodePanel.config.readFailed", {message: err.message}));
         }
     };
+
+    const write = {action: "config", label: t("actionTray.writes.configFile"), subject: node};
 
     const save = async () => {
         setSaving(true);
@@ -616,15 +595,18 @@ function NodeConfig({node}) {
                 headers: {...authHeaders(), "Content-Type": "application/octet-stream"},
                 body: edit.text,
             });
+            // What came of it, the actions tray says; refused, the editor stays open and says why.
             if (!response.ok) {
-                const message = (await getResponseErrorMessage(response)) || `HTTP ${response.status}`;
-                setError(t("config.feedback.updateFailed", {message}));
+                const detail = await getResponseErrorMessage(response);
+                trackRefused({...write, reason: refusalReason({status: response.status, detail})});
+                setError(t("config.feedback.updateFailed", {message: detail || `HTTP ${response.status}`}));
                 return;
             }
+            trackDone(write);
             setEdit(null);
-            setSaved(true);
             file.reload();
         } catch (err) {
+            trackRefused({...write, reason: err.message});
             setError(t("config.feedback.updateFailed", {message: err.message}));
         } finally {
             setSaving(false);
@@ -680,7 +662,6 @@ function NodeConfig({node}) {
                     <PencilIcon/>
                 </IconButton>
             </div>
-            {saved && <Alert tone="success">{t("config.feedback.updated")}</Alert>}
             {error && <Alert tone="error">{error}</Alert>}
             <Loaded resource={file}>
                 <ConfigText text={file.data ?? ""} label={t("nodePanel.config.file")}

@@ -69,8 +69,14 @@ export const OBJECT_ACTIONS = [
 /** Kinds holding keys, on all the nodes: no status, nothing to start or place. */
 export const KEY_KINDS = ["cfg", "sec", "usr"];
 
-/** What `om sec`, `om cfg` and `om usr` do to the object as a whole. */
-const KEY_KIND_ACTIONS = ["delete", "purge"];
+/**
+ * What `om sec`, `om cfg` and `om usr` do to the object as a whole, as the webapp
+ * offers it: a secret is deleted, not purged.
+ */
+const KEY_KIND_ACTIONS = {cfg: ["delete", "purge"], sec: ["delete"], usr: ["delete", "purge"]};
+
+/** Whether the action `name` is offered on an object of the key `kind`. */
+export const isKeyKindAction = (kind, name) => (KEY_KIND_ACTIONS[kind] ?? []).includes(name);
 
 /**
  * Of the object `actions`, the ones of the menu of an object of `kind`: the ones
@@ -79,7 +85,7 @@ const KEY_KIND_ACTIONS = ["delete", "purge"];
  */
 export const objectActionsFor = (kind, actions = OBJECT_ACTIONS) => actions.filter((a) => a.name !== "abort"
     && (!a.kinds || a.kinds.includes(kind))
-    && (!KEY_KINDS.includes(kind) || KEY_KIND_ACTIONS.includes(a.name)));
+    && (!KEY_KINDS.includes(kind) || isKeyKindAction(kind, a.name)));
 
 export const INSTANCE_ACTIONS = [
     // Lifecycle

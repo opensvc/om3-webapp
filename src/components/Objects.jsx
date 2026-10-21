@@ -12,6 +12,7 @@ import {useObjectBulkActions} from "./useObjectBulkActions";
 import CreateObjectDialog from "./CreateObjectDialog";
 import {useObjectData} from "../hooks/useObjectData";
 import {useNodeData} from "../hooks/useNodeData";
+import {useClusterNodeOrder} from "../hooks/useClusterNodeOrder";
 import {Table, HeaderRow, HeaderCell, Row, Cell, EmptyRow} from "../ui/components/Table";
 import {NotProvisionedMark as PMark, StoppedMark, RpoBreachedMark} from "../ui/components/StateMarks";
 import {StatusMark} from "../ui/components/StatusMark";
@@ -86,9 +87,22 @@ const NodeStatus = React.memo(({objectName, node}) => {
     const stoppedAt = useEventStore((s) => s.objectInstanceStatus?.[objectName]?.[node]?.stopped_at);
     const rpoBreachedAt = useEventStore((s) => s.objectInstanceStatus?.[objectName]?.[node]?.rpo_breached_at);
     const objectAvail = useEventStore((s) => s.objectStatus?.[objectName]?.avail);
+    // A node of the object that tells nothing of its instance, gone or not heard
+    // from: a "?" in its place, as om mon draws it.
+    const expected = useEventStore((s) => Boolean(
+        s.objectStatus?.[objectName]?.scope?.includes(node) || s.instanceConfig?.[objectName]?.[node]
+    ));
     const peek = usePeek();
     const hasData = Boolean(nodeData?.avail);
-    if (!hasData) return null;
+    if (!hasData) {
+        if (!expected) return null;
+        return (
+            <span title={t("objects.noInstanceStatus", {node})} data-node={node} className="inline-flex w-4 justify-center font-semibold text-state-down">
+                <span aria-hidden="true">?</span>
+                <span className="sr-only">{t("objects.noInstanceStatus", {node})}</span>
+            </span>
+        );
+    }
     const isNodeNotProvisioned = nodeData.provisioned === "false" || nodeData.provisioned === false;
     const isStopped = hasTimestamp(stoppedAt);
     const isLagging = hasTimestamp(rpoBreachedAt);
@@ -478,6 +492,10 @@ const Objects = () => {
         [allObjectNames]
     );
 
+    // The nodes of the cluster, in the order of its configuration as om mon shows
+    // them: a node gone keeps its column. Then the nodes reporting an instance that
+    // are not of it.
+    const clusterNodes = useClusterNodeOrder();
     const allNodes = useMemo(() => {
         const nodeSet = new Set();
         const objNames = Object.keys(objectInstanceStatus);
@@ -489,8 +507,9 @@ const Objects = () => {
             }
         }
 
-        return Array.from(nodeSet).sort();
-    }, [objectInstanceStatus]);
+        const known = clusterNodes ?? [];
+        return [...known, ...Array.from(nodeSet).filter((node) => !known.includes(node)).sort()];
+    }, [objectInstanceStatus, clusterNodes]);
 
     const filteredObjectNames = useMemo(() => {
         const result = [];
@@ -699,6 +718,8 @@ const Objects = () => {
                 "InstanceStatusUpdated",
                 "ObjectDeleted",
                 "InstanceMonitorUpdated",
+                // A node dropped has its instances deleted: their marks give way to a "?".
+                "InstanceConfigDeleted",
             ]);
             eventStarted.current = true;
         }
@@ -720,17 +741,10 @@ const Objects = () => {
         setSelectedObjects([]);
     }, [list]);
 
-    // Created, the object opens in its panel, over the tab it is listed in.
-    const handleCreated = useCallback((path, provisioning) => {
+    // Created, the object opens in its panel, over the tab it is listed in. Its
+    // creation and its provisioning, the actions tray says.
+    const handleCreated = useCallback((path) => {
         setCreateOpen(false);
-        notify(
-            provisioning === "requested"
-                ? t("createObject.feedback.createdProvisioning", {path})
-                : provisioning === "failed"
-                    ? t("createObject.feedback.createdProvisionFailed", {path})
-                    : t("createObject.feedback.created", {path}),
-            provisioning === "failed" ? "warning" : "success",
-        );
         // All lists it too: kept.
         const next = list === ALL_LIST ? ALL_LIST : listOf(path);
         const params = new URLSearchParams(location.search);
@@ -747,11 +761,28 @@ const Objects = () => {
         const {kind} = parseObjectName(path);
         if (kind === "cfg" || kind === "sec") params.set("tab", "keys");
         navigate(`${location.pathname}?${params.toString()}`);
-    }, [list, location.pathname, location.search, navigate, notify, t]);
+    }, [list, location.pathname, location.search, navigate]);
 
-    const handleSelectAll = useCallback((e) => {
-        setSelectedObjects(e.target.checked ? filteredObjectNames : []);
+    // An object a filter hides, or gone, leaves the selection: an action on the
+    // selection acts on none the list does not show.
+    useEffect(() => {
+        const shown = new Set(filteredObjectNames);
+        setSelectedObjects((prev) => (prev.every((name) => shown.has(name))
+            ? prev
+            : prev.filter((name) => shown.has(name))));
     }, [filteredObjectNames]);
+
+    // All, the rows of the page shown: not those of the other pages, nor the
+    // configuration of a namespace its line stands for, unless that line is ticked.
+    // Unticked, the rows of the page leave the selection, those of others stay.
+    const handleSelectAll = useCallback((e) => {
+        const {checked} = e.target;
+        setSelectedObjects((prev) => (checked
+            ? [...new Set([...prev, ...visibleObjectNames])]
+            : prev.filter((name) => !visibleObjectNames.includes(name))));
+    }, [visibleObjectNames]);
+    const allSelected = visibleObjectNames.length > 0
+        && visibleObjectNames.every((name) => selectedObjects.includes(name));
 
     const globalStateOptions = useMemo(
         () => withSelected(globalStates, selectedGlobalStates).map((state) => ({
@@ -868,7 +899,7 @@ const Objects = () => {
                     <HeaderRow>
                         <HeaderCell className="w-8">
                             <Checkbox
-                                checked={selectedObjects.length === filteredObjectNames.length && filteredObjectNames.length > 0}
+                                checked={allSelected}
                                 onChange={handleSelectAll}
                                 aria-label={t("objects.selectAll")}
                             />

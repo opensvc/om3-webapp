@@ -1,8 +1,7 @@
-import React, {useCallback, useEffect, useState} from "react";
+import React, {useCallback, useState} from "react";
 import {useTranslation} from "react-i18next";
-import {Alert} from "../ui/components/Alert";
 import {IconButton} from "../ui/components/Button";
-import {CloseIcon, RefreshIcon} from "../ui/icons";
+import {RefreshIcon} from "../ui/icons";
 import {INSTANCE_ACTIONS, OBJECT_ACTIONS, RESOURCE_ACTIONS} from "../constants/actions";
 import {CrossLink} from "../app/CrossLink";
 import ActionDialogManager from "./ActionDialogManager";
@@ -21,28 +20,18 @@ export const actionIcon = ({icon, color}) => (
 /** Every action the dialogs may have to confirm. */
 const SUPPORTED_ACTIONS = [...new Set([...OBJECT_ACTIONS, ...INSTANCE_ACTIONS, ...RESOURCE_ACTIONS, CLEAR_ACTION].map((a) => a.name))];
 
-/** The feedback message hides itself after a while, as in the other views. */
-const FEEDBACK_DURATION_MS = 5000;
-
 /**
  * The actions on the instances and resources of an object, as the status board
  * runs them: `ask` an action on its targets — one entry per node, with the
- * resources it runs on there as `rid` — confirmed first, then posted, what came of
- * it said; a console opens a terminal on its resource at once. `onDone` follows a
- * run, to clear a selection. Render `feedback` where it is said, `dialogs` once.
+ * resources it runs on there as `rid` — confirmed first, then posted; what comes
+ * of it, the actions tray says (postAction). A console opens a terminal on its
+ * resource at once. `onDone` follows a run, to clear a selection. Render `dialogs`
+ * once.
  */
 export function useActionRunner(path) {
-    const {t} = useTranslation();
     const [pending, setPending] = useState(null);
     const [running, setRunning] = useState(false);
-    const [feedback, setFeedback] = useState(null);
     const [consoleTarget, setConsoleTarget] = useState(null);
-
-    useEffect(() => {
-        if (feedback === null) return undefined;
-        const timer = setTimeout(() => setFeedback(null), FEEDBACK_DURATION_MS);
-        return () => clearTimeout(timer);
-    }, [feedback]);
 
     const ask = useCallback((action, {targets, subject, onDone}) => {
         if (action === "console") {
@@ -55,47 +44,28 @@ export function useActionRunner(path) {
 
     const run = useCallback(async () => {
         if (pending === null) return;
-        const {action, subject, targets, onDone} = pending;
+        const {action, targets, onDone} = pending;
         setPending(null);
         setRunning(true);
-        setFeedback({tone: "info", message: t("statusBoard.feedback.running", {action, subject})});
-        const posts = targets.map(({node, rid}) => ({path, action, node, rid}));
-        const results = await Promise.all(posts.map((target) => postAction(target).catch((err) => ({detail: err.message}))));
-        const failures = results
-            .map((r, i) => (r === null ? null : `${posts[i].node ?? path}: ${r.status ? `HTTP ${r.status}` : ""}${r.detail ? ` ${r.detail}` : ""}`.trim()))
-            .filter((r) => r !== null);
-        setFeedback(failures.length === 0
-            ? {tone: "success", message: t("statusBoard.feedback.accepted", {action, subject})}
-            : {tone: "error", message: t("statusBoard.feedback.failed", {action, subject, detail: failures.join("; ")})});
+        await Promise.all(targets.map(({node, rid}) => postAction({path, action, node, rid})));
         onDone?.();
         setRunning(false);
-    }, [pending, path, t]);
+    }, [pending, path]);
 
-    const feedbackAlert = feedback === null ? null : (
-        <Alert
-            tone={feedback.tone}
-            action={
-                <IconButton label={t("common.close")} bare onClick={() => setFeedback(null)}>
-                    <CloseIcon className="h-4 w-4"/>
-                </IconButton>
-            }
-        >
-            {feedback.message}
-        </Alert>
-    );
     const dialogs = (
         <>
             <ActionDialogManager
                 pendingAction={pending}
                 handleConfirm={run}
                 target={pending?.subject ?? ""}
+                instances={(pending?.targets?.length ?? 0) > 0}
                 supportedActions={SUPPORTED_ACTIONS}
                 onClose={() => setPending(null)}
             />
             <ConsoleTerminal open={consoleTarget !== null} target={consoleTarget} onClose={() => setConsoleTarget(null)}/>
         </>
     );
-    return {ask, running, feedback: feedbackAlert, dialogs};
+    return {ask, running, dialogs};
 }
 
 /**

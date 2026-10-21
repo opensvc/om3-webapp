@@ -13,19 +13,22 @@ import {useTranslation} from "react-i18next";
 import useEventStore from "../hooks/useEventStore.js";
 import {retainEventReception} from "../eventSourceManager.jsx";
 import {Table, HeaderRow, HeaderCell, SortHeaderCell, Row, Cell, EmptyRow} from "../ui/components/Table";
-import {Select} from "../ui/components/Field";
+import {Checkbox, Select} from "../ui/components/Field";
+import {MenuButton} from "../ui/components/MenuButton";
 import {Button, IconButton} from "../ui/components/Button";
-import {Alert} from "../ui/components/Alert";
 import {Dialog} from "../ui/components/Dialog";
 import {URL_NODE} from "../config/apiPath.js";
 import {getResponseErrorMessage} from "../services/api.jsx";
+import {UNTIL_TIMEOUT_MS, trackRefused, trackUntil} from "../app/action-tracker";
+import {refusalReason} from "./objectActions";
+import {streamOf, streamReached} from "../app/heartbeat-progress";
 import {useIsRoot} from "../hooks/useGrants";
 import {Pager} from "../ui/components/Pager";
 import {AgeTime} from "./AgeTime";
 import {HeartbeatMesh} from "./HeartbeatMesh";
 import {TabCount} from "../ui/components/Tabs";
 import {usePaging} from "../app/paging";
-import {ChevronDownIcon, CloseIcon, FilterIcon} from "../ui/icons";
+import {BoltIcon, ChevronDownIcon, CloseIcon, FilterIcon, PlayIcon, RefreshIcon, StopIcon} from "../ui/icons";
 
 // The breakpoints of the MUI theme the view used: below md (900px) the filters fold
 // behind a button, from lg (1200px) they are always shown at first.
@@ -112,43 +115,60 @@ export const linkMatches = (link, row) => {
 /**
  * The routine of the stream, its daemon thread, in a word. Started is the normal
  * state, said in the ink of the text; stopped, failed or warning in their tint.
- * For root the word is the button of the action it calls for: stop a started one,
- * start one that is not (om node daemon hb stop|start), the stop confirmed first.
  */
-const Routine = ({row, onAction}) => {
+const Routine = ({row}) => {
     const {t} = useTranslation();
     const status = STREAM_STATUS[row.state] ?? "unknown";
     const ink = row.state === "running" ? "text-ink" : INK[status];
-    const word = routineWord(row.state, t);
-    if (!onAction) {
-        return <span data-state={status} className={`whitespace-nowrap ${ink}`}>{word}</span>;
-    }
-    const action = row.state === "running" ? "stop" : "start";
-    const label = t(`heartbeats.actions.${action}`);
-    return (
-        <button
-            type="button"
-            data-state={status}
-            title={label}
-            aria-label={`${word}, ${label}`}
-            onClick={() => onAction(row, action)}
-            className={`whitespace-nowrap rounded-(--radius-control) underline decoration-dotted underline-offset-4 hover:decoration-solid focus-visible:outline-2 focus-visible:outline-(--focus-ring) ${ink}`}
-        >
-            {word}
-        </button>
-    );
+    return <span data-state={status} className={`whitespace-nowrap ${ink}`}>{routineWord(row.state, t)}</span>;
 };
 
-const HeartbeatRow = React.memo(({row, isSingleNode, onAction}) => {
+/**
+ * A stream as the actions address it: its node and its name. A stream with several
+ * peers has a row each: they are selected together.
+ */
+const streamKey = (row) => `${row.node}|${row.id}`;
+
+/** The actions on the streams selected, om daemon hb start|stop|restart; stop and restart confirmed. */
+const STREAM_ACTIONS = [
+    {name: "start", Icon: PlayIcon},
+    {name: "stop", Icon: StopIcon, confirm: true},
+    {name: "restart", Icon: RefreshIcon, confirm: true},
+];
+const MENU_ICON = "flex h-4 w-4 items-center justify-center text-ink-muted [&>svg]:h-4! [&>svg]:w-4!";
+
+/** Posts `action` on the stream of a row, to its node; throws the reason the daemon gives on a refusal. */
+const postAction = async (row, action) => {
+    const name = row.id.replace(/^hb#/, "");
+    const response = await fetch(
+        `${URL_NODE}/${encodeURIComponent(row.node)}/daemon/hb/name/${encodeURIComponent(name)}/action/${action}`,
+        {method: "POST", headers: {Authorization: `Bearer ${localStorage.getItem("authToken") || ""}`}},
+    );
+    if (!response.ok) {
+        throw new Error(refusalReason({status: response.status, detail: await getResponseErrorMessage(response)}));
+    }
+};
+
+const HeartbeatRow = React.memo(({row, isSingleNode, selected, onSelect}) => {
+    const {t} = useTranslation();
     return (
-        <Row>
+        <Row className={selected ? "bg-accent-soft" : undefined}>
+            {onSelect && (
+                <Cell className="w-8">
+                    <Checkbox
+                        checked={selected}
+                        onChange={(event) => onSelect(row, event.target.checked)}
+                        aria-label={t("heartbeats.actions.selectStream", {id: row.id, node: row.node})}
+                    />
+                </Cell>
+            )}
             <Cell className="whitespace-nowrap">{rowHeartbeat(row)}</Cell>
             <Cell>{row.type}</Cell>
             <Cell>{row.node}</Cell>
             <Cell className="whitespace-nowrap"><DirectionMark side={rowSide(row)}/></Cell>
             <Cell>{row.peer}</Cell>
             <Cell>{row.desc}</Cell>
-            <Cell><Routine row={row} onAction={onAction}/></Cell>
+            <Cell><Routine row={row}/></Cell>
             <Cell><BeatingMark isBeating={row.isBeating} isSingleNode={isSingleNode}/></Cell>
             {/* The dates stay on one line: wrapped, they would make the row taller than the others. */}
             <Cell className="whitespace-nowrap"><AgeTime value={row.changedAt}/></Cell>
@@ -167,7 +187,8 @@ const HeartbeatRow = React.memo(({row, isSingleNode, onAction}) => {
         prev.row.changedAt === next.row.changedAt &&
         prev.row.lastBeatingAt === next.row.lastBeatingAt &&
         prev.isSingleNode === next.isSingleNode &&
-        prev.onAction === next.onAction
+        prev.selected === next.selected &&
+        prev.onSelect === next.onSelect
     );
 });
 
@@ -476,33 +497,52 @@ const Heartbeats = () => {
         setShowStreams(true);
     }, []);
 
-    // Stop or start a stream, root only; stopping is confirmed first.
+    // Start, stop or restart the streams selected, root only; stop and restart confirmed first.
     const isRoot = useIsRoot();
-    const [pendingStop, setPendingStop] = useState(null);
-    const [actionFeedback, setActionFeedback] = useState(null);
-    const runAction = useCallback(async (row, action) => {
+    const [selectedStreams, setSelectedStreams] = useState([]);
+    const [pendingAction, setPendingAction] = useState(null);
+    // The streams of the rows, one each, by their key.
+    const streamsByKey = useMemo(() => {
+        const byKey = new Map();
+        for (const row of streamRows) if (!byKey.has(streamKey(row))) byKey.set(streamKey(row), row);
+        return byKey;
+    }, [streamRows]);
+    // The streams selected still listed: one gone from the status is no longer acted on.
+    const selection = useMemo(
+        () => selectedStreams.map((key) => streamsByKey.get(key)).filter(Boolean),
+        [selectedStreams, streamsByKey],
+    );
+    const handleSelect = useCallback((row, checked) => {
+        const key = streamKey(row);
+        setSelectedStreams((keys) => (checked ? [...new Set([...keys, key])] : keys.filter((k) => k !== key)));
+    }, []);
+
+    // What comes of each stream, the actions tray says: refused, or followed until the
+    // stream is seen in the state asked.
+    const runAction = useCallback(async (streams, action) => {
         const label = t(`heartbeats.actions.${action}`);
-        const name = row.id.replace(/^hb#/, "");
-        const target = t("heartbeats.actions.target", {id: row.id, node: row.node});
-        try {
-            const response = await fetch(
-                `${URL_NODE}/${encodeURIComponent(row.node)}/daemon/hb/name/${encodeURIComponent(name)}/action/${action}`,
-                {method: "POST", headers: {Authorization: `Bearer ${localStorage.getItem("authToken") || ""}`}},
-            );
-            if (!response.ok) {
-                const message = (await getResponseErrorMessage(response)) || `HTTP ${response.status}`;
-                setActionFeedback({tone: "error", message: t("heartbeats.actions.failed", {action: label, target, message})});
-                return;
+        const lost = t("actionTray.noNews", {seconds: UNTIL_TIMEOUT_MS / 1000});
+        const accepted = await Promise.all(streams.map(async (row) => {
+            const info = {action, label, subject: t("heartbeats.actions.target", {id: row.id, node: row.node})};
+            const id = `hb#${row.id}`;
+            const createdBefore = streamOf(useEventStore.getState(), row.node, id)?.created_at;
+            try {
+                await postAction(row, action);
+            } catch (err) {
+                trackRefused({...info, reason: err.message});
+                return false;
             }
-            setActionFeedback({tone: "success", message: t("heartbeats.actions.requested", {action: label, target})});
-        } catch (error) {
-            setActionFeedback({tone: "error", message: t("heartbeats.actions.failed", {action: label, target, message: error.message})});
-        }
+            trackUntil(info, streamReached({node: row.node, id, action, createdBefore}), {lost});
+            return true;
+        }));
+        // All accepted, the selection is done with; one refused, it stays, to try again.
+        if (accepted.every(Boolean)) setSelectedStreams([]);
     }, [t]);
-    const handleAction = useCallback((row, action) => {
-        if (action === "stop") setPendingStop(row);
-        else void runAction(row, action);
-    }, [runAction]);
+    const handleAction = useCallback((action) => {
+        if (selection.length === 0) return;
+        if (STREAM_ACTIONS.find((a) => a.name === action)?.confirm) setPendingAction({action, streams: selection});
+        else void runAction(selection, action);
+    }, [selection, runAction]);
 
     // The rows of the page shown, as oc3 pages its lists.
     const paging = usePaging("heartbeats", filteredRows.length);
@@ -605,18 +645,34 @@ const Heartbeats = () => {
                         </div>
                     </div>
 
-                    {actionFeedback && (
-                        <Alert
-                            tone={actionFeedback.tone}
-                            className="shrink-0"
-                            action={
-                                <IconButton label={t("common.close")} bare onClick={() => setActionFeedback(null)}>
-                                    <CloseIcon className="h-4 w-4"/>
-                                </IconButton>
-                            }
-                        >
-                            {actionFeedback.message}
-                        </Alert>
+                    {isRoot && (
+                        <div className="flex min-h-7 flex-wrap items-center justify-end gap-3">
+                            {selection.length > 0 ? (
+                                <>
+                                    <span className="whitespace-nowrap text-ink-muted">{t("common.selected", {count: selection.length})}</span>
+                                    <MenuButton
+                                        prominent
+                                        icon={<BoltIcon className="h-3.5 w-3.5"/>}
+                                        label={t("heartbeats.actions.menu")}
+                                        align="end"
+                                        items={STREAM_ACTIONS.map(({name, Icon}) => ({
+                                            key: name,
+                                            label: t(`heartbeats.actions.${name}`),
+                                            icon: <span aria-hidden="true" className={MENU_ICON}><Icon/></span>,
+                                            // Started, a stream has nothing to start; stopped, nothing to stop.
+                                            disabled: (name === "start" && selection.every((row) => row.state === "running"))
+                                                || (name === "stop" && selection.every((row) => row.state === "stopped")),
+                                            onSelect: () => handleAction(name),
+                                        }))}
+                                    />
+                                    <IconButton label={t("heartbeats.actions.clear")} onClick={() => setSelectedStreams([])}>
+                                        <CloseIcon className="h-4 w-4"/>
+                                    </IconButton>
+                                </>
+                            ) : (
+                                <span className="text-ink-muted">{t("heartbeats.actions.selectHint")}</span>
+                            )}
+                        </div>
                     )}
 
                     <Pager paging={paging}/>
@@ -624,6 +680,20 @@ const Heartbeats = () => {
                     <Table sticky>
                         <thead>
                             <HeaderRow>
+                                {isRoot && (
+                                    <HeaderCell className="w-8">
+                                        <Checkbox
+                                            checked={visibleRows.length > 0 && visibleRows.every((row) => selectedStreams.includes(streamKey(row)))}
+                                            onChange={(event) => {
+                                                const keys = visibleRows.map(streamKey);
+                                                setSelectedStreams((current) => (event.target.checked
+                                                    ? [...new Set([...current, ...keys])]
+                                                    : current.filter((key) => !keys.includes(key))));
+                                            }}
+                                            aria-label={t("heartbeats.actions.selectAll")}
+                                        />
+                                    </HeaderCell>
+                                )}
                                 {COLUMNS.map(({labelKey, key}) => (
                                     <SortHeaderCell
                                         key={key}
@@ -641,11 +711,12 @@ const Heartbeats = () => {
                                     key={`${row.node}-${row.id}-${row.peer}`}
                                     row={row}
                                     isSingleNode={isSingleNode}
-                                    onAction={isRoot ? handleAction : undefined}
+                                    selected={selectedStreams.includes(streamKey(row))}
+                                    onSelect={isRoot ? handleSelect : undefined}
                                 />
                             ))}
                             {visibleRows.length === 0 && (
-                                <EmptyRow colSpan={COLUMNS.length}>
+                                <EmptyRow colSpan={COLUMNS.length + (isRoot ? 1 : 0)}>
                                     {t("heartbeats.empty")}
                                 </EmptyRow>
                             )}
@@ -655,23 +726,34 @@ const Heartbeats = () => {
             )}
 
             <Dialog
-                open={pendingStop !== null}
-                onClose={() => setPendingStop(null)}
-                title={t("heartbeats.actions.confirmTitle")}
+                open={pendingAction !== null}
+                onClose={() => setPendingAction(null)}
+                title={pendingAction
+                    ? t(`heartbeats.actions.confirm.${pendingAction.action}.title`, {count: pendingAction.streams.length})
+                    : ""}
                 footer={
                     <>
-                        <Button variant="secondary" onClick={() => setPendingStop(null)}>{t("common.cancel")}</Button>
+                        <Button variant="secondary" onClick={() => setPendingAction(null)}>{t("common.cancel")}</Button>
                         <Button variant="danger" onClick={() => {
-                            const row = pendingStop;
-                            setPendingStop(null);
-                            void runAction(row, "stop");
+                            const {action, streams} = pendingAction;
+                            setPendingAction(null);
+                            void runAction(streams, action);
                         }}>
-                            {t("heartbeats.actions.stop")}
+                            {pendingAction && t(`heartbeats.actions.${pendingAction.action}`)}
                         </Button>
                     </>
                 }
             >
-                <p>{pendingStop && t("heartbeats.actions.confirmStop", {id: pendingStop.id, node: pendingStop.node})}</p>
+                {pendingAction && (
+                    <div className="space-y-2">
+                        <p>{t(`heartbeats.actions.confirm.${pendingAction.action}.text`, {count: pendingAction.streams.length})}</p>
+                        <ul className="max-h-48 list-disc overflow-y-auto pl-5 font-mono text-data">
+                            {pendingAction.streams.map((row) => (
+                                <li key={streamKey(row)}>{t("heartbeats.actions.target", {id: row.id, node: row.node})}</li>
+                            ))}
+                        </ul>
+                    </div>
+                )}
             </Dialog>
         </div>
     );

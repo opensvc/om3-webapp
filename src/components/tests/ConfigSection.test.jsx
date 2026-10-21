@@ -7,6 +7,7 @@ import {URL_OBJECT} from '../../config/apiPath.js';
 import {vi, describe, test, expect, beforeEach, afterEach} from 'vitest';
 import i18n from '../../i18n';
 import {PencilIcon, SlidersIcon} from '../../ui/icons';
+import {useActionTracker} from '../../app/action-tracker';
 
 // ── Hoisted variables ─────────────────────────────────────────────────
 const {
@@ -33,6 +34,11 @@ vi.mock('react-router-dom', async (importOriginal) => {
 Object.defineProperty(global, 'localStorage', {value: mockLocalStorage});
 
 // ── Helpers ─────────────────────────────────────────────────────────────
+// The writes said in the actions tray, newest first.
+const tray = () => useActionTracker.getState().tracked.map((e) => [e.label, e.subject, e.state, e.error ?? null]);
+// No success nor progress said by snackbar: the tray says it.
+const noWriteSnackbar = (openSnackbar) =>
+    expect(openSnackbar.mock.calls.filter(([, severity]) => severity !== 'error')).toEqual([]);
 const defaultProps = {
     decodedObjectName: 'root/cfg/cfg1',
     configNode: 'node1',
@@ -181,6 +187,7 @@ describe('ConfigSection Component', () => {
         mockUseParams.mockReturnValue({objectName: 'root/cfg/cfg1'});
         global.fetch = vi.fn(defaultFetchMock);
         clearKeywordsCache();
+        useActionTracker.setState({tracked: [], revealed: 0});
     });
 
     afterEach(() => vi.resetAllMocks());
@@ -426,7 +433,8 @@ describe('ConfigSection Component', () => {
             expect(url).toBe(`${URL_OBJECT}/root/cfg/cfg1/config/file`);
             expect(options.body).toBe('[DEFAULT]\nnodes = node1\nsecret = s3cr3t');
             expect(options.headers.Authorization).toBe('Bearer mock-token');
-            expect(openSnackbar).toHaveBeenCalledWith('Configuration updated successfully');
+            await waitFor(() => expect(tray()).toEqual([['Update the configuration', 'root/cfg/cfg1', 'succeeded', null]]));
+            noWriteSnackbar(openSnackbar);
             // Back to the redacted view, reloaded.
             expect(await screen.findByText(/nodes = node1/)).toBeInTheDocument();
             expect(screen.queryByRole('textbox', {name: 'Configuration file'})).toBeNull();
@@ -653,8 +661,8 @@ describe('ConfigSection Component', () => {
         const file = await openUpdateDialogWithFile(user);
         await waitFor(() => expect(screen.getByText(file.name)).toBeInTheDocument());
         await act(() => user.click(screen.getByRole('button', {name: /Update/i})));
-        await waitFor(() => expect(openSnackbar).toHaveBeenCalledWith('Updating configuration…', 'info'));
-        await waitFor(() => expect(openSnackbar).toHaveBeenCalledWith('Configuration updated successfully'));
+        await waitFor(() => expect(tray()).toEqual([['Update the configuration', 'root/cfg/cfg1', 'succeeded', null]]));
+        noWriteSnackbar(openSnackbar);
         expect(global.fetch).toHaveBeenCalledWith(
             expect.stringContaining(`${URL_OBJECT}/root/cfg/cfg1/config/file`),
             expect.objectContaining({
@@ -676,7 +684,7 @@ describe('ConfigSection Component', () => {
     });
 
     test.each([
-        ['missing token', () => mockLocalStorage.getItem.mockReturnValue(null), 'Auth token not found.', 'error', false],
+        ['missing token', () => mockLocalStorage.getItem.mockReturnValue(null), 'Auth token not found.', null, false],
         ['API failure', () => {
             global.fetch.mockImplementation((url, options) => {
                 if (url.includes('/config/file')) return Promise.resolve({
@@ -687,20 +695,22 @@ describe('ConfigSection Component', () => {
                 });
                 return defaultFetchMock(url, options);
             });
-        }, 'Error: Failed to update config: 500', 'error', true],
+        }, null, ['Update the configuration', 'root/cfg/cfg1', 'refused', 'HTTP 500'], true],
         ['network error', () => {
             global.fetch.mockImplementation((url, options) => {
                 if (url.includes('/config/file') && options.method === 'PUT') return Promise.reject(new Error('Network error'));
                 return defaultFetchMock(url, options);
             });
-        }, 'Error: Network error', 'error', true],
-    ])('update config: %s', async (_, setup, expectedMsg, severity, shouldClose) => {
+        }, null, ['Update the configuration', 'root/cfg/cfg1', 'refused', 'Network error'], true],
+    ])('update config: %s', async (_, setup, expectedMsg, expectedWrite, shouldClose) => {
         setup();
         const openSnackbar = vi.fn();
         renderConfig({openSnackbar});
         await openUpdateDialogWithFile(user);
         await act(() => user.click(screen.getByRole('button', {name: /Update/i})));
-        await waitFor(() => expect(openSnackbar).toHaveBeenCalledWith(expectedMsg, severity));
+        if (expectedMsg) await waitFor(() => expect(openSnackbar).toHaveBeenCalledWith(expectedMsg, 'error'));
+        // Refused, in the tray; no token, nothing written.
+        await waitFor(() => expect(tray()).toEqual(expectedWrite ? [expectedWrite] : []));
         if (shouldClose) {
             await waitFor(() => expect(screen.queryByRole('heading', {name: 'Update Configuration'})).not.toBeInTheDocument());
         } else {
@@ -722,7 +732,7 @@ describe('ConfigSection Component', () => {
         renderConfig({configNode: '', openSnackbar});
         await openUpdateDialogWithFile(user);
         await act(() => user.click(screen.getByRole('button', {name: /Update/i})));
-        await waitFor(() => expect(openSnackbar).toHaveBeenCalledWith('Configuration updated successfully'));
+        await waitFor(() => expect(tray()).toEqual([['Update the configuration', 'root/cfg/cfg1', 'succeeded', null]]));
     });
 
     test('update config dialog: cancel closes it', async () => {
@@ -769,7 +779,7 @@ describe('ConfigSection Component', () => {
         await waitFor(() => expect(within(getParamsTable()).getByText('orchestrate')).toBeInTheDocument());
         await act(() => user.type(screen.getByLabelText('Value'), 'new-value'));
         await act(() => user.click(screen.getByRole('button', {name: /Apply/i})));
-        await waitFor(() => expect(openSnackbar).toHaveBeenCalledWith('Successfully added 1 parameter(s)', 'success'));
+        await waitFor(() => expect(tray()).toEqual([['Set orchestrate = new-value', 'root/cfg/cfg1', 'succeeded', null]]));
         await waitFor(() => expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining('/config/file'), expect.any(Object)));
         await waitFor(() => expect(screen.queryByRole('heading', {name: 'Manage Configuration Parameters'})).not.toBeInTheDocument());
     });
@@ -784,7 +794,7 @@ describe('ConfigSection Component', () => {
         await act(() => user.type(screen.getByLabelText('Index'), '2'));
         await act(() => user.type(screen.getByLabelText('Value'), '20GB'));
         await act(() => user.click(screen.getByRole('button', {name: /Apply/i})));
-        await waitFor(() => expect(openSnackbar).toHaveBeenCalledWith('Successfully added 1 parameter(s)', 'success'));
+        await waitFor(() => expect(tray()).toEqual([['Set fs#2.size = 20GB', 'root/cfg/cfg1', 'succeeded', null]]));
         expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining('set=fs%232.size=20GB'), expect.objectContaining({
             method: 'PATCH',
             headers: expect.objectContaining({Authorization: 'Bearer mock-token'}),
@@ -801,7 +811,7 @@ describe('ConfigSection Component', () => {
         await waitFor(() => expect(within(getParamsTable()).getByText('size')).toBeInTheDocument());
         await act(() => user.type(screen.getByLabelText('Value'), '30GB'));
         await act(() => user.click(screen.getByRole('button', {name: /Apply/i})));
-        await waitFor(() => expect(openSnackbar).toHaveBeenCalledWith('Successfully added 1 parameter(s)', 'success'));
+        await waitFor(() => expect(tray()).toEqual([['Set fs.size = 30GB', 'root/cfg/cfg1', 'succeeded', null]]));
         expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining('set=fs.size=30GB'), expect.objectContaining({
             method: 'PATCH',
             headers: expect.objectContaining({Authorization: 'Bearer mock-token'}),
@@ -836,7 +846,7 @@ describe('ConfigSection Component', () => {
         await user.clear(screen.getByLabelText('Value'));
         await user.type(screen.getByLabelText('Value'), 'admin,user,guest');
         await act(() => user.click(screen.getByRole('button', {name: /Apply/i})));
-        await waitFor(() => expect(openSnackbar).toHaveBeenCalledWith('Successfully added 1 parameter(s)', 'success'));
+        await waitFor(() => expect(tray()).toEqual([['Set roles = admin,user,guest', 'root/cfg/cfg1', 'succeeded', null]]));
         expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining('set=roles=admin%2Cuser%2Cguest'), expect.anything());
     });
 
@@ -853,7 +863,7 @@ describe('ConfigSection Component', () => {
         await user.clear(screen.getByLabelText('Value'));
         await user.type(screen.getByLabelText('Value'), 'test-value');
         await act(() => user.click(screen.getByRole('button', {name: /Apply/i})));
-        await waitFor(() => expect(openSnackbar).toHaveBeenCalledWith('Successfully added 1 parameter(s)', 'success'));
+        await waitFor(() => expect(tray()).toEqual([['Set database.orchestrate = test-value', 'root/cfg/cfg1', 'succeeded', null]]));
         expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining('set=database.orchestrate=test-value'), expect.any(Object));
     });
 
@@ -868,9 +878,9 @@ describe('ConfigSection Component', () => {
     });
 
     test.each([
-        ['unset', 1, 'nodes', 'unset=nodes', 'Successfully unset 1 parameter(s)'],
-        ['delete', 2, 'fs#1', 'delete=fs%231', 'Successfully deleted 1 section(s)'],
-    ])('manage params: %s success', async (_, comboIdx, input, urlFragment, successMsg) => {
+        ['unset', 1, 'nodes', 'unset=nodes', 'Unset nodes'],
+        ['delete', 2, 'fs#1', 'delete=fs%231', 'Delete section fs#1'],
+    ])('manage params: %s success', async (_, comboIdx, input, urlFragment, label) => {
         const openSnackbar = vi.fn();
         renderConfig({openSnackbar});
         await openManageDialog(user);
@@ -878,7 +888,8 @@ describe('ConfigSection Component', () => {
         await waitFor(() => expect(within(comboIdx === 1 ? getUnsetGroup() : getDeleteGroup())
             .getByRole('checkbox', {name: input})).toBeChecked());
         await act(() => user.click(screen.getByRole('button', {name: /Apply/i})));
-        await waitFor(() => expect(openSnackbar).toHaveBeenCalledWith(successMsg, 'success'));
+        await waitFor(() => expect(tray()).toEqual([[label, 'root/cfg/cfg1', 'succeeded', null]]));
+        noWriteSnackbar(openSnackbar);
         expect(global.fetch).toHaveBeenCalledWith(
             expect.stringContaining(`${URL_OBJECT}/root/cfg/cfg1/config?${urlFragment}`),
             expect.objectContaining({
@@ -890,9 +901,9 @@ describe('ConfigSection Component', () => {
     });
 
     test.each([
-        ['unset', 1, 'nodes', 'Error unsetting parameter nodes: Failed to unset parameter nodes: 500'],
-        ['delete', 2, 'fs#1', 'Error deleting section fs#1: Failed to delete section fs#1: 500'],
-    ])('manage params: %s API failure', async (_, comboIdx, input, expectedError) => {
+        ['unset', 1, 'nodes', 'Unset nodes'],
+        ['delete', 2, 'fs#1', 'Delete section fs#1'],
+    ])('manage params: %s API failure', async (_, comboIdx, input, label) => {
         global.fetch.mockImplementation((url, options) => {
             if (url.includes(`/config?${comboIdx === 1 ? 'unset' : 'delete'}=`))
                 return Promise.resolve({
@@ -908,11 +919,11 @@ describe('ConfigSection Component', () => {
         await openManageDialog(user);
         await act(() => checkExisting(user, comboIdx, input));
         await act(() => user.click(screen.getByRole('button', {name: /Apply/i})));
-        await waitFor(() => expect(openSnackbar).toHaveBeenCalledWith(expectedError, 'error'));
+        await waitFor(() => expect(tray()).toEqual([[label, 'root/cfg/cfg1', 'refused', 'HTTP 500']]));
         expect(screen.getByRole('heading', {name: 'Manage Configuration Parameters'})).toBeInTheDocument();
     });
 
-    test('manage params: add parameter network error shows specific message', async () => {
+    test('manage params: add parameter network error is said in the tray', async () => {
         global.fetch.mockImplementation((url) => {
             if (url.includes('/config?set=')) return Promise.reject(new Error('Network failure'));
             return defaultFetchMock(url);
@@ -926,15 +937,13 @@ describe('ConfigSection Component', () => {
         await user.clear(screen.getByLabelText('Value'));
         await user.type(screen.getByLabelText('Value'), 'test');
         await act(() => user.click(screen.getByRole('button', {name: /Apply/i})));
-        await waitFor(() => expect(openSnackbar).toHaveBeenCalledWith(
-            'Error adding parameter orchestrate: Network failure', 'error'
-        ));
+        await waitFor(() => expect(tray()).toEqual([['Set orchestrate = test', 'root/cfg/cfg1', 'refused', 'Network failure']]));
     });
 
     test.each([
-        ['unset', 1, 'nodes', 'Error unsetting parameter nodes: Network failure'],
-        ['delete', 2, 'fs#1', 'Error deleting section fs#1: Network failure'],
-    ])('manage params: %s network error', async (_, comboIdx, input, errorMsg) => {
+        ['unset', 1, 'nodes', 'Unset nodes'],
+        ['delete', 2, 'fs#1', 'Delete section fs#1'],
+    ])('manage params: %s network error', async (_, comboIdx, input, label) => {
         global.fetch.mockImplementation((url) => {
             if (url.includes(`/config?${comboIdx === 1 ? 'unset' : 'delete'}=`)) return Promise.reject(new Error('Network failure'));
             return defaultFetchMock(url);
@@ -944,7 +953,7 @@ describe('ConfigSection Component', () => {
         await openManageDialog(user);
         await act(() => checkExisting(user, comboIdx, input));
         await act(() => user.click(screen.getByRole('button', {name: /Apply/i})));
-        await waitFor(() => expect(openSnackbar).toHaveBeenCalledWith(errorMsg, 'error'));
+        await waitFor(() => expect(tray()).toEqual([[label, 'root/cfg/cfg1', 'refused', 'Network failure']]));
     });
 
     test('manage params: all operations fail keeps dialog open', async () => {
@@ -969,7 +978,12 @@ describe('ConfigSection Component', () => {
         await act(() => checkExisting(user, 1, 'nodes'));
         await act(() => checkExisting(user, 2, 'fs#1'));
         await act(() => user.click(screen.getByRole('button', {name: /Apply/i})));
-        await waitFor(() => expect(openSnackbar).toHaveBeenCalledWith(expect.stringContaining('Error adding parameter orchestrate: HTTP 500'), 'error'));
+        // Each one refused, newest first.
+        await waitFor(() => expect(tray()).toEqual([
+            ['Delete section fs#1', 'root/cfg/cfg1', 'refused', 'HTTP 500'],
+            ['Unset nodes', 'root/cfg/cfg1', 'refused', 'HTTP 500'],
+            ['Set orchestrate = test', 'root/cfg/cfg1', 'refused', 'HTTP 500'],
+        ]));
         expect(screen.getByRole('heading', {name: 'Manage Configuration Parameters'})).toBeInTheDocument();
     });
 
@@ -998,13 +1012,13 @@ describe('ConfigSection Component', () => {
     test.each([
         ['with a section', 'fs#1.size', 'unset=fs%231.size'],
         ['without a section', 'orchestrate', 'unset=orchestrate'],
-    ])('manage params: unset an existing parameter %s', async (_, label, urlFragment) => {
+    ])('manage params: unset an existing parameter %s', async (_, keyword, urlFragment) => {
         const openSnackbar = vi.fn();
         renderConfig({openSnackbar});
         await openManageDialog(user);
-        await act(() => checkExisting(user, 1, label));
+        await act(() => checkExisting(user, 1, keyword));
         await act(() => user.click(screen.getByRole('button', {name: /Apply/i})));
-        await waitFor(() => expect(openSnackbar).toHaveBeenCalledWith('Successfully unset 1 parameter(s)', 'success'));
+        await waitFor(() => expect(tray()).toEqual([[`Unset ${keyword}`, 'root/cfg/cfg1', 'succeeded', null]]));
         expect(global.fetch).toHaveBeenCalledWith(
             expect.stringContaining(`${URL_OBJECT}/root/cfg/cfg1/config?${urlFragment}`),
             expect.objectContaining({method: 'PATCH'})
@@ -1021,7 +1035,7 @@ describe('ConfigSection Component', () => {
         await act(() => checkExisting(user, 2, 'fs#1'));
         await act(() => checkExisting(user, 2, 'fs#1'));
         await act(() => user.click(screen.getByRole('button', {name: /Apply/i})));
-        await waitFor(() => expect(openSnackbar).toHaveBeenCalledWith('Successfully unset 1 parameter(s)', 'success'));
+        await waitFor(() => expect(tray()).toEqual([['Unset orchestrate', 'root/cfg/cfg1', 'succeeded', null]]));
         const patched = global.fetch.mock.calls.filter(([, options]) => options?.method === 'PATCH').map(([url]) => url);
         expect(patched).toEqual([`${URL_OBJECT}/root/cfg/cfg1/config?unset=orchestrate`]);
     });
@@ -1136,7 +1150,7 @@ describe('ConfigSection Component', () => {
         await user.clear(screen.getByLabelText('Value'));
         await user.type(screen.getByLabelText('Value'), 'true');
         await act(() => user.click(screen.getByRole('button', {name: /Apply/i})));
-        await waitFor(() => expect(openSnackbar).toHaveBeenCalledWith('Successfully added 1 parameter(s)', 'success'));
+        await waitFor(() => expect(tray()).toEqual([['Set debug = true', 'root/cfg/cfg1', 'succeeded', null]]));
         expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining('set=debug=true'), expect.any(Object));
     });
 
@@ -1152,7 +1166,7 @@ describe('ConfigSection Component', () => {
         await user.type(screen.getByLabelText('Value'), 'new-value');
         const fetchCallsBefore = global.fetch.mock.calls.length;
         await act(() => user.click(screen.getByRole('button', {name: /Apply/i})));
-        await waitFor(() => expect(openSnackbar).toHaveBeenCalledWith('Successfully added 1 parameter(s)', 'success'));
+        await waitFor(() => expect(tray()).toEqual([['Set orchestrate = new-value', 'root/cfg/cfg1', 'succeeded', null]]));
         const fetchCallsAfter = global.fetch.mock.calls;
         const configFileCallsAfter = fetchCallsAfter.slice(fetchCallsBefore).filter(call => call[0].includes('/config/file'));
         expect(configFileCallsAfter).toHaveLength(0);
@@ -1166,7 +1180,7 @@ describe('ConfigSection Component', () => {
         await openManageDialog(user);
         await act(() => checkExisting(user, 1, 'nodes'));
         await act(() => user.click(screen.getByRole('button', {name: /Apply/i})));
-        await waitFor(() => expect(openSnackbar).toHaveBeenCalledWith('Successfully unset 1 parameter(s)', 'success'));
+        await waitFor(() => expect(tray()).toEqual([['Unset nodes', 'root/cfg/cfg1', 'succeeded', null]]));
         const configFileCalls = global.fetch.mock.calls.filter(call => call[0].includes('/config/file'));
         expect(configFileCalls).toHaveLength(0);
         expect(setConfigDialogOpen).not.toHaveBeenCalledWith(true);
@@ -1179,7 +1193,7 @@ describe('ConfigSection Component', () => {
         await openManageDialog(user);
         await act(() => checkExisting(user, 2, 'fs#1'));
         await act(() => user.click(screen.getByRole('button', {name: /Apply/i})));
-        await waitFor(() => expect(openSnackbar).toHaveBeenCalledWith('Successfully deleted 1 section(s)', 'success'));
+        await waitFor(() => expect(tray()).toEqual([['Delete section fs#1', 'root/cfg/cfg1', 'succeeded', null]]));
         const configFileCalls = global.fetch.mock.calls.filter(call => call[0].includes('/config/file'));
         expect(configFileCalls).toHaveLength(0);
         expect(setConfigDialogOpen).not.toHaveBeenCalledWith(true);

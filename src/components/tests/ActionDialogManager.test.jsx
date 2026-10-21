@@ -97,6 +97,7 @@ vi.mock('../ActionDialogs', () => ({
     DeleteDialog: vi.fn((props) =>
         props.open ? (
             <div data-testid="delete-dialog">
+                <span data-testid="delete-instances">{String(props.instances)}</span>
                 <button onClick={props.onClose}>Cancel</button>
                 <button onClick={props.onConfirm} disabled={props.disabled}>Confirm</button>
                 <input type="checkbox" checked={props.checkboxes.configLoss}
@@ -133,10 +134,35 @@ vi.mock('../ActionDialogs', () => ({
                        data-testid="giveback-checkbox"/>
                 <span>{props.pendingAction?.action}</span>
                 <span>{props.target}</span>
+                <span data-testid="giveback-names">{props.names?.join(',')}</span>
             </div>
         ) : null
     ),
+    Subject: vi.fn((props) => <span data-testid="subject-names">{props.names?.join(',')}</span>),
 }));
+
+describe('ActionDialogManager', () => {
+    test('passes the names of a bulk action to its dialog', () => {
+        render(<ActionDialogManager pendingAction={{action: 'giveback'}} handleConfirm={vi.fn()}
+                                    target="2 objects" names={['a', 'b']}
+                                    supportedActions={['giveback']} onClose={vi.fn()}/>);
+        expect(screen.getByTestId('giveback-names')).toHaveTextContent('a,b');
+    });
+
+    test('tells the delete dialog it acts on instances', () => {
+        render(<ActionDialogManager pendingAction={{action: 'delete'}} handleConfirm={vi.fn()}
+                                    target="web on node n1" instances
+                                    supportedActions={['delete']} onClose={vi.fn()}/>);
+        expect(screen.getByTestId('delete-instances')).toHaveTextContent('true');
+    });
+
+    test('lists the names of a bulk action in the simple confirmation', () => {
+        render(<ActionDialogManager pendingAction={{action: 'other'}} handleConfirm={vi.fn()}
+                                    target="2 objects" names={['a', 'b']}
+                                    supportedActions={['other']} onClose={vi.fn()}/>);
+        expect(screen.getByTestId('subject-names')).toHaveTextContent('a,b');
+    });
+});
 
 describe('ActionDialogManager', () => {
     const defaultProps = {

@@ -1,6 +1,8 @@
-import React, {useCallback, useEffect, useMemo, useRef, useState} from "react";
+import React, {useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState} from "react";
+import {createPortal} from "react-dom";
 import {useTranslation} from "react-i18next";
 import {getResponseErrorMessage} from "../services/api.jsx";
+import {verticalPlacement} from "../ui/components/MenuButton";
 
 /*
  * A configuration file as stored, each keyword it sets documented in place: on
@@ -78,9 +80,44 @@ export function findKeyword(keywords, {section, key, type}) {
         ?? candidates[0];
 }
 
-/** What a keyword does, as its documentation says it. */
-function KeywordDoc({keyword, label, onClose}) {
+/** Room kept between the help and the edges of the window. */
+const WINDOW_MARGIN = 8;
+/** Width of the help at most, as `36rem`. */
+const DOC_WIDTH = 576;
+
+/**
+ * What a keyword does, as its documentation says it, by the "?" that opened it.
+ * In a portal, placed against the window: the file scrolling sideways and the
+ * side panel around would otherwise cut it. Under the "?", or over it when the
+ * room below is short, its right edge on the one of the "?" but kept in the
+ * window; taller than the room left, scrolled.
+ */
+function KeywordDoc({keyword, label, id, anchor, ref}) {
     const {t} = useTranslation();
+    const [position, setPosition] = useState(null);
+
+    useLayoutEffect(() => {
+        const place = () => {
+            const rect = anchor?.getBoundingClientRect();
+            if (!rect) return;
+            const viewport = document.documentElement.clientWidth || window.innerWidth;
+            const width = Math.min(DOC_WIDTH, viewport - 2 * WINDOW_MARGIN);
+            const left = Math.max(WINDOW_MARGIN, Math.min(rect.right - width, viewport - width - WINDOW_MARGIN));
+            // Measured at its width and full height: the room it is cut to depends on it.
+            if (ref.current) ref.current.style.width = `${width}px`;
+            const height = ref.current?.scrollHeight ?? 0;
+            setPosition({width, left, ...verticalPlacement(rect, height)});
+        };
+        place();
+        // Follows its "?" as the file or the panel scrolls, and the window resizes.
+        window.addEventListener("scroll", place, true);
+        window.addEventListener("resize", place);
+        return () => {
+            window.removeEventListener("scroll", place, true);
+            window.removeEventListener("resize", place);
+        };
+    }, [anchor, ref, keyword]);
+
     const facts = [
         ["default", keyword.default || keyword.defaultText],
         ["candidates", (keyword.candidates ?? []).join(", ")],
@@ -89,17 +126,14 @@ function KeywordDoc({keyword, label, onClose}) {
         ["scopable", keyword.scopable ? t("common.yes") : ""],
         ["deprecated", keyword.deprecated && (keyword.replacedBy ? t("config.keywordHelp.replacedBy", {keyword: keyword.replacedBy}) : keyword.deprecated)],
     ].filter(([, value]) => value);
-    return (
+    return createPortal(
         <div
+            ref={ref}
+            id={id}
             role="dialog"
             aria-label={label}
-            onKeyDown={(e) => {
-                if (e.key === "Escape") {
-                    e.stopPropagation();
-                    onClose();
-                }
-            }}
-            className="absolute top-full right-0 z-20 mt-1 w-[min(36rem,90vw)] space-y-2 rounded-(--radius-panel) border border-line bg-surface-raised p-3 font-sans text-ui whitespace-normal text-ink shadow-lg"
+            style={position ?? {visibility: "hidden"}}
+            className="fixed z-[1350] space-y-2 rounded-(--radius-panel) border border-line bg-surface-raised p-3 font-sans text-ui whitespace-normal text-ink shadow-lg"
         >
             <p className="font-mono font-semibold">{label}</p>
             {keyword.text && <p className="whitespace-pre-line">{keyword.text.trim()}</p>}
@@ -113,7 +147,8 @@ function KeywordDoc({keyword, label, onClose}) {
                     ))}
                 </dl>
             )}
-        </div>
+        </div>,
+        document.body,
     );
 }
 
@@ -129,20 +164,36 @@ export function ConfigText({text, keywordsUrl, cacheKey = keywordsUrl, label}) {
     const [error, setError] = useState(null);
     const [open, setOpen] = useState(null);
     const root = useRef(null);
+    const doc = useRef(null);
+    const docId = useId();
+    const openButton = () => root.current?.querySelector(`[data-line="${open}"] button`) ?? null;
 
     const load = useCallback(() => {
         if (keywords !== null || !keywordsUrl) return;
         loadKeywords(cacheKey, keywordsUrl).then(setKeywords, (err) => setError(err.message));
     }, [keywords, keywordsUrl, cacheKey]);
 
-    // A click beside the help closes it.
+    // A click beside the help closes it: the help, in its portal, stands apart from its line.
+    // Escape closes it first, wherever the focus is, before the side panel around takes the key.
     useEffect(() => {
         if (open === null) return undefined;
         const onPointerDown = (event) => {
+            if (doc.current?.contains(event.target)) return;
             if (!root.current?.querySelector(`[data-line="${open}"]`)?.contains(event.target)) setOpen(null);
         };
+        const onEscape = (event) => {
+            if (event.key !== "Escape") return;
+            event.preventDefault();
+            event.stopPropagation();
+            if (doc.current?.contains(document.activeElement)) root.current?.querySelector(`[data-line="${open}"] button`)?.focus();
+            setOpen(null);
+        };
         document.addEventListener("pointerdown", onPointerDown);
-        return () => document.removeEventListener("pointerdown", onPointerDown);
+        document.addEventListener("keydown", onEscape, true);
+        return () => {
+            document.removeEventListener("pointerdown", onPointerDown);
+            document.removeEventListener("keydown", onEscape, true);
+        };
     }, [open]);
 
     return (
@@ -158,13 +209,14 @@ export function ConfigText({text, keywordsUrl, cacheKey = keywordsUrl, label}) {
                     const keyword = l.key && keywords ? findKeyword(keywords, l) : null;
                     const name = keyword && `${l.section === "DEFAULT" ? "" : `${l.section}.`}${l.key}`;
                     return (
-                        <div key={index} data-line={index} className="group relative flex min-h-[1lh] items-start gap-2 hover:bg-surface">
+                        <div key={index} data-line={index} className="group flex min-h-[1lh] items-start gap-2 hover:bg-surface">
                             <span className="min-w-0 flex-1">{l.line}</span>
                             {keyword && (
                                 <button
                                     type="button"
                                     aria-label={t("config.keywordHelp.open", {keyword: name})}
                                     aria-expanded={open === index}
+                                    aria-controls={open === index ? docId : undefined}
                                     title={t("config.keywordHelp.open", {keyword: name})}
                                     onClick={() => setOpen(open === index ? null : index)}
                                     className={`h-4 w-4 shrink-0 rounded-full border border-line bg-surface-raised text-[0.7rem] leading-none font-semibold text-ink-muted hover:text-ink focus:opacity-100 ${open === index ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}
@@ -173,7 +225,7 @@ export function ConfigText({text, keywordsUrl, cacheKey = keywordsUrl, label}) {
                                 </button>
                             )}
                             {open === index && keyword && (
-                                <KeywordDoc keyword={keyword} label={name} onClose={() => setOpen(null)}/>
+                                <KeywordDoc keyword={keyword} label={name} id={docId} anchor={openButton()} ref={doc}/>
                             )}
                         </div>
                     );

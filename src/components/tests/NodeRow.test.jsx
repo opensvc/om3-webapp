@@ -35,6 +35,14 @@ describe('NodeRow Component', () => {
         jest.useRealTimers();
     });
 
+    test('a node of the cluster reporting nothing is a line of "?", no action reaching it', () => {
+        render(<NodeRow {...defaultProps} stats={undefined} status={undefined} monitor={undefined}/>);
+        const row = screen.getByRole('row', {name: /Node node1 row/i});
+        expect(within(row).getByTitle('No status: the node is gone or not heard from')).toHaveClass('text-state-down');
+        expect(within(row).getAllByText('?')).toHaveLength(8);
+        expect(within(row).getByRole('checkbox')).toBeDisabled();
+    });
+
     test('renders nodename correctly', () => {
         render(<NodeRow {...defaultProps} />);
         expect(screen.getByText('node1')).toBeInTheDocument();

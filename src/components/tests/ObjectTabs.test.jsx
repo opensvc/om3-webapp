@@ -2,7 +2,15 @@ import React from 'react';
 import {fireEvent, render as renderInDom, screen, within} from '@testing-library/react';
 import {MemoryRouter, useLocation} from 'react-router-dom';
 import {vi} from 'vitest';
+import {act, waitFor} from '@testing-library/react';
 import {ObjectResources, ObjectSchedules} from '../ObjectTabs';
+import useEventStore from '../../hooks/useEventStore.js';
+import {retainEventReception} from '../../eventSourceManager.jsx';
+
+vi.mock('../../eventSourceManager.jsx', async (importOriginal) => ({
+    ...(await importOriginal()),
+    retainEventReception: vi.fn(() => vi.fn()),
+}));
 
 const Search = () => <span data-testid="search">{useLocation().search}</span>;
 /** Rendered in a router: its badges open their records over the view. */
@@ -171,6 +179,54 @@ describe('ObjectTabs', () => {
             answer({kind: 'ResourceInfoList', items: []});
             render(<ObjectResources path="ns1/svc/web"/>);
             expect(await screen.findByText('No resource reports information')).toBeInTheDocument();
+        });
+
+        describe('a resource deleted, which the daemon still reports from its cache', () => {
+            const config = (csum, rids) => ({csum, resources: Object.fromEntries(rids.map((rid) => [rid, {}]))});
+
+            afterEach(() => {
+                act(() => useEventStore.setState({instanceConfig: {}}));
+            });
+
+            test('the configurations of the instances are carried by the stream while shown', () => {
+                answer({kind: 'ResourceInfoList', items});
+                const {unmount} = render(<ObjectResources path="ns1/svc/web" node="n1"/>);
+                expect(retainEventReception).toHaveBeenCalledWith('tok', ['InstanceConfigUpdated'], 'ns1/svc/web');
+                const release = vi.mocked(retainEventReception).mock.results.at(-1).value;
+                unmount();
+                expect(release).toHaveBeenCalled();
+            });
+
+            test('a resource no longer configured on its node is not shown there', async () => {
+                act(() => useEventStore.setState({instanceConfig: {'ns1/svc/web': {n1: config('a', ['ip#0'])}}}));
+                answer({kind: 'ResourceInfoList', items});
+                render(<ObjectResources path="ns1/svc/web"/>);
+                await screen.findByRole('table', {name: 'Resource information'});
+                // container#0 gone from the configuration of n1; n2, not known yet, all it reports.
+                expect(groups()).toEqual([
+                    ['ip#0', ['ipaddr 10.0.0.11 10.0.0.12', 'netmask 24 –']],
+                ]);
+            });
+
+            test('a configuration changed reads the key-values again', async () => {
+                act(() => useEventStore.setState({instanceConfig: {'ns1/svc/web': {n1: config('a', ['ip#0', 'container#0'])}}}));
+                answer({kind: 'ResourceInfoList', items});
+                render(<ObjectResources path="ns1/svc/web" node="n1"/>);
+                await screen.findByRole('table', {name: 'Resource information'});
+                expect(read).toHaveLength(1);
+                act(() => useEventStore.setState({instanceConfig: {'ns1/svc/web': {n1: config('b', ['ip#0'])}}}));
+                await waitFor(() => expect(read).toHaveLength(2));
+                await waitFor(() => expect(groups().map(([rid]) => rid)).toEqual(['ip#0']));
+            });
+
+            test('the first configuration known reads nothing again', async () => {
+                answer({kind: 'ResourceInfoList', items});
+                render(<ObjectResources path="ns1/svc/web" node="n1"/>);
+                await screen.findByRole('table', {name: 'Resource information'});
+                act(() => useEventStore.setState({instanceConfig: {'ns1/svc/web': {n1: config('a', ['ip#0', 'container#0'])}}}));
+                await new Promise((r) => setTimeout(r, 50));
+                expect(read).toHaveLength(1);
+            });
         });
     });
 });

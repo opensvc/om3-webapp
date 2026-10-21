@@ -24,13 +24,38 @@ const DialogFooter = ({onClose, cancelDisabled = false, onConfirm, confirmDisabl
     );
 };
 
+// What a dialog acts on, in words, and the names one per line when there are several:
+// a bulk action on many objects or nodes is confirmed knowing which.
+export const Subject = ({target, names}) => {
+    const {t} = useTranslation();
+    const list = Array.isArray(names) && names.length > 1 ? names : [];
+    if (!target && list.length === 0) return null;
+    return (
+        <div className="flex flex-col gap-2 text-ink">
+            {target && (
+                <p>
+                    <Trans i18nKey="actionDialogs.subject" values={{target}} components={{strong: <strong/>}}/>
+                </p>
+            )}
+            {list.length > 0 && (
+                <ul
+                    aria-label={t('actionDialogs.subjectNamesAria')}
+                    className="max-h-40 overflow-y-auto rounded-(--radius-control) border border-line px-3 py-2 font-mono text-sm"
+                >
+                    {list.map((name) => <li key={name}>{name}</li>)}
+                </ul>
+            )}
+        </div>
+    );
+};
+
 // Acknowledgement checkboxes, one per line.
 const Acknowledgements = ({children}) => <div className="flex flex-col gap-2 text-ink">{children}</div>;
 
 // Dialog with a single acknowledgement checkbox
 const SingleCheckDialog = ({
                                open, onClose, onConfirm, checked, setChecked, disabled,
-                               title, checkboxLabel, checkboxAriaLabel, confirmAriaLabel, confirmText,
+                               target, names, title, checkboxLabel, checkboxAriaLabel, confirmAriaLabel, confirmText,
                                variant = 'primary', cancelDisabled = false,
                            }) => (
     <Dialog
@@ -50,6 +75,7 @@ const SingleCheckDialog = ({
             </DialogFooter>
         }
     >
+        <Subject target={target} names={names}/>
         <Acknowledgements>
             <Checkbox
                 checked={checked}
@@ -88,12 +114,13 @@ const FilePicker = ({id, onChange, disabled, file, emptyText}) => {
 };
 
 // Dialog for the "freeze" action
-export const FreezeDialog = ({open, onClose, onConfirm, checked, setChecked, disabled}) => {
+export const FreezeDialog = ({open, onClose, onConfirm, checked, setChecked, disabled, target, names}) => {
     const {t} = useTranslation();
     return (
         <SingleCheckDialog
             open={open} onClose={onClose} onConfirm={onConfirm}
             checked={checked} setChecked={setChecked} disabled={disabled}
+            target={target} names={names}
             title={t('actionDialogs.freeze.title')}
             checkboxAriaLabel={t('actionDialogs.freeze.checkboxAria')}
             checkboxLabel={t('actionDialogs.freeze.checkbox')}
@@ -104,12 +131,13 @@ export const FreezeDialog = ({open, onClose, onConfirm, checked, setChecked, dis
 };
 
 // Dialog for the "stop" action
-export const StopDialog = ({open, onClose, onConfirm, checked, setChecked, disabled}) => {
+export const StopDialog = ({open, onClose, onConfirm, checked, setChecked, disabled, target, names}) => {
     const {t} = useTranslation();
     return (
         <SingleCheckDialog
             open={open} onClose={onClose} onConfirm={onConfirm}
             checked={checked} setChecked={setChecked} disabled={disabled}
+            target={target} names={names}
             title={t('actionDialogs.stop.title')}
             checkboxAriaLabel={t('actionDialogs.acknowledge.mayInterruptAria')}
             checkboxLabel={t('actionDialogs.acknowledge.mayInterrupt')}
@@ -121,8 +149,11 @@ export const StopDialog = ({open, onClose, onConfirm, checked, setChecked, disab
 };
 
 // Dialog for the "shutdown" action
-export const ShutdownDialog = ({open, onClose, onConfirm, checkboxes, setCheckboxes, disabled}) => {
+// `instances`: the shutdown of instances of an object, its resources stopped on their
+// nodes, not of nodes, their daemon stopped.
+export const ShutdownDialog = ({open, onClose, onConfirm, checkboxes, setCheckboxes, disabled, target, names, instances = false}) => {
     const {t} = useTranslation();
+    const scope = instances ? 'shutdown.instance' : 'shutdown';
     return (
         <Dialog
             open={open}
@@ -144,22 +175,23 @@ export const ShutdownDialog = ({open, onClose, onConfirm, checkboxes, setCheckbo
                 </DialogFooter>
             }
         >
+            <Subject target={target} names={names}/>
             <Acknowledgements>
                 <Checkbox
                     checked={checkboxes.instancesDown}
                     onChange={(e) =>
                         setCheckboxes((prev) => ({...prev, instancesDown: e.target.checked}))
                     }
-                    aria-label={t('actionDialogs.shutdown.instancesDownAria')}
-                    label={t('actionDialogs.shutdown.instancesDown')}
+                    aria-label={t(`actionDialogs.${scope}.instancesDownAria`)}
+                    label={t(`actionDialogs.${scope}.instancesDown`)}
                 />
                 <Checkbox
                     checked={checkboxes.peerTakeover}
                     onChange={(e) =>
                         setCheckboxes((prev) => ({...prev, peerTakeover: e.target.checked}))
                     }
-                    aria-label={t('actionDialogs.shutdown.peerTakeoverAria')}
-                    label={t('actionDialogs.shutdown.peerTakeover')}
+                    aria-label={t(`actionDialogs.${scope}.peerTakeoverAria`)}
+                    label={t(`actionDialogs.${scope}.peerTakeover`)}
                 />
             </Acknowledgements>
         </Dialog>
@@ -167,12 +199,13 @@ export const ShutdownDialog = ({open, onClose, onConfirm, checkboxes, setCheckbo
 };
 
 // Dialog for the "restart" action
-export const RestartDialog = ({open, onClose, onConfirm, checked, setChecked, disabled}) => {
+export const RestartDialog = ({open, onClose, onConfirm, checked, setChecked, disabled, target, names}) => {
     const {t} = useTranslation();
     return (
         <SingleCheckDialog
             open={open} onClose={onClose} onConfirm={onConfirm}
             checked={checked} setChecked={setChecked} disabled={disabled}
+            target={target} names={names}
             title={t('actionDialogs.restart.title')}
             checkboxAriaLabel={t('actionDialogs.acknowledge.mayInterruptAria')}
             checkboxLabel={t('actionDialogs.acknowledge.mayInterrupt')}
@@ -184,12 +217,13 @@ export const RestartDialog = ({open, onClose, onConfirm, checked, setChecked, di
 };
 
 // Dialog for the "clear" action
-export const ClearDialog = ({open, onClose, onConfirm, checked, setChecked, disabled}) => {
+export const ClearDialog = ({open, onClose, onConfirm, checked, setChecked, disabled, target, names}) => {
     const {t} = useTranslation();
     return (
         <SingleCheckDialog
             open={open} onClose={onClose} onConfirm={onConfirm}
             checked={checked} setChecked={setChecked} disabled={disabled}
+            target={target} names={names}
             title={t('actionDialogs.clear.title')}
             checkboxAriaLabel={t('actionDialogs.clear.checkboxAria')}
             checkboxLabel={t('actionDialogs.clear.checkbox')}
@@ -200,12 +234,13 @@ export const ClearDialog = ({open, onClose, onConfirm, checked, setChecked, disa
 };
 
 // Dialog for the "drain" action
-export const DrainDialog = ({open, onClose, onConfirm, checked, setChecked, disabled}) => {
+export const DrainDialog = ({open, onClose, onConfirm, checked, setChecked, disabled, target, names}) => {
     const {t} = useTranslation();
     return (
         <SingleCheckDialog
             open={open} onClose={onClose} onConfirm={onConfirm}
             checked={checked} setChecked={setChecked} disabled={disabled}
+            target={target} names={names}
             title={t('actionDialogs.drain.title')}
             checkboxAriaLabel={t('actionDialogs.drain.checkboxAria')}
             checkboxLabel={t('actionDialogs.drain.checkbox')}
@@ -216,9 +251,10 @@ export const DrainDialog = ({open, onClose, onConfirm, checked, setChecked, disa
 };
 
 // Dialog for the "unprovision" action
-export const UnprovisionDialog = ({open, onClose, onConfirm, checkboxes, setCheckboxes, disabled, pendingAction}) => {
+// `instances`: the unprovisioning of instances of an object, on their nodes only.
+export const UnprovisionDialog = ({open, onClose, onConfirm, checkboxes, setCheckboxes, disabled, pendingAction, target, names, instances = false}) => {
     const {t} = useTranslation();
-    const isNodeAction = pendingAction?.node || pendingAction?.batch === 'nodes';
+    const isNodeAction = instances || pendingAction?.node || pendingAction?.batch === 'nodes';
 
     return (
         <Dialog
@@ -242,6 +278,7 @@ export const UnprovisionDialog = ({open, onClose, onConfirm, checkboxes, setChec
                 </DialogFooter>
             }
         >
+            <Subject target={target} names={names}/>
             <Acknowledgements>
                 <Checkbox
                     checked={checkboxes.dataLoss}
@@ -278,7 +315,7 @@ export const UnprovisionDialog = ({open, onClose, onConfirm, checkboxes, setChec
 };
 
 // Dialog for the "purge" action
-export const PurgeDialog = ({open, onClose, onConfirm, checkboxes, setCheckboxes, disabled}) => {
+export const PurgeDialog = ({open, onClose, onConfirm, checkboxes, setCheckboxes, disabled, target, names}) => {
     const {t} = useTranslation();
     return (
         <Dialog
@@ -302,6 +339,7 @@ export const PurgeDialog = ({open, onClose, onConfirm, checkboxes, setCheckboxes
                 </DialogFooter>
             }
         >
+            <Subject target={target} names={names}/>
             <Acknowledgements>
                 <Checkbox
                     checked={checkboxes.dataLoss}
@@ -336,7 +374,9 @@ export const PurgeDialog = ({open, onClose, onConfirm, checkboxes, setCheckboxes
 };
 
 // Dialog for the "delete" action
-export const DeleteDialog = ({open, onClose, onConfirm, checkboxes, setCheckboxes, disabled}) => {
+// `instances`: the delete of instances of an object, their configuration only, on their
+// nodes: not orchestrated on the cluster, and the object kept.
+export const DeleteDialog = ({open, onClose, onConfirm, checkboxes, setCheckboxes, disabled, target, names, instances = false}) => {
     const {t} = useTranslation();
     return (
         <Dialog
@@ -355,22 +395,23 @@ export const DeleteDialog = ({open, onClose, onConfirm, checkboxes, setCheckboxe
                 </DialogFooter>
             }
         >
+            <Subject target={target} names={names}/>
             <Acknowledgements>
                 <Checkbox
                     checked={checkboxes.configLoss}
                     onChange={(e) =>
                         setCheckboxes((prev) => ({...prev, configLoss: e.target.checked}))
                     }
-                    aria-label={t('actionDialogs.acknowledge.configLossAria')}
-                    label={t('actionDialogs.acknowledge.configLoss')}
+                    aria-label={t(instances ? 'actionDialogs.delete.instance.configLossAria' : 'actionDialogs.acknowledge.configLossAria')}
+                    label={t(instances ? 'actionDialogs.delete.instance.configLoss' : 'actionDialogs.acknowledge.configLoss')}
                 />
                 <Checkbox
                     checked={checkboxes.clusterwide}
                     onChange={(e) =>
                         setCheckboxes((prev) => ({...prev, clusterwide: e.target.checked}))
                     }
-                    aria-label={t('actionDialogs.acknowledge.clusterwideAria')}
-                    label={t('actionDialogs.acknowledge.clusterwide')}
+                    aria-label={t(instances ? 'actionDialogs.delete.instance.localOnlyAria' : 'actionDialogs.acknowledge.clusterwideAria')}
+                    label={t(instances ? 'actionDialogs.delete.instance.localOnly' : 'actionDialogs.acknowledge.clusterwide')}
                 />
             </Acknowledgements>
         </Dialog>
@@ -378,12 +419,13 @@ export const DeleteDialog = ({open, onClose, onConfirm, checkboxes, setCheckboxe
 };
 
 // Dialog for the "switch" action
-export const SwitchDialog = ({open, onClose, onConfirm, checked, setChecked, disabled}) => {
+export const SwitchDialog = ({open, onClose, onConfirm, checked, setChecked, disabled, target, names}) => {
     const {t} = useTranslation();
     return (
         <SingleCheckDialog
             open={open} onClose={onClose} onConfirm={onConfirm}
             checked={checked} setChecked={setChecked} disabled={disabled}
+            target={target} names={names}
             cancelDisabled={disabled}
             title={t('actionDialogs.switch.title')}
             checkboxAriaLabel={t('actionDialogs.acknowledge.unavailableDuringMoveAria')}
@@ -395,12 +437,13 @@ export const SwitchDialog = ({open, onClose, onConfirm, checked, setChecked, dis
 };
 
 // Dialog for the "giveback" action
-export const GivebackDialog = ({open, onClose, onConfirm, checked, setChecked, disabled}) => {
+export const GivebackDialog = ({open, onClose, onConfirm, checked, setChecked, disabled, target, names}) => {
     const {t} = useTranslation();
     return (
         <SingleCheckDialog
             open={open} onClose={onClose} onConfirm={onConfirm}
             checked={checked} setChecked={setChecked} disabled={disabled}
+            target={target} names={names}
             title={t('actionDialogs.giveback.title')}
             checkboxAriaLabel={t('actionDialogs.acknowledge.unavailableDuringMoveAria')}
             checkboxLabel={t('actionDialogs.acknowledge.unavailableDuringMove')}

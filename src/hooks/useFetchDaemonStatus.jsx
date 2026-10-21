@@ -1,6 +1,7 @@
 import {useState, useRef, useCallback, useEffect} from "react";
 import {fetchDaemonStatus} from "../services/api";
 import logger from '../utils/logger.js';
+import {pruneDroppedNodes} from "./clusterStatusOnce";
 
 const useFetchDaemonStatus = () => {
     const [nodes, setNodes] = useState([]);
@@ -50,6 +51,7 @@ const useFetchDaemonStatus = () => {
 
         try {
             const result = await fetchDaemonStatus(token);
+            pruneDroppedNodes(result);
             const nodesArray = Object.keys(result.cluster.node).map((key) => ({
                 nodename: key,
                 ...result.cluster.node[key],

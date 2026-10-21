@@ -173,7 +173,7 @@
       "restartDaemon": "Restart daemon",
       "resize": "Resize",
       "cap": "Cap",
-      "leave": "Leave"
+      "evict": "Evict"
     }
   },
   "alerts": {
@@ -1965,9 +1965,9 @@
       "description": "Freeze the node and shut down all the instances it hosts.",
       "warning": "All the instances hosted on the node shut down."
     },
-    "leave": {
-      "label": "Leave",
-      "description": "Evict the node from the cluster, once drained.",
+    "evict": {
+      "label": "Evict",
+      "description": "Order the node out of the cluster, through a peer, once drained.",
       "warning": "All the instances hosted on the node shut down and are deleted from it: the node leaves the cluster, restarting alone in a cluster of its own, with no credential to reach its api.",
       "fromHere": "Ask it from the webapp of another node: this one serves the webapp."
     }

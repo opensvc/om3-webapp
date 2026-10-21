@@ -35,6 +35,19 @@ export function impactBadges(t, impacts = []) {
     return impacts.map((key) => ({key, label: t(`actionMenus.impacts.${key}`), tone: IMPACT_TONE[key] ?? "warn"}));
 }
 
+/**
+ * The names of an action as the API and om say it, for the filter of its menu: its
+ * name, and its endpoint without the "action/" of the path, its slashes spaces
+ * ("startstandby", "pg reset", "push asset", "daemon restart", "update" of sync update).
+ */
+export function actionKeywords(action) {
+    if (action === undefined) return [];
+    const words = [action.name];
+    if (action.endpoint) words.push(action.endpoint.replace(/(^|\/)action\//g, "$1").replace(/\//g, " "));
+    if (action.cluster) words.push(action.cluster);
+    return [...new Set(words.filter(Boolean))];
+}
+
 /** The key of an action in the translations: "sync update" → "syncUpdate". */
 const keyOf = (name) => name.replace(/\s+(\w)/g, (_, c) => c.toUpperCase());
 
@@ -80,6 +93,7 @@ export function explainedItems(t, scope, items) {
             description: item.description ?? actionDescription(t, scope, item.key),
             danger: item.danger ?? def?.color === "red",
             badges: item.badges ?? impactBadges(t, def?.impacts),
+            keywords: item.keywords ?? actionKeywords(def ?? {name: item.key}),
         };
         if (order !== undefined && group !== undefined && group !== last) out.heading = t(`actionMenus.groups.${group}`);
         last = group;

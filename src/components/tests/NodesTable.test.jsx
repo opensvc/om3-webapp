@@ -505,22 +505,22 @@ describe('NodesTable', () => {
             expect(entries.map((item) => item.getAttribute('aria-labelledby') && document.getElementById(item.getAttribute('aria-labelledby')).textContent)).toEqual([
                 'Freeze', 'Unfreeze',
                 'Asset', 'Capabilities', 'Disks', 'Packages', 'SCSI', 'Sysreport',
-                'Clear monitor', 'Restart', 'Shutdown', 'Stop', 'Drain', 'Leave',
+                'Clear monitor', 'Restart', 'Shutdown', 'Stop', 'Drain', 'Evict',
             ]);
             // Freeze and unfreeze both, whatever the state; no abort, the badge of the orchestration offers it; no dequeue.
             expect(within(menu).queryByRole('menuitem', {name: /abort|dequeue/i})).toBeNull();
             // What each does, described; the harmful ones red.
             expect(within(menu).getByRole('menuitem', {name: 'Stop'})).toHaveAccessibleDescription('Stop the daemon; the instances keep running, unwatched.');
-            expect(['Shutdown', 'Stop', 'Drain', 'Leave'].every((name) => within(menu).getByRole('menuitem', {name}).classList.contains('text-state-down'))).toBe(true);
+            expect(['Shutdown', 'Stop', 'Drain', 'Evict'].every((name) => within(menu).getByRole('menuitem', {name}).classList.contains('text-state-down'))).toBe(true);
             expect(within(menu).getByRole('menuitem', {name: 'Restart'})).not.toHaveClass('text-state-down');
         });
 
-        test('leave: the cluster evicts the node, asked of the api node; not offered for the api node itself', async () => {
+        test('evict: the cluster evicts the node, asked of the api node; not offered for the api node itself', async () => {
             global.fetch = vi.fn().mockResolvedValue({ok: true});
             renderWithRouter(<NodesTable/>);
             fireEvent.click(await screen.findByRole('checkbox', {name: 'select node-2'}));
             fireEvent.click(screen.getByRole('button', {name: 'Actions'}));
-            fireEvent.click(await screen.findByRole('menuitem', {name: 'Leave'}));
+            fireEvent.click(await screen.findByRole('menuitem', {name: 'Evict'}));
             fireEvent.click(screen.getByRole('button', {name: 'Confirm'}));
             await waitFor(() => expect(global.fetch).toHaveBeenCalledWith(
                 '/api/cluster/evict',
@@ -529,7 +529,7 @@ describe('NodesTable', () => {
             // The api node, node-1, selected: leave off, said why.
             fireEvent.click(screen.getByRole('checkbox', {name: 'select node-1'}));
             fireEvent.click(screen.getByRole('button', {name: 'Actions'}));
-            const leave = await screen.findByRole('menuitem', {name: 'Leave'});
+            const leave = await screen.findByRole('menuitem', {name: 'Evict'});
             expect(leave).toBeDisabled();
             // Its cost badged, and why it is off.
             expect(leave).toHaveAccessibleDescription('down-time Ask it from the webapp of another node: this one serves the webapp.');

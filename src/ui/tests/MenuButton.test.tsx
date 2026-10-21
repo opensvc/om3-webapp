@@ -462,7 +462,7 @@ describe("MenuButton badges", () => {
 
 describe("MenuButton filter", () => {
   const rich: MenuItem[] = [
-    { key: "start", label: "Start", description: "Bring up the instance.", heading: "Operator" },
+    { key: "start", label: "Start", description: "Bring up the instance.", heading: "Operator", keywords: ["start", "startstandby"] },
     { key: "stop", label: "Stop", description: "Bring down the instance.", badges: [{ key: "downTime", label: "down-time", tone: "warn" }] },
     { key: "freeze", label: "Freeze", description: "Block the automatic starts." },
     { key: "provision", label: "Provision", description: "Allocate its resources.", heading: "Admin" },
@@ -490,6 +490,10 @@ describe("MenuButton filter", () => {
     await user.clear(field);
     await user.keyboard("admin");
     expect(names()).toEqual(["Provision", "Unprovision"]);
+    await user.clear(field);
+    // The action as the API and om name it.
+    await user.keyboard("startstandby");
+    expect(names()).toEqual(["Start"]);
     await user.clear(field);
     await user.keyboard("zzz");
     expect(names()).toEqual([]);

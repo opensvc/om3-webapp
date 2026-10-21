@@ -1,6 +1,7 @@
 import {describe, expect, test} from "vitest";
 import i18n from "../../i18n";
-import {actionDescription, explainedItems, explainedMenu, menuColumns} from "../action-menu";
+import {actionDescription, actionKeywords, explainedItems, explainedMenu, menuColumns} from "../action-menu";
+import {NODE_ACTIONS} from "../../constants/actions";
 
 const t = i18n.t.bind(i18n);
 const items = (...names) => names.map((name) => ({key: name, label: name}));
@@ -61,6 +62,22 @@ describe("explained action menus", () => {
         expect(badges("instance", "shutdown")).toEqual(["down-time"]);
         expect(badges("instance", "start")).toEqual([]);
         expect(explainedItems(t, "object", items("purge"))[0].badges[0].tone).toBe("down");
+    });
+
+    test("the names of an action as the API and om say them, for the filter", () => {
+        const kw = (scope, name) => explainedItems(t, scope, items(name))[0].keywords;
+        expect(kw("instance", "start standby")).toEqual(["start standby", "startstandby"]);
+        expect(kw("instance", "sync update")).toEqual(["sync update", "update"]);
+        expect(kw("instance", "pg reset")).toEqual(["pg reset"]);
+        expect(kw("object", "enable")).toEqual(["enable"]);
+        expect(kw("object", "start")).toEqual(["start"]);
+        expect(kw("instance", "clear")).toEqual(["clear"]);
+        const node = (name) => actionKeywords(NODE_ACTIONS.find((a) => a.name === name));
+        expect(node("asset")).toEqual(["asset", "push asset"]);
+        expect(node("scsi scan")).toEqual(["scsi scan"]);
+        expect(node("restart daemon")).toEqual(["restart daemon", "daemon restart"]);
+        expect(node("stop")).toEqual(["stop", "daemon stop"]);
+        expect(node("evict")).toEqual(["evict"]);
     });
 
     test("an action without a word for it has no description", () => {

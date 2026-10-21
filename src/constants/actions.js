@@ -165,5 +165,5 @@ export const NODE_ACTIONS = [
     {name: "shutdown", group: "daemon", icon: icon(PowerOffIcon), endpoint: "daemon/action/shutdown", color: "red", impacts: ["downTime"]},
     {name: "stop", group: "daemon", icon: icon(StopIcon), endpoint: "daemon/action/stop", color: "red"},
     {name: "drain", group: "daemon", icon: icon(DropIcon), endpoint: "action/drain", color: "red", impacts: ["downTime"]},
-    {name: "leave", group: "daemon", icon: icon(SignOutIcon), cluster: "evict", color: "red", impacts: ["downTime"]},
+    {name: "evict", group: "daemon", icon: icon(SignOutIcon), cluster: "evict", color: "red", impacts: ["downTime"]},
 ];

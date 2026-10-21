@@ -173,7 +173,7 @@
       "restartDaemon": "Redémarrer le démon",
       "resize": "Redimensionner",
       "cap": "Plafonner",
-      "leave": "Quitter"
+      "evict": "Évincer"
     }
   },
   "alerts": {
@@ -1965,9 +1965,9 @@
       "description": "Geler le nœud et éteindre toutes les instances qu’il héberge.",
       "warning": "Toutes les instances hébergées sur le nœud s’arrêtent."
     },
-    "leave": {
-      "label": "Quitter",
-      "description": "Retirer le nœud du cluster, une fois vidé.",
+    "evict": {
+      "label": "Évincer",
+      "description": "Faire sortir le nœud du cluster, par un pair, une fois vidé.",
       "warning": "Toutes les instances hébergées sur le nœud s’arrêtent et en sont supprimées : le nœud quitte le cluster et redémarre seul dans son propre cluster, sans identifiant pour joindre son api.",
       "fromHere": "Demandez-le depuis la webapp d’un autre nœud : celui-ci sert la webapp."
     }

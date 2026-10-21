@@ -23,6 +23,11 @@ export interface MenuItem {
   heading?: string;
   /** What the entry does, in a light line under its label. */
   description?: string;
+  /**
+   * Words the filter finds the entry by besides what it shows: the action as the
+   * API and om name it ("startstandby", "push asset").
+   */
+  keywords?: string[];
   /** An entry that harms: its label and icon in the tint of down. */
   danger?: boolean;
   /**
@@ -116,7 +121,7 @@ export function MenuButton({
   columns?: 2 | 3;
   /**
    * A field over the entries, focused on opening, keeping those whose label,
-   * description, badges or section say what is typed: Down then goes to the first
+   * description, badges, section or keywords say what is typed: Down then goes to the first
    * kept, Enter chooses it, Up from the first goes back to the field. `filterLabel`
    * names the field, `filterEmpty` says nothing is kept.
    */
@@ -309,7 +314,7 @@ export function MenuButton({
   const needle = query.trim().toLocaleLowerCase();
   const matches = (item: MenuItem, heading?: string) =>
     needle === "" ||
-    [item.label, item.description, heading, ...(item.badges ?? []).map((badge) => badge.label)].some(
+    [item.label, item.description, heading, ...(item.badges ?? []).map((badge) => badge.label), ...(item.keywords ?? [])].some(
       (text) => text?.toLocaleLowerCase().includes(needle) ?? false,
     );
   const shown = sections(items)

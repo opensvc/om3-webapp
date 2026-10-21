@@ -11,6 +11,7 @@ import {Alert} from "../ui/components/Alert";
 import {Spinner} from "../ui/components/Spinner";
 import {Table, HeaderRow, HeaderCell, Row, Cell} from "../ui/components/Table";
 import {Section} from "./NodePanel";
+import {cn} from "../ui/cn";
 
 /*
  * The capacity of an object, a tab of its panel: the size of a volume, resized
@@ -250,6 +251,8 @@ function CapForm({path, nodes}) {
     };
 
     const setValue = (option, value) => setValues((v) => ({...v, [option]: value}));
+    /** Whether a new value is asked of a keyword. */
+    const changed = (option) => (values[option] ?? "").trim() !== "";
 
     return (
         <ParamForm
@@ -308,27 +311,25 @@ function CapForm({path, nodes}) {
                                 </Cell>
                                 <Cell className="font-mono text-data">{current[k.option] || "–"}</Cell>
                                 <Cell>
-                                    <span className="flex items-center gap-1">
-                                        <Input
-                                            aria-label={t("paramActions.cap.valueOf", {keyword: k.option})}
-                                            value={values[k.option] ?? ""}
-                                            placeholder={k.example || ""}
-                                            onChange={(e) => setValue(k.option, e.target.value)}
-                                            className="h-7 w-28 font-mono"
-                                            autoComplete="off"
-                                            spellCheck={false}
-                                        />
-                                        <Button size="sm" variant="ghost" onClick={() => setValue(k.option, "default")}>
-                                            {t("paramActions.cap.lift")}
-                                        </Button>
-                                    </span>
+                                    <Input
+                                        aria-label={t("paramActions.cap.valueOf", {keyword: k.option})}
+                                        value={values[k.option] ?? ""}
+                                        placeholder={k.example || ""}
+                                        onChange={(e) => setValue(k.option, e.target.value)}
+                                        // Changed, white on the grey of the others: what the button under the table sets stands out.
+                                        data-changed={changed(k.option) || undefined}
+                                        className={cn("h-7 w-28 font-mono", changed(k.option) && "bg-surface-raised")}
+                                        autoComplete="off"
+                                        spellCheck={false}
+                                    />
                                 </Cell>
                             </Row>
                         ))}
                     </tbody>
                 </Table>
             )}
-            <p className="text-ink-muted">{sets.length === 0 ? t("paramActions.cap.nothingSet") : t("paramActions.cap.liftHint")}</p>
+            <p className="text-ink-muted">{t("paramActions.cap.liftHint")}</p>
+            {sets.length === 0 && <p className="text-ink-muted">{t("paramActions.cap.nothingSet")}</p>}
         </ParamForm>
     );
 }

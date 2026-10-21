@@ -111,16 +111,34 @@ describe('the capacity of an object', () => {
             expect(within(caps()).getByLabelText('New value of pg_mem_limit')).toHaveAttribute('placeholder', '512m');
         });
 
-        test('the caps changed set, of the section and the node chosen, "default" lifting one; followed in the tray', async () => {
+        test('a value changed is white on the grey of the others, until set', async () => {
+            render(<ObjectCapacity path="ns1/svc/web"/>);
+            await waitFor(() => expect(rows()).toHaveLength(2));
+            const cpus = () => within(caps()).getByLabelText('New value of pg_cpus');
+            const mem = () => within(caps()).getByLabelText('New value of pg_mem_limit');
+            expect(cpus()).toHaveClass('bg-surface');
+            expect(cpus()).not.toHaveClass('bg-surface-raised');
+            fireEvent.change(cpus(), {target: {value: '0-3'}});
+            expect(cpus()).toHaveClass('bg-surface-raised');
+            expect(cpus()).not.toHaveClass('bg-surface');
+            expect(mem()).not.toHaveClass('bg-surface-raised');
+            // Emptied, or blank, it is no change: grey again.
+            fireEvent.change(cpus(), {target: {value: ' '}});
+            expect(cpus()).not.toHaveClass('bg-surface-raised');
+            // No button of its own: the button under the table sets them all.
+            expect(within(caps()).getAllByRole('button').map((b) => b.textContent)).toEqual(['Apply the caps configured']);
+        });
+
+        test('the caps changed set together, of the section and the node chosen, default lifting one; followed in the tray', async () => {
             render(<ObjectCapacity path="ns1/svc/web" nodes={['n1', 'n2']}/>);
             await waitFor(() => expect(rows()).toHaveLength(2));
+            expect(within(caps()).getByText(/A value of default lifts a cap/)).toBeInTheDocument();
             fireEvent.change(within(caps()).getByLabelText('Section'), {target: {value: 'subset#web'}});
             fireEvent.change(within(caps()).getByLabelText('Node'), {target: {value: 'n2'}});
             // What that section holds on that node, read again.
             await waitFor(() => expect(rows()[0]).toEqual(['pg_cpusThe cpus the group runs on.', '3']));
             fireEvent.change(within(caps()).getByLabelText('New value of pg_mem_limit'), {target: {value: '1g'}});
-            const cpus = within(caps()).getByLabelText('New value of pg_cpus').closest('tr');
-            fireEvent.click(within(cpus).getByRole('button', {name: 'Lift'}));
+            fireEvent.change(within(caps()).getByLabelText('New value of pg_cpus'), {target: {value: 'default'}});
             config['subset#web.pg_mem_limit@n2'] = '1g';
             fireEvent.click(within(caps()).getByRole('button', {name: 'Set 2 caps'}));
             await waitFor(() => expect(posts()).toEqual([[
@@ -128,9 +146,10 @@ describe('the capacity of an object', () => {
                 null,
             ]]));
             expect(mockTrackResponse).toHaveBeenCalledWith(expect.anything(), {action: 'cap', subject: 'ns1/svc/web', path: 'ns1/svc/web'});
-            // Accepted, the values asked emptied, the ones configured read again.
+            // Accepted, the values asked emptied, grey again, the ones configured read again.
             await waitFor(() => expect(rows()[1]).toEqual(['pg_mem_limitThe memory the group may use.', '1g']));
             expect(within(caps()).getByLabelText('New value of pg_mem_limit')).toHaveValue('');
+            expect(within(caps()).getByLabelText('New value of pg_mem_limit')).not.toHaveClass('bg-surface-raised');
         });
 
         test('nothing changed: the caps configured applied again', async () => {

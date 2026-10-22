@@ -151,6 +151,47 @@ describe('CreateObjectDialog', () => {
         expect(body).toMatch(/^\[DEFAULT\]\nid = [0-9a-f-]{36}\nnodes = \*\n\n\[fs#1\]\ntype = flag\n$/);
     });
 
+    test('a copy loaded, then the kind changed to a datastore: created empty, as the dialog says', async () => {
+        answers['GET /api/object/path/ns1/svc/web/config/file?redact-secrets=false'] = {status: 200, text: SOURCE};
+        open({defaultNamespace: 'ns1'});
+        type('Name', 'tls');
+        fireEvent.click(screen.getByRole('radio', {name: 'A copy of an object'}));
+        fireEvent.click(screen.getByRole('combobox', {name: 'Object to copy'}));
+        fireEvent.click(screen.getByRole('option', {name: 'ns1/svc/web'}));
+        await waitFor(() => expect(screen.getByLabelText('Configuration')).toHaveValue(SOURCE));
+        fireEvent.change(screen.getByLabelText('Kind'), {target: {value: 'sec'}});
+        create();
+        await waitFor(() => expect(onCreated).toHaveBeenCalledWith('ns1/sec/tls'));
+        expect(posts()[0].body).toMatch(/^\[DEFAULT\]\nid = [0-9a-f-]{36}\n$/);
+        // Back to a service, the text is still there, as left.
+        fireEvent.change(screen.getByLabelText('Kind'), {target: {value: 'svc'}});
+        expect(screen.getByLabelText('Configuration')).toHaveValue(SOURCE);
+    });
+
+    test('two copies picked in a row: the text of the last one, whichever answers last', async () => {
+        const OTHER = '[DEFAULT]\nnodes = node1\n';
+        let answerFirst;
+        global.fetch.mockImplementation((url, options = {}) => {
+            requests.push({method: options.method ?? 'GET', url, body: options.body});
+            if (url.includes('/ns1/svc/web/')) {
+                return new Promise((resolve) => {
+                    answerFirst = () => resolve({ok: true, status: 200, text: () => Promise.resolve(SOURCE)});
+                });
+            }
+            return Promise.resolve({ok: true, status: 200, text: () => Promise.resolve(OTHER)});
+        });
+        open({defaultNamespace: 'ns1', paths: ['ns1/svc/web', 'ns1/svc/api']});
+        fireEvent.click(screen.getByRole('radio', {name: 'A copy of an object'}));
+        fireEvent.click(screen.getByRole('combobox', {name: 'Object to copy'}));
+        fireEvent.click(screen.getByRole('option', {name: 'ns1/svc/web'}));
+        fireEvent.click(screen.getByRole('combobox', {name: 'Object to copy'}));
+        fireEvent.click(screen.getByRole('option', {name: 'ns1/svc/api'}));
+        await waitFor(() => expect(screen.getByLabelText('Configuration')).toHaveValue(OTHER));
+        await act(async () => { answerFirst(); });
+        expect(screen.getByLabelText('Configuration')).toHaveValue(OTHER);
+        expect(screen.getByRole('button', {name: 'Create'})).toBeEnabled();
+    });
+
     test('a refusal of the daemon is said in the dialog', async () => {
         answers['POST /api/object/path/ns1/svc/db/config/file'] = {status: 400, text: JSON.stringify({detail: 'bad keyword'})};
         open({defaultNamespace: 'ns1'});

@@ -1,7 +1,6 @@
 import React from "react";
 import {Row, Cell} from "../ui/components/Table";
 import {Checkbox} from "../ui/components/Field";
-import {StatusMark} from "../ui/components/StatusMark";
 import {FrozenMark} from "../ui/components/FrozenMark";
 import {UsageBar} from "../ui/components/UsageBar";
 import {RssIcon} from "../ui/icons";
@@ -19,6 +18,18 @@ export const monitorMark = (monitor) => {
     if (state.includes("fail")) return {state: "down", label: state};
     return {state: "warn", label: state};
 };
+
+const MONITOR_STATE_CLASS = {up: undefined, down: "text-state-down", warn: "font-semibold", unknown: "text-ink-muted"};
+
+/**
+ * The node monitor state in words, styled after what it says: idle quiet, a failure
+ * red, anything else running, bold; unknown muted.
+ */
+export function MonitorState({monitor}) {
+    const {t} = useTranslation();
+    const mark = monitorMark(monitor);
+    return <span data-state={mark.state} className={MONITOR_STATE_CLASS[mark.state]}>{monitor?.state || t("common.unknown")}</span>;
+}
 
 /**
  * A node of the Nodes view. It opens the node's panel, whose title bar holds the
@@ -39,7 +50,6 @@ const NodeRow = ({
     const notAvailable = t("common.notAvailable");
     const isFrozen = !!status?.frozen_at && status.frozen_at !== ZERO_DATE;
     const isDaemonNode = daemonNodename === nodename;
-    const mark = monitorMark(monitor);
 
     const loadState = stats?.load_15m > 4 ? "down" : stats?.load_15m > 2 ? "warn" : "up";
     const memState = stats?.mem_avail < 20 ? "down" : stats?.mem_avail < 50 ? "warn" : "up";
@@ -99,8 +109,7 @@ const NodeRow = ({
             <Cell className="font-medium whitespace-nowrap">{nodename || "-"}</Cell>
             <Cell className="whitespace-nowrap">
                 <span className="flex items-center justify-center gap-1.5">
-                    <StatusMark state={mark.state} label={mark.label}/>
-                    {monitor && monitor.state !== "idle" && <span>{monitor.state}</span>}
+                    <MonitorState monitor={monitor}/>
                     {isDaemonNode && (
                         <span
                             role="img"

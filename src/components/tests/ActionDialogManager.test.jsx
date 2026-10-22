@@ -556,6 +556,35 @@ describe('ActionDialogManager', () => {
     });
 });
 
+describe('the confirmation says what the action does', () => {
+    test('on the object, an instance or resources, as the targets of the action say', () => {
+        const {rerender} = render(<SimpleConfirmDialog open onClose={vi.fn()} onConfirm={vi.fn()} action="restart" target="ns/svc/a"/>);
+        expect(screen.getByRole('dialog')).toHaveTextContent('Ask the daemon to restart its instances.');
+        rerender(<SimpleConfirmDialog open onClose={vi.fn()} onConfirm={vi.fn()} action="sync split" scope="instance" target="ns/svc/a"/>);
+        expect(screen.getByRole('dialog')).toHaveTextContent('Make both ends of a replicated pair read-write.');
+        rerender(
+            <ActionDialogManager
+                pendingAction={{action: 'restart', targets: [{node: 'n1', rid: 'app#1'}]}}
+                handleConfirm={vi.fn()}
+                target="app#1"
+                supportedActions={['restart']}
+                onClose={vi.fn()}
+            />,
+        );
+        expect(screen.getByRole('dialog')).toHaveTextContent('Restart the resources picked.');
+        rerender(
+            <ActionDialogManager
+                pendingAction={{action: 'restart', targets: [{node: 'n1'}]}}
+                handleConfirm={vi.fn()}
+                target="ns/svc/a@n1"
+                supportedActions={['restart']}
+                onClose={vi.fn()}
+            />,
+        );
+        expect(screen.getByRole('dialog')).toHaveTextContent('Restart the instance on this node.');
+    });
+});
+
 describe('SimpleConfirmDialog', () => {
     test('is not rendered when closed', () => {
         render(<SimpleConfirmDialog open={false} onClose={vi.fn()} onConfirm={vi.fn()} action="start" target="t"/>);

@@ -251,7 +251,7 @@ export function SecCertificate({path, keyNames, disabled, onWritten}) {
                         <>
                             <Button variant="secondary" onClick={() => setConfirm(null)}>{t("common.cancel")}</Button>
                             <Button
-                                variant={pending === "create" ? "create" : "secondary"}
+                                variant={pending === "create" ? "create" : "change"}
                                 disabled={(harmful && !understood) || reading}
                                 onClick={() => run(pending)}
                             >

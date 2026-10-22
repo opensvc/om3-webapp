@@ -123,6 +123,9 @@ describe("Table", () => {
     );
     const row = screen.getAllByRole("row")[1]!;
     expect(row).toHaveAttribute("tabindex", "0");
+    // Hovered, the accent tint: never the grey of a band.
+    expect(row).toHaveClass("hover:bg-row-hover");
+    expect(row).not.toHaveClass("hover:bg-surface-sunken");
     await user.click(screen.getByRole("cell", { name: "a" }));
     expect(onActivate).toHaveBeenCalledTimes(1);
     row.focus();

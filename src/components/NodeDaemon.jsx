@@ -213,6 +213,7 @@ export function NodeDaemon({node}) {
         const items = ["start", "stop", "restart"].map((action) => ({
             key: action,
             label: t(`nodeDaemon.actions.${action}`),
+            description: t(`nodeDaemon.heartbeats.describe.${action}`),
             onSelect: () => ask({
                 action,
                 label: t(`nodeDaemon.actions.${action}`),
@@ -230,6 +231,9 @@ export function NodeDaemon({node}) {
                 items.push({
                     key: action,
                     label: t(`nodeDaemon.actions.${action}`),
+                    description: t(`nodeDaemon.heartbeats.describe.${action}`),
+                    // The slots of every node erased: red.
+                    danger: action === "wipe",
                     onSelect: () => ask({
                         action,
                         label: t(`nodeDaemon.actions.${action}`),
@@ -247,6 +251,9 @@ export function NodeDaemon({node}) {
     const listenerItems = ["start", "stop", "restart"].map((action) => ({
         key: action,
         label: t(`nodeDaemon.actions.${action}`),
+        description: t(`nodeDaemon.listener.describe.${action}`, {listener: LISTENER}),
+        // The API, and maybe this page, no longer answering: red.
+        danger: action === "stop",
         onSelect: () => ask({
             action,
             label: t(`nodeDaemon.actions.${action}`),
@@ -527,7 +534,7 @@ export function NodeDaemon({node}) {
                 footer={
                     <>
                         <Button variant="secondary" onClick={() => setPending(null)}>{t("common.cancel")}</Button>
-                        <Button onClick={confirm}>{t("common.confirm")}</Button>
+                        <Button variant="change" onClick={confirm}>{t("common.confirm")}</Button>
                     </>
                 }
             >

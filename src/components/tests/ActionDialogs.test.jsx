@@ -30,9 +30,9 @@ describe('ActionDialogs', () => {
             expect(within(dialog).getByLabelText(checkboxText)).toBe(checkbox);
             const confirmBtn = within(dialog).getByRole('button', {name: confirmName});
             expect(confirmBtn).toHaveTextContent(confirmText);
-            // None of them deletes: outlined, stop and restart too.
-            expect(confirmBtn).toHaveClass('border', 'border-line');
-            expect(confirmBtn).not.toHaveClass('bg-state-down', 'bg-accent');
+            // Each changes a state: the accent fill, stop and restart too.
+            expect(confirmBtn).toHaveClass('bg-accent');
+            expect(confirmBtn).not.toHaveClass('bg-state-down', 'border-line');
             expect(within(dialog).getByRole('button', {name: 'Cancel'})).toBeEnabled();
         });
 
@@ -177,8 +177,8 @@ describe('ActionDialogs', () => {
             ]);
             const confirmBtn = screen.getByRole('button', {name: 'Confirm shutdown action'});
             expect(confirmBtn).toBeDisabled();
-            // A shutdown deletes nothing: outlined.
-            expect(confirmBtn).toHaveClass('border', 'border-line');
+            // A shutdown changes a state, deleting nothing: the accent fill.
+            expect(confirmBtn).toHaveClass('bg-accent');
 
             fireEvent.click(screen.getByLabelText(/all svc and vol instances on this node will be shut down/i));
             expect(checkboxes).toEqual({instancesDown: true, peerTakeover: false});

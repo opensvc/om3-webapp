@@ -12,6 +12,7 @@ import ActionDialogManager from "./ActionDialogManager";
 import {Alert} from "../ui/components/Alert";
 import {IconButton} from "../ui/components/Button";
 import {CloseIcon} from "../ui/icons";
+import {explainedItems} from "../app/action-menu";
 
 /** How long a feedback message stays, as the snackbar it replaces. */
 const FEEDBACK_DURATION_MS = 4000;
@@ -136,7 +137,7 @@ export function useObjectBulkActions({selectedObjects, onDone}) {
         const selectedKinds = new Set(selectedObjects.map((obj) => parseObjectPath(obj).kind));
         // Keys held on all the nodes are deleted, or the orchestration on them aborted: nothing else.
         const keysOnly = selectedKinds.size > 0 && [...selectedKinds].every((kind) => KEY_KINDS.includes(kind));
-        return OBJECT_ACTIONS
+        const built = OBJECT_ACTIONS
             .filter((action) => !keysOnly || action.name === "abort"
                 || [...selectedKinds].every((kind) => isKeyKindAction(kind, action.name)))
             .filter((action) => !action.kinds ||
@@ -148,6 +149,7 @@ export function useObjectBulkActions({selectedObjects, onDone}) {
                 disabled: !isActionAllowedForSelection(action.name, selectedObjects),
                 onSelect: () => handleActionClick(action.name),
             }));
+        return explainedItems(t, "object", built);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedObjects, handleActionClick, t]);
 

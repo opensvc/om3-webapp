@@ -17,6 +17,8 @@
   --color-accent: var(--accent);
   --color-accent-ink: var(--accent-ink);
   --color-accent-soft: var(--accent-soft);
+  --color-row-hover: var(--row-hover);
+  --color-band-hover: var(--band-hover);
   --color-state-up: var(--state-up);
   --color-state-up-soft: var(--state-up-soft);
   --color-state-warn: var(--state-warn);

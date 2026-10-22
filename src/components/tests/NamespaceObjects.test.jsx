@@ -5,6 +5,11 @@ import {vi} from 'vitest';
 import {NamespaceObjects, useNamespaceObjectTabs} from '../NamespaceObjects';
 import useEventStore from '../../hooks/useEventStore';
 
+// The name of a menu entry: its label, without what it does under it.
+const entryName = (item) => (item.getAttribute('aria-labelledby')
+    ? document.getElementById(item.getAttribute('aria-labelledby')).textContent
+    : item.textContent);
+
 vi.mock('../../hooks/useKeyStats', () => ({
     useKeyStats: (path) => (path === 'prod/cfg/app' ? {count: 2, size: 2048} : undefined),
 }));
@@ -107,7 +112,7 @@ describe('NamespaceObjects', () => {
         fireEvent.click(screen.getByRole('checkbox', {name: 'Select all the Configurations'}));
         expect(screen.getByRole('checkbox', {name: 'Select object prod/cfg/app'})).toBeChecked();
         fireEvent.click(screen.getByRole('button', {name: 'Actions'}));
-        const items = within(await screen.findByRole('menu')).getAllByRole('menuitem').map((item) => item.textContent.trim().toLowerCase());
+        const items = within(await screen.findByRole('menu')).getAllByRole('menuitem').map((item) => entryName(item).trim().toLowerCase());
         expect(items).toContain('delete');
         expect(items.every((item) => ['abort', 'delete', 'purge'].includes(item))).toBe(true);
     });

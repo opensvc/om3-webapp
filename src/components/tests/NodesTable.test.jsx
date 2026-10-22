@@ -64,6 +64,9 @@ vi.mock('../NodeRow.jsx', () => ({
 // The nodes of the cluster configuration; null, not read: the nodes reporting a status.
 const mockClusterOrder = vi.hoisted(() => ({value: null}));
 vi.mock('../../hooks/useClusterNodeOrder', () => ({useClusterNodeOrder: () => mockClusterOrder.value}));
+// The grants of the user: root enrolls a node.
+const mockGrants = vi.hoisted(() => ({value: {}}));
+vi.mock('../../hooks/useGrants', () => ({useGrants: () => mockGrants.value}));
 
 // The confirmation of a node action is tested on its own (NodeActionDialog.test): here, the action confirmed.
 vi.mock('../NodeActionDialog', () => ({
@@ -485,6 +488,25 @@ describe('NodesTable', () => {
         });
     });
 
+    describe('enroll', () => {
+        afterEach(() => {
+            mockGrants.value = {};
+        });
+
+        test('root enrolls a node: the accent of what creates, opening its dialog; others are not offered it', async () => {
+            const {unmount} = renderWithRouter(<NodesTable/>);
+            await screen.findAllByRole('checkbox');
+            expect(screen.queryByRole('button', {name: 'Enroll'})).toBeNull();
+            unmount();
+            mockGrants.value = {root: null};
+            renderWithRouter(<NodesTable/>);
+            const enroll = await screen.findByRole('button', {name: 'Enroll'});
+            expect(enroll).toHaveClass('bg-accent');
+            fireEvent.click(enroll);
+            expect(screen.getByRole('dialog', {name: 'Enroll a node'})).toBeInTheDocument();
+        });
+    });
+
     describe('menus', () => {
         test('passes each row its data and callbacks: no row actions, the panel holds them', async () => {
             renderWithRouter(<NodesTable/>);
@@ -493,34 +515,34 @@ describe('NodesTable', () => {
             );
         });
 
-        test('bulk menu lists the node actions by group, a column each, each with what it does, the harmful ones red', async () => {
+        test('bulk menu lists the node actions by group, in a masonry of two columns, each with what it does, the harmful ones red', async () => {
             renderWithRouter(<NodesTable/>);
             fireEvent.click(await screen.findByRole('checkbox', {name: 'select node-2'}));
             fireEvent.click(screen.getByRole('button', {name: 'Actions'}));
             const menu = await screen.findByRole('menu', {name: 'Actions'});
-            // The node, its inventory, its daemon, in that order, a column each in a wide window.
+            // The node, its inventory, its daemon, in that order, in a masonry of two columns in a wide window.
             expect([...menu.querySelectorAll('[data-menu-heading]')].map((h) => h.textContent)).toEqual(['Node', 'Inventory', 'Daemon']);
-            expect(menu).toHaveClass('md:grid-cols-3');
+            expect(menu.querySelector('.md\\:columns-2')).not.toBeNull();
             const entries = within(menu).getAllByRole('menuitem');
             expect(entries.map((item) => item.getAttribute('aria-labelledby') && document.getElementById(item.getAttribute('aria-labelledby')).textContent)).toEqual([
-                'Freeze',
+                'Freeze', 'Unfreeze',
                 'Asset', 'Capabilities', 'Disks', 'Packages', 'SCSI', 'Sysreport',
-                'Clear monitor', 'Restart', 'Shutdown', 'Stop', 'Drain', 'Leave',
+                'Clear monitor', 'Restart', 'Shutdown', 'Stop', 'Drain', 'Evict',
             ]);
-            // Not frozen, no unfreeze; no abort, the badge of the orchestration offers it; no dequeue.
-            expect(within(menu).queryByRole('menuitem', {name: /unfreeze|abort|dequeue/i})).toBeNull();
+            // Freeze and unfreeze both, whatever the state; no abort, the badge of the orchestration offers it; no dequeue.
+            expect(within(menu).queryByRole('menuitem', {name: /abort|dequeue/i})).toBeNull();
             // What each does, described; the harmful ones red.
             expect(within(menu).getByRole('menuitem', {name: 'Stop'})).toHaveAccessibleDescription('Stop the daemon; the instances keep running, unwatched.');
-            expect(['Shutdown', 'Stop', 'Drain', 'Leave'].every((name) => within(menu).getByRole('menuitem', {name}).classList.contains('text-state-down'))).toBe(true);
+            expect(['Shutdown', 'Stop', 'Drain', 'Evict'].every((name) => within(menu).getByRole('menuitem', {name}).classList.contains('text-state-down'))).toBe(true);
             expect(within(menu).getByRole('menuitem', {name: 'Restart'})).not.toHaveClass('text-state-down');
         });
 
-        test('leave: the cluster evicts the node, asked of the api node; not offered for the api node itself', async () => {
+        test('evict: the cluster evicts the node, asked of the api node; not offered for the api node itself', async () => {
             global.fetch = vi.fn().mockResolvedValue({ok: true});
             renderWithRouter(<NodesTable/>);
             fireEvent.click(await screen.findByRole('checkbox', {name: 'select node-2'}));
             fireEvent.click(screen.getByRole('button', {name: 'Actions'}));
-            fireEvent.click(await screen.findByRole('menuitem', {name: 'Leave'}));
+            fireEvent.click(await screen.findByRole('menuitem', {name: 'Evict'}));
             fireEvent.click(screen.getByRole('button', {name: 'Confirm'}));
             await waitFor(() => expect(global.fetch).toHaveBeenCalledWith(
                 '/api/cluster/evict',
@@ -529,9 +551,10 @@ describe('NodesTable', () => {
             // The api node, node-1, selected: leave off, said why.
             fireEvent.click(screen.getByRole('checkbox', {name: 'select node-1'}));
             fireEvent.click(screen.getByRole('button', {name: 'Actions'}));
-            const leave = await screen.findByRole('menuitem', {name: 'Leave'});
+            const leave = await screen.findByRole('menuitem', {name: 'Evict'});
             expect(leave).toBeDisabled();
-            expect(leave).toHaveAccessibleDescription('Ask it from the webapp of another node: this one serves the webapp.');
+            // Its cost badged, and why it is off.
+            expect(leave).toHaveAccessibleDescription('down-time Ask it from the webapp of another node: this one serves the webapp.');
         });
 
         test('filters based on frozen/unfrozen state and closes via Escape', async () => {

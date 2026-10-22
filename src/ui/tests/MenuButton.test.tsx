@@ -1,7 +1,9 @@
+import { useState } from "react";
 import { describe, expect, test, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MenuButton, submenuShift, verticalPlacement, type MenuItem } from "../components/MenuButton";
+import { Dialog } from "../components/Dialog";
 
 function items(handlers: Record<string, () => void> = {}): MenuItem[] {
   return [
@@ -348,20 +350,19 @@ describe("submenuShift", () => {
 });
 
 describe("MenuButton prominent", () => {
-  test("the actions: outlined, as every button neither creating nor deleting, the corners of the controls", () => {
+  test("the actions: of the accent fill, as every button changing a state, the corners of the controls", () => {
     render(<MenuButton label="Actions" items={items()} prominent />);
     const button = screen.getByRole("button", { name: "Actions" });
-    expect(button).toHaveClass("rounded-(--radius-control)", "border", "border-line", "text-ink");
-    expect(button).not.toHaveClass("bg-accent", "rounded-(--radius-pill)");
+    expect(button).toHaveClass("rounded-(--radius-control)", "bg-accent", "text-accent-ink", "aria-expanded:brightness-110");
+    expect(button).not.toHaveClass("rounded-(--radius-pill)", "border-line");
     expect(button).toHaveTextContent("Actions");
     expect(button).not.toHaveAttribute("title");
   });
 
-  test("solid, drawn as the actions: its text in a wide window, its icon alone in a narrow one, named by its label", () => {
+  test("solid, of the accent fill as the actions: its text in a wide window, its icon alone in a narrow one, named by its label", () => {
     render(<MenuButton label="Node actions" text="Actions" items={items()} solid icon={<svg data-testid="bolt" />} />);
     const button = screen.getByRole("button", { name: "Node actions" });
-    expect(button).toHaveClass("max-md:w-7", "border", "border-line");
-    expect(button).not.toHaveClass("bg-accent");
+    expect(button).toHaveClass("max-md:w-7", "bg-accent", "text-accent-ink");
     expect(button).toHaveTextContent(/^Actions$/);
     expect(screen.getByText("Actions")).toHaveClass("max-md:hidden");
     expect(screen.getByTestId("bolt").parentElement).toHaveClass("hidden", "max-md:inline-flex");
@@ -381,24 +382,24 @@ describe("MenuButton prominent", () => {
 });
 
 describe("MenuButton groups", () => {
-  test("a mega menu: its groups under their headings, a column each, each entry with what it does, the harmful ones red", async () => {
+  test("a mega menu: its sections under their headings, in a masonry, each whole, each entry with what it does, the harmful ones red", async () => {
     const user = userEvent.setup();
     const go = vi.fn();
     render(
       <MenuButton
         label="Node"
-        columns={3}
+        columns={2}
         items={[
-          { key: "freeze", label: "Freeze", description: "Stop orchestrating.", heading: "Node", column: 1, onSelect: go },
-          { key: "asset", label: "Asset", description: "Push the inventory.", heading: "Inventory", column: 2 },
-          { key: "stop", label: "Stop", description: "Stop the daemon.", heading: "Daemon", column: 3, danger: true },
-          { key: "drain", label: "Drain", column: 3, danger: true },
+          { key: "freeze", label: "Freeze", description: "Stop orchestrating.", heading: "Node", onSelect: go },
+          { key: "asset", label: "Asset", description: "Push the inventory.", heading: "Inventory" },
+          { key: "stop", label: "Stop", description: "Stop the daemon.", heading: "Daemon", danger: true },
+          { key: "drain", label: "Drain", danger: true },
         ]}
       />,
     );
     await user.click(screen.getByRole("button", { name: "Node" }));
     const menu = screen.getByRole("menu", { name: "Node" });
-    expect(menu).toHaveClass("md:grid", "md:grid-cols-3", "md:grid-flow-dense");
+    expect(menu.querySelector(".md\\:columns-2")).not.toBeNull();
     // The headings: not entries, said before their group.
     expect([...menu.querySelectorAll("[data-menu-heading]")].map((h) => h.textContent)).toEqual(["Node", "Inventory", "Daemon"]);
     expect(screen.getAllByRole("menuitem")).toHaveLength(4);
@@ -407,9 +408,11 @@ describe("MenuButton groups", () => {
     expect(stop).toHaveAccessibleDescription("Stop the daemon.");
     expect(stop).toHaveClass("text-state-down");
     expect(screen.getByRole("menuitem", { name: "Freeze" })).not.toHaveClass("text-state-down");
-    // Each in the column of its group.
-    expect(stop.parentElement).toHaveClass("md:col-start-3");
-    expect(screen.getByRole("menuitem", { name: "Asset" }).parentElement).toHaveClass("md:col-start-2");
+    // Each section a group named by its heading, never split across two columns.
+    const sections = within(menu).getAllByRole("group");
+    expect(sections.map((section) => section.getAttribute("aria-label"))).toEqual(["Node", "Inventory", "Daemon"]);
+    expect(sections.every((section) => section.classList.contains("break-inside-avoid"))).toBe(true);
+    expect(within(sections[2]!).getAllByRole("menuitem")).toHaveLength(2);
     // The arrows walk them in their order, group after group.
     await user.keyboard("{ArrowDown}");
     expect(screen.getByRole("menuitem", { name: "Freeze" })).toHaveFocus();
@@ -417,5 +420,135 @@ describe("MenuButton groups", () => {
     expect(screen.getByRole("menuitem", { name: "Asset" })).toHaveFocus();
     await user.click(screen.getByRole("menuitem", { name: "Freeze" }));
     expect(go).toHaveBeenCalled();
+  });
+});
+
+describe("MenuButton badges", () => {
+  test("what an entry costs, badged after its label in its tint, read with its description, not in its name", async () => {
+    const user = userEvent.setup();
+    render(
+      <MenuButton
+        label="Object"
+        items={[
+          {
+            key: "purge",
+            label: "Purge",
+            description: "Unprovision, then delete it.",
+            badges: [
+              { key: "dataLoss", label: "data-loss", tone: "down" },
+              { key: "downTime", label: "down-time", tone: "warn" },
+            ],
+          },
+          { key: "stop", label: "Stop", badges: [{ key: "downTime", label: "down-time", tone: "warn" }] },
+          { key: "drain", label: "Drain", disabled: true, badges: [{ key: "downTime", label: "down-time", tone: "warn" }] },
+          { key: "start", label: "Start" },
+        ]}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "Object" }));
+    const purge = screen.getByRole("menuitem", { name: "Purge" });
+    expect(purge).toHaveAccessibleDescription("data-loss down-time Unprovision, then delete it.");
+    expect(purge.querySelector("[data-badge=dataLoss]")).toHaveClass("text-state-down", "rounded-(--radius-control)");
+    expect(purge.querySelector("[data-badge=downTime]")).toHaveClass("text-state-warn");
+    // A badge without a description: still out of the name.
+    expect(screen.getByRole("menuitem", { name: "Stop" })).toHaveAccessibleDescription("down-time");
+    expect(screen.getByRole("menuitem", { name: "Start" }).querySelector("[data-badge]")).toBeNull();
+    // Greyed with an entry that cannot be chosen.
+    const drain = screen.getByRole("menuitem", { name: "Drain" }).querySelector("[data-badge=downTime]");
+    expect(drain).toHaveClass("text-ink-muted/60", "border-line");
+    expect(drain).not.toHaveClass("text-state-warn");
+  });
+});
+
+describe("MenuButton filter", () => {
+  const rich: MenuItem[] = [
+    { key: "start", label: "Start", description: "Bring up the instance.", heading: "Operator", keywords: ["start", "startstandby"] },
+    { key: "stop", label: "Stop", description: "Bring down the instance.", badges: [{ key: "downTime", label: "down-time", tone: "warn" }] },
+    { key: "freeze", label: "Freeze", description: "Block the automatic starts." },
+    { key: "provision", label: "Provision", description: "Allocate its resources.", heading: "Admin" },
+    { key: "unprovision", label: "Unprovision", description: "Free its resources.", disabled: true },
+  ];
+  const names = () => screen.queryAllByRole("menuitem").map((item) => document.getElementById(item.getAttribute("aria-labelledby") ?? "")?.textContent);
+
+  test("focused on opening; what is typed keeps the entries saying it, in label, description, badge or section, their heading kept", async () => {
+    const user = userEvent.setup();
+    render(<MenuButton label="Actions" items={rich} columns={2} filterable filterLabel="Filter the actions" filterEmpty="No action matches." />);
+    await user.click(screen.getByRole("button", { name: "Actions" }));
+    const field = screen.getByRole("searchbox", { name: "Filter the actions" });
+    expect(field).toHaveFocus();
+    // A search field, not a login one: the password managers leave it alone.
+    expect(field).toHaveAttribute("type", "search");
+    expect(field).toHaveAttribute("autocomplete", "off");
+    expect(field).toHaveAttribute("data-protonpass-ignore", "true");
+    await user.keyboard("prov");
+    // Provision and unprovision: the second section alone, under its heading.
+    expect(names()).toEqual(["Provision", "Unprovision"]);
+    expect([...document.querySelectorAll("[data-menu-heading]")].map((h) => h.textContent)).toEqual(["Admin"]);
+    await user.clear(field);
+    await user.keyboard("down-time");
+    expect(names()).toEqual(["Stop"]);
+    await user.clear(field);
+    await user.keyboard("admin");
+    expect(names()).toEqual(["Provision", "Unprovision"]);
+    await user.clear(field);
+    // The action as the API and om name it.
+    await user.keyboard("startstandby");
+    expect(names()).toEqual(["Start"]);
+    await user.clear(field);
+    await user.keyboard("zzz");
+    expect(names()).toEqual([]);
+    expect(screen.getByText("No action matches.")).toBeInTheDocument();
+  });
+
+  test("Down goes to the first entry kept, Up from it back to the field; Enter in the field chooses the first", async () => {
+    const user = userEvent.setup();
+    const chosen = vi.fn();
+    render(<MenuButton label="Actions" items={rich.map((item) => ({ ...item, onSelect: () => chosen(item.key) }))} filterable />);
+    await user.click(screen.getByRole("button", { name: "Actions" }));
+    await user.keyboard("bring");
+    await user.keyboard("{ArrowDown}");
+    expect(screen.getByRole("menuitem", { name: "Start" })).toHaveFocus();
+    await user.keyboard("{ArrowDown}");
+    expect(screen.getByRole("menuitem", { name: "Stop" })).toHaveFocus();
+    await user.keyboard("{ArrowUp}{ArrowUp}");
+    expect(screen.getByRole("searchbox", { name: "Filter" })).toHaveFocus();
+    await user.keyboard("{Enter}");
+    expect(chosen).toHaveBeenCalledWith("start");
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    // Opened again, the field empty.
+    await user.click(screen.getByRole("button", { name: "Actions" }));
+    expect(screen.getByRole("searchbox", { name: "Filter" })).toHaveValue("");
+  });
+
+  test("an action chosen so, its confirmation takes the focus; cancelled, the focus goes back to the menu", async () => {
+    const user = userEvent.setup();
+    function Harness() {
+      const [pending, setPending] = useState<string | null>(null);
+      return (
+        <>
+          <MenuButton label="Actions" items={rich.map((item) => ({ ...item, onSelect: () => setPending(item.key) }))} filterable />
+          <Dialog
+            open={pending !== null}
+            title={`Confirm ${pending ?? ""}`}
+            onClose={() => setPending(null)}
+            footer={
+              <button type="button" onClick={() => setPending(null)}>
+                Cancel
+              </button>
+            }
+          >
+            <p>Sure?</p>
+          </Dialog>
+        </>
+      );
+    }
+    render(<Harness />);
+    await user.click(screen.getByRole("button", { name: "Actions" }));
+    await user.keyboard("stop{ArrowDown}{Enter}");
+    const dialog = screen.getByRole("dialog", { name: "Confirm stop" });
+    expect(dialog.contains(document.activeElement)).toBe(true);
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Actions" })).toHaveFocus();
   });
 });

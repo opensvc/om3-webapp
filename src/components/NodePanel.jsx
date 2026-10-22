@@ -13,7 +13,7 @@ import {NodeActionDialog} from "./NodeActionDialog";
 import LogsViewer from "./LogsViewer";
 import {EventLog, NODE_EVENT_TYPES} from "./EventLogger";
 import {ConfigText} from "./ConfigText";
-import {monitorMark} from "./NodeRow";
+import {MonitorState} from "./NodeRow";
 import {MenuButton} from "../ui/components/MenuButton";
 import {OrchestrationBadge, orchestrationOf} from "./OrchestrationBadge";
 import {OrchestrationLogsFilter} from "./OrchestrationLogsFilter";
@@ -22,10 +22,9 @@ import {Spinner} from "../ui/components/Spinner";
 import {Button, IconButton} from "../ui/components/Button";
 import {Input, Textarea} from "../ui/components/Field";
 import {Table, HeaderRow, HeaderCell, Row, Cell, EmptyRow} from "../ui/components/Table";
-import {StatusMark} from "../ui/components/StatusMark";
 import {FrozenMark} from "../ui/components/FrozenMark";
 import {RelativeTime} from "../ui/components/RelativeTime";
-import {BoltIcon, EyeIcon, EyeOffIcon, PencilIcon, SearchIcon} from "../ui/icons";
+import {BoltIcon, EyeIcon, EyeOffIcon, PencilIcon, ResetIcon, SearchIcon} from "../ui/icons";
 import {formatSeconds, useAutoHide} from "../ui/lib/reveal";
 import {formatBytes, formatSizeMiB} from "../ui/lib/format";
 import {NodeDaemon} from "./NodeDaemon";
@@ -37,6 +36,11 @@ import {useLocalPaging} from "../app/paging";
 import {usePanelSearch} from "../app/panel-search";
 import {trackDone, trackRefused, trackResponse} from "../app/action-tracker";
 import {refusalReason} from "./objectActions";
+import {MIN_AVAIL, MinAvailDialog, thresholdPct, useMinAvail} from "./NodeMinAvail";
+import {useGrants} from "../hooks/useGrants";
+import {propertyKeyword, useOrgEdit} from "./NodeOrgEdit";
+import {NodeLabels} from "./NodeLabels";
+import {RawDataButton} from "./JsonCode";
 
 /*
  * The record panel of a cluster node, as oc3 gives its nodes one: its state and
@@ -178,7 +182,7 @@ export const matches = (filter, ...values) => {
  * by its state. Abort is no action of the menu: the badge of the orchestration in
  * progress offers it, with its logs.
  */
-function NodeActions({node, frozen, monitor, onOrchestrationLogs}) {
+function NodeActions({node, monitor, onOrchestrationLogs}) {
     const {t} = useTranslation();
     const [pending, setPending] = useState(null);
     const {globalExpect, orchestrationId} = orchestrationOf([monitor]);
@@ -186,7 +190,6 @@ function NodeActions({node, frozen, monitor, onOrchestrationLogs}) {
     const items = nodeMenuItems({
         t,
         nodes: [node],
-        offered: (name) => !(name === "freeze" && frozen) && !(name === "unfreeze" && !frozen),
         apiNode,
         renderIcon: ({icon, color}) => <span aria-hidden="true" className={color === "red" ? DANGER_ICON : ICON}>{icon}</span>,
         onSelect: (name) => setPending({action: name, node}),
@@ -229,7 +232,10 @@ function NodeActions({node, frozen, monitor, onOrchestrationLogs}) {
                 label={t("nodePanel.actions")}
                 align="end"
                 // The node, its inventory, its daemon: a column each in a wide window.
-                columns={3}
+                columns={2}
+                filterable
+                filterLabel={t("actionMenus.filter")}
+                filterEmpty={t("actionMenus.noMatch")}
                 items={items}
             />
             <NodeActionDialog
@@ -243,8 +249,10 @@ function NodeActions({node, frozen, monitor, onOrchestrationLogs}) {
 }
 
 /**
- * The state of the node, as the Nodes view tells it and kept current by its events,
- * then its properties as the agent probed them (`om node system property`).
+ * The node in a masonry of sections: its monitor, its health (its free memory and
+ * swap with the minimum below which it is overloaded, set here by root), then its
+ * properties (`om node system property`), those the agent discovered apart from
+ * those the organisation gives it. Kept current by its events.
  */
 function NodeStatusTab({node, onOrchestrationLogs}) {
     const {t, i18n} = useTranslation();
@@ -260,75 +268,260 @@ function NodeStatusTab({node, onOrchestrationLogs}) {
         return () => release?.();
     }, []);
 
+    const mayConfigure = Object.prototype.hasOwnProperty.call(useGrants(), "root");
+    const {thresholds, reload: reloadThresholds} = useMinAvail(node);
+    const [editing, setEditing] = useState(null);
+
     const frozen = isSet(status?.frozen_at);
-    const mark = monitorMark(monitor);
     const none = "–";
-    const facts = [
-        ["state", (
-            <span className="inline-flex items-center gap-1.5">
-                <StatusMark state={mark.state} label={mark.label}/>
-                {monitor?.state ?? t("common.unknown")}
+    const fact = (key, value) => [key, t(`nodePanel.status.${key}`), value];
+    // When a value of the monitor was set, muted after it.
+    const since = (at) => (isSet(at) ? <span className="text-ink-muted"><RelativeTime value={at} locale={i18n.language}/></span> : null);
+    const withSince = (value, at) => <span className="inline-flex flex-wrap items-baseline gap-x-1.5">{value}{since(at)}</span>;
+    // An expect: none, quiet; one set, bold, a target the node is moving to.
+    const expectOf = (value, at) => (!value || value === "none"
+        ? <span className="text-ink-muted">{t("nodePanel.status.noExpect")}</span>
+        : withSince(<span className="font-semibold">{value}</span>, at));
+    const orchestrationId = monitor?.orchestration_id;
+    const orchestration = orchestrationId && !/^0{8}-0{4}-0{4}-0{4}-0{12}$/.test(orchestrationId) ? (
+        <span className="inline-flex flex-wrap items-baseline gap-x-1.5">
+            {/* Its logs a click away, its full id hovered. */}
+            <button
+                type="button"
+                title={orchestrationId}
+                aria-label={t("nodePanel.status.orchestrationLogs", {id: orchestrationId})}
+                onClick={() => onOrchestrationLogs?.(orchestrationId)}
+                className="font-mono text-accent hover:underline"
+            >
+                {orchestrationId.slice(0, 8)}
+            </button>
+            <span className="text-ink-muted">
+                {monitor.orchestration_is_done ? t("nodePanel.status.orchestrationDone") : t("nodePanel.status.orchestrationOngoing")}
             </span>
-        )],
-        ["frozen", frozen ? (
+        </span>
+    ) : <span className="text-ink-muted">{t("nodePanel.status.noOrchestration")}</span>;
+    const monitorFacts = [
+        fact("state", withSince(<MonitorState monitor={monitor}/>, monitor?.state_updated_at)),
+        fact("globalExpect", expectOf(monitor?.global_expect, monitor?.global_expect_updated_at)),
+        fact("localExpect", expectOf(monitor?.local_expect, monitor?.local_expect_updated_at)),
+        fact("orchestration", orchestration),
+        fact("frozen", frozen ? (
             <span className="inline-flex items-center gap-1.5">
                 <FrozenMark frozen/>
                 <RelativeTime value={status.frozen_at} locale={i18n.language}/>
             </span>
-        ) : t("common.no")],
-        ["leader", status?.is_leader ? t("common.yes") : t("common.no")],
-        ["overloaded", status?.is_overloaded ? t("common.yes") : t("common.no")],
-        ["agent", status?.agent || none],
-        ["booted", isSet(status?.booted_at) ? <RelativeTime value={status.booted_at} locale={i18n.language}/> : none],
-        ["score", stats?.score ?? none],
-        ["load15m", stats?.load_15m ?? none],
-        // The totals are in mebibytes.
-        ["memAvail", stats?.mem_avail !== undefined
-            ? t("nodePanel.status.ofTotal", {pct: stats.mem_avail, total: formatSizeMiB(stats.mem_total, i18n.language) || none})
-            : none],
-        ["swapAvail", stats?.swap_avail !== undefined
-            ? t("nodePanel.status.ofTotal", {pct: stats.swap_avail, total: formatSizeMiB(stats.swap_total, i18n.language) || none})
-            : none],
+        ) : t("common.no")),
+        fact("leader", status?.is_leader ? t("common.yes") : t("common.no")),
     ];
+    /** The free share of memory or swap, of its total, with the minimum below which the node is overloaded. */
+    const freeOf = (kind) => {
+        const pct = stats?.[`${kind}_avail`];
+        const total = stats?.[`${kind}_total`];
+        // A dash rather than a percent of nothing, as in the nodes table: no value reported, or no swap.
+        if (typeof pct !== "number" || total === 0) return "-";
+        const threshold = thresholds?.[kind];
+        const min = threshold ? thresholdPct(threshold.text, total, MIN_AVAIL[kind].cap) : null;
+        const low = min !== null && min > 0 && pct < min;
+        return (
+            <span className="inline-flex flex-wrap items-center gap-x-1.5">
+                {/* The totals are in mebibytes. */}
+                <span className={low ? "text-state-warn" : undefined}>
+                    {t("nodePanel.status.ofTotal", {pct, total: formatSizeMiB(total, i18n.language) || none})}
+                </span>
+                {threshold && (
+                    <span className="text-ink-muted">
+                        {min === 0 ? t("nodeHealth.minimumOff") : t("nodeHealth.minimumIs", {value: threshold.text})}
+                    </span>
+                )}
+                {threshold && mayConfigure && (
+                    <IconButton size="sm" label={t(`nodeHealth.${kind}.edit`)} onClick={() => setEditing(kind)}>
+                        <PencilIcon className="h-3 w-3"/>
+                    </IconButton>
+                )}
+            </span>
+        );
+    };
+    const healthFacts = [
+        fact("score", stats?.score ?? none),
+        fact("load15m", stats?.load_15m ?? none),
+        fact("memAvail", freeOf("mem")),
+        fact("swapAvail", freeOf("swap")),
+        fact("overloaded", status?.is_overloaded ? <span className="text-state-warn">{t("common.yes")}</span> : t("common.no")),
+    ];
+    // What the agent found on the node, apart from what the organisation says of it, each in its groups.
+    // A property by its label, the title the api gives the unknown ones.
+    const labelOf = (p) => t(`nodeProperties.${p.name}`, {defaultValue: p.title || p.name});
+    const groups = propertyGroups(itemsOf(properties), labelOf);
+    // The properties of the organisation, edited in a buffer, applied in one write of the node configuration.
+    const organisationItems = groups.filter((g) => g.family === "organisation").flatMap((g) => g.items);
+    const org = useOrgEdit(node, {reload: properties.reload, t});
+    const orgField = (p) => {
+        const kw = propertyKeyword(p.name);
+        const changed = org.changed(kw);
+        return (
+            <span className="flex items-center gap-1">
+                <Input
+                    aria-label={labelOf(p)}
+                    value={org.valueOf(kw)}
+                    // Not set, its default as a hint: emptied, the keyword is unset, back to it.
+                    placeholder={p.source === "default" && p.value ? String(p.value) : none}
+                    onChange={(e) => org.change(kw, e.target.value)}
+                    autoComplete="off"
+                    spellCheck={false}
+                    data-changed={changed ? "" : undefined}
+                    className={`h-7 ${changed ? "border-accent bg-accent-soft" : ""}`}
+                />
+                {changed && (
+                    <IconButton size="sm" label={t("nodePanel.orgEdit.revert", {name: labelOf(p)})} onClick={() => org.revert(kw)}>
+                        <ResetIcon className="h-3 w-3"/>
+                    </IconButton>
+                )}
+            </span>
+        );
+    };
+    const valueOf = (p) => {
+        if (p.error) return <span className="text-ink-muted">{p.error}</span>;
+        if (p.value === "" || p.value === undefined || p.value === null) return <span className="text-ink-muted">{none}</span>;
+        // The memory in bytes, readable.
+        if (p.name === "mem_bytes" && Number(p.value) > 0) return formatBytes(Number(p.value));
+        // The last boot, as an age: its date hovered.
+        if (p.name === "last_boot") return <RelativeTime value={String(p.value)} locale={i18n.language}/>;
+        return String(p.value);
+    };
 
     return (
-        <div className="space-y-4">
+        // A masonry of its sections: side by side where the panel is wide, each whole.
+        <div className="@container">
             {header.actions !== null && createPortal(
-                <NodeActions node={node} frozen={frozen} monitor={monitor} onOrchestrationLogs={onOrchestrationLogs}/>,
+                <NodeActions node={node} monitor={monitor} onOrchestrationLogs={onOrchestrationLogs}/>,
                 header.actions,
             )}
-            <dl aria-label={t("nodePanel.status.title")} className="grid grid-cols-[max-content_1fr] gap-x-6 gap-y-1">
-                {facts.map(([key, value]) => (
-                    <React.Fragment key={key}>
-                        <dt className="text-ink-muted">{t(`nodePanel.status.${key}`)}</dt>
-                        <dd>{value}</dd>
-                    </React.Fragment>
+            {org.editing && (
+                <div role="region" aria-label={t("nodePanel.orgEdit.bar")}
+                     className="mb-4 flex flex-wrap items-center gap-2 rounded-(--radius-panel) border border-accent bg-accent-soft px-3 py-2">
+                    <span className="mr-auto">{t("nodePanel.orgEdit.pending", {count: org.count})}</span>
+                    <Button size="sm" onClick={org.discard} disabled={org.applying}>{t("nodePanel.orgEdit.discard")}</Button>
+                    <Button size="sm" onClick={org.apply} disabled={org.count === 0 || org.applying}>
+                        {org.applying ? t("nodePanel.orgEdit.applying") : t("nodePanel.orgEdit.apply", {count: org.count})}
+                    </Button>
+                    {org.error && <Alert className="w-full">{t("nodePanel.orgEdit.refused", {message: org.error})}</Alert>}
+                </div>
+            )}
+            <div className="gap-x-6 @3xl:columns-2 [&>*]:mb-5 [&>*]:break-inside-avoid">
+                <Section id={`node-monitor-${node}`} title={t("nodePanel.status.monitor")}
+                         tools={<RawDataButton title={t("nodePanel.status.monitor")} data={monitor}/>}>
+                    <Facts facts={monitorFacts}/>
+                </Section>
+                <Section id={`node-health-${node}`} title={t("nodePanel.status.health")}
+                         tools={<RawDataButton title={t("nodePanel.status.health")} data={stats}/>}>
+                    <Facts facts={healthFacts}/>
+                </Section>
+                <NodeLabels node={node} mayEdit={mayConfigure}/>
+                {properties.data === null || properties.error ? (
+                    <Section id={`node-properties-${node}`} title={t("nodePanel.status.discovered")}>
+                        <Loaded resource={properties}>{null}</Loaded>
+                    </Section>
+                ) : groups.map(({family, group, items}) => (
+                    <Section
+                        key={`${family}-${group}`}
+                        id={`node-${family}-${group}-${node}`}
+                        title={t(`nodePanel.properties.${group}`)}
+                        tools={(
+                            <>
+                                <span className="text-data text-ink-muted">{t(`nodePanel.status.${family}Tag`)}</span>
+                                {/* Root edits the properties of the organisation, from any of their blocks: all of them at once. */}
+                                {mayConfigure && !org.editing && family === "organisation" && (
+                                    <IconButton size="sm" label={t("nodePanel.orgEdit.edit")} onClick={() => org.start(organisationItems)}>
+                                        <PencilIcon className="h-3 w-3"/>
+                                    </IconButton>
+                                )}
+                            </>
+                        )}
+                    >
+                        <Facts facts={items.map((p) => (org.editing && family === "organisation"
+                            // Edited, the keyword written under its label.
+                            ? [p.name, (
+                                <span className="block">
+                                    {labelOf(p)}
+                                    <span className="block font-mono text-data text-ink-muted/70">{propertyKeyword(p.name)}</span>
+                                </span>
+                            ), orgField(p)]
+                            : [p.name, labelOf(p), valueOf(p)]))}/>
+                    </Section>
                 ))}
-            </dl>
-            <Section id={`node-properties-${node}`} title={t("nodePanel.status.properties")}
-                     count={properties.data ? itemsOf(properties).length : undefined}>
-                <Loaded resource={properties}>
-                    <DataTable
-                        label={t("nodePanel.status.properties")}
-                        rowKey={(p) => p.name}
-                        rows={itemsOf(properties)}
-                        columns={[
-                            {key: "title", label: t("nodePanel.columns.property")},
-                            {
-                                key: "value",
-                                label: t("nodePanel.columns.value"),
-                                className: "break-all",
-                                render: (p) => p.error
-                                    ? <span className="text-ink-muted">{p.error}</span>
-                                    : String(p.value ?? ""),
-                            },
-                            {key: "source", label: t("nodePanel.columns.source"), className: "text-ink-muted"},
-                        ]}
-                    />
-                </Loaded>
-            </Section>
+            </div>
+            {editing !== null && (
+                <MinAvailDialog
+                    node={node}
+                    kind={editing}
+                    written={thresholds?.[editing]?.written}
+                    freePct={stats?.[`${editing}_avail`]}
+                    totalMiB={stats?.[`${editing}_total`]}
+                    onClose={() => setEditing(null)}
+                    onSaved={reloadThresholds}
+                />
+            )}
         </div>
     );
+}
+
+/** Facts of the node, a label and its value a line: named by the section holding them. */
+function Facts({facts}) {
+    return (
+        // The labels in a column of one width in every block: the values aligned from one block to the next.
+        <dl className="grid grid-cols-[minmax(0,11rem)_minmax(0,1fr)] items-baseline gap-x-6 gap-y-1">
+            {facts.map(([key, label, value]) => (
+                <React.Fragment key={key}>
+                    <dt className="break-words text-ink-muted">{label}</dt>
+                    <dd className="min-w-0 break-words">{value}</dd>
+                </React.Fragment>
+            ))}
+        </dl>
+    );
+}
+
+/**
+ * The groups of the properties of a node, by their name: those the agent
+ * discovers (`probe`), then those the organisation gives the node (`default`,
+ * `config`). A property of no group known goes to the other ones of its family.
+ */
+const PROPERTY_GROUPS = {
+    discovered: [
+        ["node", (n) => ["nodename", "fqdn", "cluster_id", "version", "last_boot", "boot_id", "tz"].includes(n)],
+        ["os", (n) => n.startsWith("os_")],
+        ["cpu", (n) => n.startsWith("cpu_")],
+        ["memory", (n) => n.startsWith("mem_")],
+        ["hardware", (n) => ["manufacturer", "model", "serial", "bios_version", "enclosure", "sp_version"].includes(n)],
+    ],
+    organisation: [
+        ["location", (n) => n.startsWith("loc_")],
+        ["team", (n) => n.startsWith("team_")],
+        ["asset", (n) => ["asset_env", "node_env", "sec_zone"].includes(n)],
+        ["network", (n) => ["connect_to", "listener_port"].includes(n)],
+        ["hardware", (n) => ["manufacturer", "model", "serial", "bios_version", "enclosure", "sp_version"].includes(n)],
+    ],
+};
+
+/**
+ * The properties in their groups, in order, those left empty dropped; in a group, by
+ * their label (`labelOf`, the title the api gives by default): the order the api
+ * answers them in is not kept, so that a reload on an event does not shuffle them.
+ */
+export function propertyGroups(properties, labelOf = (p) => p.title ?? p.name) {
+    const out = [];
+    const byTitle = (a, b) => String(labelOf(a)).localeCompare(String(labelOf(b))) || String(a.name).localeCompare(String(b.name));
+    for (const family of ["discovered", "organisation"]) {
+        const own = properties.filter((p) => (family === "discovered") === (p.source === "probe")).sort(byTitle);
+        const placed = new Set();
+        for (const [group, test] of PROPERTY_GROUPS[family]) {
+            const items = own.filter((p) => !placed.has(p.name) && test(p.name));
+            items.forEach((p) => placed.add(p.name));
+            if (items.length > 0) out.push({family, group, items});
+        }
+        const rest = own.filter((p) => !placed.has(p.name));
+        if (rest.length > 0) out.push({family, group: "other", items: rest});
+    }
+    return out;
 }
 
 /** The views of the inventory, the hardware first. */

@@ -9,6 +9,8 @@ import {reloadRecordHistory} from '../../app/record-history';
 import node from './fixtures/node-dev3n1.json';
 import daemon from './fixtures/daemon-dev3n1.json';
 import {useActionTracker} from '../../app/action-tracker';
+import {propertyGroups} from '../NodePanel';
+import {parseLabel} from '../NodeLabels';
 
 /** What the actions tray holds, the latest first: label, subject, state, reason. */
 const trayEntries = () => useActionTracker.getState().tracked.map((e) => [e.label, e.subject, e.state, e.error ?? null]);
@@ -30,6 +32,10 @@ vi.mock('../LogsViewer', () => ({
     ),
 }));
 // The confirmation dialogs are tested on their own: here, the action confirmed.
+// The grants of the user: root sets the thresholds of the health.
+const mockGrants = vi.hoisted(() => ({value: {}}));
+vi.mock('../../hooks/useGrants', () => ({useGrants: () => mockGrants.value}));
+
 vi.mock('../NodeActionDialog', () => ({
     NodeActionDialog: ({pending: pendingAction, onConfirm: handleConfirm, target}) => (pendingAction === null ? null : (
         <div role="alertdialog" aria-label={`${pendingAction.action} ${target}`}>
@@ -86,7 +92,10 @@ describe('NodeDetailPanel', () => {
         });
         useEventStore.setState({
             nodeStatus: {dev3n1: {agent: 'v3.0.0-rc46', frozen_at: '0001-01-01T00:00:00Z', booted_at: '2026-10-10T14:08:50+02:00', is_leader: true}},
-            nodeMonitor: {dev3n1: {state: 'idle'}},
+            nodeMonitor: {dev3n1: {
+                state: 'idle', state_updated_at: '2026-10-10T12:08:50Z', global_expect: 'none', local_expect: 'none',
+                orchestration_id: '0cbb5d5e-0d1c-4a7c-8f1a-3c0f1e1d2b3a', orchestration_is_done: true, preserved: false,
+            }},
             nodeStats: {dev3n1: {score: 63, load_15m: 0.39, mem_avail: 42, mem_total: 5920, swap_avail: 0, swap_total: 0}},
             // No heartbeat event yet: the daemon tab reads the heartbeats of the cluster status.
             heartbeatStatus: {},
@@ -95,41 +104,200 @@ describe('NodeDetailPanel', () => {
 
     afterEach(() => {
         localStorage.clear();
+        mockGrants.value = {};
     });
 
     const panel = () => screen.getByRole('dialog', {name: 'dev3n1'});
     const openTab = (name) => fireEvent.click(within(panel()).getByRole('tab', {name}));
 
-    test('opens on its state, kept current by the node events, and its properties', async () => {
+    test('opens on its monitor, its health, then its properties in groups, discovered then organisation, kept current by the node events', async () => {
         renderPanel();
         expect(within(panel()).getAllByRole('tab').map((tab) => tab.textContent))
-            .toEqual(['Status', 'Inventory', 'Configuration', 'Schedules', 'Drivers', 'Daemon', 'Events', 'Logs']);
-        const facts = within(panel()).getByLabelText('Node state');
-        expect(facts).toHaveTextContent('Stateidle');
-        expect(facts).toHaveTextContent('Agentv3.0.0-rc46');
-        expect(facts).toHaveTextContent('LeaderYes');
-        expect(facts).toHaveTextContent('Memory available42% of 5.8 GiB');
+            .toEqual(['Overview', 'Inventory', 'Configuration', 'Schedules', 'Drivers', 'Daemon', 'Events', 'Logs']);
+        const monitor = within(panel()).getByRole('region', {name: 'Monitor'});
+        expect(monitor).toHaveTextContent('Stateidle');
+        // Idle, quiet: no mark, no emphasis; running, bold; failed, red.
+        expect(within(monitor).getByText('idle').className).toBe('');
+        expect(monitor.querySelector('[role=img]')).toBeNull();
+        act(() => useEventStore.setState({nodeMonitor: {dev3n1: {state: 'draining'}}}));
+        expect(within(monitor).getByText('draining')).toHaveClass('font-semibold');
+        act(() => useEventStore.setState({nodeMonitor: {dev3n1: {state: 'drain failed'}}}));
+        expect(within(monitor).getByText('drain failed')).toHaveClass('text-state-down');
+        act(() => useEventStore.setState({nodeMonitor: {dev3n1: {
+            state: 'idle', state_updated_at: '2026-10-10T12:08:50Z', global_expect: 'none', local_expect: 'none',
+            orchestration_id: '0cbb5d5e-0d1c-4a7c-8f1a-3c0f1e1d2b3a', orchestration_is_done: true, preserved: false,
+        }}}));
+        // Beyond its state: its expects, its orchestration, its logs a click away.
+        expect(monitor).toHaveTextContent('Global expectnone');
+        expect(monitor).toHaveTextContent('Orchestration0cbb5d5edone');
+        expect(within(monitor).getByRole('button', {name: 'Show the logs of the orchestration 0cbb5d5e-0d1c-4a7c-8f1a-3c0f1e1d2b3a'})).toBeInTheDocument();
+        // All of it as JSON, what the section leaves out too.
+        fireEvent.click(within(monitor).getByRole('button', {name: 'Show the data of Monitor as JSON'}));
+        const raw = screen.getByRole('dialog', {name: 'Monitor as JSON'});
+        expect(raw).toHaveTextContent('"preserved": false');
+        fireEvent.click(within(raw).getByRole('button', {name: 'Close'}));
+        expect(monitor).toHaveTextContent('LeaderYes');
+        const health = within(panel()).getByRole('region', {name: 'Health'});
+        fireEvent.click(within(health).getByRole('button', {name: 'Show the data of Health as JSON'}));
+        expect(screen.getByRole('dialog', {name: 'Health as JSON'})).toHaveTextContent('"load_15m": 0.39');
+        fireEvent.click(within(screen.getByRole('dialog', {name: 'Health as JSON'})).getByRole('button', {name: 'Close'}));
+        expect(health).toHaveTextContent('Score63');
+        expect(health).toHaveTextContent('Memory available42% of 5.8 GiB');
+        // No swap: a dash, as in the nodes table, and no minimum to set.
+        expect(health).toHaveTextContent('Swap available-Overloaded');
+        expect(health).toHaveTextContent('OverloadedNo');
         expect(mockRetain).toHaveBeenCalledWith('tok', ['NodeStatusUpdated', 'NodeMonitorUpdated', 'NodeStatsUpdated']);
 
-        const properties = await within(panel()).findByRole('table', {name: 'Properties'});
-        expect(within(properties).getByRole('row', {name: /os arch x86_64 probe/})).toBeInTheDocument();
-        // A property the agent could not probe says why, muted.
-        expect(within(properties).getByRole('row', {name: /enclosure not implemented/})).toBeInTheDocument();
+        // The properties in groups, each a block of facts as the others: what the agent
+        // discovered, by what it is about, then what the organisation gives the node.
+        await within(panel()).findByRole('region', {name: 'OS'});
+        expect(within(panel()).getAllByRole('heading', {level: 3}).map((h) => h.textContent))
+            .toEqual(['Monitor', 'Health', 'Labels0', 'Node', 'OS', 'CPU', 'Memory', 'Hardware']);
+        expect(within(panel()).getByRole('region', {name: 'OS'})).toHaveTextContent('Architecturex86_64');
+        expect(within(panel()).getByRole('region', {name: 'CPU'})).toHaveTextContent(/Model.*Threads/);
+        const hardware = within(panel()).getByRole('region', {name: 'Hardware'});
+        expect(hardware).toHaveTextContent('organisation');
+        // A property not probed says why, muted.
+        expect(hardware).toHaveTextContent('Enclosurenot implemented');
+        expect(within(panel()).queryByRole('table', {name: /properties/i})).toBeNull();
     });
 
-    test('its actions stand in the title bar, an outlined button the size of the close one, each confirmed then posted', async () => {
+    test('the organisation properties edited in a buffer: applied at once, in one write of the node configuration, then the asset pushed', async () => {
+        api['system/property'].items.push({data: {name: 'loc_city', source: 'config', title: 'loc, city', value: 'Paris', error: ''}});
+        api.config = {items: [
+            {keyword: 'node.enclosure', value: ''},
+            {keyword: 'node.loc_city', value: 'Paris'},
+        ]};
+        mockGrants.value = {root: null};
+        renderPanel();
+        // A pencil on each block of the organisation, each editing them all.
+        await waitFor(() => expect(within(panel()).getAllByRole('button', {name: 'Edit the organisation properties'}).length).toBeGreaterThan(1));
+        fireEvent.click(within(panel()).getAllByRole('button', {name: 'Edit the organisation properties'}).at(-1));
+        await waitFor(() => expect(within(panel()).queryAllByRole('button', {name: 'Edit the organisation properties'})).toEqual([]));
+        const enclosure = await within(panel()).findByRole('textbox', {name: 'Enclosure'});
+        const city = within(panel()).getByRole('textbox', {name: 'City'});
+        // Edited, the keyword under its label.
+        expect(within(panel()).getByText('node.loc_city')).toBeInTheDocument();
+        expect(city).toHaveValue('Paris');
+        // The discovered properties stay read only.
+        expect(within(panel()).queryByRole('textbox', {name: 'Architecture'})).toBeNull();
+        fireEvent.change(enclosure, {target: {value: 'rack 12'}});
+        fireEvent.change(city, {target: {value: ''}});
+        expect(enclosure).toHaveAttribute('data-changed');
+        const bar = within(panel()).getByRole('region', {name: 'Changes of the organisation properties'});
+        expect(bar).toHaveTextContent('2 changes, applied in one write of the node configuration');
+        // Nothing written until applied.
+        expect(requests.filter((r) => r.method === 'PATCH')).toEqual([]);
+        // A change reverted leaves the buffer.
+        fireEvent.click(within(panel()).getByRole('button', {name: 'Revert City'}));
+        expect(city).toHaveValue('Paris');
+        fireEvent.change(city, {target: {value: ''}});
+        fireEvent.click(within(bar).getByRole('button', {name: 'Apply 2 changes'}));
+        await waitFor(() => expect(requests.filter((r) => r.method === 'PATCH')).toEqual([expect.objectContaining({
+            url: '/api/node/name/dev3n1/config?set=node.enclosure%3Drack%2012&unset=node.loc_city',
+        })]));
+        // The properties are those of the asset: pushed again for them to say it.
+        await waitFor(() => expect(requests).toContainEqual(expect.objectContaining({method: 'POST', url: '/api/node/name/dev3n1/action/push/asset'})));
+        expect(within(panel()).queryByRole('region', {name: 'Changes of the organisation properties'})).toBeNull();
+        expect(useActionTracker.getState().tracked.some((e) => e.label === 'Update 2 organisation properties' && e.state === 'succeeded')).toBe(true);
+    });
+
+    test('the last boot an age, its date hovered', async () => {
+        renderPanel();
+        const node = await within(panel()).findByRole('region', {name: 'Node'});
+        const age = node.querySelector('time');
+        expect(age).toHaveAttribute('datetime', '2026-10-10T12:08:50.000Z');
+        expect(age).toHaveAttribute('title', expect.stringMatching(/10\/10\/26/));
+        expect(age).toHaveTextContent(/ago|day|week/);
+    });
+
+    test('the labels as badges, those of the cluster dashed; root edits them in a buffer, applied in one write', async () => {
+        api.config = {items: [{keyword: 'labels.az', value: 'fr1'}, {keyword: 'labels.foo', value: 'a4'}, {keyword: 'node.env', value: 'DEV'}]};
+        api['cluster/config'] = {items: [{keyword: 'labels.az', value: 'fr2'}, {keyword: 'labels.toto', value: 'tata'}]};
+        mockGrants.value = {root: null};
+        renderPanel();
+        const labels = await within(panel()).findByRole('region', {name: /^Labels/});
+        await waitFor(() => expect([...labels.querySelectorAll('[data-label]')].map((b) => [...b.children].map((c) => c.textContent).join(' '))).toEqual(['az fr1', 'foo a4', 'toto tata']));
+        expect(labels).not.toHaveTextContent('=');
+        // Its own over the cluster's; the cluster's dashed, said so.
+        expect(labels.querySelector('[data-label=toto]')).toHaveClass('border-dashed');
+        expect(labels.querySelector('[data-label=toto]')).toHaveAttribute('title', expect.stringMatching(/^From the cluster configuration/));
+        expect(labels.querySelector('[data-label=az]')).not.toHaveClass('border-dashed');
+
+        fireEvent.click(within(labels).getByRole('button', {name: 'Edit the labels'}));
+        fireEvent.change(within(labels).getByRole('textbox', {name: 'Value of az'}), {target: {value: 'fr3'}});
+        fireEvent.click(within(labels).getByRole('button', {name: 'Remove foo'}));
+        // One of the cluster: no removal from the node, a value of its own possible.
+        expect(within(labels).queryByRole('button', {name: 'Remove toto'})).toBeNull();
+        // A new one from the plus card, typed in one field.
+        fireEvent.click(within(labels).getByRole('button', {name: 'Add a label'}));
+        const field = within(labels).getByRole('textbox', {name: 'New label'});
+        fireEvent.change(field, {target: {value: 'bad/key x'}});
+        fireEvent.keyDown(field, {key: 'Enter'});
+        expect(field).toHaveAttribute('aria-invalid', 'true');
+        expect(labels).toHaveTextContent('A key of letters, digits');
+        fireEvent.change(field, {target: {value: 'rack = r12'}});
+        fireEvent.keyDown(field, {key: 'Enter'});
+        expect(within(labels).queryByRole('textbox', {name: 'New label'})).toBeNull();
+        expect(within(labels).getByRole('textbox', {name: 'Value of rack'})).toHaveValue('r12');
+        const bar = within(labels).getByRole('region', {name: 'Changes of the labels'});
+        expect(bar).toHaveTextContent('3 changes, applied in one write of the node configuration');
+        expect(requests.filter((r) => r.method === 'PATCH')).toEqual([]);
+        fireEvent.click(within(bar).getByRole('button', {name: 'Apply 3 changes'}));
+        await waitFor(() => expect(requests.filter((r) => r.method === 'PATCH')).toEqual([expect.objectContaining({
+            url: '/api/node/name/dev3n1/config?set=labels.az%3Dfr3&unset=labels.foo&set=labels.rack%3Dr12',
+        })]));
+        expect(useActionTracker.getState().tracked[0]).toMatchObject({state: 'succeeded', label: 'Update 3 labels'});
+    });
+
+    test('the health says the minimum free memory; root sets it, said whether the node would be overloaded, written to its configuration', async () => {
+        api.config = {items: [
+            {keyword: 'node.min_avail_mem', value: '10', evaluated_text: '10%'},
+            {keyword: 'node.min_avail_swap', value: '', evaluated_text: '10%'},
+        ]};
+        const {unmount} = renderPanel();
+        const health = within(panel()).getByRole('region', {name: 'Health'});
+        await waitFor(() => expect(health).toHaveTextContent('42% of 5.8 GiB· minimum 10%'));
+        // Not root: said, not set.
+        expect(within(health).queryByRole('button', {name: 'Set the minimum free memory'})).toBeNull();
+        unmount();
+
+        mockGrants.value = {root: null};
+        renderPanel();
+        fireEvent.click(await within(panel()).findByRole('button', {name: 'Set the minimum free memory'}));
+        const dialog = screen.getByRole('dialog', {name: 'Minimum free memory of dev3n1'});
+        const field = within(dialog).getByRole('textbox', {name: 'Minimum free'});
+        expect(field).toHaveValue('10');
+        expect(dialog).toHaveTextContent('Free now: 42%.');
+        expect(dialog).toHaveTextContent('With a minimum of 10%, the node would not be overloaded now.');
+        fireEvent.click(within(dialog).getByRole('button', {name: '20%'}));
+        fireEvent.change(field, {target: {value: '3Gi'}});
+        // 3 GiB of 5.8 GiB: 51%, read as 50% at most.
+        expect(dialog).toHaveTextContent('With a minimum of 50%, the node would be overloaded now.');
+        fireEvent.change(field, {target: {value: 'lots'}});
+        expect(within(dialog).getByRole('button', {name: 'Save'})).toBeDisabled();
+        fireEvent.change(field, {target: {value: '50%'}});
+        fireEvent.click(within(dialog).getByRole('button', {name: 'Save'}));
+        await waitFor(() => expect(requests).toContainEqual(expect.objectContaining({
+            method: 'PATCH', url: '/api/node/name/dev3n1/config?set=node.min_avail_mem%3D50%25',
+        })));
+        await waitFor(() => expect(screen.queryByRole('dialog', {name: 'Minimum free memory of dev3n1'})).toBeNull());
+        expect(useActionTracker.getState().tracked[0]).toMatchObject({state: 'succeeded', label: 'Set node.min_avail_mem = 50%'});
+    });
+
+    test('its actions stand in the title bar, an accent button the size of the close one, each confirmed then posted', async () => {
         renderPanel();
         const actions = within(panel()).getByRole('button', {name: 'Node actions'});
-        expect(actions).toHaveClass('max-md:w-7', 'border', 'border-line');
+        expect(actions).toHaveClass('max-md:w-7', 'bg-accent');
         expect(actions).not.toHaveClass('rounded-(--radius-pill)');
         expect(actions).toHaveAttribute('title', 'Node actions');
         // "Actions" in a wide window, the bolt alone in a narrow one.
         expect(actions).toHaveTextContent(/^Actions$/);
         fireEvent.click(actions);
         const menu = screen.getByRole('menu', {name: 'Node actions'});
-        // Not frozen: freeze on offer, unfreeze not.
+        // Freeze and unfreeze both, whatever the state.
         expect(within(menu).getByRole('menuitem', {name: 'Freeze'})).toBeInTheDocument();
-        expect(within(menu).queryByRole('menuitem', {name: 'Unfreeze'})).not.toBeInTheDocument();
+        expect(within(menu).getByRole('menuitem', {name: 'Unfreeze'})).toBeInTheDocument();
         fireEvent.click(within(menu).getByRole('menuitem', {name: 'Freeze'}));
         fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', {name: 'Confirm'}));
         await waitFor(() => expect(requests).toContainEqual(expect.objectContaining({
@@ -518,5 +686,54 @@ describe('NodeDetailPanel', () => {
                 ['Restart', 'the api.inet listener of dev3n1', 'refused', expect.stringMatching(/^HTTP 409 .*listener busy/)],
             ]));
         });
+    });
+});
+
+describe('parseLabel', () => {
+    test('key=value or key value, spaces allowed around the equal sign; a key alone, an empty value', () => {
+        expect(parseLabel('az=fr1')).toEqual({key: 'az', value: 'fr1'});
+        expect(parseLabel('  az  =  fr1 ')).toEqual({key: 'az', value: 'fr1'});
+        expect(parseLabel('az fr1')).toEqual({key: 'az', value: 'fr1'});
+        expect(parseLabel('az\tfr 1')).toEqual({key: 'az', value: 'fr 1'});
+        expect(parseLabel('az b=c')).toEqual({key: 'az', value: 'b=c'});
+        expect(parseLabel('az')).toEqual({key: 'az', value: ''});
+        expect(parseLabel('az=')).toEqual({key: 'az', value: ''});
+        expect(parseLabel('=fr1')).toBeNull();
+        expect(parseLabel('a/z fr1')).toBeNull();
+    });
+});
+
+describe('propertyGroups', () => {
+    test('in a group, by title, whatever order the api answers them in', () => {
+        const props = [
+            {name: 'loc_room', title: 'loc, room', source: 'default'}, {name: 'loc_city', title: 'loc, city', source: 'default'},
+            {name: 'loc_addr', title: 'loc, address', source: 'config'},
+        ];
+        const order = (list) => propertyGroups(list)[0].items.map((p) => p.name);
+        expect(order(props)).toEqual(['loc_addr', 'loc_city', 'loc_room']);
+        expect(order([...props].reverse())).toEqual(['loc_addr', 'loc_city', 'loc_room']);
+    });
+
+    test('by the label given, when one is', () => {
+        const props = [{name: 'loc_zip', title: 'loc, zip', source: 'default'}, {name: 'loc_city', title: 'loc, city', source: 'default'}];
+        const labels = {loc_zip: 'Code postal', loc_city: 'Ville'};
+        expect(propertyGroups(props, (p) => labels[p.name])[0].items.map((p) => p.name)).toEqual(['loc_zip', 'loc_city']);
+    });
+
+    test('by family then by what they are about; unknown ones in the other group of their family', () => {
+        const props = [
+            {name: 'loc_city', source: 'default'}, {name: 'os_name', source: 'probe'}, {name: 'nodename', source: 'probe'},
+            {name: 'mystery', source: 'probe'}, {name: 'team_support', source: 'config'}, {name: 'sec_zone', source: 'default'},
+            {name: 'odd', source: 'default'},
+        ];
+        expect(propertyGroups(props).map(({family, group, items}) => [family, group, items.map((p) => p.name)])).toEqual([
+            ['discovered', 'node', ['nodename']],
+            ['discovered', 'os', ['os_name']],
+            ['discovered', 'other', ['mystery']],
+            ['organisation', 'location', ['loc_city']],
+            ['organisation', 'team', ['team_support']],
+            ['organisation', 'asset', ['sec_zone']],
+            ['organisation', 'other', ['odd']],
+        ]);
     });
 });

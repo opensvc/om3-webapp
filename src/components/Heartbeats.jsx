@@ -739,6 +739,7 @@ const Heartbeats = () => {
                     <>
                         <Button variant="secondary" onClick={() => setPending(null)}>{t("common.cancel")}</Button>
                         <Button
+                            variant="change"
                             onClick={() => {
                                 const confirmed = pending;
                                 setPending(null);

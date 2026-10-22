@@ -10,7 +10,7 @@ const labelOf = (t, action) => t(`actions.labels.${action.replace(/\s+(\w)/g, (_
     {defaultValue: action.charAt(0).toUpperCase() + action.slice(1)});
 
 // Cancel and confirm buttons at the foot of a dialog.
-const DialogFooter = ({onClose, cancelDisabled = false, onConfirm, confirmDisabled, confirmLabel, variant = 'secondary', children}) => {
+const DialogFooter = ({onClose, cancelDisabled = false, onConfirm, confirmDisabled, confirmLabel, variant = 'change', children}) => {
     const {t} = useTranslation();
     return (
         <>
@@ -56,7 +56,7 @@ const Acknowledgements = ({children}) => <div className="flex flex-col gap-2 tex
 const SingleCheckDialog = ({
                                open, onClose, onConfirm, checked, setChecked, disabled,
                                target, names, title, checkboxLabel, checkboxAriaLabel, confirmAriaLabel, confirmText,
-                               variant = 'secondary', cancelDisabled = false,
+                               variant = 'change', cancelDisabled = false,
                            }) => (
     <Dialog
         open={open}
@@ -557,6 +557,7 @@ export const UpdateConfigDialog = ({
             title={t('actionDialogs.updateConfig.title')}
             footer={
                 <DialogFooter
+                    variant="secondary"
                     onClose={onClose}
                     onConfirm={onConfirm}
                     confirmDisabled={disabled || !newConfigFile}
@@ -599,6 +600,7 @@ export const ManageConfigParamsDialog = ({
             size="md"
             footer={
                 <DialogFooter
+                    variant="secondary"
                     onClose={onClose}
                     onConfirm={onConfirm}
                     confirmDisabled={disabled || (!paramsToSet && !paramsToUnset && !paramsToDelete)}

@@ -56,7 +56,7 @@ describe('HeaderSection Component', () => {
         });
     });
 
-    test('embedded in a panel, its actions and orchestration an outlined button of the title bar, "Actions"', () => {
+    test('embedded in a panel, its actions and orchestration an accent button of the title bar, "Actions"', () => {
         function InPanel() {
             const [actions, setActions] = React.useState(null);
             return (
@@ -73,7 +73,7 @@ describe('HeaderSection Component', () => {
         render(<InPanel/>);
         const bar = screen.getByTestId('bar-actions');
         const menu = within(bar).getByRole('button', {name: 'Actions'});
-        expect(menu).toHaveClass('max-md:w-7', 'border', 'border-line');
+        expect(menu).toHaveClass('max-md:w-7', 'bg-accent');
         expect(menu).not.toHaveClass('rounded-(--radius-pill)');
         expect(within(bar).getByText('placed@node1')).toBeInTheDocument();
         expect(within(screen.getByTestId('body')).queryByRole('button', {name: /actions/i})).toBeNull();

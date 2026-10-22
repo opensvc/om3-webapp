@@ -173,7 +173,7 @@
       "restartDaemon": "Restart daemon",
       "resize": "Resize",
       "cap": "Cap",
-      "leave": "Leave"
+      "evict": "Evict"
     }
   },
   "alerts": {
@@ -946,7 +946,8 @@
       "pgNode": "CPU and memory are those of the objects on the node serving this page.",
       "byObject": "CPU and memory by object",
       "actions": "Namespace actions",
-      "configOf": "the configuration of {{namespace}}"
+      "configOf": "the configuration of {{namespace}}",
+      "deleteDescription": "Delete the configuration object of the namespace: its claims and settings with it."
     },
     "claims": {
       "actions": "Actions",
@@ -1190,7 +1191,7 @@
     "none": "None",
     "actions": "Node actions",
     "tabs": {
-      "status": "Status",
+      "status": "Overview",
       "inventory": "Inventory",
       "config": "Configuration",
       "schedules": "Schedules",
@@ -1200,19 +1201,28 @@
       "logs": "Logs"
     },
     "status": {
-      "title": "Node state",
       "state": "State",
       "frozen": "Frozen",
       "leader": "Leader",
       "overloaded": "Overloaded",
-      "agent": "Agent",
-      "booted": "Booted",
       "score": "Score",
       "load15m": "Load (15 min)",
       "memAvail": "Memory available",
       "swapAvail": "Swap available",
       "ofTotal": "{{pct}}% of {{total}}",
-      "properties": "Properties"
+      "monitor": "Monitor",
+      "health": "Health",
+      "discovered": "Discovered properties",
+      "discoveredTag": "discovered",
+      "organisationTag": "organisation",
+      "globalExpect": "Global expect",
+      "localExpect": "Local expect",
+      "noExpect": "none",
+      "orchestration": "Orchestration",
+      "noOrchestration": "none",
+      "orchestrationDone": "done",
+      "orchestrationOngoing": "ongoing",
+      "orchestrationLogs": "Show the logs of the orchestration {{id}}"
     },
     "inventory": {
       "hardware": "Hardware",
@@ -1276,6 +1286,32 @@
       "nextRun": "Next run",
       "requires": "Requires",
       "keyword": "Keyword"
+    },
+    "properties": {
+      "node": "Node",
+      "os": "OS",
+      "cpu": "CPU",
+      "memory": "Memory",
+      "hardware": "Hardware",
+      "location": "Location",
+      "team": "Team",
+      "asset": "Asset",
+      "network": "Network",
+      "other": "Other"
+    },
+    "orgEdit": {
+      "edit": "Edit the organisation properties",
+      "bar": "Changes of the organisation properties",
+      "pending_one": "{{count}} change, applied in one write of the node configuration",
+      "pending_other": "{{count}} changes, applied in one write of the node configuration",
+      "discard": "Discard",
+      "apply_one": "Apply {{count}} change",
+      "apply_other": "Apply {{count}} changes",
+      "applying": "Applying…",
+      "revert": "Revert {{name}}",
+      "refused": "Not applied: {{message}}",
+      "tray_one": "Update {{count}} organisation property",
+      "tray_other": "Update {{count}} organisation properties"
     }
   },
   "objectDetails": {
@@ -1524,8 +1560,7 @@
       "namespace": "Namespaces",
       "instance": "Instances",
       "resource": "Resources"
-    },
-    "reopen": "Reopen {{name}}"
+    }
   },
   "statusBoard": {
     "caption": "Status of {{path}} by node",
@@ -1742,7 +1777,12 @@
         "restart": "Restart the {{listener}} listener of {{node}}? Its API stops answering for a moment."
       },
       "actionsOf": "Actions on the listener {{listener}}",
-      "target": "the {{listener}} listener of {{node}}"
+      "target": "the {{listener}} listener of {{node}}",
+      "describe": {
+        "start": "Start the {{listener}} listener: the API answers over the network again.",
+        "stop": "Stop the {{listener}} listener: the API stops answering over the network, this page included if it goes through this node.",
+        "restart": "Restart the {{listener}} listener: the API stops answering for a moment."
+      }
     },
     "heartbeats": {
       "title": "Heartbeats",
@@ -1755,6 +1795,13 @@
         "restart": "Restart {{target}}?",
         "sign": "Sign {{target}}?",
         "wipe": "Wipe {{target}}? Its signature and the slots of its peers are erased."
+      },
+      "describe": {
+        "start": "Start the stream: the node sends or receives on it again.",
+        "stop": "Stop the stream: the node stops sending or receiving on it.",
+        "restart": "Restart the stream.",
+        "sign": "Write the signature the nodes of the disk heartbeat claim their slot with.",
+        "wipe": "Remove that signature: the slots of every node of the disk heartbeat are erased."
       }
     },
     "orchestrations": {
@@ -1953,9 +2000,9 @@
       "description": "Freeze the node and shut down all the instances it hosts.",
       "warning": "All the instances hosted on the node shut down."
     },
-    "leave": {
-      "label": "Leave",
-      "description": "Evict the node from the cluster, once drained.",
+    "evict": {
+      "label": "Evict",
+      "description": "Order the node out of the cluster, through a peer, once drained.",
       "warning": "All the instances hosted on the node shut down and are deleted from it: the node leaves the cluster, restarting alone in a cluster of its own, with no credential to reach its api.",
       "fromHere": "Ask it from the webapp of another node: this one serves the webapp."
     }
@@ -1994,5 +2041,212 @@
       "selfSigned": "No ca: self-signed.",
       "reading": "Reading the ca of the sec…"
     }
+  },
+  "actionMenus": {
+    "groups": {
+      "operator": "Operator",
+      "admin": "Admin",
+      "operatorInstance": "Operator · instance",
+      "operatorDisk": "Operator · disk",
+      "operatorTask": "Operator · task",
+      "operatorSync": "Operator · sync",
+      "adminPg": "Admin · pg"
+    },
+    "object": {
+      "start": "Ask the daemon to start it, on the nodes its placement elects.",
+      "stop": "Ask the daemon to stop all its instances; it stays stopped.",
+      "restart": "Ask the daemon to restart its instances.",
+      "freeze": "Block the automatic starts and the monitor actions of the daemon, on all its nodes.",
+      "unfreeze": "Let the daemon start it and act on it again.",
+      "switch": "Stop the running instance and start it on the next preferred node.",
+      "giveback": "Stop the misplaced instances and start them on the preferred nodes.",
+      "abort": "Abort the orchestration in progress.",
+      "enable": "Act on it again: the actions no longer skip it.",
+      "disable": "Skip it on the actions; what runs is left as it is.",
+      "provision": "Allocate the system resources its resources need on its nodes: format a filesystem, create a volume…",
+      "unprovision": "Free the system resources of its resources on all its nodes: their data is lost.",
+      "delete": "Delete its configuration from the cluster; its system resources are left in place.",
+      "purge": "Unprovision, then delete it: its data and its configuration are lost."
+    },
+    "instance": {
+      "start": "Bring up the instance resources on this node.",
+      "stop": "Bring down the instance resources on this node.",
+      "restart": "Restart the instance on this node.",
+      "run": "Run its tasks now, outside their schedule.",
+      "boot": "Run the clean up actions done at node boot only.",
+      "shutdown": "Stop the instance, its standby resources too, as on a node shutdown.",
+      "startStandby": "Activate the resources meant to stay up on a standby node.",
+      "freeze": "Block the automatic starts and the monitor actions on this node.",
+      "unfreeze": "Unblock the automatic starts and the monitor actions on this node.",
+      "clear": "Clear the failed state of its monitor, for the daemon to act on it again.",
+      "provision": "Allocate the system resources of its resources on this node.",
+      "unprovision": "Free the system resources of its resources on this node: their data is lost.",
+      "install": "Install again what its volumes and filesystems declare, without starting anything.",
+      "prstart": "Preempt the exclusive write reservation of its devices.",
+      "prstop": "Release the exclusive write reservation of its devices.",
+      "syncUpdate": "Copy the changes of the local dataset to the peers.",
+      "syncFull": "Copy the whole local dataset to the peers.",
+      "syncResync": "Restore the optimal synchronization of the replicated pairs.",
+      "syncSplit": "Make both ends of a replicated pair read-write.",
+      "syncIngest": "Ingest the files received from the active instance.",
+      "pgReset": "Lift the process group cappings, whatever the pg_* keywords say.",
+      "pgUpdate": "Apply the pg_* keywords to the process groups again.",
+      "info": "Gather and show the instance information.",
+      "status": "Evaluate the status of its resources again.",
+      "delete": "Delete the instance configuration on this node."
+    },
+    "resource": {
+      "start": "Bring up the resources picked.",
+      "stop": "Bring down the resources picked.",
+      "restart": "Restart the resources picked.",
+      "run": "Run the tasks picked now, outside their schedule.",
+      "console": "Open a console in the container."
+    },
+    "impacts": {
+      "dataLoss": "data-loss",
+      "downTime": "down-time"
+    },
+    "filter": "Filter the actions",
+    "noMatch": "No action matches."
+  },
+  "enroll": {
+    "button": "Enroll",
+    "buttonTitle": "Enroll a node into this cluster",
+    "title": "Enroll a node",
+    "intro": "Bring a node into this cluster. It must be alone in a cluster of its own: a node that still has peers is refused.",
+    "tokenHow": "Or, on that node, create a token with the join role:",
+    "copyCommand": "Copy the command",
+    "node": "Node address",
+    "nodeHint": "[scheme://]address[:port]: https and the daemon listener port by default.",
+    "token": "Join token",
+    "tokenHint": "The token the command above prints. Its ca claim lets this cluster trust the node.",
+    "more": "More options",
+    "joinAddr": "Address of this cluster for the node",
+    "joinAddrHint": "[scheme://]address[:port] the node reaches this cluster at; by default, a name the cluster certificate is valid for.",
+    "timeout": "Token lifetime",
+    "timeoutHint": "How long the node has to join, its drain included: 1h by default.",
+    "warning": "The node is drained before it leaves its cluster. Alone, it has nowhere to move its instances: they are stopped, stay down, and are removed from its configuration.",
+    "submit": "Enroll",
+    "submitting": "Enrolling…",
+    "tray": "Enroll {{node}}",
+    "lost": "{{node}} not seen in the cluster yet",
+    "failed": "Enrollment refused: {{message}}",
+    "tokenPage": "Get a join token from the webapp of {{node}}",
+    "tokenPageFirst": "Type the node address to get a join token from its webapp.",
+    "tokenPageWhy": "It opens in a new tab: accept its certificate if asked, sign in, create the token, copy it, and paste it here."
+  },
+  "tokenPage": {
+    "title": "Token of {{host}}",
+    "intro": "Create a token of this node, for a script or another host.",
+    "joinIntro": "Create a join token of this node, to paste into the Enroll dialog of the cluster it joins. It takes the root grant on this node.",
+    "role": "Role",
+    "allRoles": "your grants",
+    "duration": "Lifetime",
+    "durationHint": "As 10m, 1h; 24h at most. A join token must outlive the drain of the node.",
+    "credentialsWhy": "The username and password of a user of this node: they go to this node alone.",
+    "fromSession": "Created from your session on this node.",
+    "username": "Username",
+    "password": "Password",
+    "create": "Create token",
+    "creating": "Creating…",
+    "refused": "No token: {{message}}",
+    "token": "Token",
+    "expires": "valid until {{at}}",
+    "reveal": "Reveal the token",
+    "hide": "Hide the token",
+    "copy": "Copy the token",
+    "joinNext": "Paste it into the Enroll dialog of the cluster, then enroll."
+  },
+  "nodeHealth": {
+    "minimum": "Minimum free",
+    "minimumIs": "· minimum {{value}}",
+    "minimumOff": "· no minimum",
+    "default": "default, {{value}}",
+    "off": "off (0)",
+    "choices": "Usual values",
+    "now": "Free now: {{pct}}%.",
+    "invalid": "A percentage, as 10%, or a size, as 2Gi.",
+    "previewOverloaded": "With a minimum of {{pct}}%, the node would be overloaded now.",
+    "previewFine": "With a minimum of {{pct}}%, the node would not be overloaded now.",
+    "previewOff": "No minimum: the node is never overloaded by it.",
+    "refused": "Not saved: {{message}}",
+    "mem": {
+      "title": "Minimum free memory of {{node}}",
+      "edit": "Set the minimum free memory",
+      "why": "Below it, the node is overloaded, and the daemon starts nothing on it.",
+      "hint": "A percentage, 10%, or a size, 2Gi, read as its share of the memory, 50% at most. 0 turns the check off. Empty: the default, {{value}}."
+    },
+    "swap": {
+      "title": "Minimum free swap of {{node}}",
+      "edit": "Set the minimum free swap",
+      "why": "Below it, the node is overloaded, and the daemon starts nothing on it. A node without swap is never overloaded by it.",
+      "hint": "A percentage, 10%, or a size, 2Gi, read as its share of the swap. 0 turns the check off. Empty: the default, {{value}}."
+    }
+  },
+  "nodeLabels": {
+    "title": "Labels",
+    "none": "No label.",
+    "edit": "Edit the labels",
+    "fromCluster": "From the cluster configuration: set here, the node takes a value of its own.",
+    "valueOf": "Value of {{key}}",
+    "revert": "Revert {{key}}",
+    "remove": "Remove {{key}}",
+    "add": "Add a label",
+    "keyInvalid": "A key of letters, digits, dot, dash or underscore, then its value: key=value or key value.",
+    "bar": "Changes of the labels",
+    "pending_one": "{{count}} change, applied in one write of the node configuration",
+    "pending_other": "{{count}} changes, applied in one write of the node configuration",
+    "tray_one": "Update {{count}} label",
+    "tray_other": "Update {{count}} labels",
+    "new": "New label",
+    "newHint": "key=value or key value"
+  },
+  "nodeProperties": {
+    "nodename": "Node name",
+    "fqdn": "FQDN",
+    "version": "Agent version",
+    "cluster_id": "Cluster ID",
+    "tz": "Time zone",
+    "last_boot": "Last boot",
+    "boot_id": "Boot ID",
+    "os_name": "Name",
+    "os_vendor": "Vendor",
+    "os_release": "Release",
+    "os_kernel": "Kernel",
+    "os_arch": "Architecture",
+    "mem_bytes": "Size",
+    "mem_slots": "Slots",
+    "mem_banks": "Banks",
+    "cpu_freq": "Frequency",
+    "cpu_threads": "Threads",
+    "cpu_cores": "Cores",
+    "cpu_dies": "Dies",
+    "cpu_model": "Model",
+    "serial": "Serial number",
+    "model": "Model",
+    "manufacturer": "Manufacturer",
+    "bios_version": "BIOS version",
+    "sp_version": "Service processor version",
+    "enclosure": "Enclosure",
+    "node_env": "Environment",
+    "asset_env": "Asset environment",
+    "sec_zone": "Security zone",
+    "listener_port": "Listener port",
+    "connect_to": "Connect to",
+    "loc_country": "Country",
+    "loc_city": "City",
+    "loc_zip": "Postal code",
+    "loc_addr": "Address",
+    "loc_building": "Building",
+    "loc_floor": "Floor",
+    "loc_room": "Room",
+    "loc_rack": "Rack",
+    "team_integ": "Integration team",
+    "team_support": "Support team"
+  },
+  "rawData": {
+    "show": "Show the data of {{title}} as JSON",
+    "title": "{{title}} as JSON",
+    "copy": "Copy the JSON"
   }
 }

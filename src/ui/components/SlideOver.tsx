@@ -108,7 +108,7 @@ export function SlideOver({
    */
   rail?: ReactNode;
   /**
-   * A record panel, which the "p" key reopens (`PanelAnchor`) and puts away: a form
+   * A record panel, which the "p" key reopens (`PanelReopenKey`) and puts away: a form
    * being filled is not closed by a stray key.
    */
   reopenable?: boolean;
@@ -243,7 +243,7 @@ export function SlideOver({
     };
   }, [open]);
 
-  // "p" opens the record panel from the keyboard (`PanelAnchor`) and puts it away again.
+  // "p" opens the record panel from the keyboard (`PanelReopenKey`) and puts it away again.
   useShortcut("p", () => {
     if (!open || !reopenable) return false;
     onClose();

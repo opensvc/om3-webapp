@@ -14,13 +14,14 @@ import {
 } from './ActionDialogs';
 import logger from '../utils/logger.js';
 import {useTranslation} from 'react-i18next';
+import {actionDescription} from '../app/action-menu';
 
 // The translated label of an action, as actionLabel() of constants/actions, kept local
 // so that the tests mocking constants/actions still render these dialogs.
 const labelOf = (t, action) => t(`actions.labels.${action.replace(/\s+(\w)/g, (_, c) => c.toUpperCase())}`,
     {defaultValue: action.charAt(0).toUpperCase() + action.slice(1)});
 
-export const SimpleConfirmDialog = ({open, onClose, onConfirm, action, target, names, disabled, cancelDisabled}) => {
+export const SimpleConfirmDialog = ({open, onClose, onConfirm, action, scope = 'object', target, names, disabled, cancelDisabled}) => {
     const {t} = useTranslation();
     const known = typeof action === 'string' && action;
     // The action name stays as is in the English sentence, French shows its translated label.
@@ -38,12 +39,16 @@ export const SimpleConfirmDialog = ({open, onClose, onConfirm, action, target, n
                     <Button variant="secondary" onClick={onClose} disabled={cancelDisabled}>
                         {t('common.cancel')}
                     </Button>
-                    <Button onClick={onConfirm} disabled={disabled}>
+                    <Button variant="change" onClick={onConfirm} disabled={disabled}>
                         {t('common.confirm')}
                     </Button>
                 </>
             }
         >
+            {/* What it does, before the question. */}
+            {known && actionDescription(t, scope, action) && (
+                <p className="mb-2 text-ink">{actionDescription(t, scope, action)}</p>
+            )}
             <p className="text-ink">
                 {known
                     ? t('actionDialogs.simpleConfirm.messageAction', values)
@@ -62,6 +67,12 @@ const ActionDialogManager = ({
                                  supportedActions = [],
                                  onClose,
                              }) => {
+    // What the action runs on, for the confirmation to say what it does: resources
+    // named, instances (nodes), or the object as a whole.
+    const targets = pendingAction?.targets ?? [];
+    const scope = targets.some((target) => target.rid)
+        ? 'resource'
+        : instances || targets.length > 0 || pendingAction?.node || pendingAction?.batch ? 'instance' : 'object';
     const [checkboxState, setCheckboxState] = useState({
         freeze: false,
         stop: false,
@@ -318,6 +329,7 @@ const ActionDialogManager = ({
                     if (onClose) onClose();
                 },
                 action: pendingAction?.action,
+                scope,
                 target,
                 names,
                 disabled: false,

@@ -77,29 +77,33 @@ describe('NodeRow Component', () => {
         expect(defaultProps.onSelect).toHaveBeenCalledWith(expect.any(Object), 'node1');
     });
 
-    test('renders monitor state when not idle', () => {
+    test('shows a running monitor state bold', () => {
         render(<NodeRow {...defaultProps} monitor={{state: 'running'}}/>);
         const cells = screen.getAllByRole('cell');
-        expect(within(cells[2]).getByText('running', {ignore: '.sr-only'})).toBeInTheDocument();
-        const mark = within(cells[2]).getByTitle('running');
-        expect(mark).toHaveAttribute('data-state', 'warn');
+        const state = within(cells[2]).getByText('running');
+        expect(state).toHaveAttribute('data-state', 'warn');
+        expect(state).toHaveClass('font-semibold');
     });
 
-    test('shows idle as a mark only', () => {
+    test('shows idle quiet, in words, with no mark', () => {
         render(<NodeRow {...defaultProps} monitor={{state: 'idle'}}/>);
         const cells = screen.getAllByRole('cell');
-        expect(within(cells[2]).queryByText('idle', {ignore: '.sr-only'})).not.toBeInTheDocument();
-        expect(within(cells[2]).getByTitle('idle')).toHaveAttribute('data-state', 'up');
+        const state = within(cells[2]).getByText('idle');
+        expect(state).toHaveAttribute('data-state', 'up');
+        expect(state.className).toBe('');
+        expect(within(cells[2]).queryByTitle('idle')).toBeNull();
     });
 
-    test('marks a failed monitor state as down', () => {
+    test('shows a failed monitor state red', () => {
         render(<NodeRow {...defaultProps} monitor={{state: 'drain failed'}}/>);
-        expect(screen.getByTitle('drain failed')).toHaveAttribute('data-state', 'down');
+        expect(screen.getByText('drain failed')).toHaveClass('text-state-down');
     });
 
-    test('marks a missing monitor as unknown', () => {
+    test('shows a missing monitor as unknown, muted', () => {
         render(<NodeRow {...defaultProps} monitor={undefined}/>);
-        expect(screen.getByTitle('unknown')).toHaveAttribute('data-state', 'unknown');
+        const state = screen.getByText(/^unknown$/i);
+        expect(state).toHaveAttribute('data-state', 'unknown');
+        expect(state).toHaveClass('text-ink-muted');
     });
 
     test('renders frozen mark when frozen_at is set', () => {

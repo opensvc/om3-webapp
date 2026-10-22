@@ -77,7 +77,9 @@ function ParamForm({submitLabel, submitting, disabled, onSubmit, error, children
         >
             {children}
             {error && <Alert tone="error">{error}</Alert>}
+            {/* A resize, caps applied: the nodes converge to them, a state changed. */}
             <Button
+                variant="change"
                 type="submit"
                 disabled={submitting || disabled}
                 icon={submitting ? <Spinner label={submitLabel}/> : undefined}

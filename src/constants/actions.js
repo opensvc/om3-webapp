@@ -37,7 +37,11 @@ import {
 import i18n from "../i18n";
 
 // Action icons of the oc3 icon set (src/ui/icons), sized by the menus that show
-// them. `color: "red"` marks the destructive actions, tinted by those menus.
+// them. `color: "red"` marks the destructive actions, tinted by those menus; `group`
+// the heading an action stands under in its menu (`app/action-menu.js`): the grant
+// om3 asks for it, operator or admin of its namespace, the operator actions of an
+// instance by what they act on; `impacts` what it costs, badged in the menus:
+// "dataLoss", "downTime".
 // `endpoint` is the API path of the action; `kinds` limits it to some object kinds.
 // The `name` of an action is its identifier (API, menus): show actionLabel(name) instead.
 const capitalize = (s) => s.charAt(0).toUpperCase() + s.slice(1);
@@ -52,20 +56,20 @@ export const actionLabel = (name) => {
 const icon = (Icon) => <Icon className="h-4 w-4"/>;
 
 export const OBJECT_ACTIONS = [
-    {name: "start", icon: icon(PlayIcon), endpoint: "action/start"},
-    {name: "stop", icon: icon(StopIcon), endpoint: "action/stop"},
-    {name: "restart", icon: icon(RefreshIcon), endpoint: "action/restart"},
-    {name: "freeze", icon: icon(SnowflakeIcon), endpoint: "action/freeze"},
-    {name: "unfreeze", icon: icon(SunIcon), endpoint: "action/unfreeze"},
-    {name: "provision", icon: icon(GearIcon), endpoint: "action/provision"},
-    {name: "unprovision", icon: icon(BanIcon), endpoint: "action/unprovision"},
-    {name: "switch", icon: icon(SwapIcon), endpoint: "action/switch"},
-    {name: "giveback", icon: icon(ArrowLeftIcon), endpoint: "action/giveback"},
-    {name: "abort", icon: icon(CloseIcon), endpoint: "action/abort"},
-    {name: "enable", icon: icon(ToggleOnIcon), endpoint: "enable", kinds: ["svc"]},
-    {name: "disable", icon: icon(ToggleOffIcon), endpoint: "disable", kinds: ["svc"]},
-    {name: "delete", icon: icon(TrashIcon), endpoint: "action/delete", color: "red"},
-    {name: "purge", icon: icon(TrashIcon), endpoint: "action/purge", color: "red"},
+    {name: "start", group: "operator", icon: icon(PlayIcon), endpoint: "action/start"},
+    {name: "stop", group: "operator", icon: icon(StopIcon), endpoint: "action/stop", impacts: ["downTime"]},
+    {name: "restart", group: "operator", icon: icon(RefreshIcon), endpoint: "action/restart", impacts: ["downTime"]},
+    {name: "freeze", group: "operator", icon: icon(SnowflakeIcon), endpoint: "action/freeze"},
+    {name: "unfreeze", group: "operator", icon: icon(SunIcon), endpoint: "action/unfreeze"},
+    {name: "provision", group: "admin", icon: icon(GearIcon), endpoint: "action/provision"},
+    {name: "unprovision", group: "admin", icon: icon(BanIcon), endpoint: "action/unprovision", color: "red", impacts: ["dataLoss", "downTime"]},
+    {name: "switch", group: "operator", icon: icon(SwapIcon), endpoint: "action/switch", impacts: ["downTime"]},
+    {name: "giveback", group: "operator", icon: icon(ArrowLeftIcon), endpoint: "action/giveback", impacts: ["downTime"]},
+    {name: "abort", group: "operator", icon: icon(CloseIcon), endpoint: "action/abort"},
+    {name: "enable", group: "admin", icon: icon(ToggleOnIcon), endpoint: "enable", kinds: ["svc"]},
+    {name: "disable", group: "admin", icon: icon(ToggleOffIcon), endpoint: "disable", kinds: ["svc"]},
+    {name: "delete", group: "admin", icon: icon(TrashIcon), endpoint: "action/delete", color: "red"},
+    {name: "purge", group: "admin", icon: icon(TrashIcon), endpoint: "action/purge", color: "red", impacts: ["dataLoss", "downTime"]},
 ];
 
 /** Kinds holding keys, on all the nodes: no status, nothing to start or place. */
@@ -90,45 +94,42 @@ export const objectActionsFor = (kind, actions = OBJECT_ACTIONS) => actions.filt
     && (!KEY_KINDS.includes(kind) || isKeyKindAction(kind, a.name)));
 
 export const INSTANCE_ACTIONS = [
-    // Lifecycle
-    {name: "start", icon: icon(PlayIcon), endpoint: "start"},
-    {name: "stop", icon: icon(StopIcon), endpoint: "stop"},
-    {name: "restart", icon: icon(RefreshIcon), endpoint: "restart"},
-    {name: "run", icon: icon(CaretRightIcon), endpoint: "run"},
-    {name: "boot", icon: icon(PowerIcon), endpoint: "boot"},
-    {name: "shutdown", icon: icon(PowerOffIcon), endpoint: "shutdown"},
-    {name: "start standby", icon: icon(PauseIcon), endpoint: "startstandby"},
+    // Operator, the instance: its state, its orchestration, what its volumes and
+    // filesystems declare installed again (nothing started), what it says of itself.
+    {name: "start", group: "operatorInstance", icon: icon(PlayIcon), endpoint: "start"},
+    {name: "stop", group: "operatorInstance", icon: icon(StopIcon), endpoint: "stop", impacts: ["downTime"]},
+    {name: "restart", group: "operatorInstance", icon: icon(RefreshIcon), endpoint: "restart", impacts: ["downTime"]},
+    {name: "shutdown", group: "operatorInstance", icon: icon(PowerOffIcon), endpoint: "shutdown", impacts: ["downTime"]},
+    {name: "start standby", group: "operatorInstance", icon: icon(PauseIcon), endpoint: "startstandby"},
+    {name: "freeze", group: "operatorInstance", icon: icon(SnowflakeIcon), endpoint: "freeze"},
+    {name: "unfreeze", group: "operatorInstance", icon: icon(SunIcon), endpoint: "unfreeze"},
+    {name: "install", group: "operatorInstance", icon: icon(DownloadIcon), endpoint: "install"},
+    {name: "info", group: "operatorInstance", icon: icon(InfoIcon), endpoint: "info"},
+    {name: "status", group: "operatorInstance", icon: icon(StateIcon), endpoint: "status"},
 
-    // Freeze state
-    {name: "freeze", icon: icon(SnowflakeIcon), endpoint: "freeze"},
-    {name: "unfreeze", icon: icon(SunIcon), endpoint: "unfreeze"},
+    // Operator, the disks: their exclusive write reservation.
+    {name: "prstart", group: "operatorDisk", icon: icon(StepForwardIcon), endpoint: "prstart"},
+    {name: "prstop", group: "operatorDisk", icon: icon(StepBackwardIcon), endpoint: "prstop"},
 
-    // Provisioning
-    {name: "provision", icon: icon(GearIcon), endpoint: "provision"},
-    {name: "unprovision", icon: icon(BanIcon), endpoint: "unprovision"},
-    // What the volumes and filesystems declare, installed again, nothing started.
-    {name: "install", icon: icon(DownloadIcon), endpoint: "install"},
+    // Operator, the tasks: run now.
+    {name: "run", group: "operatorTask", icon: icon(CaretRightIcon), endpoint: "run"},
 
-    // Replication, as om <path> sync <action>: the changes copied to the peers, the
-    // whole dataset, the synchronization restored or split; the files received ingested.
-    {name: "prstart", icon: icon(StepForwardIcon), endpoint: "prstart"},
-    {name: "prstop", icon: icon(StepBackwardIcon), endpoint: "prstop"},
-    {name: "sync update", icon: icon(UploadIcon), endpoint: "update"},
-    {name: "sync full", icon: icon(DatabaseIcon), endpoint: "full"},
-    {name: "sync resync", icon: icon(SwapIcon), endpoint: "resync"},
-    {name: "sync split", icon: icon(CloseIcon), endpoint: "split"},
-    {name: "sync ingest", icon: icon(DownloadIcon), endpoint: "ingest"},
+    // Operator, the replication, as om <path> sync <action>: the changes copied to the
+    // peers, the whole dataset, the synchronization restored or split; the files
+    // received ingested.
+    {name: "sync update", group: "operatorSync", icon: icon(UploadIcon), endpoint: "update"},
+    {name: "sync full", group: "operatorSync", icon: icon(DatabaseIcon), endpoint: "full"},
+    {name: "sync resync", group: "operatorSync", icon: icon(SwapIcon), endpoint: "resync"},
+    {name: "sync split", group: "operatorSync", icon: icon(CloseIcon), endpoint: "split"},
+    {name: "sync ingest", group: "operatorSync", icon: icon(DownloadIcon), endpoint: "ingest"},
 
-    // Placement groups
-    {name: "pg reset", icon: icon(ResetIcon), endpoint: "pg/reset"},
-    {name: "pg update", icon: icon(RefreshIcon), endpoint: "pg/update"},
-
-    // Info
-    {name: "info", icon: icon(InfoIcon), endpoint: "info"},
-    {name: "status", icon: icon(StateIcon), endpoint: "status"},
-
-    // Destructive
-    {name: "delete", icon: icon(TrashIcon), endpoint: "delete", color: "red"},
+    // Admin: what the instance is made of on its node, then its process groups.
+    {name: "boot", group: "admin", icon: icon(PowerIcon), endpoint: "boot"},
+    {name: "provision", group: "admin", icon: icon(GearIcon), endpoint: "provision"},
+    {name: "unprovision", group: "admin", icon: icon(BanIcon), endpoint: "unprovision", color: "red", impacts: ["dataLoss", "downTime"]},
+    {name: "pg update", group: "adminPg", icon: icon(RefreshIcon), endpoint: "pg/update"},
+    {name: "pg reset", group: "adminPg", icon: icon(ResetIcon), endpoint: "pg/reset"},
+    {name: "delete", group: "admin", icon: icon(TrashIcon), endpoint: "delete", color: "red"},
 ];
 
 export const RESOURCE_ACTIONS = [
@@ -161,8 +162,8 @@ export const NODE_ACTIONS = [
 
     {name: "clear", group: "daemon", icon: icon(CheckIcon), endpoint: "action/clear"},
     {name: "restart daemon", group: "daemon", icon: icon(RefreshIcon), endpoint: "daemon/action/restart"},
-    {name: "shutdown", group: "daemon", icon: icon(PowerOffIcon), endpoint: "daemon/action/shutdown", color: "red"},
+    {name: "shutdown", group: "daemon", icon: icon(PowerOffIcon), endpoint: "daemon/action/shutdown", color: "red", impacts: ["downTime"]},
     {name: "stop", group: "daemon", icon: icon(StopIcon), endpoint: "daemon/action/stop", color: "red"},
-    {name: "drain", group: "daemon", icon: icon(DropIcon), endpoint: "action/drain", color: "red"},
-    {name: "leave", group: "daemon", icon: icon(SignOutIcon), cluster: "evict", color: "red"},
+    {name: "drain", group: "daemon", icon: icon(DropIcon), endpoint: "action/drain", color: "red", impacts: ["downTime"]},
+    {name: "evict", group: "daemon", icon: icon(SignOutIcon), cluster: "evict", color: "red", impacts: ["downTime"]},
 ];

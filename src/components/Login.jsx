@@ -9,6 +9,7 @@ import {Alert} from '../ui/components/Alert';
 import {SetAccessToken, SetAuthChoice, useAuthDispatch} from "../context/AuthProvider.jsx";
 import {URL_TOKEN, URL_REFRESH} from "../config/apiPath.js";
 import logger from '../utils/logger.js';
+import {takeReturn} from '../app/after-login';
 
 // --- Custom decodeToken using safe Base64url decoding for compatibility with tests ---
 export const decodeToken = (token) => {
@@ -161,7 +162,8 @@ const Login = forwardRef((props, ref) => {
 
             dispatch({type: SetAccessToken, data: data.access_token});
             setLoading(false);
-            navigate('/');
+            // Back to the page the sign-in was asked for, if any.
+            navigate(takeReturn());
         } catch (error) {
             logger.error('Authentication error:', error);
             setErrorMessage(error.message || t('auth.login.error'));

@@ -10,6 +10,7 @@ import {FrozenMark} from "../ui/components/FrozenMark";
 import {FileIcon, MoreIcon} from "../ui/icons";
 import logger from '../utils/logger.js';
 import {actionLabel} from "../constants/actions";
+import {explainedMenu} from "../app/action-menu";
 
 /** Icon of an action in a menu: the action icons are sized to the menu line. */
 const ICON = "flex h-4 w-4 items-center justify-center text-ink-muted [&>svg]:h-4! [&>svg]:w-4!";
@@ -116,7 +117,7 @@ const InstanceCard = ({
                     align="end"
                     disabled={actionInProgress}
                     className="inline-flex"
-                    items={actions.map(({name, icon, color}) => ({
+                    {...explainedMenu(t, "instance", actions.map(({name, icon, color}) => ({
                         key: name,
                         label: actionLabel(name),
                         icon: (
@@ -126,7 +127,7 @@ const InstanceCard = ({
                         ),
                         disabled: actionInProgress,
                         onSelect: () => onAction(node, name),
-                    }))}
+                    })))}
                 />
                 <IconButton
                     size="sm"

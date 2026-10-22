@@ -8,19 +8,20 @@ import {refusalReason} from "./objectActions";
 import {getResponseErrorMessage} from "../services/api.jsx";
 import NodeRow from "../components/NodeRow.jsx";
 import logger from '../utils/logger.js';
-import {NODE_ACTIONS} from "../constants/actions";
 import {nodeActionRequest, nodeMenuItems} from "../app/node-actions";
 import {useTranslation} from "react-i18next";
 import {NodeActionDialog} from "./NodeActionDialog";
 import {Table, HeaderRow, HeaderCell, SortHeaderCell} from "../ui/components/Table";
 import {Checkbox} from "../ui/components/Field";
-import {IconButton} from "../ui/components/Button";
+import {Button, IconButton} from "../ui/components/Button";
 import {MenuButton} from "../ui/components/MenuButton";
 import {usePanelSearch} from "../app/panel-search";
 import {NodeDetailPanel} from "./NodePanel";
 import {Alert} from "../ui/components/Alert";
 import {Spinner} from "../ui/components/Spinner";
-import {BoltIcon, CloseIcon} from "../ui/icons";
+import {BoltIcon, CloseIcon, PlusIcon} from "../ui/icons";
+import {EnrollNodeDialog} from "./EnrollNodeDialog";
+import {useGrants} from "../hooks/useGrants";
 
 const ZERO_DATE = "0001-01-01T00:00:00Z";
 
@@ -57,6 +58,9 @@ const NodesTable = () => {
 
     const [selectedNodes, setSelectedNodes] = useState([]);
     const [snackbar, setSnackbar] = useState({open: false, message: "", severity: "info"});
+    // A node enrolled into the cluster, as om cluster enroll: root only, as the api asks.
+    const mayEnroll = Object.prototype.hasOwnProperty.call(useGrants(), "root");
+    const [enrollOpen, setEnrollOpen] = useState(false);
     const [pendingAction, setPendingAction] = useState(null);
     const [sortColumn, setSortColumn] = useState("name");
     const [sortDirection, setSortDirection] = useState("asc");
@@ -176,15 +180,6 @@ const NodesTable = () => {
         setPendingAction(null);
     };
 
-    const filteredMenuItems = NODE_ACTIONS.filter(({name}) => {
-        if (selectedNodes.length === 0) return false;
-        return selectedNodes.some((nodename) => {
-            const isFrozen = isNodeFrozen(nodeStatus[nodename]);
-            if (name === "freeze" && isFrozen) return false;
-            return !(name === "unfreeze" && !isFrozen);
-        });
-    });
-
     // The nodes of the cluster configuration too: a node dropped keeps its line.
     const clusterNodes = useClusterNodeOrder();
     const sortedNodes = React.useMemo(() => {
@@ -236,6 +231,19 @@ const NodesTable = () => {
             {/* The actions on the nodes selected; on one node, its panel's. Nothing selected,
                 how to select, in the place of the actions. */}
             <div className="flex min-h-7 flex-wrap items-center justify-end gap-3">
+                {/* A node added: the accent of what creates, apart from the actions on the selection. */}
+                {mayEnroll && (
+                    <Button
+                        size="sm"
+                        variant="create"
+                        className="mr-auto"
+                        icon={<PlusIcon className="h-4 w-4"/>}
+                        title={t("enroll.buttonTitle")}
+                        onClick={() => setEnrollOpen(true)}
+                    >
+                        {t("enroll.button")}
+                    </Button>
+                )}
                 {selectedNodes.length > 0 ? (
                     <>
                         <span className="whitespace-nowrap text-ink-muted">{t("common.selected", {count: selectedNodes.length})}</span>
@@ -246,11 +254,13 @@ const NodesTable = () => {
                             label={t("nodes.bulkActions")}
                             align="end"
                             // The node, its inventory, its daemon: a column each in a wide window.
-                            columns={3}
+                            columns={2}
+                            filterable
+                            filterLabel={t("actionMenus.filter")}
+                            filterEmpty={t("actionMenus.noMatch")}
                             items={nodeMenuItems({
                                 t,
                                 nodes: selectedNodes,
-                                offered: (name) => filteredMenuItems.some((action) => action.name === name),
                                 apiNode: daemon?.nodename,
                                 renderIcon: ({icon, color}) => <span aria-hidden="true" className={color === "red" ? DANGER_ICON : ICON}>{icon}</span>,
                                 onSelect: handleAction,
@@ -324,6 +334,7 @@ const NodesTable = () => {
                 </Table>
             )}
 
+            <EnrollNodeDialog open={enrollOpen} onClose={() => setEnrollOpen(false)}/>
             <NodeActionDialog
                 pending={pendingAction}
                 onConfirm={handleDialogConfirm}

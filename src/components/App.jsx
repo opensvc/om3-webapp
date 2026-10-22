@@ -24,14 +24,13 @@ import logger from "../utils/logger.js";
 import {prepareForNavigation} from "../eventSourceManager";
 import {isRenewalRefused} from "../context/serialRenewal";
 import {PeekPanel} from "./PeekPanel";
-import {PanelAnchor} from "../app/PanelAnchor";
+import {PanelReopenKey} from "../app/PanelReopenKey";
 import {ActionTray} from "../app/ActionTray";
-import {useMediaQuery} from "../ui/lib/media";
-import {useRecordHistory} from "../app/record-history";
 import {ShortcutsHelp} from "../app/ShortcutsHelp";
 import {useShortcut} from "../ui/lib/shortcuts";
 
 import {decodeToken as decodeTokenFromLogin} from "./Login.jsx";
+import {rememberReturn} from "../app/after-login";
 
 // Lazy load components for code splitting
 const NodesTable = lazy(() => import("./NodesTable"));
@@ -41,6 +40,7 @@ const Heartbeats = lazy(() => import("./Heartbeats"));
 const Pools = lazy(() => import("./Pools"));
 const Network = lazy(() => import("./Network"));
 const WhoAmI = lazy(() => import("./WhoAmI"));
+const TokenPage = lazy(() => import("./TokenPage"));
 
 /*
  * The records had pages of their own; they open in a panel over their list now, as
@@ -339,6 +339,7 @@ const ProtectedRoute = ({children}) => {
     if (authChoice === 'openid') {
         if (!token) {
             logger.warn("No OIDC token found, redirecting to /auth-choice");
+            rememberReturn(location.pathname + location.search);
             return <Navigate to="/auth-choice" replace/>;
         }
         return children;
@@ -349,16 +350,15 @@ const ProtectedRoute = ({children}) => {
         localStorage.removeItem("authToken");
         localStorage.removeItem("tokenExpiration");
         localStorage.removeItem("authChoice");
+        rememberReturn(location.pathname + location.search);
         return <Navigate to="/auth-choice" replace/>;
     }
 
     return children;
 };
 
-const AUTH_PATHS = ['/auth', '/login', '/silent-renew'];
-
-/** A narrow window, as Tailwind's max-md: the anchor in the header bar, no gutter for it. */
-const NARROW_QUERY = "(max-width: 47.95rem)";
+// The token page stands alone too: it is opened on a node to enroll, maybe with no session.
+const AUTH_PATHS = ['/auth', '/login', '/silent-renew', '/token'];
 
 const App = () => {
     logger.info("App init");
@@ -408,22 +408,12 @@ const App = () => {
         color: 'var(--ink)',
     };
 
-    // The anchor that brings the panels back stands on the right edge of the window,
-    // over the views: while there is a record to bring back, the views keep a gutter
-    // as wide as it there, so that it covers nothing, an Actions menu at the end of a
-    // toolbar included. A narrow window spares no such gutter: the anchor is a button
-    // of the header bar there.
-    const historySize = useRecordHistory().entries.length;
-    const narrow = useMediaQuery(NARROW_QUERY);
-    const anchorEnabled = showSidebar && !!localStorage.getItem("authToken");
-    const anchorShown = showSidebar && historySize > 0 && !narrow;
     const mainStyle = {
         flex: 1,
         minWidth: 0,
         overflowY: 'auto',
         WebkitOverflowScrolling: 'touch',
         width: '100%',
-        ...(anchorShown ? {paddingRight: '2.5rem'} : {}),
     };
 
     return (
@@ -436,7 +426,6 @@ const App = () => {
                             onToggleSidebar={toggleSidebar}
                             menuAlert={sidebarOpen ? null : menuAlert(sidebarAlerts)}
                             showSidebarToggle={showSidebar}
-                            anchor={anchorEnabled && narrow ? <PanelAnchor inBar/> : null}
                         />
                         <div style={{display: 'flex', flex: 1, minHeight: 0}}>
                             {/* Short of room, the menu folds once an entry is chosen. */}
@@ -457,18 +446,19 @@ const App = () => {
                                         <Route path="/objects/:objectName" element={<ObjectRedirect/>}/>
                                         <Route path="/nodes/:node/objects/:objectName" element={<InstanceRedirect/>}/>
                                         <Route path="/whoami" element={<ProtectedRoute><WhoAmI/></ProtectedRoute>}/>
+                                        <Route path="/token" element={<TokenPage/>}/>
                                         <Route path="/silent-renew" element={<SilentRenew/>}/>
                                         <Route path="/auth-callback" element={<OidcCallback/>}/>
                                         <Route path="/auth-choice" element={<AuthChoice authInfo={authInfo}/>}/>
                                         <Route path="/auth/login" element={<Login/>}/>
                                         <Route path="*" element={<Navigate to="/"/>}/>
                                     </Routes>
-                                    {/* The record opened from a badge or the history, whatever the
-                                        view, and what brings the panels back once closed. */}
+                                    {/* The record opened from a badge or the search palette, whatever
+                                        the view, and the key that brings it back once closed. */}
                                     {showSidebar && localStorage.getItem("authToken") && (
                                         <>
                                             <PeekPanel/>
-                                            {!narrow && <PanelAnchor/>}
+                                            <PanelReopenKey/>
                                             <ShortcutsHelp/>
                                             {/* The actions asked, followed to their end, whatever the view. */}
                                             <ActionTray/>

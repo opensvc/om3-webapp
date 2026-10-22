@@ -629,6 +629,36 @@ describe('ConfigSection Component', () => {
             expect(screen.queryByText(/s3cr3t-value/)).toBeNull();
         });
 
+        test('a revealed config answering after the hide is dropped, never shown as hidden', async () => {
+            // The read of the secrets in clear held, answered only once hidden again.
+            let answerRevealed;
+            const revealed = new Promise((resolve) => { answerRevealed = resolve; });
+            const signals = [];
+            global.fetch.mockImplementation((url, options) => {
+                if (url.includes('/config/file') && (options?.method ?? 'GET') === 'GET') {
+                    signals.push(options?.signal);
+                    const text = url.includes('redact-secrets=false')
+                        ? revealed.then(() => '[cluster]\nsecret = s3cr3t-value')
+                        : Promise.resolve('[cluster]\nsecret = ********');
+                    return Promise.resolve({ok: true, status: 200, text: () => text});
+                }
+                return defaultFetchMock(url, options);
+            });
+            renderConfig({configDialogOpen: true});
+            expect(await screen.findByText(/secret = \*{8}/)).toBeInTheDocument();
+
+            await act(() => user.click(screen.getByRole('button', {name: 'Show secrets'})));
+            const hide = await screen.findByRole('button', {name: 'Hide secrets'});
+            await act(() => user.click(hide));
+            expect(await screen.findByText(/secret = \*{8}/)).toBeInTheDocument();
+            // The read in clear aborted, its late answer dropped.
+            expect(signals.at(-2)?.aborted).toBe(true);
+            await act(async () => { answerRevealed(); await revealed; });
+            expect(screen.queryByText(/s3cr3t-value/)).toBeNull();
+            expect(screen.getByText(/secret = \*{8}/)).toBeInTheDocument();
+            expect(screen.getByRole('button', {name: 'Show secrets'})).toBeInTheDocument();
+        });
+
         test('masks the shown secrets again on their own after 10 seconds', async () => {
             renderConfig({configDialogOpen: true});
             const show = await screen.findByRole('button', {name: 'Show secrets'});

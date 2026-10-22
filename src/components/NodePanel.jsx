@@ -6,7 +6,7 @@ import {usePanelHeader} from "../app/panel-header";
 import useEventStore from "../hooks/useEventStore.js";
 import {retainEventReception} from "../eventSourceManager";
 import {URL_NODE} from "../config/apiPath.js";
-import {getResponseErrorMessage} from "../services/api.jsx";
+import {authHeaders, getResponseErrorMessage} from "../services/api.jsx";
 import {nodeActionRequest, nodeMenuItems} from "../app/node-actions";
 import {useApiNode} from "../hooks/useApiNode";
 import {NodeActionDialog} from "./NodeActionDialog";
@@ -55,7 +55,8 @@ export const isSet = (time) => !!time && time !== ZERO_TIME;
 const NODE_EVENTS = ["NodeStatusUpdated", "NodeMonitorUpdated", "NodeStatsUpdated"];
 
 export const nodeUrl = (node, path) => `${URL_NODE}/${encodeURIComponent(node)}/${path}`;
-export const authHeaders = () => ({Authorization: `Bearer ${localStorage.getItem("authToken") || ""}`});
+// The header of the session, from services/api.jsx: here too for the views reading the node.
+export {authHeaders};
 
 /*
  * The helpers of the tabs below are shared with the tabs of the object panel

@@ -1082,7 +1082,8 @@
       "objects": "Objects",
       "kinds": "Kinds",
       "namespaces": "Namespaces",
-      "pools": "Pools"
+      "pools": "Pools",
+      "resources": "Resources"
     },
     "main": "Main",
     "loading": "Loading...",
@@ -1106,7 +1107,8 @@
         "nodes": "nodes",
         "objects": "objects",
         "pools": "pools",
-        "whoami": "whoami"
+        "whoami": "whoami",
+        "resources": "resources"
       }
     },
     "sections": {
@@ -1144,7 +1146,9 @@
       "swapAvail": "Swap Avail",
       "version": "Version",
       "bootedAt": "Booted At",
-      "updatedAt": "Updated At"
+      "updatedAt": "Updated At",
+      "env": "Env",
+      "labels": "Labels"
     },
     "bulkActions": "Actions",
     "selectAll": "Select all nodes",
@@ -1518,7 +1522,8 @@
       "keys": "Keys",
       "config": "Configuration",
       "info": "Info",
-      "containerLogs": "Container logs"
+      "containerLogs": "Container logs",
+      "locks": "Locks"
     },
     "crossLink": "Show the {{kind}} here",
     "kinds": {
@@ -1870,7 +1875,8 @@
     "reasons": {
       "unknownObject": "the object is not known",
       "alreadyFrozen": "already frozen",
-      "alreadyUnfrozen": "not frozen"
+      "alreadyUnfrozen": "not frozen",
+      "clusterInSelection": "left out: the cluster is acted on alone"
     },
     "monitor": "{{node}}: the monitor is {{state}}",
     "subjects": {
@@ -2248,5 +2254,78 @@
     "show": "Show the data of {{title}} as JSON",
     "title": "{{title}} as JSON",
     "copy": "Copy the JSON"
+  },
+  "clusterLocks": {
+    "intro": "The locks the node speaking for the cluster granted, whose holder has neither released them nor seen their lease end, as om cluster lock list shows them. A lock serializes what reads the state of the cluster and changes it on the strength of that reading.",
+    "refresh": "Refresh",
+    "loading": "Reading the locks",
+    "table": "Cluster locks",
+    "holder": "Holder",
+    "acquired": "Acquired",
+    "lease": "Lease left",
+    "id": "Id",
+    "actions": "Actions",
+    "none": "No lock is held.",
+    "forbidden": "Reading the cluster locks takes the root role.",
+    "footer": "Read again {{seconds}} s after each read, while this page is shown: no event tells a lock taken or released.",
+    "leftSeconds": "{{seconds}} s",
+    "leftMinutes": "{{minutes}} min {{seconds}} s",
+    "release": "Release",
+    "releaseOne": "Release {{name}}",
+    "subject": "the lock {{name}}",
+    "confirmTitle": "Release the lock {{name}}?",
+    "confirm": "The lock {{name}} is taken back from {{holder}}, as om cluster lock release does.",
+    "warning": "Its holder is not told: it goes on as if it held the lock. Release it only from a holder known to be stuck, or gone before its lease ends.",
+    "byId": "Released only while still held under {{id}}: granted to another meanwhile, it is left to that one.",
+    "stale": "Not read again ({{message}}): the locks below are as last read, none released until they are read again.",
+    "unanswered": "no answer ({{message}}), and the lock still held: released or not, read the locks again",
+    "acquire": {
+      "open": "Acquire",
+      "title": "Acquire a cluster lock",
+      "intro": "Granted by the node speaking for the cluster, as to a client of the daemon, until released or its lease ends. What takes this lock waits for it, or is refused, while it is held.",
+      "label": "Acquire",
+      "submit": "Acquire",
+      "acquiring": "Acquiring the lock",
+      "holderHint": "Who holds it, as the list shows it.",
+      "holderOf": "{{user}}, from the webapp",
+      "holderWebapp": "the webapp",
+      "lease": "Lease",
+      "leaseHint": "Held for this long unless released: 30s by default, 10m at most.",
+      "wait": "Wait",
+      "waitHint": "How long to wait while another holds it: not at all if empty.",
+      "nameRequired": "A lock needs a name.",
+      "badDuration": "A duration, as 30s, 1m30s or 10m.",
+      "leaseTooLong": "10m at most.",
+      "warning": "A lock held here holds every client of the cluster asking it: release it once done, or keep its lease short.",
+      "held": "Not granted: {{message}}. Set a wait to queue for it, or try again later."
+    }
+  },
+  "resources": {
+    "caption": "The resources of the cluster",
+    "loading": "Reading the resources",
+    "loadError": "The resources could not be read: {{message}}",
+    "filter": "Filter the resources",
+    "group": "Driver",
+    "all": "All",
+    "count": "{{shown}} / {{total}}",
+    "refresh": "Refresh",
+    "empty": "No resource reported.",
+    "noMatch": "No resource matches.",
+    "notProvisioned": "not provisioned",
+    "restarts_one": "{{count}} restart left",
+    "restarts_other": "{{count}} restarts left",
+    "columns": {
+      "object": "Object",
+      "resource": "Resource",
+      "flags": "Flags",
+      "label": "Label"
+    },
+    "flags": {
+      "disabled": "disabled",
+      "standby": "standby",
+      "monitored": "monitored",
+      "optional": "optional",
+      "encap": "encapsulated"
+    }
   }
 }

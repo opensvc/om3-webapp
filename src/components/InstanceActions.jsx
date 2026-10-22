@@ -58,7 +58,7 @@ export function useActionRunner(path) {
                 pendingAction={pending}
                 handleConfirm={run}
                 target={pending?.subject ?? ""}
-                instances={(pending?.targets?.length ?? 0) > 0}
+                instances={pending?.targets?.some(({node}) => node !== undefined) ?? false}
                 supportedActions={SUPPORTED_ACTIONS}
                 onClose={() => setPending(null)}
             />

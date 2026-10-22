@@ -93,6 +93,8 @@ const CreateObjectDialog = ({open, onClose, defaultKind = "svc", defaultNamespac
     // Errors show once a field was left, or a submit tried.
     const [touched, setTouched] = useState({});
     const nameRef = useRef(null);
+    // The object whose copy is read: picked again meanwhile, an answer is not the one asked.
+    const copying = useRef("");
 
     // Each opening starts over, on the kind of the list it was opened from.
     useEffect(() => {
@@ -104,6 +106,8 @@ const CreateObjectDialog = ({open, onClose, defaultKind = "svc", defaultNamespac
         setCopyFrom("");
         setFileName("");
         setConfig("");
+        copying.current = "";
+        setLoadingSource(false);
         setProvision(false);
         setError(null);
         setTouched({});
@@ -127,20 +131,29 @@ const CreateObjectDialog = ({open, onClose, defaultKind = "svc", defaultNamespac
     const chooseSource = (next) => {
         setSource(next);
         setError(null);
+        if (next !== "copy") {
+            copying.current = "";
+            setLoadingSource(false);
+        }
         if (next === "empty") setConfig("");
     };
 
     const copy = async (from) => {
         setCopyFrom(from);
-        if (from === "") return;
+        copying.current = from;
+        if (from === "") {
+            setLoadingSource(false);
+            return;
+        }
         setLoadingSource(true);
         setError(null);
         try {
-            setConfig(await fetchConfigFile(from));
+            const text = await fetchConfigFile(from);
+            if (copying.current === from) setConfig(text);
         } catch (err) {
-            setError(t("createObject.feedback.copyFailed", {path: from, message: err.message}));
+            if (copying.current === from) setError(t("createObject.feedback.copyFailed", {path: from, message: err.message}));
         } finally {
-            setLoadingSource(false);
+            if (copying.current === from) setLoadingSource(false);
         }
     };
 
@@ -173,7 +186,9 @@ const CreateObjectDialog = ({open, onClose, defaultKind = "svc", defaultNamespac
                     Authorization: `Bearer ${localStorage.getItem("authToken") || ""}`,
                     "Content-Type": "application/octet-stream",
                 },
-                body: withId(config, newId()),
+                // A datastore is created empty, as the dialog says: a text left from another
+                // kind, hidden, is not sent.
+                body: withId(datastore ? "" : config, newId()),
             });
             // What came of it, the actions tray says; refused, the dialog stays open and says why.
             if (!response.ok) {

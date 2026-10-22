@@ -123,6 +123,20 @@ describe("trackAccepted", () => {
     expect(useActionTracker.getState().revealed).toBe(revealed + 1);
   });
 
+  test("over the limit, the oldest ended actions go, never the running ones", () => {
+    // 40 orchestrations running, asked of a selection; an older refusal under them.
+    const running = Array.from({ length: 40 }, (_, i) => ({
+      id: `run-${String(i)}`, action: "stop", subject: `svc${String(i)}`, kind: "orchestration" as const,
+      node: "dev3n1", state: "running" as const, startedAt: 0, steps: [],
+    }));
+    const old = { id: "old", action: "start", subject: "web", kind: "exec" as const, node: "", state: "refused" as const, startedAt: 0, endedAt: 0, steps: [] };
+    useActionTracker.setState({ tracked: [...running, old], revealed: 0 });
+    trackRefused({ action: "stop", subject: "svc40", reason: "HTTP 409" });
+    const ids = tracked().map((t) => t.id);
+    expect(ids).toEqual(expect.arrayContaining(running.map((t) => t.id)));
+    expect(ids).not.toContain("old");
+  });
+
   test("an answer naming nothing to follow is done: the daemon acted before it answered (enable, 204)", async () => {
     globalThis.fetch = vi.fn() as unknown as typeof fetch;
     await trackResponse({ status: 204, clone: () => ({ json: () => Promise.reject(new Error("no body")) }) } as unknown as Response, {

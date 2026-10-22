@@ -21,7 +21,7 @@ export const nodeAction = (name) => NODE_ACTIONS.find((action) => action.name ==
 export function nodeActionRequest(node, name) {
     const action = nodeAction(name);
     if (action?.cluster === "evict") {
-        return {url: `${URL_CLUSTER}/evict`, body: JSON.stringify({node})};
+        return {url: `${URL_CLUSTER}/evict`, body: JSON.stringify({nodename: node})};
     }
     return {url: `${URL_NODE}/${encodeURIComponent(node)}/${action?.endpoint ?? `action/${name}`}`};
 }

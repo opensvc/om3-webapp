@@ -237,6 +237,20 @@ function lingerIfSucceeded(id: string) {
 let sequence = 0;
 
 /**
+ * The actions tracked, a new one first. Over the limit, the oldest ended ones go;
+ * the running ones stay, followed to their end.
+ */
+function withNew(entry: Tracked, tracked: Tracked[]): Tracked[] {
+  const all = [entry, ...tracked];
+  while (all.length > MAX_TRACKED) {
+    const index = all.map((t) => t.state !== "running").lastIndexOf(true);
+    if (index < 0) break;
+    all.splice(index, 1);
+  }
+  return all;
+}
+
+/**
  * Follows the action the daemon accepted with `accepted`, the body of its answer:
  * `action` and `subject` say it in words, `node` is the node the request went to,
  * for an exec that names no node of its own. An answer naming nothing to follow
@@ -264,16 +278,7 @@ export function trackAccepted(
     startedAt: Date.now(),
     steps: [],
   };
-  useActionTracker.setState((s) => {
-    const all = [tracked, ...s.tracked];
-    // Over the limit, the oldest ended ones go; the running ones stay.
-    while (all.length > MAX_TRACKED) {
-      const index = all.map((t) => t.state !== "running").lastIndexOf(true);
-      if (index < 0) break;
-      all.splice(index, 1);
-    }
-    return { tracked: all, revealed: s.revealed + 1 };
-  });
+  useActionTracker.setState((s) => ({ tracked: withNew(tracked, s.tracked), revealed: s.revealed + 1 }));
   if (orchestrationId) void followOrchestration(id, orchestrationId, answering);
   else if (execId) void followExec(id, execId, answering);
 }
@@ -308,7 +313,7 @@ export function trackRefused({
     endedAt: now,
     steps: [],
   };
-  useActionTracker.setState((s) => ({ tracked: [refused, ...s.tracked].slice(0, MAX_TRACKED), revealed: s.revealed + 1 }));
+  useActionTracker.setState((s) => ({ tracked: withNew(refused, s.tracked), revealed: s.revealed + 1 }));
 }
 
 /**
@@ -332,7 +337,7 @@ export function trackDone({ action, subject, path, label }: { action: string; su
     endedAt: now,
     steps: [],
   };
-  useActionTracker.setState((s) => ({ tracked: [done, ...s.tracked].slice(0, MAX_TRACKED), revealed: s.revealed + 1 }));
+  useActionTracker.setState((s) => ({ tracked: withNew(done, s.tracked), revealed: s.revealed + 1 }));
   lingerIfSucceeded(id);
 }
 
@@ -394,7 +399,7 @@ export function trackUntil(
     startedAt: Date.now(),
     steps: [],
   };
-  useActionTracker.setState((s) => ({ tracked: [entry, ...s.tracked].slice(0, MAX_TRACKED), revealed: s.revealed + 1 }));
+  useActionTracker.setState((s) => ({ tracked: withNew(entry, s.tracked), revealed: s.revealed + 1 }));
   let unsubscribe: () => void = () => undefined;
   const end = (change: Partial<Tracked>) => {
     unsubscribe();
@@ -431,20 +436,20 @@ export function trackPoll(
   const id = `${String(Date.now())}-${String(sequence)}`;
   const startedAt = Date.now();
   useActionTracker.setState((s) => ({
-    tracked: [
+    tracked: withNew(
       {
         id,
         action: info.action,
         ...(info.label === undefined ? {} : { label: info.label }),
         subject: info.subject,
-        kind: "exec" as const,
+        kind: "exec",
         node: "",
-        state: "running" as const,
+        state: "running",
         startedAt,
         steps: [],
       },
-      ...s.tracked,
-    ].slice(0, MAX_TRACKED),
+      s.tracked,
+    ),
     revealed: s.revealed + 1,
   }));
   void (async () => {

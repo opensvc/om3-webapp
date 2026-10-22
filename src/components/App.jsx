@@ -38,6 +38,7 @@ const Objects = lazy(() => import("./Objects"));
 const Namespaces = lazy(() => import("./Namespaces"));
 const Heartbeats = lazy(() => import("./Heartbeats"));
 const Pools = lazy(() => import("./Pools"));
+const Resources = lazy(() => import("./Resources"));
 const Network = lazy(() => import("./Network"));
 const WhoAmI = lazy(() => import("./WhoAmI"));
 const TokenPage = lazy(() => import("./TokenPage"));
@@ -437,9 +438,10 @@ const App = () => {
                                         {/* Tabs of the Objects page now: an old link lands there. */}
                                         <Route path="/namespaces" element={<ProtectedRoute><Namespaces/></ProtectedRoute>}/>
                                         <Route path="/kinds" element={<ObjectsTab list="any"/>}/>
-                                        <Route path="/heartbeats" element={<Heartbeats/>}/>
+                                        <Route path="/heartbeats" element={<ProtectedRoute><Heartbeats/></ProtectedRoute>}/>
                                         <Route path="/nodes" element={<ProtectedRoute><NodesTable/></ProtectedRoute>}/>
                                         <Route path="/pools" element={<ProtectedRoute><Pools/></ProtectedRoute>}/>
+                                        <Route path="/resources" element={<ProtectedRoute><Resources/></ProtectedRoute>}/>
                                         <Route path="/network" element={<ProtectedRoute><Network/></ProtectedRoute>}/>
                                         <Route path="/network/:networkName" element={<NetworkRedirect/>}/>
                                         <Route path="/objects" element={<ProtectedRoute><ObjectsRoute/></ProtectedRoute>}/>

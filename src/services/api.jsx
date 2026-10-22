@@ -10,6 +10,24 @@ export class ApiError extends Error {
     }
 }
 
+/** The Authorization header of a request to the daemon, the token of the session. */
+export const authHeaders = () => ({Authorization: `Bearer ${localStorage.getItem("authToken") || ""}`});
+
+/**
+ * The reason a refusal gives, in words: the detail of its problem, its title, its
+ * error or its message; else what apiFetch said of it.
+ */
+export function problemOf(err) {
+    const body = err?.body;
+    if (body && typeof body === "object") {
+        for (const key of ["detail", "title", "error", "message"]) {
+            if (typeof body[key] === "string" && body[key].trim() !== "") return body[key];
+        }
+    }
+    if (typeof body === "string" && body.trim() !== "") return body;
+    return err?.message ?? "";
+}
+
 export async function apiFetch(url, options = {}) {
     const controller = new AbortController();
     const timeoutMs = options.timeout || 10000;

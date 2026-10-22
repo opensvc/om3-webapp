@@ -1215,6 +1215,17 @@ describe('eventSourceManager', () => {
             expect(console.error).toHaveBeenCalledWith('❌ Missing token for Logger EventSource!');
         });
 
+        test('an event received by both streams is logged once, by the logger stream', () => {
+            vi.mocked(EventSourcePolyfill).mockImplementationOnce(() => mockEventSource);
+            eventSourceManager.createEventSource(URL_NODE_EVENT, 'fake-token', ['ObjectStatusUpdated']);
+            eventSourceManager.createLoggerEventSource(URL_NODE_EVENT, 'fake-token', ['ObjectStatusUpdated']);
+            const event = {path: 'ns/svc/web', node: 'node1', object_status: {avail: 'up'}};
+            fire(getHandler(mockEventSource, 'ObjectStatusUpdated'), event);
+            fire(getHandler(mockLoggerEventSource, 'ObjectStatusUpdated'), event);
+            const logged = mockLogStore.addEventLog.mock.calls.filter(([type]) => type === 'ObjectStatusUpdated');
+            expect(logged).toEqual([['ObjectStatusUpdated', {...event, _rawEvent: JSON.stringify(event)}]]);
+        });
+
         test('should handle open and error events without logging them', () => {
             eventSourceManager.createLoggerEventSource(URL_NODE_EVENT, 'fake-token', []);
             mockLoggerEventSource.onopen();

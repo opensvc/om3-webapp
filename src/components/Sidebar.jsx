@@ -8,7 +8,7 @@ import {ALL_LIST, OBJECT_LISTS, listUrl} from "../utils/objectLists";
 
 /**
  * The menu, in two sections. The cluster: its links (the heartbeats), nodes,
- * namespaces, networks and pools. The objects: their title opens all of them, then
+ * namespaces, networks, pools and the resources of all its objects. The objects: their title opens all of them, then
  * a list per kind. Names alone, no icon. The cluster overview and the user page
  * are reached from the top bar: the logo and the user button. `id` keys the alert
  * of an entry; `labelKey` is the catalog key of its name; `list`, the list of the
@@ -24,6 +24,7 @@ export const NAV_SECTIONS = [
             {id: "namespaces", to: "/namespaces", labelKey: "nav.routes.namespaces"},
             {id: "networks", to: "/network", labelKey: "nav.routes.networks"},
             {id: "pools", to: "/pools", labelKey: "nav.routes.pools"},
+            {id: "resources", to: "/resources", labelKey: "nav.routes.resources"},
         ],
     },
     {

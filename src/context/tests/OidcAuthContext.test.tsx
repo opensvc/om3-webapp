@@ -18,6 +18,7 @@ const mockUserManagerInstance = {
         removeAccessTokenExpiring: vi.fn(),
         removeSilentRenewError: vi.fn(),
     },
+    stopSilentRenew: vi.fn(),
     clearStaleState: vi.fn().mockResolvedValue(undefined),
 };
 
@@ -156,15 +157,28 @@ describe('OidcAuthContext', () => {
             result.current.recreateUserManager(settings2);
         });
 
-        expect(mockUserManagerInstance.events.removeUserLoaded).toHaveBeenCalledWith(expect.any(Function));
-        expect(mockUserManagerInstance.events.removeUserUnloaded).toHaveBeenCalledWith(expect.any(Function));
-        expect(mockUserManagerInstance.events.removeAccessTokenExpired).toHaveBeenCalledWith(expect.any(Function));
-        expect(mockUserManagerInstance.events.removeAccessTokenExpiring).toHaveBeenCalledWith(expect.any(Function));
-        expect(mockUserManagerInstance.events.removeSilentRenewError).toHaveBeenCalledWith(expect.any(Function));
+        expect(mockUserManagerInstance.stopSilentRenew).toHaveBeenCalledTimes(1);
         expect(mockUserManagerInstance.clearStaleState).toHaveBeenCalled();
 
         expect(UserManager).toHaveBeenCalledTimes(2);
         expect(result.current.userManager).toBe(mockUserManagerInstance);
+    });
+
+    test('recreateUserManager asked again with the same settings keeps the manager', () => {
+        const settings = {
+            authority: 'https://example.com',
+            client_id: 'test-client',
+            redirect_uri: 'https://example.com/callback',
+        };
+        const {result} = renderHook(() => useOidc(), {wrapper});
+        act(() => {
+            result.current.recreateUserManager(settings);
+        });
+        act(() => {
+            result.current.recreateUserManager({...settings});
+        });
+        expect(UserManager).toHaveBeenCalledTimes(1);
+        expect(mockUserManagerInstance.stopSilentRenew).not.toHaveBeenCalled();
     });
 
     test('handles failure when setting window.oidcUserManager', () => {
@@ -205,78 +219,39 @@ describe('OidcAuthContext', () => {
         expect(result.current.isInitialized).toBe(true);
     });
 
-    test('cleanupUserManager removes event listeners and clears stale state', () => {
+    test('cleanupUserManager stops the silent renewal and clears stale state', () => {
         const mockUserManager = {
-            events: {
-                removeUserLoaded: vi.fn(),
-                removeUserUnloaded: vi.fn(),
-                removeAccessTokenExpired: vi.fn(),
-                removeAccessTokenExpiring: vi.fn(),
-                removeSilentRenewError: vi.fn(),
-            },
+            stopSilentRenew: vi.fn(),
             clearStaleState: vi.fn().mockResolvedValue(undefined),
         };
         cleanupUserManager(mockUserManager as unknown as UserManager);
-        expect(mockUserManager.events.removeUserLoaded).toHaveBeenCalledWith(expect.any(Function));
-        expect(mockUserManager.events.removeUserUnloaded).toHaveBeenCalledWith(expect.any(Function));
-        expect(mockUserManager.events.removeAccessTokenExpired).toHaveBeenCalledWith(expect.any(Function));
-        expect(mockUserManager.events.removeAccessTokenExpiring).toHaveBeenCalledWith(expect.any(Function));
-        expect(mockUserManager.events.removeSilentRenewError).toHaveBeenCalledWith(expect.any(Function));
+        expect(mockUserManager.stopSilentRenew).toHaveBeenCalled();
         expect(mockUserManager.clearStaleState).toHaveBeenCalled();
     });
 
     test('cleanupUserManager does nothing if userManager is null', () => {
         cleanupUserManager(null);
-        expect(mockUserManagerInstance.events.removeUserLoaded).not.toHaveBeenCalled();
+        expect(mockUserManagerInstance.stopSilentRenew).not.toHaveBeenCalled();
         expect(mockUserManagerInstance.clearStaleState).not.toHaveBeenCalled();
     });
 
-    test('cleanupUserManager handles missing event methods gracefully', () => {
-        const userManagerWithMissingEvents = {
-            events: {
-                removeUserUnloaded: vi.fn(),
-                removeAccessTokenExpired: vi.fn(),
-                removeAccessTokenExpiring: vi.fn(),
-                removeSilentRenewError: vi.fn(),
-            },
+    test('cleanupUserManager logs a failure to stop the renewal, and clears stale state still', () => {
+        const mockError = new Error('Stop failed');
+        const userManagerFailingToStop = {
+            stopSilentRenew: vi.fn().mockImplementation(() => {
+                throw mockError;
+            }),
             clearStaleState: vi.fn().mockResolvedValue(undefined),
         };
-        expect(() => {
-            cleanupUserManager(userManagerWithMissingEvents as unknown as UserManager);
-        }).not.toThrow();
-        expect(userManagerWithMissingEvents.events.removeUserUnloaded).toHaveBeenCalled();
-        expect(userManagerWithMissingEvents.clearStaleState).toHaveBeenCalled();
-    });
-
-    test('cleanupUserManager catches errors from event removal', () => {
-        const mockError = new Error('Removal failed');
-        const userManagerWithFailingEvents = {
-            events: {
-                removeUserLoaded: vi.fn().mockImplementation(() => {
-                    throw mockError;
-                }),
-                removeUserUnloaded: vi.fn(),
-                removeAccessTokenExpired: vi.fn(),
-                removeAccessTokenExpiring: vi.fn(),
-                removeSilentRenewError: vi.fn(),
-            },
-            clearStaleState: vi.fn().mockResolvedValue(undefined),
-        };
-        cleanupUserManager(userManagerWithFailingEvents as unknown as UserManager);
-        expect(logger.debug).toHaveBeenCalledWith('Error removing UserManager listener:', mockError);
-        expect(userManagerWithFailingEvents.clearStaleState).toHaveBeenCalled();
+        cleanupUserManager(userManagerFailingToStop as unknown as UserManager);
+        expect(logger.debug).toHaveBeenCalledWith('Error stopping the silent renewal:', mockError);
+        expect(userManagerFailingToStop.clearStaleState).toHaveBeenCalled();
     });
 
     test('cleanupUserManager logs error when clearStaleState rejects', async () => {
         const mockError = new Error('Clear stale state failed');
         const userManagerWithFailingClear = {
-            events: {
-                removeUserLoaded: vi.fn(),
-                removeUserUnloaded: vi.fn(),
-                removeAccessTokenExpired: vi.fn(),
-                removeAccessTokenExpiring: vi.fn(),
-                removeSilentRenewError: vi.fn(),
-            },
+            stopSilentRenew: vi.fn(),
             clearStaleState: vi.fn().mockRejectedValue(mockError),
         };
         cleanupUserManager(userManagerWithFailingClear as unknown as UserManager);
@@ -297,11 +272,7 @@ describe('OidcAuthContext', () => {
         expect(result.current.userManager).toBe(mockUserManagerInstance);
         expect((window as any).oidcUserManager).toBe(mockUserManagerInstance);
         unmount();
-        expect(mockUserManagerInstance.events.removeUserLoaded).toHaveBeenCalledWith(expect.any(Function));
-        expect(mockUserManagerInstance.events.removeUserUnloaded).toHaveBeenCalledWith(expect.any(Function));
-        expect(mockUserManagerInstance.events.removeAccessTokenExpired).toHaveBeenCalledWith(expect.any(Function));
-        expect(mockUserManagerInstance.events.removeAccessTokenExpiring).toHaveBeenCalledWith(expect.any(Function));
-        expect(mockUserManagerInstance.events.removeSilentRenewError).toHaveBeenCalledWith(expect.any(Function));
+        expect(mockUserManagerInstance.stopSilentRenew).toHaveBeenCalled();
         expect(mockUserManagerInstance.clearStaleState).toHaveBeenCalled();
         expect((window as any).oidcUserManager).toBeUndefined();
     });
@@ -309,7 +280,7 @@ describe('OidcAuthContext', () => {
     test('useEffect cleanup handles null userManager on unmount', () => {
         const {unmount} = renderHook(() => useOidc(), {wrapper});
         unmount();
-        expect(mockUserManagerInstance.events.removeUserLoaded).not.toHaveBeenCalled();
+        expect(mockUserManagerInstance.stopSilentRenew).not.toHaveBeenCalled();
         expect(mockUserManagerInstance.clearStaleState).not.toHaveBeenCalled();
         expect((window as any).oidcUserManager).toBeUndefined();
     });

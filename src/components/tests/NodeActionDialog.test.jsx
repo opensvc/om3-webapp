@@ -43,6 +43,6 @@ describe('nodeActionRequest', () => {
     test('an action of the node posted to it; evict to the cluster, which orders it out', () => {
         expect(nodeActionRequest('n1', 'freeze')).toEqual({url: '/api/node/name/n1/action/freeze'});
         expect(nodeActionRequest('n1', 'restart daemon')).toEqual({url: '/api/node/name/n1/daemon/action/restart'});
-        expect(nodeActionRequest('n1', 'evict')).toEqual({url: '/api/cluster/evict', body: JSON.stringify({node: 'n1'})});
+        expect(nodeActionRequest('n1', 'evict')).toEqual({url: '/api/cluster/evict', body: JSON.stringify({nodename: 'n1'})});
     });
 });

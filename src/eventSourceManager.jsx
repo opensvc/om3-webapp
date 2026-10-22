@@ -739,7 +739,8 @@ export const createEventSource = (url, token, filters = DEFAULT_FILTERS) => {
                     break;
                 }
             }
-            useEventLogStore.getState().addEventLog(eventType, data);
+            // The events shown are those of the logger stream, opened with them: logged
+            // here too, each one would be shown twice.
         });
     });
 

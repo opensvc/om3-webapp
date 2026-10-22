@@ -12,6 +12,7 @@ import {NamespaceConfig, NamespaceUsage} from "./NamespacePanel";
 import {NamespaceClaims} from "./NamespaceClaims";
 import {ObjectUsage} from "./InstanceRecord";
 import {CAPACITY_KINDS, ObjectCapacity} from "./ObjectCapacity";
+import {ClusterLocks} from "./ClusterLocks";
 import {InstanceLink, ResourceLink} from "./RecordLinks";
 import {CrossLink} from "../app/CrossLink";
 import {usePeek} from "../app/panel-search";
@@ -102,6 +103,8 @@ export function ObjectDetailPanel({path, tab, onTabChange, onClose}) {
             // Its size and its caps: a service's and a volume's.
             ...(CAPACITY_KINDS.includes(kind) ? [{key: "capacity", label: t("panel.tabs.capacity")}] : []),
             {key: "schedules", label: t("panel.tabs.schedules")},
+            // The cluster object, the cluster: its locks, as om cluster lock list shows them.
+            ...(kind === "ccfg" ? [{key: "locks", label: t("panel.tabs.locks")}] : []),
             {key: "config", label: t("panel.tabs.config")},
             {key: "logs", label: t("panel.tabs.logs")},
             {key: "events", label: t("panel.tabs.events")},
@@ -131,6 +134,7 @@ export function ObjectDetailPanel({path, tab, onTabChange, onClose}) {
                     {active === "usage" && <ObjectUsage key={path} path={path}/>}
                     {active === "capacity" && <ObjectCapacity key={path} path={path} nodes={nodes}/>}
                     {active === "schedules" && <ObjectSchedules key={path} path={path}/>}
+                    {active === "locks" && <ClusterLocks/>}
                     {active === "events" && (
                         <div className="h-[calc(100dvh-10rem)]">
                             <EventLog key={path} eventTypes={OBJECT_EVENT_TYPES} objectName={path} label={t("panel.tabs.events")}/>
@@ -140,7 +144,7 @@ export function ObjectDetailPanel({path, tab, onTabChange, onClose}) {
                         <ObjectLogs key={path} path={path} nodes={nodes}
                                     orchestration={logsOrchestration} onClearOrchestration={() => setLogsOrchestration(null)}/>
                     )}
-                    {active === "config" && <ObjectConfig path={path}/>}
+                    {active === "config" && <ObjectConfig key={path} path={path}/>}
                 </>
             )}
         </RecordPanel>

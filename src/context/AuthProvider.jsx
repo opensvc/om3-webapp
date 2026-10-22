@@ -171,6 +171,9 @@ export const useAuth = () => {
     return context;
 };
 
+/** The user signed in, null when none or outside an AuthProvider: for a default, never required. */
+export const useAuthUser = () => useContext(AuthContext)?.user ?? null;
+
 export const useAuthDispatch = () => {
     const context = useContext(AuthDispatchContext);
     if (context === null) throw new Error('useAuthDispatch must be used within an AuthProvider');

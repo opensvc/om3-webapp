@@ -21,8 +21,17 @@ export const OidcProvider = ({children}: { children: React.ReactNode }) => {
     const [userManager, setUserManager] = useState<UserManager | null>(null);
     const [isInitialized, setIsInitialized] = useState<boolean>(false);
     const userManagerRef = useRef<UserManager | null>(null);
+    // The settings the manager was built with: asked again the same, it is kept.
+    const settingsRef = useRef<UserManagerSettings | null>(null);
 
     const recreateUserManager = (settings: UserManagerSettings) => {
+        // App, AuthChoice and OidcCallback each build one when none is there, after
+        // reading the configuration: the same asked twice, a second manager would renew
+        // the same refresh token beside the first, the provider refusing one of them.
+        if (userManagerRef.current !== null && sameSettings(settingsRef.current, settings)) {
+            logger.debug("UserManager kept: built with the same settings");
+            return;
+        }
         logger.info("Recreating UserManager with settings:", settings);
         cleanupUserManager(userManagerRef.current);
         // Ensure oidc-client-ts has verbose logging during development
@@ -46,6 +55,7 @@ export const OidcProvider = ({children}: { children: React.ReactNode }) => {
         }
         setUserManager(newUserManager);
         userManagerRef.current = newUserManager;
+        settingsRef.current = settings;
         setIsInitialized(true);
     };
 
@@ -77,25 +87,24 @@ export const useOidc = () => {
     return context;
 };
 
-// Cleanup function to dispose of UserManager events
-const safeRemoveListener = (removeFn: ((callback: (...args: unknown[]) => void) => void) | undefined) => {
-    if (typeof removeFn !== 'function') return;
-    try {
-        removeFn(() => {
-        });
-    } catch (e) {
-        logger.debug('Error removing UserManager listener:', e);
-    }
-};
+/** Whether two settings build the same manager: the same provider, client and addresses. */
+const SETTINGS_KEYS = ["authority", "client_id", "redirect_uri", "silent_redirect_uri", "post_logout_redirect_uri", "scope", "response_type"] as const;
+const sameSettings = (a: UserManagerSettings | null, b: UserManagerSettings) =>
+    a !== null && SETTINGS_KEYS.every((key) => a[key] === b[key]);
 
+/**
+ * Retires a manager replaced or gone: its automatic renewal stopped, which else goes
+ * on with its own timers, renewing the refresh token beside the new manager. The
+ * listeners on its events are their owners' to remove (App, on the manager changing).
+ */
 export function cleanupUserManager(userManager: UserManager | null) {
     if (!userManager) return;
-    logger.debug("Cleaning up UserManager events");
-    safeRemoveListener(userManager.events.removeUserLoaded);
-    safeRemoveListener(userManager.events.removeUserUnloaded);
-    safeRemoveListener(userManager.events.removeAccessTokenExpired);
-    safeRemoveListener(userManager.events.removeAccessTokenExpiring);
-    safeRemoveListener(userManager.events.removeSilentRenewError);
+    logger.debug("Stopping the silent renewal of the UserManager replaced");
+    try {
+        userManager.stopSilentRenew();
+    } catch (e) {
+        logger.debug('Error stopping the silent renewal:', e);
+    }
     userManager.clearStaleState()
         .catch(error => {
             logger.debug('Error during clearStaleState:', error);

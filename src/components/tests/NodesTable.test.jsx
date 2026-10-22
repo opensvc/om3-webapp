@@ -568,7 +568,7 @@ describe('NodesTable', () => {
             fireEvent.click(screen.getByRole('button', {name: 'Confirm'}));
             await waitFor(() => expect(global.fetch).toHaveBeenCalledWith(
                 '/api/cluster/evict',
-                expect.objectContaining({method: 'POST', body: JSON.stringify({node: 'node-2'})}),
+                expect.objectContaining({method: 'POST', body: JSON.stringify({nodename: 'node-2'})}),
             ));
             // The api node, node-1, selected: leave off, said why.
             fireEvent.click(screen.getByRole('checkbox', {name: 'select node-1'}));

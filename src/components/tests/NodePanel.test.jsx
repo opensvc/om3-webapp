@@ -27,8 +27,8 @@ vi.mock('../../eventSourceManager', () => ({
 }));
 // The logs stream is tested on its own: here, which node and which kind it reads.
 vi.mock('../LogsViewer', () => ({
-    default: ({nodename, type, filters = []}) => (
-        <div data-testid="logs">{`${type} logs of ${nodename}${filters.length ? ` where ${filters.join(', ')}` : ''}`}</div>
+    default: ({nodename, nodenames, type, filters = []}) => (
+        <div data-testid="logs">{`${type} logs of ${nodenames?.join('+') ?? nodename}${filters.length ? ` where ${filters.join(', ')}` : ''}`}</div>
     ),
 }));
 // The confirmation dialogs are tested on their own: here, the action confirmed.
@@ -563,6 +563,12 @@ describe('NodeDetailPanel', () => {
             fireEvent.click(chip('Orchestrations'));
             expect(screen.getByTestId('location')).toHaveTextContent('view=orchestrations');
             expect(await within(panel()).findByRole('table', {name: 'Orchestrations'})).toHaveTextContent('foo002');
+            // Its logs in a modal: on every node of the cluster, of its id.
+            const orchestrations = within(panel()).getByRole('table', {name: 'Orchestrations'});
+            fireEvent.click(within(orchestrations).getAllByRole('button', {name: 'Logs'})[0]);
+            const orchestrationLogs = screen.getByRole('dialog', {name: /^Logs of the orchestration /});
+            expect(within(orchestrationLogs).getByTestId('logs')).toHaveTextContent(/^node logs of dev3n1 where ORCHESTRATION_ID=[0-9a-f-]{36}$/);
+            fireEvent.click(within(orchestrationLogs).getByRole('button', {name: 'Close'}));
             expect(within(panel()).queryByRole('table', {name: 'Components'})).not.toBeInTheDocument();
             fireEvent.click(chip('Executions'));
             expect(await within(panel()).findByRole('table', {name: 'Executions'})).toHaveTextContent('instance status');
@@ -654,6 +660,11 @@ describe('NodeDetailPanel', () => {
             renderPanel('?peek=node:dev3n1&peektab=daemon&view=executions');
             const execs = await within(panel()).findByRole('table', {name: 'Executions'});
             const first = within(execs).getAllByRole('row')[1];
+            // Its logs in a modal: on its node, of its id.
+            fireEvent.click(within(first).getByRole('button', {name: 'Logs'}));
+            const execLogs = screen.getByRole('dialog', {name: 'Logs of the exec e1 of ns1/svc/web'});
+            expect(within(execLogs).getByTestId('logs')).toHaveTextContent('node logs of dev3n1 where EXEC_ID=e1');
+            fireEvent.click(within(execLogs).getByRole('button', {name: 'Close'}));
             expect(first).toHaveTextContent('ns1/svc/web');
             fireEvent.click(within(first).getByRole('button', {name: 'Terminate'}));
             expect(confirmDialog()).toHaveTextContent('Send TERM to "/usr/bin/om ns1/svc/web instance start" on dev3n1?');

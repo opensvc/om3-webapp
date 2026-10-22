@@ -1838,6 +1838,14 @@
       "dns": "{{count}} records of {{names}} names",
       "running_one": "{{count}} running",
       "running_other": "{{count}} running"
+    },
+    "logs": {
+      "show": "Logs",
+      "orchestration": "Logs of the orchestration {{id}} of {{subject}}",
+      "exec": "Logs of the exec {{id}} of {{subject}}",
+      "copyId": "Copy the id",
+      "nodes_one": "on {{nodes}}",
+      "nodes_other": "on {{count}} nodes: {{nodes}}"
     }
   },
   "resource": {

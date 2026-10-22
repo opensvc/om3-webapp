@@ -1838,6 +1838,14 @@
       "dns": "{{count}} enregistrements de {{names}} noms",
       "running_one": "{{count}} en cours",
       "running_other": "{{count}} en cours"
+    },
+    "logs": {
+      "show": "Journaux",
+      "orchestration": "Journaux de l'orchestration {{id}} de {{subject}}",
+      "exec": "Journaux de l'exécution {{id}} de {{subject}}",
+      "copyId": "Copier l'identifiant",
+      "nodes_one": "sur {{nodes}}",
+      "nodes_other": "sur {{count}} nœuds : {{nodes}}"
     }
   },
   "resource": {

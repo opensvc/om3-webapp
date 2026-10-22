@@ -2278,7 +2278,27 @@
     "warning": "Son détenteur n’est pas prévenu : il continue comme s’il tenait le verrou. Ne le relâchez que pour un détenteur bloqué, ou parti avant la fin de son bail.",
     "byId": "Relâché seulement s’il est encore tenu sous {{id}} : accordé à un autre entre-temps, il lui est laissé.",
     "stale": "Non relus ({{message}}) : les verrous ci-dessous sont ceux de la dernière lecture, aucun n’est rendu avant qu’ils ne soient relus.",
-    "unanswered": "pas de réponse ({{message}}), et le verrou toujours tenu : rendu ou non, relisez les verrous"
+    "unanswered": "pas de réponse ({{message}}), et le verrou toujours tenu : rendu ou non, relisez les verrous",
+    "acquire": {
+      "open": "Acquérir",
+      "title": "Acquérir un verrou du cluster",
+      "intro": "Accordé par le nœud qui parle pour le cluster, comme à un client du démon, jusqu'à sa libération ou la fin de son bail. Ce qui prend ce verrou l'attend, ou est refusé, tant qu'il est tenu.",
+      "label": "Acquérir",
+      "submit": "Acquérir",
+      "acquiring": "Acquisition du verrou",
+      "holderHint": "Qui le tient, tel que la liste le montre.",
+      "holderOf": "{{user}}, depuis la webapp",
+      "holderWebapp": "la webapp",
+      "lease": "Bail",
+      "leaseHint": "Tenu aussi longtemps sauf libération : 30s par défaut, 10m au plus.",
+      "wait": "Attente",
+      "waitHint": "Combien de temps attendre qu'un autre le libère : pas du tout si vide.",
+      "nameRequired": "Un verrou a besoin d'un nom.",
+      "badDuration": "Une durée, comme 30s, 1m30s ou 10m.",
+      "leaseTooLong": "10m au plus.",
+      "warning": "Un verrou tenu ici bloque tout client du cluster qui le demande : libérez-le une fois fini, ou gardez son bail court.",
+      "held": "Non accordé : {{message}}. Fixez une attente pour le guetter, ou réessayez plus tard."
+    }
   },
   "resources": {
     "caption": "Les ressources du cluster",

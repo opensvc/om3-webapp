@@ -31,6 +31,7 @@ describe('ClusterLocks', () => {
     let requests;
     let locks;
     let released;
+    let posted;
 
     beforeEach(() => {
         vi.useFakeTimers({shouldAdvanceTime: true});
@@ -39,9 +40,22 @@ describe('ClusterLocks', () => {
         requests = [];
         locks = [lock('net-default', 'id-2', {node: 'n2', holder: '', expires_in: '1m5s'}), lock('alloc', 'id-1')];
         released = {status: 204};
+        posted = [];
         global.fetch = vi.fn(async (url, options = {}) => {
             const method = options.method ?? 'GET';
             requests.push(`${method} ${decodeURIComponent(url)}`);
+            if (method === 'POST') {
+                const body = JSON.parse(options.body);
+                posted.push(body);
+                const holding = locks.find((l) => l.name === body.name);
+                if (holding) {
+                    return new Response(JSON.stringify({title: 'Lock held', detail: `lock ${body.name} is held by ${holding.holder || holding.node} on n1 until 10:00:30`}),
+                        {status: 409, headers: {'Content-Type': 'application/problem+json'}});
+                }
+                const granted = lock(body.name, `id-${body.name}`, {holder: body.holder ?? '', expires_in: body.lease ?? '30s'});
+                locks = [...locks, granted];
+                return new Response(JSON.stringify(granted), {status: 200, headers: {'Content-Type': 'application/json'}});
+            }
             if (method === 'DELETE') {
                 if (released.status === 204) locks = locks.filter((l) => !url.includes(`id=${l.id}`));
                 return new Response(released.status === 204 ? null : JSON.stringify({detail: released.detail}), {status: released.status});
@@ -119,6 +133,77 @@ describe('ClusterLocks', () => {
         await waitFor(() => expect(tray()).toEqual([[
             'Release', 'the lock alloc', 'refused', 'HTTP 404 lock alloc is not held under id-1: it was released, or its lease ended',
         ]]));
+    });
+
+    describe('acquired on demand', () => {
+        const openAcquire = async () => {
+            await waitFor(() => expect(rows()).toHaveLength(2));
+            fireEvent.click(screen.getByRole('button', {name: 'Acquire'}));
+            return screen.getByRole('dialog', {name: 'Acquire a cluster lock'});
+        };
+        const field = (dialog, label) => within(dialog).getByLabelText(label);
+        const submit = (dialog) => fireEvent.click(within(dialog).getByRole('button', {name: 'Acquire'}));
+
+        test('its name, held by the webapp for 30 s by default, waiting for none: granted, said in the tray, listed', async () => {
+            renderLocks();
+            const dialog = await openAcquire();
+            expect(field(dialog, 'Holder')).toHaveValue('the webapp');
+            expect(field(dialog, 'Lease')).toHaveValue('30s');
+            expect(field(dialog, 'Wait')).toHaveValue('');
+            expect(within(dialog).getByText(/release it once done/)).toBeInTheDocument();
+            fireEvent.change(field(dialog, 'Name'), {target: {value: ' maintenance '}});
+            submit(dialog);
+            await waitFor(() => expect(posted).toEqual([{name: 'maintenance', holder: 'the webapp', lease: '30s'}]));
+            await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+            await waitFor(() => expect(rows().map((r) => r[0])).toEqual(['alloc', 'maintenance', 'net-default']));
+            expect(tray()).toEqual([['Acquire', 'the lock maintenance', 'succeeded', null]]);
+        });
+
+        test('its holder, lease and wait as said', async () => {
+            renderLocks();
+            const dialog = await openAcquire();
+            fireEvent.change(field(dialog, 'Name'), {target: {value: 'upgrade'}});
+            fireEvent.change(field(dialog, 'Holder'), {target: {value: 'ops: kernel upgrade'}});
+            fireEvent.change(field(dialog, 'Lease'), {target: {value: '5m'}});
+            fireEvent.change(field(dialog, 'Wait'), {target: {value: '10s'}});
+            submit(dialog);
+            await waitFor(() => expect(posted).toEqual([{name: 'upgrade', holder: 'ops: kernel upgrade', lease: '5m', wait: '10s'}]));
+        });
+
+        test('held by another: said in the form, kept open to try again; refused in the tray', async () => {
+            renderLocks();
+            const dialog = await openAcquire();
+            fireEvent.change(field(dialog, 'Name'), {target: {value: 'alloc'}});
+            submit(dialog);
+            expect(await within(dialog).findByText('Not granted: lock alloc is held by om pool claim alloc on n1 until 10:00:30. Set a wait to queue for it, or try again later.')).toBeInTheDocument();
+            expect(screen.getByRole('dialog', {name: 'Acquire a cluster lock'})).toBeInTheDocument();
+            expect(tray()).toEqual([['Acquire', 'the lock alloc', 'refused', 'HTTP 409 lock alloc is held by om pool claim alloc on n1 until 10:00:30']]);
+        });
+
+        test('a name required, a lease of 10 min at most, durations as om reads them: nothing sent until right', async () => {
+            renderLocks();
+            const dialog = await openAcquire();
+            submit(dialog);
+            expect(await within(dialog).findByText('A lock needs a name.')).toBeInTheDocument();
+            fireEvent.change(field(dialog, 'Name'), {target: {value: 'x'}});
+            fireEvent.change(field(dialog, 'Lease'), {target: {value: '11m'}});
+            expect(within(dialog).getByText('10m at most.')).toBeInTheDocument();
+            fireEvent.change(field(dialog, 'Lease'), {target: {value: '30s'}});
+            fireEvent.change(field(dialog, 'Wait'), {target: {value: 'soon'}});
+            expect(within(dialog).getByText('A duration, as 30s, 1m30s or 10m.')).toBeInTheDocument();
+            submit(dialog);
+            await act(async () => {
+                await vi.advanceTimersByTimeAsync(10);
+            });
+            expect(posted).toEqual([]);
+        });
+
+        test('not offered to a user who may not read the locks', async () => {
+            global.fetch = vi.fn(async () => new Response(JSON.stringify({detail: 'forbidden'}), {status: 403}));
+            renderLocks();
+            expect(await screen.findByText('Reading the cluster locks takes the root role.')).toBeInTheDocument();
+            expect(screen.queryByRole('button', {name: 'Acquire'})).not.toBeInTheDocument();
+        });
     });
 
     test('none held: said', async () => {

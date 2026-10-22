@@ -2278,7 +2278,27 @@
     "warning": "Its holder is not told: it goes on as if it held the lock. Release it only from a holder known to be stuck, or gone before its lease ends.",
     "byId": "Released only while still held under {{id}}: granted to another meanwhile, it is left to that one.",
     "stale": "Not read again ({{message}}): the locks below are as last read, none released until they are read again.",
-    "unanswered": "no answer ({{message}}), and the lock still held: released or not, read the locks again"
+    "unanswered": "no answer ({{message}}), and the lock still held: released or not, read the locks again",
+    "acquire": {
+      "open": "Acquire",
+      "title": "Acquire a cluster lock",
+      "intro": "Granted by the node speaking for the cluster, as to a client of the daemon, until released or its lease ends. What takes this lock waits for it, or is refused, while it is held.",
+      "label": "Acquire",
+      "submit": "Acquire",
+      "acquiring": "Acquiring the lock",
+      "holderHint": "Who holds it, as the list shows it.",
+      "holderOf": "{{user}}, from the webapp",
+      "holderWebapp": "the webapp",
+      "lease": "Lease",
+      "leaseHint": "Held for this long unless released: 30s by default, 10m at most.",
+      "wait": "Wait",
+      "waitHint": "How long to wait while another holds it: not at all if empty.",
+      "nameRequired": "A lock needs a name.",
+      "badDuration": "A duration, as 30s, 1m30s or 10m.",
+      "leaseTooLong": "10m at most.",
+      "warning": "A lock held here holds every client of the cluster asking it: release it once done, or keep its lease short.",
+      "held": "Not granted: {{message}}. Set a wait to queue for it, or try again later."
+    }
   },
   "resources": {
     "caption": "The resources of the cluster",

@@ -9,16 +9,19 @@ import {CrossLink} from "../app/CrossLink";
 import {Alert} from "../ui/components/Alert";
 import {Button} from "../ui/components/Button";
 import {Dialog} from "../ui/components/Dialog";
+import {Field, Input} from "../ui/components/Field";
+import {useAuthUser} from "../context/AuthProvider.jsx";
 import {Spinner} from "../ui/components/Spinner";
 import {RelativeTime} from "../ui/components/RelativeTime";
 import {Table, HeaderRow, HeaderCell, Row, Cell, EmptyRow} from "../ui/components/Table";
-import {RefreshIcon} from "../ui/icons";
+import {PlusIcon, RefreshIcon} from "../ui/icons";
 
 /*
  * The cluster locks, as `om cluster lock list` shows them: the ones the node
  * speaking for the cluster granted, whose holder has neither released them nor
  * seen their lease end; each released on demand, as `om cluster lock release`
- * does. Root reads and releases them. No event tells a lock taken or released:
+ * does; acquired on demand, as a client of the daemon takes one. Root reads,
+ * acquires and releases them. No event tells a lock taken or released:
  * read again a few seconds after each read ends, while shown and the page seen
  * (usePagePoll).
  */
@@ -30,6 +33,12 @@ const URL_LOCKS = `${URL_CLUSTER}/lock`;
 
 /** How long a release is waited for: the node speaking for the cluster may be slow to answer. */
 export const RELEASE_TIMEOUT_MS = 60_000;
+
+/** The longest lease the daemon grants: a lock held longer would outlive its holder. */
+export const MAX_LEASE_MS = 10 * 60_000;
+
+/** How long an acquisition is waited for beyond the wait asked: the node speaking may be slow to answer. */
+const ACQUIRE_SLACK_MS = 30_000;
 
 /** The reason of a refusal apiFetch threw: the daemon's words, by its status. */
 const refusalOf = (err) => refusalReason({status: err.status, detail: problemOf(err)});
@@ -66,6 +75,8 @@ export function ClusterLocks() {
     const [now, setNow] = useState(() => Date.now());
     // The lock to release, waiting for its confirmation.
     const [releasing, setReleasing] = useState(null);
+    // The lock to acquire, its form open; null closed.
+    const [acquiring, setAcquiring] = useState(null);
     const [reads, setReads] = useState(0);
     const reload = useCallback(() => setReads((n) => n + 1), []);
 
@@ -148,6 +159,12 @@ export function ClusterLocks() {
                 <Button size="sm" icon={<RefreshIcon className="h-3.5 w-3.5"/>} onClick={reload}>
                     {t("clusterLocks.refresh")}
                 </Button>
+                {/* Root alone acquires one, as it reads them: not offered to whom may not read them. */}
+                {locks !== null && (
+                    <Button size="sm" variant="create" icon={<PlusIcon className="h-3.5 w-3.5"/>} onClick={() => setAcquiring({})}>
+                        {t("clusterLocks.acquire.open")}
+                    </Button>
+                )}
             </div>
             {error && (
                 <Alert tone={stale ? "warning" : "error"}>
@@ -218,6 +235,142 @@ export function ClusterLocks() {
                     </div>
                 )}
             </Dialog>
+
+            <AcquireDialog open={acquiring !== null} onClose={() => setAcquiring(null)} onAcquired={reload}/>
         </div>
+    );
+}
+
+/** A lease or a wait as typed: "" for none, else a Go duration, null when it reads as none. */
+const typedMs = (text) => (text.trim() === "" ? 0 : durationMs(text.trim()));
+
+/**
+ * Acquires a cluster lock, as a client of the daemon takes one (POST /cluster/lock):
+ * its name, who holds it (the user signed in, from the webapp, unless said), its
+ * lease (30 s unless said, 10 min at most) and how long to wait for it while
+ * another holds it (not at all unless said). Held by another, it says so and stays
+ * open; granted, the actions tray says it and the locks are read again.
+ */
+function AcquireDialog({open, onClose, onAcquired}) {
+    const {t} = useTranslation();
+    const user = useAuthUser();
+    const defaultHolder = user ? t("clusterLocks.acquire.holderOf", {user}) : t("clusterLocks.acquire.holderWebapp");
+    const [name, setName] = useState("");
+    const [holder, setHolder] = useState(defaultHolder);
+    const [lease, setLease] = useState("30s");
+    const [wait, setWait] = useState("");
+    const [submitting, setSubmitting] = useState(false);
+    const [error, setError] = useState("");
+    const [tried, setTried] = useState(false);
+
+    // Each opening starts over.
+    useEffect(() => {
+        if (!open) return;
+        setName("");
+        setHolder(defaultHolder);
+        setLease("30s");
+        setWait("");
+        setError("");
+        setTried(false);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [open]);
+
+    const leaseMs = typedMs(lease);
+    const waitMs = typedMs(wait);
+    const nameError = name.trim() === "" ? t("clusterLocks.acquire.nameRequired") : null;
+    const leaseError = leaseMs === null || leaseMs < 0
+        ? t("clusterLocks.acquire.badDuration")
+        : leaseMs > MAX_LEASE_MS ? t("clusterLocks.acquire.leaseTooLong") : null;
+    const waitError = waitMs === null || waitMs < 0 ? t("clusterLocks.acquire.badDuration") : null;
+    const invalid = nameError !== null || leaseError !== null || waitError !== null;
+
+    const submit = async (event) => {
+        event?.preventDefault();
+        setTried(true);
+        if (invalid || submitting) return;
+        setSubmitting(true);
+        setError("");
+        const lockName = name.trim();
+        const info = {action: "acquire", label: t("clusterLocks.acquire.label"), subject: t("clusterLocks.subject", {name: lockName})};
+        const body = {name: lockName};
+        if (holder.trim() !== "") body.holder = holder.trim();
+        if (lease.trim() !== "") body.lease = lease.trim();
+        if (wait.trim() !== "") body.wait = wait.trim();
+        try {
+            await apiFetch(URL_LOCKS, {
+                method: "POST",
+                headers: {...authHeaders(), "Content-Type": "application/json"},
+                body: JSON.stringify(body),
+                // The daemon answers once granted, or once the wait asked is over.
+                timeout: waitMs + ACQUIRE_SLACK_MS,
+            });
+            trackDone(info);
+            onClose();
+        } catch (err) {
+            const reason = err.status ? refusalOf(err) : err.message;
+            trackRefused({...info, reason});
+            // Held by another: said here, the form kept to try again or wait longer.
+            setError(err.status === 409 ? t("clusterLocks.acquire.held", {message: problemOf(err) || reason}) : reason);
+        } finally {
+            setSubmitting(false);
+            onAcquired();
+        }
+    };
+
+    const formId = "cluster-lock-acquire";
+    return (
+        <Dialog
+            open={open}
+            onClose={submitting ? () => {} : onClose}
+            title={t("clusterLocks.acquire.title")}
+            footer={
+                <>
+                    <Button onClick={onClose} disabled={submitting}>{t("common.cancel")}</Button>
+                    <Button
+                        variant="create"
+                        type="submit"
+                        form={formId}
+                        disabled={submitting}
+                        icon={submitting ? <Spinner label={t("clusterLocks.acquire.acquiring")}/> : undefined}
+                    >
+                        {t("clusterLocks.acquire.submit")}
+                    </Button>
+                </>
+            }
+        >
+            <form id={formId} onSubmit={submit} noValidate className="space-y-3">
+                <p className="text-ink-muted">{t("clusterLocks.acquire.intro")}</p>
+                <Field label={t("common.name")} error={tried ? nameError : null}>
+                    {(control) => (
+                        <Input {...control} value={name} onChange={(e) => setName(e.target.value)}
+                               autoComplete="off" spellCheck={false} autoFocus/>
+                    )}
+                </Field>
+                <Field label={t("clusterLocks.holder")} hint={t("clusterLocks.acquire.holderHint")}>
+                    {(control) => (
+                        <Input {...control} value={holder} onChange={(e) => setHolder(e.target.value)}
+                               autoComplete="off" spellCheck={false}/>
+                    )}
+                </Field>
+                <div className="grid gap-3 sm:grid-cols-2">
+                    <Field label={t("clusterLocks.acquire.lease")} hint={t("clusterLocks.acquire.leaseHint")}
+                           error={leaseError}>
+                        {(control) => (
+                            <Input {...control} value={lease} onChange={(e) => setLease(e.target.value)}
+                                   placeholder="30s" autoComplete="off" spellCheck={false}/>
+                        )}
+                    </Field>
+                    <Field label={t("clusterLocks.acquire.wait")} hint={t("clusterLocks.acquire.waitHint")}
+                           error={waitError}>
+                        {(control) => (
+                            <Input {...control} value={wait} onChange={(e) => setWait(e.target.value)}
+                                   placeholder="10s" autoComplete="off" spellCheck={false}/>
+                        )}
+                    </Field>
+                </div>
+                <Alert tone="warning">{t("clusterLocks.acquire.warning")}</Alert>
+                {error && <Alert tone="error">{error}</Alert>}
+            </form>
+        </Dialog>
     );
 }

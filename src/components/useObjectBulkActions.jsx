@@ -31,6 +31,15 @@ const actionIcon = ({icon, color}) => (
 const selectObjectStatus = (state) => state.objectStatus;
 const selectRemoveObject = (state) => state.removeObject;
 
+const isCluster = (objectName) => parseObjectPath(objectName).kind === "ccfg";
+
+/**
+ * The objects an action on a selection goes to. The cluster object is acted on as
+ * the cluster, on all the nodes: only when it is the whole selection, never swept
+ * along with other objects by a select all.
+ */
+const actedOn = (objects) => objects.length > 1 ? objects.filter((obj) => !isCluster(obj)) : objects;
+
 /** The frozen state an action gives an object at once, before the daemon says it. */
 const updateFrozenStatusOptimistic = (objectName, newFrozenValue) => {
     const store = useEventStore.getState();
@@ -85,7 +94,10 @@ export function useObjectBulkActions({selectedObjects, onDone}) {
         // What comes of each object, accepted, refused or left alone, the actions tray says.
         const objectsToProcess = pendingAction?.target ? [pendingAction.target] : selectedObjects;
         const refuse = (objectName, reason) => trackRefused({action, subject: objectName, reason});
-        const promises = objectsToProcess.map(async (objectName) => {
+        const targets = actedOn(objectsToProcess);
+        objectsToProcess.filter((obj) => !targets.includes(obj))
+            .forEach((obj) => refuse(obj, t("actionTray.reasons.clusterInSelection")));
+        const promises = targets.map(async (objectName) => {
             const rawObj = objectStatus[objectName];
             if (!rawObj) {
                 refuse(objectName, t("actionTray.reasons.unknownObject"));
@@ -134,7 +146,8 @@ export function useObjectBulkActions({selectedObjects, onDone}) {
 
     // Kind-limited actions (svc-only enable / disable) are offered when the whole selection is of that kind.
     const items = useMemo(() => {
-        const selectedKinds = new Set(selectedObjects.map((obj) => parseObjectPath(obj).kind));
+        const objects = actedOn(selectedObjects);
+        const selectedKinds = new Set(objects.map((obj) => parseObjectPath(obj).kind));
         // Keys held on all the nodes are deleted, or the orchestration on them aborted: nothing else.
         const keysOnly = selectedKinds.size > 0 && [...selectedKinds].every((kind) => KEY_KINDS.includes(kind));
         const built = OBJECT_ACTIONS
@@ -146,7 +159,7 @@ export function useObjectBulkActions({selectedObjects, onDone}) {
                 key: action.name,
                 label: actionLabel(action.name),
                 icon: actionIcon(action),
-                disabled: !isActionAllowedForSelection(action.name, selectedObjects),
+                disabled: !isActionAllowedForSelection(action.name, objects),
                 onSelect: () => handleActionClick(action.name),
             }));
         return explainedItems(t, "object", built);
@@ -167,14 +180,15 @@ export function useObjectBulkActions({selectedObjects, onDone}) {
         </Alert>
     ) : null;
 
+    const dialogNames = useMemo(() => actedOn(selectedObjects), [selectedObjects]);
     const dialog = (
         <ActionDialogManager
             pendingAction={pendingAction}
             handleConfirm={execute}
             target={pendingAction?.target
                 ? t("objects.dialogTarget.object", {name: pendingAction.target})
-                : t("objects.dialogTarget.objects", {count: selectedObjects.length})}
-            names={pendingAction?.target ? undefined : selectedObjects}
+                : t("objects.dialogTarget.objects", {count: dialogNames.length})}
+            names={pendingAction?.target ? undefined : dialogNames}
             supportedActions={OBJECT_ACTIONS.map((action) => action.name)}
             onClose={() => setPendingAction(null)}
         />

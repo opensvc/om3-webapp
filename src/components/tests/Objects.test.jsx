@@ -2000,6 +2000,26 @@ describe('Objects Component', () => {
         );
     });
 
+    test('the cluster object, selected with others, is left out of their action: no freeze of the nodes', async () => {
+        setup({
+            objectStatus: {
+                cluster: {avail: 'up', frozen: 'unfrozen'},
+                'test-ns/svc/web': {avail: 'up', frozen: 'unfrozen'},
+            },
+            objectInstanceStatus: {cluster: {node1: {avail: 'up'}}, 'test-ns/svc/web': {node1: {avail: 'up'}}},
+        }, '?list=any', {isWideScreen: true, isMobile: false});
+        await waitForLoad();
+        selectRow('cluster');
+        selectRow('test-ns/svc/web');
+        openActionsMenu();
+        await clickMenuItem('Freeze');
+        await confirmDialog();
+        await waitFor(() =>
+            expect(global.fetch).toHaveBeenCalledWith('/api/object/path/test-ns/svc/web/action/freeze', expect.any(Object))
+        );
+        expect(global.fetch).not.toHaveBeenCalledWith('/api/cluster/action/freeze', expect.anything());
+    });
+
     test.each([
         ['svc/myobj', {
             objectStatus: {'svc/myobj': {avail: 'up', frozen: 'unfrozen'}},

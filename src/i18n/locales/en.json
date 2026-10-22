@@ -1875,7 +1875,8 @@
     "reasons": {
       "unknownObject": "the object is not known",
       "alreadyFrozen": "already frozen",
-      "alreadyUnfrozen": "not frozen"
+      "alreadyUnfrozen": "not frozen",
+      "clusterInSelection": "left out: the cluster is acted on alone"
     },
     "monitor": "{{node}}: the monitor is {{state}}",
     "subjects": {

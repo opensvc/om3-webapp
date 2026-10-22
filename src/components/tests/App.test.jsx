@@ -285,7 +285,6 @@ describe('App Component', () => {
     });
 
     test.each([
-        ['/heartbeats', 'heartbeats'],
         ['/silent-renew', 'silent-renew'],
         ['/auth-callback', 'auth-callback'],
         ['/auth-choice', 'auth-choice'],
@@ -310,6 +309,17 @@ describe('App Component', () => {
         expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('authToken');
         expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('tokenExpiration');
         expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('authChoice');
+    });
+
+    test('ProtectedRoute: the heartbeats shown signed in, the sign-in asked without a token', async () => {
+        setupBasicAuth();
+        const {unmount} = renderApp(['/heartbeats']);
+        expect(await screen.findByTestId('heartbeats')).toBeInTheDocument();
+        unmount();
+        mockLocalStorage.getItem.mockImplementation(() => null);
+        renderApp(['/heartbeats']);
+        expect(await screen.findByTestId('auth-choice')).toBeInTheDocument();
+        expect(screen.queryByTestId('heartbeats')).not.toBeInTheDocument();
     });
 
     test('ProtectedRoute: null token + null authChoice redirects', async () => {

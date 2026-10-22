@@ -438,7 +438,7 @@ const App = () => {
                                         {/* Tabs of the Objects page now: an old link lands there. */}
                                         <Route path="/namespaces" element={<ProtectedRoute><Namespaces/></ProtectedRoute>}/>
                                         <Route path="/kinds" element={<ObjectsTab list="any"/>}/>
-                                        <Route path="/heartbeats" element={<Heartbeats/>}/>
+                                        <Route path="/heartbeats" element={<ProtectedRoute><Heartbeats/></ProtectedRoute>}/>
                                         <Route path="/nodes" element={<ProtectedRoute><NodesTable/></ProtectedRoute>}/>
                                         <Route path="/pools" element={<ProtectedRoute><Pools/></ProtectedRoute>}/>
                                         <Route path="/resources" element={<ProtectedRoute><Resources/></ProtectedRoute>}/>

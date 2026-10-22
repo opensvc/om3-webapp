@@ -237,6 +237,11 @@ describe('record panels', () => {
             fireEvent.click(actions);
             const remove = within(screen.getByRole('menu', {name: 'Namespace actions'})).getByRole('menuitem', {name: 'Delete'});
             expect(remove).toBeEnabled();
+            // The configuration deleted on all the nodes: said so, not as the delete of an instance.
+            fireEvent.click(remove);
+            const confirm = screen.getByRole('dialog', {name: /delete/i});
+            expect(within(confirm).getByText(/orchestrated clusterwide/)).toBeInTheDocument();
+            expect(within(confirm).queryByText(/may recreate the configuration from a peer/)).not.toBeInTheDocument();
         } finally {
             mockGrants.value = {};
             store.reset();

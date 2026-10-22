@@ -144,7 +144,7 @@ export function ObjectDetailPanel({path, tab, onTabChange, onClose}) {
                         <ObjectLogs key={path} path={path} nodes={nodes}
                                     orchestration={logsOrchestration} onClearOrchestration={() => setLogsOrchestration(null)}/>
                     )}
-                    {active === "config" && <ObjectConfig path={path}/>}
+                    {active === "config" && <ObjectConfig key={path} path={path}/>}
                 </>
             )}
         </RecordPanel>

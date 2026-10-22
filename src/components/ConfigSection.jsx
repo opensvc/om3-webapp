@@ -45,6 +45,9 @@ const useConfig = (decodedObjectName, configNode, setConfigNode, refreshTrigger,
     const {t} = useTranslation();
     const [state, dispatch] = useReducer(reducer, initialState);
     const lastFetch = useRef({});
+    // The read in flight: a newer one aborts it, and its answer, late, is dropped. A
+    // revealed config answering after a hide must not be shown as hidden.
+    const inFlight = useRef(null);
 
     const fetchConfig = useCallback(async (node, forceBypassThrottle = false) => {
         /* istanbul ignore next */
@@ -59,24 +62,38 @@ const useConfig = (decodedObjectName, configNode, setConfigNode, refreshTrigger,
         lastFetch.current[key] = now;
         const {namespace, kind, name} = parseObjectPath(decodedObjectName);
         const token = localStorage.getItem("authToken") || "";
+        inFlight.current?.abort();
+        const controller = new AbortController();
+        inFlight.current = controller;
+        const superseded = () => inFlight.current !== controller;
         dispatch({type: "FETCH_START"});
         setConfigNode(node);
         try {
             const response = await fetch(`${URL_OBJECT}/${namespace}/${kind}/${name}/config/file?redact-secrets=${!showSecrets}`, {
                 headers: {Authorization: `Bearer ${token}`},
                 cache: "no-cache",
+                signal: controller.signal,
             });
+            if (superseded()) return;
             if (!response.ok) {
                 const error = new Error(`HTTP ${response.status}`);
                 dispatch({type: "FETCH_ERROR", payload: t("config.errors.fetchConfig", {message: error.message})});
                 return;
             }
             const text = await response.text();
+            if (superseded()) return;
             dispatch({type: "FETCH_SUCCESS", payload: text});
         } catch (err) {
+            if (superseded()) return;
             dispatch({type: "FETCH_ERROR", payload: t("config.errors.fetchConfig", {message: err.message})});
         }
     }, [decodedObjectName, setConfigNode, showSecrets, t]);
+
+    // Gone, the read in flight is of no use.
+    useEffect(() => () => {
+        inFlight.current?.abort();
+        inFlight.current = null;
+    }, []);
 
     // Showing or hiding the secrets always reloads, throttle or not, and drops the
     // text first: a revealed secret must not stay on screen while hiding them.
@@ -1071,7 +1088,8 @@ const ConfigSection = ({
                                 label={showSecrets ? t("config.view.hideSecrets") : t("config.view.showSecrets")}
                                 aria-pressed={showSecrets}
                                 onClick={() => setShowSecrets((shown) => !shown)}
-                                disabled={configLoading}
+                                // Hidden at any time, a slow read in clear dropped.
+                                disabled={configLoading && !showSecrets}
                             >
                                 {showSecrets ? <EyeOffIcon/> : <EyeIcon/>}
                             </IconButton>}

@@ -8,6 +8,7 @@ import ObjectStatus from "./ObjectStatus";
 import ObjectConfig from "./ObjectConfig";
 import {ObjectSchedules} from "./ObjectTabs";
 import NetworkDetails from "./NetworkDetails";
+import {NetworkConfig, NetworkOverview} from "./NetworkPanel";
 import {NamespaceConfig, NamespaceUsage} from "./NamespacePanel";
 import {NamespaceClaims} from "./NamespaceClaims";
 import {ObjectUsage} from "./InstanceRecord";
@@ -151,11 +152,31 @@ export function ObjectDetailPanel({path, tab, onTabChange, onClose}) {
     );
 }
 
-/** A network: the addresses it hands out. */
-export function NetworkDetailPanel({name, onClose}) {
+/**
+ * A network: what it is and hands out, root deleting it; the addresses it handed out;
+ * its section of the cluster configuration. A tab each, the tab in the URL, as for the
+ * other records. `onDeleted`, the network deleted, the panel closed by its page.
+ */
+export function NetworkDetailPanel({name, tab, onTabChange, onClose, onDeleted}) {
+    const {t} = useTranslation();
+    const tabs = ["overview", "addresses", "config"].map((key) => ({key, label: t(`networks.panel.tabs.${key}`)}));
     return (
-        <RecordPanel open={name !== undefined} kind="network" recordId={name} title={name ?? ""} onClose={onClose} size="wide">
-            {() => <NetworkDetails key={name} name={name} embedded/>}
+        <RecordPanel
+            open={name !== undefined}
+            kind="network"
+            recordId={name}
+            title={name ?? ""}
+            onClose={onClose}
+            tabs={tabs}
+            tab={tab}
+            onTabChange={onTabChange}
+            size="wide"
+        >
+            {(active) => (active === "addresses"
+                ? <NetworkDetails key={name} name={name} embedded/>
+                : active === "config"
+                    ? <NetworkConfig key={name} name={name} onDeleted={onDeleted ?? onClose}/>
+                    : <NetworkOverview key={name} name={name}/>)}
         </RecordPanel>
     );
 }

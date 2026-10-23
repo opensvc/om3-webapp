@@ -17,9 +17,24 @@ vi.mock('axios', () => ({
 
 // The panel of a network, on its own tested elsewhere: here, which network it is given.
 vi.mock('../RecordPanels', () => ({
-    NetworkDetailPanel: ({name, onClose}) => (name ? (
-        <div data-testid="network-panel">{name}<button onClick={onClose}>close</button></div>
+    NetworkDetailPanel: ({name, onClose, onDeleted}) => (name ? (
+        <div data-testid="network-panel">{name}<button onClick={onClose}>close</button>
+            <button onClick={() => onDeleted(name)}>deleted</button></div>
     ) : null),
+}));
+
+// The grants of the user: root adds a network.
+const mockGrants = vi.hoisted(() => ({value: {}}));
+vi.mock('../../hooks/useGrants', () => ({useGrants: () => mockGrants.value}));
+
+// The wizard, on its own tested elsewhere: here, saving the network it was given a name for.
+vi.mock('../NetworkWizard', () => ({
+    NetworkWizard: ({onSaved, onClose}) => (
+        <div role="dialog" aria-label="New network">
+            <button onClick={() => onSaved('backend')}>save backend</button>
+            <button onClick={onClose}>cancel</button>
+        </div>
+    ),
 }));
 
 // Mock useNavigate from react-router-dom
@@ -55,6 +70,43 @@ describe('Network Component', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         mockLocalStorage.getItem.mockReturnValue('mock-token');
+        mockGrants.value = {};
+    });
+
+    test('a network deleted: its panel closed, the list read until it no longer has it', async () => {
+        axios.get
+            .mockResolvedValueOnce({data: {items: mockNetworks}})
+            .mockResolvedValueOnce({data: {items: mockNetworks}})
+            .mockResolvedValue({data: {items: mockNetworks.filter((n) => n.name !== 'mid')}});
+        render(<Network/>, {wrapper: MemoryRouter});
+        fireEvent.click(await screen.findByText('mid'));
+        fireEvent.click(within(screen.getByTestId('network-panel')).getByRole('button', {name: 'deleted'}));
+        expect(screen.queryByTestId('network-panel')).toBeNull();
+        await waitFor(() => expect(screen.queryByText('mid')).toBeNull(), {timeout: 3000});
+        expect(axios.get).toHaveBeenCalledTimes(3);
+    });
+
+    test('root adds a network from a wizard: the list read until it has it, its panel then opened', async () => {
+        axios.get.mockResolvedValueOnce({data: {items: mockNetworks}});
+        const {unmount} = render(<Network/>, {wrapper: MemoryRouter});
+        // Not root: no button.
+        await waitFor(() => expect(screen.getByText('lo')).toBeInTheDocument());
+        expect(screen.queryByRole('button', {name: 'Add network'})).toBeNull();
+        unmount();
+
+        mockGrants.value = {root: null};
+        axios.get
+            .mockResolvedValueOnce({data: {items: mockNetworks}})
+            // Written, not applied yet: read again until it is.
+            .mockResolvedValueOnce({data: {items: mockNetworks}})
+            .mockResolvedValue({data: {items: [...mockNetworks, {name: 'backend', type: 'routed_bridge', network: '10.40.0.0/16', size: 0, used: 0}]}});
+        render(<Network/>, {wrapper: MemoryRouter});
+        fireEvent.click(await screen.findByRole('button', {name: 'Add network'}));
+        fireEvent.click(within(screen.getByRole('dialog', {name: 'New network'})).getByRole('button', {name: 'save backend'}));
+        expect(screen.queryByRole('dialog', {name: 'New network'})).toBeNull();
+        await waitFor(() => expect(screen.getByTestId('network-panel')).toHaveTextContent('backend'), {timeout: 3000});
+        expect(screen.getByRole('row', {name: /backend/})).toHaveTextContent('10.40.0.0/16');
+        expect(axios.get).toHaveBeenCalledTimes(4);
     });
 
     test('renders table headers correctly', () => {

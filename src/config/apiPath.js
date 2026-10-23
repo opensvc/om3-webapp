@@ -10,6 +10,8 @@ export const URL_RESOURCE = '/api/resource';
 export const URL_NODE_INFO = '/api/node/info';
 export const URL_OBJECT = '/api/object/path';
 export const URL_NODE = '/api/node/name';
+// The nodes of the cluster, a list.
+export const URL_NODES = '/api/node';
 export const URL_NETWORK = "/api/network";
 export const URL_NETWORK_IP = "/api/network/ip";
 // Not under /api: the per cgroup metrics, served unauthenticated by the node listener.

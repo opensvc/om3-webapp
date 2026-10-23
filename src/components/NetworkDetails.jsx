@@ -15,7 +15,8 @@ import {CrossLink} from "../app/CrossLink";
 
 /**
  * The addresses of a network. A page of its own under its route, or, `embedded`, the
- * content of the network record panel, which gives the name and already shows it.
+ * addresses tab of the network record panel, which gives the name and already shows
+ * it, its overview the type.
  */
 const NetworkDetails = ({name, embedded = false} = {}) => {
     const {t} = useTranslation();
@@ -136,9 +137,8 @@ const NetworkDetails = ({name, embedded = false} = {}) => {
 
     return (
         <div ref={containerRef} className={embedded ? "space-y-3" : "p-4 space-y-3"}>
-            {embedded ? (
-                <p className="text-ink-muted">{t("networks.details.type", {type: networkType || notAvailable})}</p>
-            ) : (
+            {/* Embedded, the panel's overview says its type. */}
+            {!embedded && (
                 <h1 className="text-title font-semibold">
                     {t("networks.details.title", {name: networkName || notAvailable, type: networkType || notAvailable})}
                 </h1>

@@ -1,0 +1,339 @@
+[
+  {
+    "section": "network",
+    "option": "addr",
+    "types": [
+      "routed_bridge"
+    ],
+    "text": "The ip address used as local endpoint for the ipip tunnel configured by the\n`network setup` command to access the backend subnet of peer nodes not\nreachable on the same subnet.\n",
+    "default": "",
+    "defaultText": "Detect using a name resolution of `<nodename>`.\n\nBeware, if the nodename resolves to `127.0.1.1` or `127.0.0.1` the ipip\ntunnel can not work.\n",
+    "example": "",
+    "candidates": [],
+    "converter": "",
+    "required": false,
+    "scopable": true
+  },
+  {
+    "section": "network",
+    "option": "dev",
+    "types": [
+      "bridge",
+      "routed_bridge"
+    ],
+    "text": "The network bridge device name. If not set the name will be `obr_<network name>`. Use this keyword if you need the network to use an already existing bridge.\n",
+    "default": "",
+    "defaultText": "",
+    "example": "",
+    "candidates": [],
+    "converter": "",
+    "required": false,
+    "scopable": false
+  },
+  {
+    "section": "network",
+    "option": "dev",
+    "types": [
+      "lan"
+    ],
+    "text": "The interface of the node on the segment, which the addresses drawn from this\nnetwork are configured on, as `eth1`.\n\nWhen not set, it is the interface holding an address of the segment, not\ncounting the addresses of the ranges. Set it when the nodes have no address\non the segment, or when several interfaces hold one.\n",
+    "default": "",
+    "defaultText": "",
+    "example": "eth1",
+    "candidates": [],
+    "converter": "",
+    "required": false,
+    "scopable": true
+  },
+  {
+    "section": "network",
+    "option": "dns",
+    "types": [
+      "bridge",
+      "lan",
+      "routed_bridge"
+    ],
+    "text": "The nameservers reachable from the network, which the containers whose\nnetwork namespace holds an address of it, from an ip.netns or an ip.cni, are\ngiven in place of the nameservers of the cluster: a segment the cluster\nnameservers are not reachable from, as a public one, needs its own. The `dns`\nkeyword of a container adds its own nameservers after them.\n\nUnset, the containers are given the nameservers of the cluster. A container\nwith addresses on several networks naming nameservers is given the ones of\neach, in the order of its ip resources.\n",
+    "default": "",
+    "defaultText": "",
+    "example": "2001:db8::53 192.0.2.53",
+    "candidates": [],
+    "converter": "list",
+    "required": false,
+    "scopable": true
+  },
+  {
+    "section": "network",
+    "option": "gateway",
+    "types": [
+      "lan"
+    ],
+    "text": "The router of the segment, which the ip.netns resources drawing from this\nnetwork route the traffic of their namespace through, unless they set a\ngateway of their own. The ip.host resources do not use it: their addresses\nare configured on the node, which has its own routes.\n\nIt must be an address of the segment, and not one of the ranges om hands out.\nWhen not set, the ip.netns resources set no gateway, and a namespace with no\ndefault route of its own reaches the segment only.\n",
+    "default": "",
+    "defaultText": "",
+    "example": "192.168.10.254",
+    "candidates": [],
+    "converter": "",
+    "required": false,
+    "scopable": true
+  },
+  {
+    "section": "network",
+    "option": "gateway",
+    "types": [
+      "routed_bridge"
+    ],
+    "text": "The gateway to use to reach the network segment of the node specified as scope.\n",
+    "default": "",
+    "defaultText": "",
+    "example": "",
+    "candidates": [],
+    "converter": "",
+    "required": false,
+    "scopable": true
+  },
+  {
+    "section": "network",
+    "option": "ips_per_node",
+    "types": [
+      "routed_bridge"
+    ],
+    "text": "The number of ips each node must be able to allocate in the  network. This number is translated into the prefix length of the subnets distributed to each node.\nFor example if the network is a x.x.x.x/16 you can distribute\n- x.x.x.x/17 subnets to 2 nodes\n- x.x.x.x/18 to 4 nodes\n- etc...\n\nIf both `mask_per_node` and `ips_per_node` are set, `ips_per_node` is ignored.\nIf only `ips_per_node` is set, it is honored for backward compatibility.\n\nThe `ips_per_node` keyword is deprecated because its value is hard to manage for large ipv6 subnets (e.g a x.x.x.x/48 subnet has 281474976710656 ips).",
+    "default": "1024",
+    "defaultText": "",
+    "example": "",
+    "candidates": [],
+    "converter": "int",
+    "required": false,
+    "scopable": false
+  },
+  {
+    "section": "network",
+    "option": "mask_per_node",
+    "types": [],
+    "text": "The prefix length of the subnets distributed to each node.\nFor example if the network is a x.x.x.x/16 you can distribute\n- x.x.x.x/17 subnets to 2 nodes\n- x.x.x.x/18 to 4 nodes\n- etc...\n\nIf both `mask_per_node` and `ips_per_node` are set, `ips_per_node` is ignored.\nIf only `ips_per_node` is set, it is honored for backward compatibility.\n\nThe `ips_per_node` keyword is deprecated because its value is hard to manage for large ipv6 subnets (e.g a x.x.x.x/48 subnet has 281474976710656 ips).",
+    "default": "0",
+    "defaultText": "",
+    "example": "",
+    "candidates": [],
+    "converter": "int",
+    "required": false,
+    "scopable": false
+  },
+  {
+    "section": "network",
+    "option": "modes",
+    "types": [
+      "lan"
+    ],
+    "text": "The modes an ip.netns drawing its address from the network may join the\nsegment with, the first being the one of an ip.netns naming none: the\nnetwork says how the segment is joined, as `macvlan` where the interface of\nthe node on it is no bridge, and an ip.netns naming another mode is refused.\n\nUnset, an ip.netns joins the segment with the mode it names, `bridge` by\ndefault, which needs the interface of the node on the segment to be a bridge.\n\nA namespace administrator can not name the mode of an ip.netns: the network\nchoosing it is what lets the address of a namespace be on any segment. The\nkeyword is scopable, for the nodes whose interface on the segment differs.\n",
+    "default": "",
+    "defaultText": "",
+    "example": "macvlan ipvlan-l2",
+    "candidates": [
+      "bridge",
+      "macvlan",
+      "ipvlan-l2",
+      "dedicated",
+      "ovs"
+    ],
+    "converter": "list",
+    "required": false,
+    "scopable": true
+  },
+  {
+    "section": "network",
+    "option": "network",
+    "types": [
+      "bridge"
+    ],
+    "text": "The cluster backend network.\n\nThe routed_bridge driver fragments this network into subnets with a prefix length given by`mask_per_nodes`.\n",
+    "default": "",
+    "defaultText": "",
+    "example": "",
+    "candidates": [],
+    "converter": "",
+    "required": false,
+    "scopable": true
+  },
+  {
+    "section": "network",
+    "option": "network",
+    "types": [
+      "lan"
+    ],
+    "text": "The segment the nodes share, as `192.168.10.0/24`, which the addresses drawn\nfrom this network are configured with the prefix length of. Its first\naddress, and the last of an ipv4 segment, are never handed out.\n\nom hands out the addresses of the ranges keyword only. Every node draws from\nall of them, so an address is the same wherever the object runs, and an\nobject moving to another node takes its address along.\n\nA draw is made under the cluster lock of the network, and keeps clear of the\naddresses the nodes hold: the ones each node alive has reserved, the ones the\ncluster status reports, and the ones each node remembers the others last\nreported holding, which outlive a node the cluster stops hearing from. A node\nstopped cleanly, as for a restart, is waited for until its maintenance grace\nperiod ends, for as long as the lease of the lock allows.\n\nTwo parts of a split cluster, each not hearing the other, draw blind to what\nthe other draws, and can hand out the same address twice. The ip.host\nresources report such an address as held elsewhere too, and an administrator\ngives one of them another address: unset the addr of the resource and\nrestart it, or unprovision and provision it.\n",
+    "default": "",
+    "defaultText": "",
+    "example": "192.168.10.0/24",
+    "candidates": [],
+    "converter": "",
+    "required": false,
+    "scopable": false
+  },
+  {
+    "section": "network",
+    "option": "network",
+    "types": [
+      "routed_bridge"
+    ],
+    "text": "The cluster backend network.\n\nThe routed_bridge driver fragments this network into subnets with a prefix length given by`mask_per_nodes`.\n",
+    "default": "",
+    "defaultText": "",
+    "example": "",
+    "candidates": [],
+    "converter": "",
+    "required": false,
+    "scopable": false
+  },
+  {
+    "section": "network",
+    "option": "public",
+    "types": [
+      "bridge",
+      "routed_bridge"
+    ],
+    "text": "Set to true if the network ip range is public and we must not configure masquerading rules.\n",
+    "default": "",
+    "defaultText": "",
+    "example": "",
+    "candidates": [],
+    "converter": "bool",
+    "required": false,
+    "scopable": false
+  },
+  {
+    "section": "network",
+    "option": "ranges",
+    "types": [
+      "lan"
+    ],
+    "text": "The addresses of the segment om hands out, as a list of subnets, as\n`192.168.10.128/26`, and of spans from a first to a last address, as\n`192.168.10.100-192.168.10.199`, the form nftables and ipset read.\n\nRequired: the segment holds the addresses of the nodes, of the router and of\nthe other hosts, which om knows nothing of. Keep the ranges clear of them,\nleaving out a host in the middle of a span by writing the span in two:\n\n    ranges = 192.168.10.100-192.168.10.149 192.168.10.151-192.168.10.199\n\nThe ranges must be in the segment, and must not overlap, nor overlap the\nranges of another lan network of the same segment.\n",
+    "default": "",
+    "defaultText": "",
+    "example": "192.168.10.100-192.168.10.149 192.168.10.151-192.168.10.199",
+    "candidates": [],
+    "converter": "list",
+    "required": false,
+    "scopable": false
+  },
+  {
+    "section": "network",
+    "option": "subnet",
+    "types": [
+      "routed_bridge"
+    ],
+    "text": "The cidr subnet handled by this node.\n\nThis parameter must be scoped for each node.\n\nUsually, the subnets are allocated automatically upon initial network setup,\neach node being attributed a subnet based on its index in the cluster.nodes\nlist.\n",
+    "default": "",
+    "defaultText": "",
+    "example": "",
+    "candidates": [],
+    "converter": "",
+    "required": false,
+    "scopable": true
+  },
+  {
+    "section": "network",
+    "option": "tables",
+    "types": [
+      "routed_bridge"
+    ],
+    "text": "The list of routing tables to add the backend network routes to.\n\nThe list of available tables is in `/etc/iproute2/rt_tables`.\n",
+    "default": "main",
+    "defaultText": "",
+    "example": "main custom1 custom2",
+    "candidates": [],
+    "converter": "list",
+    "required": false,
+    "scopable": false
+  },
+  {
+    "section": "network",
+    "option": "tunnel",
+    "types": [
+      "routed_bridge"
+    ],
+    "text": "Create and route traffic through tunnels to peer nodes policy.\n\n* `auto`\n\n  Tunnel if the peer is not in the same subnet\n\n* `always`\n\n  Tunnel even if the peer seems to be in the same subnet.\n  Some hosting providers require this as traffic goes through routers even\n  between adjacent nodes.\n",
+    "default": "auto",
+    "defaultText": "",
+    "example": "",
+    "candidates": [
+      "auto",
+      "always",
+      "never"
+    ],
+    "converter": "",
+    "required": false,
+    "scopable": false
+  },
+  {
+    "section": "network",
+    "option": "tunnel_mode",
+    "types": [
+      "routed_bridge"
+    ],
+    "text": "The ip tunnel mode. gre can tunnel mcast ip and ipv6 at the price of a 24B header, ipip can only tunnel ipv4 but with a 20B header. Note, some OVH servers combinations don't support ipip but work with gre.\n",
+    "default": "ipip",
+    "defaultText": "",
+    "example": "",
+    "candidates": [
+      "gre",
+      "ipip",
+      "ip6ip6"
+    ],
+    "converter": "",
+    "required": false,
+    "scopable": false
+  },
+  {
+    "section": "network",
+    "option": "type",
+    "types": [],
+    "text": "The type of network.\n\n* `bridge`: a subnet on a bridge of each node, the same on every node, its\n  traffic masqueraded out of the node.\n* `routed_bridge`: a subnet cut into one range per node, routed between the\n  nodes.\n* `lan`: ranges of a segment the nodes share, the addresses of which an\n  object takes along when it moves to another node, as the floating address\n  of a failover service.\n\nThe traffic the nodes forward for the `bridge` and `routed_bridge` networks\nis accepted in the om nft table, and, on a node running docker, whose\nforward chain drops what docker did not accept, in a chain the docker\n`DOCKER-USER` chain jumps to.\n",
+    "default": "bridge",
+    "defaultText": "",
+    "example": "",
+    "candidates": [
+      "bridge",
+      "routed_bridge",
+      "lan"
+    ],
+    "converter": "",
+    "required": false,
+    "scopable": false
+  },
+  {
+    "section": "network",
+    "option": "vlan_mode",
+    "types": [
+      "lan"
+    ],
+    "text": "The VLAN mode of the port an ip.netns joining the segment in `ovs` mode adds\nto the openvswitch bridge, when the ip.netns names none: `access`,\n`native-tagged` or `native-untagged`.\n",
+    "default": "",
+    "defaultText": "",
+    "example": "access",
+    "candidates": [
+      "access",
+      "native-tagged",
+      "native-untagged"
+    ],
+    "converter": "",
+    "required": false,
+    "scopable": true
+  },
+  {
+    "section": "network",
+    "option": "vlan_tag",
+    "types": [
+      "lan"
+    ],
+    "text": "The VLAN of the segment an ip.netns joining it in `ovs` mode puts its port\nin, the `tag` of the port on the openvswitch bridge, when the ip.netns names\nnone. The segment is the network's: a namespace administrator, who can not\nname the tag of an ip.netns, joins it so.\n",
+    "default": "",
+    "defaultText": "",
+    "example": "44",
+    "candidates": [],
+    "converter": "",
+    "required": false,
+    "scopable": true
+  }
+]

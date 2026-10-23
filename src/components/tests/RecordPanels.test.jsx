@@ -30,6 +30,11 @@ vi.mock('../ObjectTabs', () => ({
     ObjectSchedules: ({path}) => <div data-testid="object-schedules">{path}</div>,
 }));
 vi.mock('../NetworkDetails', () => ({default: ({name}) => <div data-testid="network-details">{name}</div>}));
+vi.mock('../PoolPanel', () => ({
+    PoolOverview: ({name}) => <div data-testid="pool-overview">{name}</div>,
+    PoolVolumes: ({name}) => <div data-testid="pool-volumes">{name}</div>,
+    PoolConfig: ({name}) => <div data-testid="pool-config">{name}</div>,
+}));
 vi.mock('../NetworkPanel', () => ({
     NetworkOverview: ({name}) => <div data-testid="network-overview">{name}</div>,
     NetworkConfig: ({name}) => <div data-testid="network-config">{name}</div>,
@@ -267,6 +272,16 @@ describe('record panels', () => {
         expect(within(panel).getByTestId('network-details')).toHaveTextContent('lo');
         fireEvent.click(within(panel).getByRole('tab', {name: 'Configuration'}));
         expect(within(panel).getByTestId('network-config')).toHaveTextContent('lo');
+    });
+
+    test('a pool opens on its overview, its volumes and configuration on tabs of their own', () => {
+        renderPeek('/objects?peek=pool:tank');
+        const panel = screen.getByRole('dialog', {name: 'tank'});
+        expect(within(panel).getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Overview', 'Volumes', 'Configuration']);
+        expect(within(panel).getByTestId('pool-overview')).toHaveTextContent('tank');
+        fireEvent.click(within(panel).getByRole('tab', {name: 'Volumes'}));
+        expect(screen.getByTestId('search')).toHaveTextContent('peektab=volumes');
+        expect(within(panel).getByTestId('pool-volumes')).toHaveTextContent('tank');
     });
 
     test('closing the panel leaves the view as it was', () => {

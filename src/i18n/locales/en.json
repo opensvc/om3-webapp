@@ -1547,7 +1547,92 @@
     "usageOf": "Usage of {{name}}",
     "loading": "Loading pools",
     "loadError": "Failed to load pools. Please try again.",
-    "empty": "No pools available."
+    "empty": "No pools available.",
+    "add": "Add pool",
+    "wizard": {
+      "title": "New pool {{name}}",
+      "editTitle": "Modify the pool {{name}}",
+      "steps": "Steps of the wizard",
+      "step": {
+        "type": "Name and type",
+        "settings": "Settings",
+        "review": "Review"
+      },
+      "name": "Name",
+      "nameHint": "Letters, digits, dash or underscore: the section pool#<name> of the cluster configuration.",
+      "nameKept": "A pool keeps its name.",
+      "nameInvalid": "Letters, digits, dash or underscore only.",
+      "nameTaken": "A pool {{name}} exists already.",
+      "typeQuestion": "What type of pool?",
+      "required": "{{key}} (required)",
+      "onNode": "{{key}} on {{node}}",
+      "byDefault": "Default: {{value}}",
+      "unset": "Not set",
+      "listHint": "Several values separated by spaces.",
+      "written": "Written to the cluster configuration, which every node applies:",
+      "back": "Back",
+      "next": "Next",
+      "save": "Add the pool",
+      "update": "Modify the pool",
+      "saving": "Writing…",
+      "readFailed": "Could not read the keywords of a pool: {{message}}",
+      "saveFailed": "Not written: {{message}}",
+      "tray": "Add the pool {{name}}",
+      "trayEdit": "Modify the pool {{name}}",
+      "unchanged": "Nothing changed.",
+      "rewrite": "Its type changes from {{from}} to {{to}}: its section is written anew, the keys of {{from}} dropped."
+    },
+    "panel": {
+      "tabs": {
+        "overview": "Overview",
+        "volumes": "Volumes",
+        "config": "Configuration"
+      },
+      "usage": "Usage",
+      "used": "{{value}} used",
+      "free": "{{value}} free",
+      "loading": "Reading the pool",
+      "none": "No pool {{name}}.",
+      "readFailed": "Could not read the pool: {{message}}",
+      "builtIn": "{{name}} is built in: no section of the cluster configuration defines it.",
+      "configOf": "Configuration of the pool {{name}}",
+      "edit": "Edit the configuration of the pool {{name}}",
+      "modify": "Modify the pool {{name}} in the wizard",
+      "editHint": "A key = value a line, key@node = value for one node; a key removed is unset. Written as the keys changed, the rest of the cluster configuration left as it is.",
+      "invalidLines": "Not a key = value line: {{lines}}",
+      "trayEdit": "Update the pool {{name}}",
+      "delete": "Delete the pool",
+      "deleting": "Deleting…",
+      "confirmTitle": "Delete the pool {{name}}?",
+      "confirmText": "The section pool#{{name}} is removed from the cluster configuration, which every node applies.",
+      "inUse_one": "{{count}} volume of it remains: no pool makes it any more.",
+      "inUse_other": "{{count}} volumes of it remain: no pool makes them any more.",
+      "deleteFailed": "Not deleted: {{message}}",
+      "tray": "Delete the pool {{name}}"
+    },
+    "sketch": {
+      "title": "Sketch",
+      "label": "Sketch of the pool {{name}} over {{count}} nodes",
+      "volumes_one": "{{count}} volume",
+      "volumes_other": "{{count}} volumes",
+      "sharedOn_one": "{{count}} shared",
+      "sharedOn_other": "{{count}} shared",
+      "shared": "Volumes on several nodes: {{count}}; used by none: {{unused}}",
+      "object": "{{path}}, {{size}}, on {{node}}",
+      "sharedObject": "{{path}}, {{size}}, on {{nodes}}",
+      "unusedObject": "{{path}}, {{size}}, used by no service",
+      "more_one": "+{{count}} more volume",
+      "more_other": "+{{count}} more volumes"
+    },
+    "volumes": {
+      "caption": "Volumes of the pool {{name}}",
+      "volume": "Volume",
+      "size": "Size",
+      "usedBy": "Used by",
+      "orphan": "orphan",
+      "unused": "none",
+      "empty": "No volume."
+    }
   },
   "ui": {
     "policies": {
@@ -1620,7 +1705,8 @@
       "namespace": "namespace",
       "node": "node",
       "instance": "instance",
-      "resource": "resource"
+      "resource": "resource",
+      "pool": "pool"
     },
     "logs": {
       "noNode": "No instance to read the logs of."

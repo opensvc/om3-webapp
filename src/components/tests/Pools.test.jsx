@@ -6,6 +6,24 @@ import axios from 'axios';
 import Pools from '../Pools';
 import i18n from '../../i18n';
 import {URL_POOL} from '../../config/apiPath.js';
+import {MemoryRouter} from 'react-router-dom';
+
+// The panel of a pool, on its own tested elsewhere: here, which pool it is given.
+vi.mock('../RecordPanels', () => ({
+    PoolDetailPanel: ({name}) => (name ? <div data-testid="pool-panel">{name}</div> : null),
+}));
+// The wizard, on its own tested elsewhere: here, saving the pool it was given a name for.
+vi.mock('../PoolWizard', () => ({
+    PoolWizard: ({onSaved, nodes}) => (
+        <div role="dialog" aria-label="New pool" data-nodes={nodes.join(' ')}>
+            <button onClick={() => onSaved('fast')}>save fast</button>
+        </div>
+    ),
+}));
+vi.mock('../SectionConfig', () => ({readNodes: async () => ['n1', 'n2']}));
+// The grants of the user: root adds a pool.
+const mockGrants = vi.hoisted(() => ({value: {}}));
+vi.mock('../../hooks/useGrants', () => ({useGrants: () => mockGrants.value}));
 
 // ── Mocks ──────────────────────────────────────────────────────────────
 vi.mock('axios', () => ({
@@ -45,10 +63,40 @@ describe('Pools Component', () => {
         vi.restoreAllMocks();
     });
 
+    test('a row opens the panel of its pool', async () => {
+        axios.get.mockResolvedValue({data: {items: [{name: 'tank', type: 'zpool', size: 100, used: 10, volume_count: 1, head: '/dev/tank'}]}});
+        render(<Pools/>, {wrapper: MemoryRouter});
+        fireEvent.click(await screen.findByText('tank', {selector: 'td'}));
+        expect(screen.getByTestId('pool-panel')).toHaveTextContent('tank');
+    });
+
+    test('root adds a pool from a wizard, given the nodes: the list read until it has it, its panel then opened', async () => {
+        const tank = {name: 'tank', type: 'zpool', size: 100, used: 10, volume_count: 1, head: '/dev/tank'};
+        axios.get.mockResolvedValue({data: {items: [tank]}});
+        const {unmount} = render(<Pools/>, {wrapper: MemoryRouter});
+        await screen.findByText('tank', {selector: 'td'});
+        expect(screen.queryByRole('button', {name: 'Add pool'})).toBeNull();
+        unmount();
+
+        mockGrants.value = {root: null};
+        axios.get
+            .mockResolvedValueOnce({data: {items: [tank]}})
+            // Written, not applied yet: read again until it is.
+            .mockResolvedValueOnce({data: {items: [tank]}})
+            .mockResolvedValue({data: {items: [tank, {name: 'fast', type: 'directory', size: 50, used: 0, volume_count: 0, head: '/srv'}]}});
+        render(<Pools/>, {wrapper: MemoryRouter});
+        fireEvent.click(await screen.findByRole('button', {name: 'Add pool'}));
+        const wizard = await screen.findByRole('dialog', {name: 'New pool'});
+        expect(wizard).toHaveAttribute('data-nodes', 'n1 n2');
+        fireEvent.click(within(wizard).getByRole('button', {name: 'save fast'}));
+        await waitFor(() => expect(screen.getByTestId('pool-panel')).toHaveTextContent('fast'), {timeout: 3000});
+        mockGrants.value = {};
+    });
+
     test('renders table headers correctly', async () => {
         axios.get.mockResolvedValueOnce({data: {items: []}});
 
-        render(<Pools/>);
+        render(<Pools/>, {wrapper: MemoryRouter});
 
         await waitFor(() => {
             const headers = screen.getAllByRole('columnheader').map((h) => h.textContent.replace(/[▲▼]/g, '').trim());
@@ -64,7 +112,7 @@ describe('Pools Component', () => {
         axios.get.mockRejectedValueOnce(new Error('Network error'));
         await i18n.changeLanguage('fr');
         try {
-            render(<Pools/>);
+            render(<Pools/>, {wrapper: MemoryRouter});
             expect(await screen.findByText('Échec du chargement des pools. Veuillez réessayer.')).toBeInTheDocument();
             expect(screen.getByRole('button', {name: 'Réessayer'})).toBeInTheDocument();
         } finally {
@@ -75,7 +123,7 @@ describe('Pools Component', () => {
     test('displays pool data correctly when API call succeeds', async () => {
         axios.get.mockResolvedValueOnce({data: {items: mockPools}});
 
-        render(<Pools/>);
+        render(<Pools/>, {wrapper: MemoryRouter});
 
         await waitFor(() => {
             expect(screen.getByText('pool1')).toBeInTheDocument();
@@ -107,7 +155,7 @@ describe('Pools Component', () => {
         });
         axios.get.mockRejectedValueOnce(new Error('API Error'));
 
-        render(<Pools/>);
+        render(<Pools/>, {wrapper: MemoryRouter});
 
         await waitFor(() => {
             expect(consoleErrorSpy).toHaveBeenCalledWith('Error retrieving pools', expect.any(Error));
@@ -133,7 +181,7 @@ describe('Pools Component', () => {
                 })
         );
 
-        const {unmount} = render(<Pools/>);
+        const {unmount} = render(<Pools/>, {wrapper: MemoryRouter});
         unmount();
 
         await new Promise((resolve) => setTimeout(resolve, 150));
@@ -150,7 +198,7 @@ describe('Pools Component', () => {
         ];
         axios.get.mockResolvedValueOnce({data: {items: poolsWithNegativeUsed}});
 
-        render(<Pools/>);
+        render(<Pools/>, {wrapper: MemoryRouter});
 
         await waitFor(() => {
             expect(screen.getByText('pool4')).toBeInTheDocument();
@@ -167,7 +215,7 @@ describe('Pools Component', () => {
         ];
         axios.get.mockResolvedValueOnce({data: {items: poolsWithMissingProps}});
 
-        render(<Pools/>);
+        render(<Pools/>, {wrapper: MemoryRouter});
 
         await waitFor(() => {
             expect(naCells().length).toBe(5);
@@ -177,7 +225,7 @@ describe('Pools Component', () => {
     test('handles API response with null items', async () => {
         axios.get.mockResolvedValueOnce({data: {items: null}});
 
-        render(<Pools/>);
+        render(<Pools/>, {wrapper: MemoryRouter});
 
         await waitFor(() => {
             expect(screen.getByText('No pools available.')).toBeInTheDocument();
@@ -187,7 +235,7 @@ describe('Pools Component', () => {
     test('calls API with correct authorization token', async () => {
         axios.get.mockResolvedValueOnce({data: {items: []}});
 
-        render(<Pools/>);
+        render(<Pools/>, {wrapper: MemoryRouter});
 
         await waitFor(() => {
             expect(axios.get).toHaveBeenCalledWith(URL_POOL, {
@@ -199,7 +247,7 @@ describe('Pools Component', () => {
     test('displays "No pools available." when API returns an empty list', async () => {
         axios.get.mockResolvedValueOnce({data: {items: []}});
 
-        render(<Pools/>);
+        render(<Pools/>, {wrapper: MemoryRouter});
 
         await waitFor(() => {
             expect(screen.getByText('No pools available.')).toBeInTheDocument();
@@ -209,7 +257,7 @@ describe('Pools Component', () => {
     test('displays error and allows retry on failure', async () => {
         axios.get.mockRejectedValueOnce(new Error('API Error'));
 
-        render(<Pools/>);
+        render(<Pools/>, {wrapper: MemoryRouter});
 
         await waitFor(() => {
             expect(screen.getByText('Failed to load pools. Please try again.')).toBeInTheDocument();
@@ -235,7 +283,7 @@ describe('Pools Component', () => {
     test('handles retry with missing auth token', async () => {
         axios.get.mockRejectedValueOnce(new Error('API Error'));
 
-        render(<Pools/>);
+        render(<Pools/>, {wrapper: MemoryRouter});
 
         await waitFor(() => {
             expect(screen.getByText('Failed to load pools. Please try again.')).toBeInTheDocument();
@@ -264,7 +312,7 @@ describe('Pools Component', () => {
     test('sorts table by different columns', async () => {
         axios.get.mockResolvedValueOnce({data: {items: mockPools}});
 
-        render(<Pools/>);
+        render(<Pools/>, {wrapper: MemoryRouter});
 
         await waitFor(() => {
             expect(screen.getByText('pool1')).toBeInTheDocument();
@@ -379,7 +427,7 @@ describe('Pools Component', () => {
         ];
         axios.get.mockResolvedValueOnce({data: {items: poolsWithZeroSize}});
 
-        render(<Pools/>);
+        render(<Pools/>, {wrapper: MemoryRouter});
 
         await waitFor(() => {
             expect(screen.getByText('pool5')).toBeInTheDocument();
@@ -390,7 +438,7 @@ describe('Pools Component', () => {
     test('renders Alert component with correct properties on API error', async () => {
         axios.get.mockRejectedValueOnce(new Error('API Error'));
 
-        render(<Pools/>);
+        render(<Pools/>, {wrapper: MemoryRouter});
 
         await waitFor(() => {
             const alert = screen.getByRole('alert');
@@ -427,7 +475,7 @@ describe('Pools Component', () => {
         ];
         axios.get.mockResolvedValueOnce({data: {items: poolsWithMissingStrings}});
 
-        render(<Pools/>);
+        render(<Pools/>, {wrapper: MemoryRouter});
         await waitFor(() => expect(screen.getByText('pool2')).toBeInTheDocument());
 
         // Initial state: sort by name asc (null first, then pool2, pool3)
@@ -481,7 +529,7 @@ describe('Pools Component', () => {
         ];
         axios.get.mockResolvedValueOnce({data: {items: poolsWithMissingVolume}});
 
-        render(<Pools/>);
+        render(<Pools/>, {wrapper: MemoryRouter});
         await waitFor(() => expect(screen.getByText('pool1')).toBeInTheDocument());
 
         fireEvent.click(sortButton('Volume Count'));
@@ -502,7 +550,7 @@ describe('Pools Component', () => {
         ];
         axios.get.mockResolvedValueOnce({data: {items: poolsWithZeroSize}});
 
-        render(<Pools/>);
+        render(<Pools/>, {wrapper: MemoryRouter});
         await waitFor(() => expect(screen.getByText('pool1')).toBeInTheDocument());
 
         fireEvent.click(sortButton('Usage'));
@@ -518,7 +566,7 @@ describe('Pools Component', () => {
     test('covers retry success with non-array items', async () => {
         axios.get.mockRejectedValueOnce(new Error('API Error'));
 
-        render(<Pools/>);
+        render(<Pools/>, {wrapper: MemoryRouter});
         await waitFor(() => expect(screen.getByText('Failed to load pools. Please try again.')).toBeInTheDocument());
 
         // Retry succeeds but items is null
@@ -542,7 +590,7 @@ describe('Pools Component', () => {
         ];
         axios.get.mockResolvedValueOnce({data: {items: pools}});
 
-        render(<Pools/>);
+        render(<Pools/>, {wrapper: MemoryRouter});
         await waitFor(() => expect(screen.getByText('low')).toBeInTheDocument());
 
         const bar = (name) => within(screen.getByRole('row', {name: new RegExp(`^${name} `)})).queryByRole('progressbar');

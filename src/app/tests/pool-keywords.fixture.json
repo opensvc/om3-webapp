@@ -1,0 +1,769 @@
+[
+  {
+    "section": "pool",
+    "option": "addr",
+    "types": [
+      "drbd"
+    ],
+    "text": "The addr to use to connect a peer. Use scoping to define each non-default\naddress.\n",
+    "default": "",
+    "defaultText": "The ipaddr resolved for the nodename.\n",
+    "example": "1.2.3.4",
+    "candidates": [],
+    "converter": "",
+    "required": false,
+    "scopable": true
+  },
+  {
+    "section": "pool",
+    "option": "array",
+    "types": [
+      "dorado",
+      "freenas",
+      "hoc",
+      "pure",
+      "symmetrix",
+      "truenas"
+    ],
+    "text": "The name of the array, known as `array#<name>` in the node or cluster\nconfiguration.\n",
+    "default": "",
+    "defaultText": "",
+    "example": "",
+    "candidates": [],
+    "converter": "",
+    "required": true,
+    "scopable": true
+  },
+  {
+    "section": "pool",
+    "option": "blocksize",
+    "types": [
+      "freenas",
+      "truenas"
+    ],
+    "text": "The block size of the zvol created for a volume of this pool.\n",
+    "default": "512",
+    "defaultText": "",
+    "example": "",
+    "candidates": [],
+    "converter": "size",
+    "required": false,
+    "scopable": false
+  },
+  {
+    "section": "pool",
+    "option": "capabilities",
+    "types": [
+      "virtual"
+    ],
+    "text": "The capabilities exposed by the virtual pool.\n\nSupported capabilities:\n\n* `blk`\n  The pool can satisfy the `format=false` requirement.\n\n* `file`\n  The pool can satisfy the `format=true` requirement.\n\n* `move`\n  The pool volumes can host data for resources proposing live migration (e.g. container.kvm).\n\n* `roo`\n  Read-Only from One node.\n  The pool can satisfy the `access=roo` requirement.\n\n* `rox`\n  Read-Only from Many nodes.\n  The pool can satisfy the `access=rox` requirement.\n\n* `rwo`\n  Read-Write from One node.\n  The pool can satisfy the `access=rwo` requirement.\n\n* `rwx`\n  Read-Write from Many nodes.\n  The pool can satisfy the `access=rwx` requirement.\n\n* `shared`\n  The same technical object is used on all nodes.\n\n* `snap`\n  The volume can be snapshotted.\n\n* `volatile`\n  The pool can satisfy the `volatile=true` requirement.\n\n",
+    "default": "file roo rwo rox rwx",
+    "defaultText": "",
+    "example": "",
+    "candidates": [],
+    "converter": "list",
+    "required": false,
+    "scopable": false
+  },
+  {
+    "section": "pool",
+    "option": "compression",
+    "types": [
+      "dorado",
+      "hoc"
+    ],
+    "text": "Activate compression on created luns.\n",
+    "default": "false",
+    "defaultText": "",
+    "example": "",
+    "candidates": [],
+    "converter": "bool",
+    "required": false,
+    "scopable": false
+  },
+  {
+    "section": "pool",
+    "option": "compression",
+    "types": [
+      "freenas",
+      "truenas"
+    ],
+    "text": "Compression level.\n",
+    "default": "inherit",
+    "defaultText": "",
+    "example": "",
+    "candidates": [
+      "inherit",
+      "none",
+      "lz4",
+      "gzip-1",
+      "gzip-2",
+      "gzip-3",
+      "gzip-4",
+      "gzip-5",
+      "gzip-6",
+      "gzip-7",
+      "gzip-8",
+      "gzip-9",
+      "zle",
+      "lzjb"
+    ],
+    "converter": "",
+    "required": false,
+    "scopable": false
+  },
+  {
+    "section": "pool",
+    "option": "dedup",
+    "types": [
+      "dorado",
+      "hoc"
+    ],
+    "text": "Activate data deduplcation on created luns.\n",
+    "default": "false",
+    "defaultText": "",
+    "example": "",
+    "candidates": [],
+    "converter": "bool",
+    "required": false,
+    "scopable": false
+  },
+  {
+    "section": "pool",
+    "option": "dedup",
+    "types": [
+      "freenas",
+      "truenas"
+    ],
+    "text": "Activate data deduplication on created dataset and zvol. Example values: on, off, verify\n",
+    "default": "off",
+    "defaultText": "",
+    "example": "",
+    "candidates": [],
+    "converter": "",
+    "required": false,
+    "scopable": false
+  },
+  {
+    "section": "pool",
+    "option": "delete_now",
+    "types": [
+      "pure"
+    ],
+    "text": "If set to false the pure volumes are not immediately deleted on unprovision, so a following provision action could fail.\n",
+    "default": "true",
+    "defaultText": "",
+    "example": "",
+    "candidates": [],
+    "converter": "bool",
+    "required": false,
+    "scopable": false
+  },
+  {
+    "section": "pool",
+    "option": "diskgroup",
+    "types": [
+      "dorado",
+      "freenas",
+      "hoc",
+      "pure",
+      "truenas"
+    ],
+    "text": "The name of the array disk group to allocate volumes from.\n",
+    "default": "",
+    "defaultText": "",
+    "example": "",
+    "candidates": [],
+    "converter": "",
+    "required": true,
+    "scopable": false
+  },
+  {
+    "section": "pool",
+    "option": "fs_type",
+    "types": [
+      "dorado",
+      "drbd",
+      "freenas",
+      "hoc",
+      "loop",
+      "pure",
+      "rados",
+      "symmetrix",
+      "truenas",
+      "vg"
+    ],
+    "text": "The filesystem to format the pool devices with.\n",
+    "default": "xfs",
+    "defaultText": "",
+    "example": "",
+    "candidates": [],
+    "converter": "",
+    "required": false,
+    "scopable": false
+  },
+  {
+    "section": "pool",
+    "option": "hypermetrodomain",
+    "types": [
+      "dorado"
+    ],
+    "text": "Create LUN as HyperMetro replicated pairs, using this domain.\n",
+    "default": "",
+    "defaultText": "",
+    "example": "HyperMetroDomain_000",
+    "candidates": [],
+    "converter": "",
+    "required": false,
+    "scopable": false
+  },
+  {
+    "section": "pool",
+    "option": "insecure_tpc",
+    "types": [
+      "freenas",
+      "truenas"
+    ],
+    "text": "Allow initiators to xcopy without authenticating to foreign targets.\n",
+    "default": "false",
+    "defaultText": "",
+    "example": "",
+    "candidates": [],
+    "converter": "bool",
+    "required": false,
+    "scopable": false
+  },
+  {
+    "section": "pool",
+    "option": "label_prefix",
+    "types": [
+      "hoc",
+      "pure"
+    ],
+    "text": "The prefix to add to the label assigned to the created disks.\n",
+    "default": "",
+    "defaultText": "",
+    "example": "",
+    "candidates": [],
+    "converter": "",
+    "required": false,
+    "scopable": false
+  },
+  {
+    "section": "pool",
+    "option": "max_peers",
+    "types": [
+      "drbd"
+    ],
+    "text": "The integer value to use in `create-md --max-peers <n>`.\n\nThe driver ensures the value is not lesser than the number of instances.\n",
+    "default": "",
+    "defaultText": "(nodes_count*2)-1\n",
+    "example": "8",
+    "candidates": [],
+    "converter": "int",
+    "required": false,
+    "scopable": false
+  },
+  {
+    "section": "pool",
+    "option": "mkblk_opt",
+    "types": [],
+    "text": "The zvol, lv, and other block device creation command options to use to\nprepare the pool volumes devices.\n",
+    "default": "",
+    "defaultText": "",
+    "example": "-b 16k",
+    "candidates": [],
+    "converter": "",
+    "required": false,
+    "scopable": false
+  },
+  {
+    "section": "pool",
+    "option": "mkfs_opt",
+    "types": [],
+    "text": "The mkfs command options to use to format the pool devices.\n",
+    "default": "",
+    "defaultText": "",
+    "example": "-O largefile",
+    "candidates": [],
+    "converter": "",
+    "required": false,
+    "scopable": false
+  },
+  {
+    "section": "pool",
+    "option": "mnt_opt",
+    "types": [],
+    "text": "The mount options of the fs created over the pool devices.\n",
+    "default": "",
+    "defaultText": "",
+    "example": "",
+    "candidates": [],
+    "converter": "",
+    "required": false,
+    "scopable": true
+  },
+  {
+    "section": "pool",
+    "option": "mode",
+    "types": [
+      "shm"
+    ],
+    "text": "The permissions of the root of the volumes the pool makes, in octal, as `700`\nor `1777`.\n\nA volume is written with it as the mode keyword of its tmpfs, where it stays\nwhen the pool is changed afterwards.\n",
+    "default": "",
+    "defaultText": "`700`, unless mnt_opt names a mode: the volumes are for the objects using them, and the root of a tmpfs is everyone's to write in otherwise.\n",
+    "example": "750",
+    "candidates": [],
+    "converter": "filemode",
+    "required": false,
+    "scopable": false
+  },
+  {
+    "section": "pool",
+    "option": "name",
+    "types": [
+      "vg"
+    ],
+    "text": "The name of the volume group to allocate the pool volumes logical volumes into.\n",
+    "default": "",
+    "defaultText": "",
+    "example": "",
+    "candidates": [],
+    "converter": "",
+    "required": true,
+    "scopable": false
+  },
+  {
+    "section": "pool",
+    "option": "name",
+    "types": [
+      "zpool"
+    ],
+    "text": "The name of the zpool to allocate the pool volumes zvol or datasets into.\n",
+    "default": "",
+    "defaultText": "",
+    "example": "",
+    "candidates": [],
+    "converter": "",
+    "required": true,
+    "scopable": false
+  },
+  {
+    "section": "pool",
+    "option": "network",
+    "types": [
+      "drbd"
+    ],
+    "text": "The name of the backend network to use for the drbd traffic of the volumes\nthe pool creates, set as the `network` keyword of their `disk.drbd`\nresource. Set this keyword if some node names are resolved to NATed\naddresses.\n\nThe address of a node is then the first of the segment the network assigned\nit, so the network is a `routed_bridge`: a network giving the nodes no\nsegment of their own, as a `lan`, is refused. Name the addresses with\n`addr@<node>` there.\n",
+    "default": "",
+    "defaultText": "",
+    "example": "backend1",
+    "candidates": [],
+    "converter": "",
+    "required": false,
+    "scopable": false
+  },
+  {
+    "section": "pool",
+    "option": "optional_volume_env",
+    "types": [
+      "virtual"
+    ],
+    "text": "The list of the `vol` consumer service config keywords which values are mapped\nas env keys in the allocated volume service.\n\nIf the keyword is not set at the source, the default value in the template env\nsection applies.\n",
+    "default": "",
+    "defaultText": "",
+    "example": "container#1.name:container_name env.foo:foo",
+    "candidates": [],
+    "converter": "list",
+    "required": false,
+    "scopable": false
+  },
+  {
+    "section": "pool",
+    "option": "path",
+    "types": [
+      "directory"
+    ],
+    "text": "The fullpath of the directory hosting the pool volumes directories or loop files.\n",
+    "default": "{var}/pool/directory",
+    "defaultText": "",
+    "example": "",
+    "candidates": [],
+    "converter": "",
+    "required": false,
+    "scopable": false
+  },
+  {
+    "section": "pool",
+    "option": "path",
+    "types": [
+      "drbd"
+    ],
+    "text": "The fullpath of the directory hosting the pool volumes loop files.\n",
+    "default": "",
+    "defaultText": "",
+    "example": "",
+    "candidates": [],
+    "converter": "",
+    "required": false,
+    "scopable": false
+  },
+  {
+    "section": "pool",
+    "option": "path",
+    "types": [
+      "loop"
+    ],
+    "text": "The path to create the pool loop files in.\n",
+    "default": "{var}/pool/loop",
+    "defaultText": "",
+    "example": "",
+    "candidates": [],
+    "converter": "",
+    "required": false,
+    "scopable": false
+  },
+  {
+    "section": "pool",
+    "option": "path",
+    "types": [
+      "share"
+    ],
+    "text": "The fullpath of the shared directory hosting the pool volumes directories or loop files.\n",
+    "default": "{var}/pool/share",
+    "defaultText": "",
+    "example": "",
+    "candidates": [],
+    "converter": "",
+    "required": false,
+    "scopable": false
+  },
+  {
+    "section": "pool",
+    "option": "pod",
+    "types": [
+      "pure"
+    ],
+    "text": "The pod to create volume into.\n",
+    "default": "",
+    "defaultText": "",
+    "example": "",
+    "candidates": [],
+    "converter": "",
+    "required": false,
+    "scopable": false
+  },
+  {
+    "section": "pool",
+    "option": "pool_id",
+    "types": [
+      "hoc"
+    ],
+    "text": "The Hitachi Ops Center storage machine pool name.\nVolumes are created in this storage pool.\n",
+    "default": "",
+    "defaultText": "",
+    "example": "",
+    "candidates": [],
+    "converter": "",
+    "required": false,
+    "scopable": false
+  },
+  {
+    "section": "pool",
+    "option": "quota",
+    "types": [
+      "directory"
+    ],
+    "text": "Bound each volume this pool serves to the size it was asked for, with a\nproject quota on the filesystem holding the pool.\n\nA directory has no size of its own, so without this a volume served by a\ndirectory pool is given the whole filesystem and the size asked of the pool is\nrecorded but not enforced.\n\nThe pool path has to be on an xfs filesystem mounted with the prjquota option.\nA volume provision refuses rather than set a limit that would silently do\nnothing.\n",
+    "default": "false",
+    "defaultText": "",
+    "example": "",
+    "candidates": [],
+    "converter": "bool",
+    "required": false,
+    "scopable": false
+  },
+  {
+    "section": "pool",
+    "option": "rbd_namespace",
+    "types": [
+      "rados"
+    ],
+    "text": "The ceph pool namespace where to create images.",
+    "default": "",
+    "defaultText": "",
+    "example": "",
+    "candidates": [],
+    "converter": "",
+    "required": false,
+    "scopable": false
+  },
+  {
+    "section": "pool",
+    "option": "rbd_pool",
+    "types": [
+      "rados"
+    ],
+    "text": "The ceph pool where to create images.",
+    "default": "",
+    "defaultText": "",
+    "example": "",
+    "candidates": [],
+    "converter": "",
+    "required": true,
+    "scopable": false
+  },
+  {
+    "section": "pool",
+    "option": "rdfg",
+    "types": [
+      "symmetrix"
+    ],
+    "text": "Replication Group to use for SRDF.\n",
+    "default": "",
+    "defaultText": "",
+    "example": "",
+    "candidates": [],
+    "converter": "",
+    "required": false,
+    "scopable": false
+  },
+  {
+    "section": "pool",
+    "option": "slo",
+    "types": [
+      "symmetrix"
+    ],
+    "text": "The name of the Service Level Agreement of the selected Storage Group.\n",
+    "default": "",
+    "defaultText": "",
+    "example": "",
+    "candidates": [],
+    "converter": "",
+    "required": false,
+    "scopable": false
+  },
+  {
+    "section": "pool",
+    "option": "sparse",
+    "types": [
+      "freenas",
+      "truenas"
+    ],
+    "text": "Create zvol in sparse mode.\n",
+    "default": "false",
+    "defaultText": "",
+    "example": "",
+    "candidates": [],
+    "converter": "bool",
+    "required": false,
+    "scopable": false
+  },
+  {
+    "section": "pool",
+    "option": "srdf",
+    "types": [
+      "symmetrix"
+    ],
+    "text": "Use SRDF replication.\n",
+    "default": "false",
+    "defaultText": "",
+    "example": "",
+    "candidates": [],
+    "converter": "bool",
+    "required": false,
+    "scopable": false
+  },
+  {
+    "section": "pool",
+    "option": "srp",
+    "types": [
+      "symmetrix"
+    ],
+    "text": "The name of the array resource pool to allocate volumes from.\n",
+    "default": "",
+    "defaultText": "",
+    "example": "",
+    "candidates": [],
+    "converter": "",
+    "required": true,
+    "scopable": false
+  },
+  {
+    "section": "pool",
+    "option": "status_schedule",
+    "types": [],
+    "text": "The value to set to the `status_schedule` keyword of the `vol` objects\nallocated from the pool.\n\nSee `usr/share/doc/schedule` for the schedule syntax.\n",
+    "default": "",
+    "defaultText": "",
+    "example": "",
+    "candidates": [],
+    "converter": "",
+    "required": false,
+    "scopable": false
+  },
+  {
+    "section": "pool",
+    "option": "template",
+    "types": [
+      "drbd"
+    ],
+    "text": "The value of the template keyword to set in the drbd resource of the created volumes",
+    "default": "",
+    "defaultText": "",
+    "example": "live-migration",
+    "candidates": [],
+    "converter": "",
+    "required": false,
+    "scopable": false
+  },
+  {
+    "section": "pool",
+    "option": "template",
+    "types": [
+      "virtual"
+    ],
+    "text": "The path of a `vol` to use as a template for new volumes.\n",
+    "default": "",
+    "defaultText": "",
+    "example": "templates/vol/mpool-over-loop",
+    "candidates": [],
+    "converter": "",
+    "required": true,
+    "scopable": false
+  },
+  {
+    "section": "pool",
+    "option": "type",
+    "types": [],
+    "text": "The pool type.\n",
+    "default": "directory",
+    "defaultText": "",
+    "example": "",
+    "candidates": [
+      "directory",
+      "loop",
+      "vg",
+      "zpool",
+      "freenas",
+      "share",
+      "shm",
+      "symmetrix",
+      "truenas",
+      "virtual",
+      "dorado",
+      "hoc",
+      "drbd",
+      "pure",
+      "rados"
+    ],
+    "converter": "",
+    "required": false,
+    "scopable": false
+  },
+  {
+    "section": "pool",
+    "option": "vg",
+    "types": [
+      "drbd"
+    ],
+    "text": "The name of the volume group to allocate the pool volumes logical volumes into.\n",
+    "default": "",
+    "defaultText": "",
+    "example": "",
+    "candidates": [],
+    "converter": "",
+    "required": false,
+    "scopable": false
+  },
+  {
+    "section": "pool",
+    "option": "volume_env",
+    "types": [
+      "virtual"
+    ],
+    "text": "The list of the `vol` consumer service config keywords which values are mapped\nas env keys in the allocated volume service.\n\nIf the keyword is not set at the source, an error is raised.\n",
+    "default": "",
+    "defaultText": "",
+    "example": "container#1.name:container_name env.foo:foo",
+    "candidates": [],
+    "converter": "list",
+    "required": false,
+    "scopable": false
+  },
+  {
+    "section": "pool",
+    "option": "volume_id_range_from",
+    "types": [
+      "hoc"
+    ],
+    "text": "The start of the range of ldev ids to allocate from.\n",
+    "default": "",
+    "defaultText": "",
+    "example": "",
+    "candidates": [],
+    "converter": "",
+    "required": false,
+    "scopable": false
+  },
+  {
+    "section": "pool",
+    "option": "volume_id_range_to",
+    "types": [
+      "hoc"
+    ],
+    "text": "The end of the range of ldev ids to allocate from.\n",
+    "default": "",
+    "defaultText": "",
+    "example": "",
+    "candidates": [],
+    "converter": "",
+    "required": false,
+    "scopable": false
+  },
+  {
+    "section": "pool",
+    "option": "volumegroup",
+    "types": [
+      "pure"
+    ],
+    "text": "The volumegroup to create volume disks into.\n",
+    "default": "",
+    "defaultText": "",
+    "example": "",
+    "candidates": [],
+    "converter": "",
+    "required": false,
+    "scopable": false
+  },
+  {
+    "section": "pool",
+    "option": "vsm_id",
+    "types": [
+      "hoc"
+    ],
+    "text": "The name of the virtual storage machine id to allocate volume into.\n",
+    "default": "",
+    "defaultText": "",
+    "example": "",
+    "candidates": [],
+    "converter": "",
+    "required": false,
+    "scopable": false
+  },
+  {
+    "section": "pool",
+    "option": "zpool",
+    "types": [
+      "drbd"
+    ],
+    "text": "The name of the zpool to allocate the pool volumes zvol into.\n",
+    "default": "",
+    "defaultText": "",
+    "example": "",
+    "candidates": [],
+    "converter": "",
+    "required": false,
+    "scopable": false
+  }
+]

@@ -1547,7 +1547,92 @@
     "usageOf": "Utilisation de {{name}}",
     "loading": "Chargement des pools",
     "loadError": "Échec du chargement des pools. Veuillez réessayer.",
-    "empty": "Aucun pool disponible."
+    "empty": "Aucun pool disponible.",
+    "add": "Ajouter un pool",
+    "wizard": {
+      "title": "Nouveau pool {{name}}",
+      "editTitle": "Modifier le pool {{name}}",
+      "steps": "Étapes de l'assistant",
+      "step": {
+        "type": "Nom et type",
+        "settings": "Réglages",
+        "review": "Vérification"
+      },
+      "name": "Nom",
+      "nameHint": "Lettres, chiffres, tiret ou souligné : la section pool#<nom> de la configuration du cluster.",
+      "nameKept": "Un pool garde son nom.",
+      "nameInvalid": "Lettres, chiffres, tiret ou souligné uniquement.",
+      "nameTaken": "Un pool {{name}} existe déjà.",
+      "typeQuestion": "Quel type de pool ?",
+      "required": "{{key}} (requis)",
+      "onNode": "{{key}} sur {{node}}",
+      "byDefault": "Par défaut : {{value}}",
+      "unset": "Non réglé",
+      "listHint": "Plusieurs valeurs séparées par des espaces.",
+      "written": "Écrit dans la configuration du cluster, que chaque nœud applique :",
+      "back": "Retour",
+      "next": "Suivant",
+      "save": "Ajouter le pool",
+      "update": "Modifier le pool",
+      "saving": "Écriture…",
+      "readFailed": "Impossible de lire les mots-clés d'un pool : {{message}}",
+      "saveFailed": "Non écrit : {{message}}",
+      "tray": "Ajouter le pool {{name}}",
+      "trayEdit": "Modifier le pool {{name}}",
+      "unchanged": "Rien n'a changé.",
+      "rewrite": "Son type passe de {{from}} à {{to}} : sa section est réécrite, les clés de {{from}} abandonnées."
+    },
+    "panel": {
+      "tabs": {
+        "overview": "Vue d'ensemble",
+        "volumes": "Volumes",
+        "config": "Configuration"
+      },
+      "usage": "Utilisation",
+      "used": "{{value}} utilisés",
+      "free": "{{value}} libres",
+      "loading": "Lecture du pool",
+      "none": "Aucun pool {{name}}.",
+      "readFailed": "Impossible de lire le pool : {{message}}",
+      "builtIn": "{{name}} est intégré : aucune section de la configuration du cluster ne le définit.",
+      "configOf": "Configuration du pool {{name}}",
+      "edit": "Modifier la configuration du pool {{name}}",
+      "modify": "Modifier le pool {{name}} dans l'assistant",
+      "editHint": "Une ligne clé = valeur, clé@nœud = valeur pour un nœud ; une clé retirée est supprimée. Écrit comme les clés modifiées, le reste de la configuration du cluster laissé tel quel.",
+      "invalidLines": "Pas une ligne clé = valeur : {{lines}}",
+      "trayEdit": "Mettre à jour le pool {{name}}",
+      "delete": "Supprimer le pool",
+      "deleting": "Suppression…",
+      "confirmTitle": "Supprimer le pool {{name}} ?",
+      "confirmText": "La section pool#{{name}} est retirée de la configuration du cluster, que chaque nœud applique.",
+      "inUse_one": "{{count}} de ses volumes demeure : aucun pool ne le fait plus.",
+      "inUse_other": "{{count}} de ses volumes demeurent : aucun pool ne les fait plus.",
+      "deleteFailed": "Non supprimé : {{message}}",
+      "tray": "Supprimer le pool {{name}}"
+    },
+    "sketch": {
+      "title": "Schéma",
+      "label": "Schéma du pool {{name}} sur {{count}} nœuds",
+      "volumes_one": "{{count}} volume",
+      "volumes_other": "{{count}} volumes",
+      "sharedOn_one": "{{count}} partagé",
+      "sharedOn_other": "{{count}} partagés",
+      "shared": "Volumes sur plusieurs nœuds : {{count}} ; utilisés par aucun : {{unused}}",
+      "object": "{{path}}, {{size}}, sur {{node}}",
+      "sharedObject": "{{path}}, {{size}}, sur {{nodes}}",
+      "unusedObject": "{{path}}, {{size}}, utilisé par aucun service",
+      "more_one": "+{{count}} autre volume",
+      "more_other": "+{{count}} autres volumes"
+    },
+    "volumes": {
+      "caption": "Volumes du pool {{name}}",
+      "volume": "Volume",
+      "size": "Taille",
+      "usedBy": "Utilisé par",
+      "orphan": "orphelin",
+      "unused": "aucun",
+      "empty": "Aucun volume."
+    }
   },
   "ui": {
     "policies": {
@@ -1620,7 +1705,8 @@
       "namespace": "espace de noms",
       "node": "nœud",
       "instance": "instance",
-      "resource": "ressource"
+      "resource": "ressource",
+      "pool": "pool"
     },
     "logs": {
       "noNode": "Aucune instance dont lire les journaux."

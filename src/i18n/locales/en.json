@@ -1136,6 +1136,94 @@
       "caption": "Network details",
       "empty": "No IP details available for this network.",
       "type": "Type: {{type}}"
+    },
+    "add": "Add network",
+    "wizard": {
+      "title": "New network {{name}}",
+      "steps": "Steps of the wizard",
+      "step": {
+        "type": "Name and type",
+        "settings": "Settings",
+        "review": "Review"
+      },
+      "name": "Name",
+      "nameHint": "Letters, digits, dash or underscore: the section network#<name> of the cluster configuration.",
+      "nameInvalid": "Letters, digits, dash or underscore only.",
+      "nameTaken": "A network {{name}} exists already.",
+      "typeQuestion": "What type of network?",
+      "required": "{{key}} (required)",
+      "onNode": "{{key}} on {{node}}",
+      "byDefault": "Default: {{value}}",
+      "unset": "Not set",
+      "listHint": "Several values separated by spaces.",
+      "cidrInvalid": "An address range, as 10.30.0.0/16 or fd00::/64.",
+      "overlaps": "Its range overlaps that of {{networks}}: two networks could hand out the same addresses.",
+      "written": "Written to the cluster configuration, which every node applies:",
+      "back": "Back",
+      "next": "Next",
+      "save": "Add the network",
+      "saving": "Adding…",
+      "readFailed": "Could not read the keywords of a network: {{message}}",
+      "saveFailed": "Not added: {{message}}",
+      "tray": "Add the network {{name}}",
+      "editTitle": "Modify the network {{name}}",
+      "nameKept": "A network keeps its name.",
+      "update": "Modify the network",
+      "trayEdit": "Modify the network {{name}}",
+      "unchanged": "Nothing changed.",
+      "rewrite": "Its type changes from {{from}} to {{to}}: its section is written anew, the keys of {{from}} dropped."
+    },
+    "panel": {
+      "tabs": {
+        "overview": "Overview",
+        "addresses": "Addresses",
+        "config": "Configuration"
+      },
+      "byNode": "Addresses in use by node",
+      "noAddress": "No address in use.",
+      "loading": "Reading the network",
+      "none": "No network {{name}}.",
+      "readFailed": "Could not read the network: {{message}}",
+      "builtIn": "{{name}} is built in: no section of the cluster configuration defines it.",
+      "configOf": "Configuration of the network {{name}}",
+      "delete": "Delete the network",
+      "deleting": "Deleting…",
+      "confirmTitle": "Delete the network {{name}}?",
+      "confirmText": "The section network#{{name}} is removed from the cluster configuration, which every node applies.",
+      "inUse_one": "{{count}} address of it is in use: the resource holding it loses its network.",
+      "inUse_other": "{{count}} addresses of it are in use: the resources holding them lose their network.",
+      "deleteFailed": "Not deleted: {{message}}",
+      "tray": "Delete the network {{name}}",
+      "edit": "Edit the configuration of the network {{name}}",
+      "editHint": "A key = value a line, key@node = value for one node; a key removed is unset. Written as the keys changed, the rest of the cluster configuration left as it is.",
+      "invalidLines": "Not a key = value line: {{lines}}",
+      "trayEdit": "Update the network {{name}}",
+      "modify": "Modify the network {{name}} in the wizard",
+      "usage": "Usage",
+      "used_one": "{{value}} used",
+      "used_other": "{{value}} used",
+      "free_one": "{{value}} free",
+      "free_other": "{{value}} free"
+    },
+    "sketch": {
+      "title": "Sketch",
+      "label": "Sketch of the network {{name}} over {{count}} nodes",
+      "computed": "chosen by the daemon",
+      "routed": "Routed between the nodes",
+      "addresses_one": "{{count}} address",
+      "addresses_other": "{{count}} addresses",
+      "object_one": "{{path}}, {{count}} address on {{node}}",
+      "object_other": "{{path}}, {{count}} addresses on {{node}}",
+      "more_one": "+{{count}} more object",
+      "more_other": "+{{count}} more objects",
+      "shared_one": "{{count}} address on several nodes",
+      "shared_other": "{{count}} addresses on several nodes",
+      "sharedOn_one": "{{count}} shared",
+      "sharedOn_other": "{{count}} shared",
+      "sharedObject_one": "{{path}}, {{count}} address on {{nodes}}",
+      "sharedObject_other": "{{path}}, {{count}} addresses on {{nodes}}",
+      "tunnelMesh": "tunnel mesh",
+      "routedLabel": "routed"
     }
   },
   "nodes": {
@@ -1459,7 +1547,92 @@
     "usageOf": "Usage of {{name}}",
     "loading": "Loading pools",
     "loadError": "Failed to load pools. Please try again.",
-    "empty": "No pools available."
+    "empty": "No pools available.",
+    "add": "Add pool",
+    "wizard": {
+      "title": "New pool {{name}}",
+      "editTitle": "Modify the pool {{name}}",
+      "steps": "Steps of the wizard",
+      "step": {
+        "type": "Name and type",
+        "settings": "Settings",
+        "review": "Review"
+      },
+      "name": "Name",
+      "nameHint": "Letters, digits, dash or underscore: the section pool#<name> of the cluster configuration.",
+      "nameKept": "A pool keeps its name.",
+      "nameInvalid": "Letters, digits, dash or underscore only.",
+      "nameTaken": "A pool {{name}} exists already.",
+      "typeQuestion": "What type of pool?",
+      "required": "{{key}} (required)",
+      "onNode": "{{key}} on {{node}}",
+      "byDefault": "Default: {{value}}",
+      "unset": "Not set",
+      "listHint": "Several values separated by spaces.",
+      "written": "Written to the cluster configuration, which every node applies:",
+      "back": "Back",
+      "next": "Next",
+      "save": "Add the pool",
+      "update": "Modify the pool",
+      "saving": "Writing…",
+      "readFailed": "Could not read the keywords of a pool: {{message}}",
+      "saveFailed": "Not written: {{message}}",
+      "tray": "Add the pool {{name}}",
+      "trayEdit": "Modify the pool {{name}}",
+      "unchanged": "Nothing changed.",
+      "rewrite": "Its type changes from {{from}} to {{to}}: its section is written anew, the keys of {{from}} dropped."
+    },
+    "panel": {
+      "tabs": {
+        "overview": "Overview",
+        "volumes": "Volumes",
+        "config": "Configuration"
+      },
+      "usage": "Usage",
+      "used": "{{value}} used",
+      "free": "{{value}} free",
+      "loading": "Reading the pool",
+      "none": "No pool {{name}}.",
+      "readFailed": "Could not read the pool: {{message}}",
+      "builtIn": "{{name}} is built in: no section of the cluster configuration defines it.",
+      "configOf": "Configuration of the pool {{name}}",
+      "edit": "Edit the configuration of the pool {{name}}",
+      "modify": "Modify the pool {{name}} in the wizard",
+      "editHint": "A key = value a line, key@node = value for one node; a key removed is unset. Written as the keys changed, the rest of the cluster configuration left as it is.",
+      "invalidLines": "Not a key = value line: {{lines}}",
+      "trayEdit": "Update the pool {{name}}",
+      "delete": "Delete the pool",
+      "deleting": "Deleting…",
+      "confirmTitle": "Delete the pool {{name}}?",
+      "confirmText": "The section pool#{{name}} is removed from the cluster configuration, which every node applies.",
+      "inUse_one": "{{count}} volume of it remains: no pool makes it any more.",
+      "inUse_other": "{{count}} volumes of it remain: no pool makes them any more.",
+      "deleteFailed": "Not deleted: {{message}}",
+      "tray": "Delete the pool {{name}}"
+    },
+    "sketch": {
+      "title": "Sketch",
+      "label": "Sketch of the pool {{name}} over {{count}} nodes",
+      "volumes_one": "{{count}} volume",
+      "volumes_other": "{{count}} volumes",
+      "sharedOn_one": "{{count}} shared",
+      "sharedOn_other": "{{count}} shared",
+      "shared": "Volumes on several nodes: {{count}}; used by none: {{unused}}",
+      "object": "{{path}}, {{size}}, on {{node}}",
+      "sharedObject": "{{path}}, {{size}}, on {{nodes}}",
+      "unusedObject": "{{path}}, {{size}}, used by no service",
+      "more_one": "+{{count}} more volume",
+      "more_other": "+{{count}} more volumes"
+    },
+    "volumes": {
+      "caption": "Volumes of the pool {{name}}",
+      "volume": "Volume",
+      "size": "Size",
+      "usedBy": "Used by",
+      "orphan": "orphan",
+      "unused": "none",
+      "empty": "No volume."
+    }
   },
   "ui": {
     "policies": {
@@ -1532,7 +1705,8 @@
       "namespace": "namespace",
       "node": "node",
       "instance": "instance",
-      "resource": "resource"
+      "resource": "resource",
+      "pool": "pool"
     },
     "logs": {
       "noNode": "No instance to read the logs of."
@@ -1838,6 +2012,14 @@
       "dns": "{{count}} records of {{names}} names",
       "running_one": "{{count}} running",
       "running_other": "{{count}} running"
+    },
+    "logs": {
+      "show": "Logs",
+      "orchestration": "Logs of the orchestration {{id}} of {{subject}}",
+      "exec": "Logs of the exec {{id}} of {{subject}}",
+      "copyId": "Copy the id",
+      "nodes_one": "on {{nodes}}",
+      "nodes_other": "on {{count}} nodes: {{nodes}}"
     }
   },
   "resource": {

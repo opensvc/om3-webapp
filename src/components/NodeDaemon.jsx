@@ -10,6 +10,7 @@ import {refusalReason} from "./objectActions";
 import {Alert} from "../ui/components/Alert";
 import {Button} from "../ui/components/Button";
 import {Dialog} from "../ui/components/Dialog";
+import {DaemonIdLogs} from "./DaemonIdLogs";
 import {MenuButton} from "../ui/components/MenuButton";
 import {RelativeTime} from "../ui/components/RelativeTime";
 import {StatusMark} from "../ui/components/StatusMark";
@@ -97,6 +98,13 @@ export function NodeDaemon({node}) {
     const [busy, setBusy] = useState(false);
     const [execFilter, setExecFilter] = useState("");
     const [dnsFilter, setDnsFilter] = useState("");
+    // The orchestration or exec whose logs show in a modal.
+    const [logsOf, setLogsOf] = useState(null);
+    const logsButton = (kind, id, subject) => (
+        <Button size="sm" variant="secondary" onClick={() => setLogsOf({kind, id, node, subject})}>
+            {t("nodeDaemon.logs.show")}
+        </Button>
+    );
     const panel = usePanelSearch();
     const view = VIEWS.includes(panel.view) ? panel.view : VIEWS[0];
     const viewsId = useId();
@@ -412,7 +420,10 @@ export function NodeDaemon({node}) {
                         }},
                         {key: "started_at", label: t("nodeDaemon.columns.started"), render: (e) => when(e.started_at)},
                         {key: "ended_at", label: t("nodeDaemon.columns.ended"), render: (e) => when(e.ended_at)},
-                        {key: "signal", label: t("nodeDaemon.actions.label"), render: (e) => (e.state === "running" ? (
+                        {key: "signal", label: t("nodeDaemon.actions.label"), render: (e) => (
+                            <span className="flex items-center gap-1.5">
+                                {logsButton("exec", e.exec_id, e.path || node)}
+                                {e.state === "running" && (
                             <Button
                                 size="sm"
                                 variant="secondary"
@@ -430,7 +441,9 @@ export function NodeDaemon({node}) {
                             >
                                 {t("nodeDaemon.execs.terminate")}
                             </Button>
-                        ) : null)},
+                                )}
+                            </span>
+                        )},
                     ]}
                 />
             </Loaded>
@@ -450,6 +463,7 @@ export function NodeDaemon({node}) {
                     {key: "started_at", label: t("nodeDaemon.columns.started"), render: (o) => when(o.started_at)},
                     {key: "ended_at", label: t("nodeDaemon.columns.ended"), render: (o) => when(o.ended_at)},
                     {key: "orchestration_id", label: t("nodeDaemon.columns.id"), className: "font-mono text-data text-ink-muted"},
+                    {key: "logs", label: t("nodeDaemon.actions.label"), render: (o) => logsButton("orchestration", o.orchestration_id, o.path || node)},
                 ]}
             />
         </Loaded>
@@ -527,6 +541,7 @@ export function NodeDaemon({node}) {
                 {views[view]}
             </div>
 
+            <DaemonIdLogs target={logsOf} onClose={() => setLogsOf(null)}/>
             <Dialog
                 open={pending !== null}
                 onClose={() => setPending(null)}

@@ -30,6 +30,15 @@ vi.mock('../ObjectTabs', () => ({
     ObjectSchedules: ({path}) => <div data-testid="object-schedules">{path}</div>,
 }));
 vi.mock('../NetworkDetails', () => ({default: ({name}) => <div data-testid="network-details">{name}</div>}));
+vi.mock('../PoolPanel', () => ({
+    PoolOverview: ({name}) => <div data-testid="pool-overview">{name}</div>,
+    PoolVolumes: ({name}) => <div data-testid="pool-volumes">{name}</div>,
+    PoolConfig: ({name}) => <div data-testid="pool-config">{name}</div>,
+}));
+vi.mock('../NetworkPanel', () => ({
+    NetworkOverview: ({name}) => <div data-testid="network-overview">{name}</div>,
+    NetworkConfig: ({name}) => <div data-testid="network-config">{name}</div>,
+}));
 vi.mock('../NamespacePanel', () => ({
     NamespaceUsage: ({namespace}) => <div data-testid="namespace-usage">{namespace}</div>,
     NamespaceConfig: ({namespace}) => <div data-testid="namespace-config">{namespace}</div>,
@@ -197,7 +206,7 @@ describe('record panels', () => {
     });
 
     test.each([
-        ['network:lo', 'lo', 'network-details', 'lo'],
+        ['network:lo', 'lo', 'network-overview', 'lo'],
         ['namespace:ns1', 'ns1', 'namespace-usage', 'ns1'],
     ])('%s opens its panel', (peek, title, testId, content) => {
         renderPeek(`/objects?peek=${peek}`);
@@ -252,6 +261,27 @@ describe('record panels', () => {
         renderPeek('/objects?peek=namespace:ns1');
         fireEvent.click(within(screen.getByRole('dialog', {name: 'ns1'})).getByRole('button', {name: 'Namespace actions'}));
         expect(within(screen.getByRole('menu', {name: 'Namespace actions'})).getByRole('menuitem', {name: 'Delete'})).toBeDisabled();
+    });
+
+    test('a network opens on its overview, its addresses and configuration on tabs of their own', () => {
+        renderPeek('/objects?peek=network:lo');
+        const panel = screen.getByRole('dialog', {name: 'lo'});
+        expect(within(panel).getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Overview', 'Addresses', 'Configuration']);
+        fireEvent.click(within(panel).getByRole('tab', {name: 'Addresses'}));
+        expect(screen.getByTestId('search')).toHaveTextContent('peektab=addresses');
+        expect(within(panel).getByTestId('network-details')).toHaveTextContent('lo');
+        fireEvent.click(within(panel).getByRole('tab', {name: 'Configuration'}));
+        expect(within(panel).getByTestId('network-config')).toHaveTextContent('lo');
+    });
+
+    test('a pool opens on its overview, its volumes and configuration on tabs of their own', () => {
+        renderPeek('/objects?peek=pool:tank');
+        const panel = screen.getByRole('dialog', {name: 'tank'});
+        expect(within(panel).getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Overview', 'Volumes', 'Configuration']);
+        expect(within(panel).getByTestId('pool-overview')).toHaveTextContent('tank');
+        fireEvent.click(within(panel).getByRole('tab', {name: 'Volumes'}));
+        expect(screen.getByTestId('search')).toHaveTextContent('peektab=volumes');
+        expect(within(panel).getByTestId('pool-volumes')).toHaveTextContent('tank');
     });
 
     test('closing the panel leaves the view as it was', () => {

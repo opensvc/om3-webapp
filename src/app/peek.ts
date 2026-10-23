@@ -17,17 +17,19 @@ export interface PeekStep {
  * - `object`: an object, by its path (`ns/kind/name`), its instances shown by
  *   its status board;
  * - `network`: a network, by its name;
+ * - `pool`: a pool, by its name;
  * - `namespace`: the usage of a namespace, by its name;
  * - `instance`: the instance of an object on a node, by `path@node` (`instanceId`);
  * - `resource`: a resource of an object on all its nodes, by `path:rid`, or on
  *   the instance of one node, by `path:rid@node` (`resourceId`).
  */
-export type PeekKind = "node" | "object" | "network" | "namespace" | "instance" | "resource";
+export type PeekKind = "node" | "object" | "network" | "pool" | "namespace" | "instance" | "resource";
 
 const PEEK_KINDS: ReadonlySet<string> = new Set<PeekKind>([
   "node",
   "object",
   "network",
+  "pool",
   "namespace",
   "instance",
   "resource",
@@ -95,6 +97,8 @@ export function stepIcon(step: PeekStep): ObjectKind {
       return om3ObjectKind(pathKind(step.id));
     case "network":
       return "network";
+    case "pool":
+      return "pool";
     case "namespace":
       return "namespace";
     case "instance":

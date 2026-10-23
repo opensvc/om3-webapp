@@ -1,4 +1,4 @@
-import React, {useEffect, useState, useRef, useMemo} from "react";
+import React, {useCallback, useEffect, useState, useRef, useMemo} from "react";
 import axios from "axios";
 import {useTranslation} from "react-i18next";
 import {URL_NETWORK} from "../config/apiPath.js";
@@ -7,6 +7,15 @@ import {Table, HeaderRow, SortHeaderCell, Row, Cell, EmptyRow} from "../ui/compo
 import {UsageBar} from "../ui/components/UsageBar";
 import {usePanelSearch} from "../app/panel-search";
 import {NetworkDetailPanel} from "./RecordPanels";
+import {NetworkWizard} from "./NetworkWizard";
+import {Button} from "../ui/components/Button";
+import {PlusIcon} from "../ui/icons";
+import {useGrants} from "../hooks/useGrants";
+import {useClusterNodes} from "../hooks/usePgUsage";
+
+/** A network written: the list read again until it has it, the daemons applying the configuration. */
+const APPEAR_TRIES = 10;
+const APPEAR_EVERY_MS = 1000;
 
 const COLUMNS = [
     {key: "name", labelKey: "common.name"},
@@ -34,8 +43,12 @@ const Network = () => {
     const [sortColumn, setSortColumn] = useState("name");
     const [sortDirection, setSortDirection] = useState("asc");
     // The network whose panel is open, in the URL.
-    const {sel, select} = usePanelSearch();
+    const {sel, select, tab, setTab} = usePanelSearch();
     const containerRef = useRef(null);
+    // Root writes the cluster configuration: a network added from a wizard.
+    const isRoot = Object.prototype.hasOwnProperty.call(useGrants(), "root");
+    const nodes = useClusterNodes();
+    const [adding, setAdding] = useState(false);
 
     // Scroll to top on component mount
     useEffect(() => {
@@ -45,23 +58,50 @@ const Network = () => {
         }
     }, []);
 
-    useEffect(() => {
-        const fetchNetworks = async () => {
-            try {
-                const token = localStorage.getItem("authToken");
-                const res = await axios.get(URL_NETWORK, {
-                    headers: {
-                        Authorization: `Bearer ${token}`
-                    }
-                });
-                setNetworks(res.data.items || []);
-            } catch (err) {
-                logger.error("Error retrieving networks", err);
-            }
-        };
-
-        void fetchNetworks();
+    /** The networks read, set and answered; none on an error, logged. */
+    const fetchNetworks = useCallback(async () => {
+        try {
+            const token = localStorage.getItem("authToken");
+            const res = await axios.get(URL_NETWORK, {
+                headers: {
+                    Authorization: `Bearer ${token}`
+                }
+            });
+            const items = res.data.items || [];
+            setNetworks(items);
+            return items;
+        } catch (err) {
+            logger.error("Error retrieving networks", err);
+            return [];
+        }
     }, []);
+
+    useEffect(() => {
+        void fetchNetworks();
+    }, [fetchNetworks]);
+
+    /** A network deleted: its panel closed, the list read until it no longer has it. */
+    const deleted = async (name) => {
+        select(undefined);
+        for (let i = 0; i < APPEAR_TRIES; i += 1) {
+            const items = await fetchNetworks();
+            if (!items.some((n) => n.name === name)) return;
+            await new Promise((resolve) => setTimeout(resolve, APPEAR_EVERY_MS));
+        }
+    };
+
+    /** A network written: the list read until it has it, then its panel opened. */
+    const added = async (name) => {
+        setAdding(false);
+        for (let i = 0; i < APPEAR_TRIES; i += 1) {
+            const items = await fetchNetworks();
+            if (items.some((n) => n.name === name)) {
+                select(name);
+                return;
+            }
+            await new Promise((resolve) => setTimeout(resolve, APPEAR_EVERY_MS));
+        }
+    };
 
     const sortedNetworks = useMemo(() => {
         return [...networks].sort((a, b) => {
@@ -92,6 +132,13 @@ const Network = () => {
 
     return (
         <div ref={containerRef} className="p-4 space-y-3">
+            {isRoot && (
+                <div className="flex justify-end">
+                    <Button size="sm" variant="create" icon={<PlusIcon className="h-4 w-4"/>} onClick={() => setAdding(true)}>
+                        {t("networks.add")}
+                    </Button>
+                </div>
+            )}
             <Table sticky>
                 <caption className="sr-only">{t("networks.caption")}</caption>
                 <thead>
@@ -126,7 +173,8 @@ const Network = () => {
                 </tbody>
             </Table>
 
-            <NetworkDetailPanel name={sel} onClose={() => select(undefined)}/>
+            <NetworkDetailPanel name={sel} tab={tab} onTabChange={setTab} onClose={() => select(undefined)} onDeleted={deleted}/>
+            {adding && <NetworkWizard networks={networks} nodes={nodes} onClose={() => setAdding(false)} onSaved={added}/>}
         </div>
     );
 };

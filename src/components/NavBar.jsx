@@ -19,7 +19,7 @@ const HEADER_BUTTON =
     "flex h-7 w-7 shrink-0 items-center justify-center rounded-(--radius-control) border border-line text-ink-muted hover:bg-surface-sunken hover:text-ink";
 
 /** First path segments named after a view: their breadcrumb is translated, the others are names. */
-const SEGMENTS = new Set(["heartbeats", "kinds", "namespaces", "network", "nodes", "objects", "pools", "resources", "stores", "whoami"]);
+const SEGMENTS = new Set(["cluster", "heartbeats", "kinds", "namespaces", "network", "nodes", "objects", "pools", "resources", "stores", "whoami"]);
 
 /** Breadcrumb item of a path segment; `key` is the catalog key of its label, translated at render. */
 const crumb = (part, index, path) => ({

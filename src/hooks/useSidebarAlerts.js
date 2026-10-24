@@ -1,4 +1,5 @@
 import {useEffect, useMemo, useState} from "react";
+import {create} from "zustand";
 import axios from "axios";
 import {EventSourcePolyfill} from "event-source-polyfill";
 import {useTranslation} from "react-i18next";
@@ -196,8 +197,17 @@ function useUsageLists(enabled) {
  * in the current language. None, `null`, while all is well.
  */
 
+/**
+ * The state the menu keeps live, shared with the overview of the cluster: the
+ * objects, the nodes and their heartbeats, from its event stream; the pools and the
+ * networks, polled. `ready`, a first state read.
+ */
+export const useMenuState = create(() => ({
+    objects: {}, nodeStatus: {}, heartbeatStatus: {}, pools: [], networks: [], ready: false,
+}));
+
 /** The kind of an object path, as om3 writes it: "ns/kind/name", "kind/name", a bare svc name, "ns/". */
-function kindOf(path) {
+export function kindOf(path) {
     if (path.endsWith("/")) return "nscfg";
     const parts = path.split("/");
     if (parts.length >= 2) return parts[parts.length - 2];
@@ -296,6 +306,10 @@ const ofKind = (objects, kind) =>
 export default function useSidebarAlerts({enabled = true} = {}) {
     const {objects, nodeStatus, heartbeatStatus} = useSidebarEventState(enabled);
     const {pools, networks} = useUsageLists(enabled);
+    // Shared with the overview of the cluster: one stream, one poll, for both.
+    useEffect(() => {
+        useMenuState.setState({objects, nodeStatus, heartbeatStatus, pools, networks, ready: true});
+    }, [objects, nodeStatus, heartbeatStatus, pools, networks]);
     // The alerts and details are text: computed again when the language changes.
     const {i18n: {language}} = useTranslation();
 

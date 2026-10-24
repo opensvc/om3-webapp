@@ -18,6 +18,9 @@ export const NAV_SECTIONS = [
     {
         key: "cluster",
         labelKey: "nav.sections.cluster",
+        // Its title, the overview of the cluster: the default view.
+        id: "cluster",
+        to: "/cluster",
         entries: [
             {id: "links", to: "/heartbeats", labelKey: "nav.routes.heartbeats"},
             {id: "nodes", to: "/nodes", labelKey: "nav.routes.nodes"},
@@ -141,6 +144,8 @@ function NavSection({section, alerts, onNavigate}) {
     const location = useLocation();
     const shown = shownList(location);
     const titleId = `nav-section-${section.key}`;
+    // The title of a list current when its list is shown; of a page, when it is.
+    const current = section.list !== undefined ? shown === section.list : location.pathname === section.to;
     return (
         <section aria-labelledby={titleId} className="mb-3">
             {section.to === undefined ? (
@@ -151,8 +156,8 @@ function NavSection({section, alerts, onNavigate}) {
                     <Link
                         to={section.to}
                         onClick={onNavigate}
-                        aria-current={shown === section.list ? "page" : undefined}
-                        className={cn(TITLE, "flex rounded-(--radius-control) hover:text-ink", shown === section.list && CURRENT)}
+                        aria-current={current ? "page" : undefined}
+                        className={cn(TITLE, "flex rounded-(--radius-control) hover:text-ink", current && CURRENT)}
                     >
                         {t(section.labelKey)}
                     </Link>

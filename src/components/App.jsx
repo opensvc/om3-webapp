@@ -39,6 +39,7 @@ const Namespaces = lazy(() => import("./Namespaces"));
 const Heartbeats = lazy(() => import("./Heartbeats"));
 const Pools = lazy(() => import("./Pools"));
 const Stores = lazy(() => import("./Stores"));
+const ClusterView = lazy(() => import("./ClusterView"));
 const Resources = lazy(() => import("./Resources"));
 const Network = lazy(() => import("./Network"));
 const WhoAmI = lazy(() => import("./WhoAmI"));
@@ -435,7 +436,8 @@ const App = () => {
                             <main id="app-scroll-container" ref={mainRef} style={mainStyle}>
                                 <Suspense fallback={<Loading/>}>
                                     <Routes>
-                                        <Route path="/" element={<Navigate to="/objects" replace/>}/>
+                                        <Route path="/" element={<Navigate to="/cluster" replace/>}/>
+                                        <Route path="/cluster" element={<ProtectedRoute><ClusterView/></ProtectedRoute>}/>
                                         {/* Tabs of the Objects page now: an old link lands there. */}
                                         <Route path="/namespaces" element={<ProtectedRoute><Namespaces/></ProtectedRoute>}/>
                                         <Route path="/kinds" element={<ObjectsTab list="any"/>}/>

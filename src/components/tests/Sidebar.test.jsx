@@ -43,10 +43,10 @@ describe('Sidebar', () => {
         expect(screen.getAllByRole('heading').map((h) => h.textContent)).toEqual(['Cluster', 'Objects']);
         expect(linkNames(section('Cluster'))).toEqual(CLUSTER);
         expect(linkNames(section('Objects'))).toEqual(OBJECTS);
-        // No "All" entry: the title of the objects opens them all; the cluster's is no link.
+        // No "All" entry: the title of the objects opens them all; the cluster's, its overview.
         expect(screen.queryByRole('link', {name: 'All'})).not.toBeInTheDocument();
         expect(within(screen.getByRole('heading', {name: 'Objects'})).getByRole('link', {name: 'Objects'})).toHaveAttribute('href', '/objects?list=any');
-        expect(within(screen.getByRole('heading', {name: 'Cluster'})).queryByRole('link')).not.toBeInTheDocument();
+        expect(within(screen.getByRole('heading', {name: 'Cluster'})).getByRole('link', {name: 'Cluster'})).toHaveAttribute('href', '/cluster');
         // The entries indented under their section title.
         for (const name of ['Cluster', 'Objects']) expect(within(section(name)).getByRole('list')).toHaveClass('ml-2', 'border-l', 'pl-1');
     });
@@ -55,7 +55,7 @@ describe('Sidebar', () => {
         renderSidebar();
         const hrefs = Object.fromEntries(screen.getAllByRole('link').map((link) => [link.textContent, link.getAttribute('href')]));
         expect(hrefs).toEqual({
-            Links: '/heartbeats', Nodes: '/nodes', Namespaces: '/namespaces', Networks: '/network', Pools: '/pools', Stores: '/stores', Resources: '/resources',
+            Cluster: '/cluster', Links: '/heartbeats', Nodes: '/nodes', Namespaces: '/namespaces', Networks: '/network', Pools: '/pools', Stores: '/stores', Resources: '/resources',
             Objects: '/objects?list=any', Services: '/objects', Volumes: '/objects?list=volumes',
             Configurations: '/objects?list=configs', Secrets: '/objects?list=secrets', Users: '/objects?list=users',
         });
@@ -112,10 +112,15 @@ describe('Sidebar', () => {
         expect(link.parentElement).toContainElement(badge);
     });
 
-    test('leaves the cluster overview and the user page to the top bar', () => {
+    test('leaves the user page to the top bar', () => {
         renderSidebar();
-        expect(screen.queryByRole('link', {name: /^Cluster/})).toBeNull();
         expect(screen.queryByRole('link', {name: /^Who Am I/})).toBeNull();
+    });
+
+    test('the cluster title current on its overview alone', () => {
+        renderSidebar(true, '/cluster');
+        expect(screen.getByRole('link', {name: 'Cluster'})).toHaveAttribute('aria-current', 'page');
+        expect(screen.getByRole('link', {name: 'Objects'})).not.toHaveAttribute('aria-current');
     });
 
     test('marks the view on display', () => {

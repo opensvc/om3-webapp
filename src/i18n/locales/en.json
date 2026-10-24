@@ -1110,7 +1110,8 @@
         "pools": "pools",
         "whoami": "whoami",
         "resources": "resources",
-        "stores": "stores"
+        "stores": "stores",
+        "cluster": "cluster"
       }
     },
     "sections": {
@@ -2731,6 +2732,56 @@
       "after": "first after: {{id}}, {{date}}",
       "noneBefore": "None before",
       "noneAfter": "none after"
+    }
+  },
+  "clusterView": {
+    "title": "Cluster",
+    "cards": "Summary of the cluster",
+    "open": "Open {{page}}",
+    "nodes": {
+      "frozen_one": "{{count}} frozen",
+      "frozen_other": "{{count}} frozen",
+      "operational": "nodes optimal",
+      "dropped": "dropped",
+      "overloaded": "overloaded",
+      "optimal": "optimal"
+    },
+    "objects": {
+      "up": "up",
+      "warn": "warn",
+      "down": "down",
+      "na": "n/a",
+      "kinds": "By kind",
+      "operational": "services and volumes up"
+    },
+    "namespaces": {
+      "busiest": "The busiest",
+      "objects_one": "{{count}} object",
+      "objects_other": "{{count}} objects"
+    },
+    "usage": {
+      "full_one": "{{count}} full",
+      "full_other": "{{count}} full",
+      "fullest": "The fullest",
+      "none": "None."
+    },
+    "stores": {
+      "snapshots_one": "{{count}} snapshot",
+      "snapshots_other": "{{count}} snapshots",
+      "unreached_one": "{{count}} not reached",
+      "unreached_other": "{{count}} not reached",
+      "latest": "latest {{age}}"
+    },
+    "resources": {
+      "unread": "Could not read the resources: {{message}}",
+      "operational": "resources in warn",
+      "warn": "warn",
+      "other": "other"
+    },
+    "reading": "Reading…",
+    "links": {
+      "heartbeats": "Heartbeats",
+      "beating": "{{beating}} of {{total}} links beating"
     }
   }
 }

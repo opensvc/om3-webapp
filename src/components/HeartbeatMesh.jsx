@@ -3,6 +3,7 @@ import {useTranslation} from "react-i18next";
 import {DIRECTION_OFFSET, meshLayout, meshLinks, meshNodes} from "../app/heartbeat-mesh";
 import {RelativeTime} from "../ui/components/RelativeTime";
 import {CARD as CARD_SURFACE} from "./HeartbeatSummary";
+import {RING_INK, StateRing} from "./StateRing";
 
 /** The tint of a line: the state of its links, in the oc3 state colours. */
 const STROKE = {up: "stroke-state-up", warn: "stroke-state-warn", down: "stroke-state-down", none: "stroke-line"};
@@ -34,8 +35,6 @@ const ZERO_TIME = "0001-01-01T00:00:00Z";
  * their cards; its word in the tint of their counts.
  */
 const ARC = {up: "stroke-state-up", down: "stroke-state-down", stopped: "stroke-line"};
-const RING_INK = {up: "text-state-up", warn: "text-state-warn", down: "text-state-down"};
-const RING_RADIUS = 52;
 
 /**
  * All the streams of the cluster at a glance, nothing hovered nor kept: a ring, a gauge
@@ -43,49 +42,20 @@ const RING_RADIUS = 52;
  * and in it their figures, how many beat out of all, and a word for it, optimal when
  * all do.
  */
-function Overall({links, hint}) {
+export function Overall({links, hint}) {
     const {t} = useTranslation();
     const total = links.length;
     const beating = links.filter((l) => l.state === "up").length;
     const stopped = links.filter((l) => l.streamState !== undefined && l.streamState !== "running").length;
     const state = beating === total ? "up" : beating === 0 ? "down" : "warn";
-    const round = 2 * Math.PI * RING_RADIUS;
-    // The arcs one after the other round the ring, from the top.
-    let start = 0;
-    const arcs = [["up", beating], ["down", total - beating - stopped], ["stopped", stopped]]
-        .filter(([, count]) => count > 0)
-        .map(([part, count]) => {
-            const length = (round * count) / total;
-            const arc = {part, length, start};
-            start += length;
-            return arc;
-        });
+    const parts = [["up", beating], ["down", total - beating - stopped], ["stopped", stopped]].map(([part, count]) => [part, count, ARC[part]]);
     return (
         <div data-overall={state} className="flex flex-col items-center gap-2 py-1">
-            <div className="relative size-44">
-                <svg viewBox="0 0 120 120" aria-hidden="true" className="size-full -rotate-90">
-                    <circle cx="60" cy="60" r={RING_RADIUS} fill="none" strokeWidth="8" className="stroke-surface-sunken"/>
-                    {arcs.map(({part, length, start: from}) => (
-                        <circle
-                            key={part}
-                            data-arc={part}
-                            cx="60"
-                            cy="60"
-                            r={RING_RADIUS}
-                            fill="none"
-                            strokeWidth="8"
-                            strokeDasharray={`${length} ${round}`}
-                            strokeDashoffset={-from}
-                            className={ARC[part]}
-                        />
-                    ))}
-                </svg>
-                <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-                    <span className="text-2xl font-semibold tabular-nums">{beating}/{total}</span>
-                    <span className="text-ink-muted">{t("heartbeats.mesh.overall.operational")}</span>
-                    <span className={`font-semibold ${RING_INK[state]}`}>{t(`heartbeats.mesh.overall.${state}`)}</span>
-                </div>
-            </div>
+            <StateRing parts={parts} total={total}>
+                <span className="text-2xl font-semibold tabular-nums">{beating}/{total}</span>
+                <span className="text-ink-muted">{t("heartbeats.mesh.overall.operational")}</span>
+                <span className={`font-semibold ${RING_INK[state]}`}>{t(`heartbeats.mesh.overall.${state}`)}</span>
+            </StateRing>
             <p className="text-center text-ink-muted">{hint}</p>
         </div>
     );

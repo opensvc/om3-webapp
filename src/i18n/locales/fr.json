@@ -1110,7 +1110,8 @@
         "pools": "pools",
         "whoami": "utilisateur",
         "resources": "ressources",
-        "stores": "magasins"
+        "stores": "magasins",
+        "cluster": "cluster"
       }
     },
     "sections": {
@@ -2731,6 +2732,56 @@
       "after": "premier après : {{id}}, {{date}}",
       "noneBefore": "Aucun avant",
       "noneAfter": "aucun après"
+    }
+  },
+  "clusterView": {
+    "title": "Cluster",
+    "cards": "Résumé du cluster",
+    "open": "Ouvrir {{page}}",
+    "nodes": {
+      "frozen_one": "{{count}} gelé",
+      "frozen_other": "{{count}} gelés",
+      "operational": "nœuds optimaux",
+      "dropped": "perdus",
+      "overloaded": "surchargés",
+      "optimal": "optimaux"
+    },
+    "objects": {
+      "up": "up",
+      "warn": "warn",
+      "down": "down",
+      "na": "n/a",
+      "kinds": "Par type",
+      "operational": "services et volumes up"
+    },
+    "namespaces": {
+      "busiest": "Les plus chargés",
+      "objects_one": "{{count}} objet",
+      "objects_other": "{{count}} objets"
+    },
+    "usage": {
+      "full_one": "{{count}} plein",
+      "full_other": "{{count}} pleins",
+      "fullest": "Les plus remplis",
+      "none": "Aucun."
+    },
+    "stores": {
+      "snapshots_one": "{{count}} instantané",
+      "snapshots_other": "{{count}} instantanés",
+      "unreached_one": "{{count}} injoignable",
+      "unreached_other": "{{count}} injoignables",
+      "latest": "dernier {{age}}"
+    },
+    "resources": {
+      "unread": "Impossible de lire les ressources : {{message}}",
+      "operational": "ressources en warn",
+      "warn": "warn",
+      "other": "autres"
+    },
+    "reading": "Lecture…",
+    "links": {
+      "heartbeats": "Heartbeats",
+      "beating": "{{beating}} liens sur {{total}} battent"
     }
   }
 }

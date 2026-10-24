@@ -26,6 +26,7 @@ vi.mock('../../app/record-history', async (importOriginal) => ({
 }));
 vi.mock('../NavBar', () => ({default: ({anchor}) => <div data-testid="navbar">NavBar{anchor}</div>}));
 vi.mock('../../hooks/useSidebarAlerts', () => ({default: () => ({})}));
+vi.mock('../ClusterView', () => ({default: () => <div data-testid="cluster">ClusterView</div>}));
 vi.mock('../NodesTable', () => ({default: () => <div data-testid="nodes">NodesTable</div>}));
 vi.mock('../Heartbeats', () => ({default: () => <div data-testid="heartbeats">Heartbeats</div>}));
 vi.mock('../Pools', () => ({default: () => <div data-testid="pools">Pools</div>}));
@@ -193,11 +194,11 @@ describe('App Component', () => {
     });
 
     // --- Routing ---
-    test('renders NavBar and redirects / to /objects', async () => {
+    test('renders NavBar and redirects / to the cluster overview', async () => {
         setupBasicAuth();
         renderApp(['/']);
         expect(await screen.findByTestId('navbar')).toBeInTheDocument();
-        expect(await screen.findByTestId('objects')).toBeInTheDocument();
+        expect(await screen.findByTestId('cluster')).toBeInTheDocument();
     });
 
     test('shows the sidebar beside the views', async () => {
@@ -207,10 +208,10 @@ describe('App Component', () => {
         expect(screen.getByRole('navigation', {name: 'Main'})).toBeInTheDocument();
     });
 
-    test('sends the former cluster overview URL to the objects', async () => {
+    test('shows the cluster overview at /cluster', async () => {
         setupBasicAuth();
         renderApp(['/cluster']);
-        expect(await screen.findByTestId('objects')).toBeInTheDocument();
+        expect(await screen.findByTestId('cluster')).toBeInTheDocument();
     });
 
     test('shows no sidebar on the sign-in screens', async () => {
@@ -219,10 +220,10 @@ describe('App Component', () => {
         expect(screen.queryByRole('navigation', {name: 'Main'})).not.toBeInTheDocument();
     });
 
-    test('unknown route redirects to /objects', async () => {
+    test('unknown route redirects to the cluster overview', async () => {
         setupBasicAuth();
         renderApp(['/unknown-route']);
-        expect(await screen.findByTestId('objects')).toBeInTheDocument();
+        expect(await screen.findByTestId('cluster')).toBeInTheDocument();
     });
 
     test.each([

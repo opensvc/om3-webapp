@@ -1083,7 +1083,8 @@
       "kinds": "Kinds",
       "namespaces": "Namespaces",
       "pools": "Pools",
-      "resources": "Resources"
+      "resources": "Resources",
+      "stores": "Stores"
     },
     "main": "Main",
     "loading": "Loading...",
@@ -1108,7 +1109,8 @@
         "objects": "objects",
         "pools": "pools",
         "whoami": "whoami",
-        "resources": "resources"
+        "resources": "resources",
+        "stores": "stores"
       }
     },
     "sections": {
@@ -1696,7 +1698,8 @@
       "config": "Configuration",
       "info": "Info",
       "containerLogs": "Container logs",
-      "locks": "Locks"
+      "locks": "Locks",
+      "snapshots": "Snapshots"
     },
     "crossLink": "Show the {{kind}} here",
     "kinds": {
@@ -1706,7 +1709,8 @@
       "node": "node",
       "instance": "instance",
       "resource": "resource",
-      "pool": "pool"
+      "pool": "pool",
+      "store": "store"
     },
     "logs": {
       "noNode": "No instance to read the logs of."
@@ -2037,7 +2041,8 @@
         "optional": "optional",
         "standby": "standby",
         "encap": "encapsulated"
-      }
+      },
+      "actions": "Resource actions"
     }
   },
   "actionTray": {
@@ -2087,7 +2092,8 @@
       "objectCreate": "Create",
       "configCreate": "Create the configuration"
     },
-    "noNews": "no news of it within {{seconds}} s"
+    "noNews": "no news of it within {{seconds}} s",
+    "logs": "Logs of {{action}} {{subject}}"
   },
   "paramActions": {
     "resize": {
@@ -2281,14 +2287,33 @@
       "pgUpdate": "Apply the pg_* keywords to the process groups again.",
       "info": "Gather and show the instance information.",
       "status": "Evaluate the status of its resources again.",
-      "delete": "Delete the instance configuration on this node."
+      "delete": "Delete the instance configuration on this node.",
+      "syncUpdateStore": "Back up the changes of its datasets into their stores.",
+      "syncUpdateEither": "Copy the changes of its datasets to the peers, or back them up into their stores.",
+      "syncFullStore": "Back up its whole datasets into their stores.",
+      "syncFullEither": "Copy its whole datasets to the peers, or back them up into their stores."
     },
     "resource": {
       "start": "Bring up the resources picked.",
       "stop": "Bring down the resources picked.",
       "restart": "Restart the resources picked.",
       "run": "Run the tasks picked now, outside their schedule.",
-      "console": "Open a console in the container."
+      "console": "Open a console in the container.",
+      "startStandby": "Bring up the resources picked meant to stay up on a standby node.",
+      "prstart": "Preempt the exclusive write reservation of the devices of the resources picked.",
+      "prstop": "Release the write reservation of the devices of the resources picked.",
+      "syncUpdate": "Copy the changes of the resources picked to the peers.",
+      "syncFull": "Copy the whole dataset of the resources picked to the peers.",
+      "syncResync": "Restore the optimal synchronization of the replicated pairs picked.",
+      "syncSplit": "Make both ends of the replicated pairs picked read-write.",
+      "syncIngest": "Ingest the files the resources picked received from the active instance.",
+      "boot": "Run the clean up actions of the resources picked done at node boot only.",
+      "provision": "Allocate the system resources of the resources picked on this node.",
+      "unprovision": "Free the system resources of the resources picked on this node: their data is lost.",
+      "syncUpdateStore": "Back up the changes of the resources picked into their store.",
+      "syncUpdateEither": "Copy the changes of the resources picked to the peers, or back them up into their store.",
+      "syncFullStore": "Back up the whole dataset of the resources picked into their store.",
+      "syncFullEither": "Copy the whole dataset of the resources picked to the peers, or back it up into their store."
     },
     "impacts": {
       "dataLoss": "data-loss",
@@ -2508,6 +2533,204 @@
       "monitored": "monitored",
       "optional": "optional",
       "encap": "encapsulated"
+    }
+  },
+  "stores": {
+    "caption": "Stores",
+    "loading": "Reading the stores",
+    "loadError": "Could not read the stores: {{message}}",
+    "empty": "No store.",
+    "add": "Add store",
+    "none": "none",
+    "everyNamespace": "every namespace",
+    "serves": "Serves {{namespaces}}",
+    "source": {
+      "cluster": "Of the cluster configuration",
+      "sec": "Declared by the secret",
+      "secNamed": "Declared by the secret {{sec}}"
+    },
+    "facts": {
+      "type": "Type",
+      "url": "Where",
+      "share": "Serves",
+      "source": "Declared",
+      "keep": "Keeps",
+      "schedule": "Pushed"
+    },
+    "figures": {
+      "snapshots_one": "snapshot",
+      "snapshots_other": "snapshots",
+      "objects_one": "object",
+      "objects_other": "objects",
+      "protected_one": "protected",
+      "protected_other": "protected",
+      "latest": "latest",
+      "incomplete_one": "incomplete",
+      "incomplete_other": "incomplete",
+      "saved": "saved",
+      "stored": "stored",
+      "free": "free",
+      "freeOn": "free on {{node}}"
+    },
+    "wizard": {
+      "title": "New store {{name}}",
+      "editTitle": "Modify the store {{name}}",
+      "steps": "Steps of the wizard",
+      "step": {
+        "type": "Name and type",
+        "settings": "Settings",
+        "review": "Review"
+      },
+      "name": "Name",
+      "nameHint": "Letters, digits, dash or underscore: the section store#<name> of the cluster configuration.",
+      "nameKept": "A store keeps its name.",
+      "nameInvalid": "Letters, digits, dash or underscore only.",
+      "nameTaken": "A store {{name}} exists already.",
+      "typeQuestion": "What type of store?",
+      "required": "{{key}} (required)",
+      "onNode": "{{key}} on {{node}}",
+      "byDefault": "Default: {{value}}",
+      "unset": "Not set",
+      "listHint": "Several values separated by spaces.",
+      "written": "Written to the cluster configuration, which every node applies:",
+      "back": "Back",
+      "next": "Next",
+      "save": "Add the store",
+      "update": "Modify the store",
+      "saving": "Writing…",
+      "readFailed": "Could not read the keywords of a store: {{message}}",
+      "saveFailed": "Not written: {{message}}",
+      "tray": "Add the store {{name}}",
+      "trayEdit": "Modify the store {{name}}",
+      "unchanged": "Nothing changed.",
+      "rewrite": "Its type changes from {{from}} to {{to}}: its section is written anew, the keys of {{from}} dropped."
+    },
+    "panel": {
+      "tabs": {
+        "overview": "Overview",
+        "snapshots": "Snapshots",
+        "config": "Configuration"
+      },
+      "store": "Store",
+      "snapshots": "Snapshots",
+      "byObject": "Snapshots by object",
+      "latest": "latest",
+      "noSnapshot": "No snapshot.",
+      "loading": "Reading the store",
+      "none": "No store {{name}}.",
+      "readFailed": "Could not read the store: {{message}}",
+      "snapshotsFailed": "Could not read the snapshots: {{message}}",
+      "ofSec": "The store {{name}} is declared, and configured, in the secret",
+      "builtIn": "No section of the cluster configuration defines {{name}}.",
+      "configOf": "Configuration of the store {{name}}",
+      "edit": "Edit the configuration of the store {{name}}",
+      "modify": "Modify the store {{name}} in the wizard",
+      "editHint": "A key = value a line, key@node = value for one node; a key removed is unset. Written as the keys changed, the rest of the cluster configuration left as it is.",
+      "invalidLines": "Not a key = value line: {{lines}}",
+      "trayEdit": "Update the store {{name}}",
+      "delete": "Delete the store",
+      "deleting": "Deleting…",
+      "confirmTitle": "Delete the store {{name}}?",
+      "confirmText": "The section store#{{name}} is removed from the cluster configuration, which every node applies. The snapshots stay where they are.",
+      "inUse_one": "It holds {{count}} snapshot: no store of the cluster reads it any more.",
+      "inUse_other": "It holds {{count}} snapshots: no store of the cluster reads them any more.",
+      "deleteFailed": "Not deleted: {{message}}",
+      "tray": "Delete the store {{name}}",
+      "noStats": "Its figures are being computed.",
+      "byNode": "By node",
+      "byCluster": "By cluster",
+      "cluster": "Cluster",
+      "objectsFailed": "Could not read its objects: {{message}}",
+      "figuresComputed": "Figures computed {{age}}"
+    },
+    "snapshots": {
+      "caption": "Snapshots of the store {{name}}",
+      "filter": "Filter the snapshots",
+      "object": "Object",
+      "taken": "Taken",
+      "holds": "Holds",
+      "note": "Note",
+      "protected": "Protected: the retention keeps it",
+      "on": "{{node}} of {{cluster}}",
+      "deleting": "Deleting…",
+      "took": "Took",
+      "size": "Size",
+      "readSome_one": "The latest {{count}} read",
+      "readSome_other": "The latest {{count}} read",
+      "readAll_one": "{{count}} snapshot",
+      "readAll_other": "{{count}} snapshots",
+      "older": "Read {{count}} older",
+      "reading": "Reading…",
+      "id": "ID",
+      "copyId": "Copy the id {{id}}",
+      "select": "Select the snapshot {{id}} of {{path}}",
+      "selectAll": "Select the snapshots shown",
+      "selection": "Selected snapshots",
+      "selected_one": "{{count}} selected",
+      "selected_other": "{{count}} selected",
+      "clear": "Clear",
+      "deleteSelected_one": "Delete {{count}} snapshot",
+      "deleteSelected_other": "Delete {{count}} snapshots",
+      "confirmManyTitle_one": "Delete {{count}} snapshot?",
+      "confirmManyTitle_other": "Delete {{count}} snapshots?",
+      "confirmMany_one": "This snapshot is removed from the store, for good:",
+      "confirmMany_other": "These {{count}} snapshots are removed from the store, for good:",
+      "protectedMany_one": "{{count}} of them is protected: the retention would never have removed it.",
+      "protectedMany_other": "{{count}} of them are protected: the retention would never have removed them.",
+      "failedMany_one": "{{count}} not deleted, still selected:",
+      "failedMany_other": "{{count}} not deleted, still selected:",
+      "trayMany_one": "Delete {{count}} snapshot",
+      "trayMany_other": "Delete {{count}} snapshots",
+      "store": "Store",
+      "captionOf": "Snapshots of {{path}}"
+    },
+    "counts": {
+      "snapshots_one": "{{count}} snapshot",
+      "snapshots_other": "{{count}} snapshots",
+      "protected_one": "{{count}} protected",
+      "protected_other": "{{count}} protected",
+      "incomplete_one": "{{count}} incomplete run",
+      "incomplete_other": "{{count}} incomplete runs"
+    },
+    "open": "Open the store {{name}}",
+    "card": {
+      "cluster": "cluster configuration",
+      "sec": "secret {{sec}}"
+    },
+    "check": {
+      "failed": "Not reached at its last attempt: {{message}}",
+      "unreached": "Not reached at its last attempt",
+      "reachedAgo": "last reached {{age}}"
+    },
+    "columns": {
+      "snapshots": "Snapshots",
+      "objects": "Objects",
+      "latest": "Latest",
+      "nodes": "Nodes",
+      "saved": "Saved",
+      "free": "Free",
+      "protected": "Protected",
+      "incomplete": "Incomplete"
+    },
+    "timeline": {
+      "when": "When",
+      "object": "Object",
+      "allObjects": "All objects (the latest)",
+      "presets": "Periods",
+      "preset": {
+        "latest": "Latest",
+        "24h": "24 h",
+        "7d": "7 d",
+        "30d": "30 d",
+        "1y": "1 y",
+        "all": "All"
+      },
+      "around": "Around",
+      "clear": "Clear the period",
+      "before": "Last before: {{id}}, {{date}}",
+      "after": "first after: {{id}}, {{date}}",
+      "noneBefore": "None before",
+      "noneAfter": "none after"
     }
   }
 }

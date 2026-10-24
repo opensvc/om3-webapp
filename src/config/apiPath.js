@@ -14,5 +14,8 @@ export const URL_NODE = '/api/node/name';
 export const URL_NODES = '/api/node';
 export const URL_NETWORK = "/api/network";
 export const URL_NETWORK_IP = "/api/network/ip";
+export const URL_STORE = "/api/store";
+export const URL_STORE_SNAPSHOT = "/api/store/snapshot";
+export const URL_STORE_OBJECT = "/api/store/object";
 // Not under /api: the per cgroup metrics, served unauthenticated by the node listener.
 export const URL_METRICS_PG = "/metrics/pg";

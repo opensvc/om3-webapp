@@ -132,12 +132,45 @@ export const INSTANCE_ACTIONS = [
     {name: "delete", group: "admin", icon: icon(TrashIcon), endpoint: "delete", color: "red"},
 ];
 
+/** The driver group of a resource type, "sync.rsync" → "sync"; a type of no driver, its group. */
+const groupOf = (type) => String(type).split(".")[0];
+/** A rule of the resources an action takes: those of these driver groups. */
+const groups = (...names) => (type) => names.includes(groupOf(type));
+/** A rule: those of these driver types (`group.driver`). */
+const types = (...names) => (type) => names.includes(type);
+/** A rule: those of every driver group but these. */
+const groupsBut = (...names) => (type) => !names.includes(groupOf(type));
+
+/**
+ * The actions on resources, by what om3's drivers do (`rid=` of the instance actions):
+ * `on(type)` the resources taking one, by their driver type, "sync.rsync", "disk.md".
+ * A task runs, and neither starts nor stops; a sync resource replicates, nor starts
+ * nor stops either; the replication of some disks (md, hp3par, xp8) is driven by the
+ * sync actions too; the disks and what holds them reserve their devices; a container
+ * has a console. The groups, the endpoints and the costs those of the instance actions.
+ */
 export const RESOURCE_ACTIONS = [
-    {name: "start", icon: icon(PlayIcon)},
-    {name: "stop", icon: icon(StopIcon)},
-    {name: "restart", icon: icon(RefreshIcon)},
-    {name: "run", icon: icon(CaretRightIcon)},
-    {name: 'console', icon: icon(TerminalIcon)},
+    {name: "start", group: "operator", icon: icon(PlayIcon), endpoint: "start", on: groupsBut("task", "sync")},
+    {name: "stop", group: "operator", icon: icon(StopIcon), endpoint: "stop", impacts: ["downTime"], on: groupsBut("task", "sync")},
+    {name: "restart", group: "operator", icon: icon(RefreshIcon), endpoint: "restart", impacts: ["downTime"], on: groupsBut("task", "sync")},
+    {name: "start standby", group: "operator", icon: icon(PauseIcon), endpoint: "startstandby", on: groupsBut("task", "sync")},
+    {name: "console", group: "operator", icon: icon(TerminalIcon), on: groups("container")},
+
+    {name: "prstart", group: "operatorDisk", icon: icon(StepForwardIcon), endpoint: "prstart", on: groups("disk", "fs", "app", "container")},
+    {name: "prstop", group: "operatorDisk", icon: icon(StepBackwardIcon), endpoint: "prstop", on: groups("disk", "fs", "app", "container")},
+
+    {name: "run", group: "operatorTask", icon: icon(CaretRightIcon), endpoint: "run", on: groups("task")},
+
+    {name: "sync update", group: "operatorSync", icon: icon(UploadIcon), endpoint: "update", on: (type) => groups("sync")(type) || types("disk.hp3par")(type)},
+    {name: "sync full", group: "operatorSync", icon: icon(DatabaseIcon), endpoint: "full", on: types("sync.btrfs", "sync.rsync", "sync.store", "sync.zfs")},
+    {name: "sync resync", group: "operatorSync", icon: icon(SwapIcon), endpoint: "resync", on: types("disk.hp3par", "disk.md", "disk.sgcp_nfs_cg", "disk.xp8")},
+    {name: "sync split", group: "operatorSync", icon: icon(CloseIcon), endpoint: "split", on: types("disk.hp3par", "disk.xp8", "sync.symsrdfs")},
+    {name: "sync ingest", group: "operatorSync", icon: icon(DownloadIcon), endpoint: "ingest", on: types("disk.md", "sync.symsrdfs")},
+
+    {name: "boot", group: "admin", icon: icon(PowerIcon), endpoint: "boot",
+        on: types("disk.lv", "disk.md", "disk.rados", "disk.vg", "disk.xp8", "fs.sgcp_nfs", "ip.sgcp_dnsalias")},
+    {name: "provision", group: "admin", icon: icon(GearIcon), endpoint: "provision", on: groupsBut("task")},
+    {name: "unprovision", group: "admin", icon: icon(BanIcon), endpoint: "unprovision", color: "red", impacts: ["dataLoss", "downTime"], on: groupsBut("task")},
 ];
 
 /**

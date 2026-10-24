@@ -1,6 +1,6 @@
 import React from "react";
 import {usePanelSearch} from "../app/panel-search";
-import {NamespaceDetailPanel, NetworkDetailPanel, ObjectDetailPanel, PoolDetailPanel} from "./RecordPanels";
+import {NamespaceDetailPanel, NetworkDetailPanel, ObjectDetailPanel, PoolDetailPanel, StoreDetailPanel} from "./RecordPanels";
 import {NodeDetailPanel} from "./NodePanel";
 import {InstanceDetailPanel, ResourceDetailPanel} from "./InstanceRecord";
 
@@ -23,6 +23,7 @@ export function PeekPanel() {
             <ObjectDetailPanel path={id("object")} tab={peektab} onTabChange={setPeekTab} onClose={closePeek}/>
             <NetworkDetailPanel name={id("network")} tab={peektab} onTabChange={setPeekTab} onClose={closePeek}/>
             <PoolDetailPanel name={id("pool")} tab={peektab} onTabChange={setPeekTab} onClose={closePeek}/>
+            <StoreDetailPanel name={id("store")} tab={peektab} onTabChange={setPeekTab} onClose={closePeek}/>
             <NamespaceDetailPanel name={id("namespace")} tab={peektab} onTabChange={setPeekTab} onClose={closePeek}/>
             <InstanceDetailPanel id={id("instance")} tab={peektab} onTabChange={setPeekTab} onClose={closePeek}/>
             <ResourceDetailPanel id={id("resource")} tab={peektab} onTabChange={setPeekTab} onClose={closePeek}/>

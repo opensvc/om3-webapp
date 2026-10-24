@@ -557,6 +557,20 @@ describe('ActionDialogManager', () => {
 });
 
 describe('the confirmation says what the action does', () => {
+    test('a sync of a store: a backup into it, no peer', () => {
+        render(
+            <ActionDialogManager
+                pendingAction={{action: 'sync update', targets: [{node: 'n1', rid: 'sync#bk'}], variant: 'Store'}}
+                handleConfirm={vi.fn()}
+                target="sync#bk"
+                supportedActions={['sync update']}
+                onClose={vi.fn()}
+            />,
+        );
+        expect(screen.getByRole('dialog')).toHaveTextContent('Back up the changes of the resources picked into their store.');
+        expect(screen.getByRole('dialog')).not.toHaveTextContent('peers');
+    });
+
     test('on the object, an instance or resources, as the targets of the action say', () => {
         const {rerender} = render(<SimpleConfirmDialog open onClose={vi.fn()} onConfirm={vi.fn()} action="restart" target="ns/svc/a"/>);
         expect(screen.getByRole('dialog')).toHaveTextContent('Ask the daemon to restart its instances.');

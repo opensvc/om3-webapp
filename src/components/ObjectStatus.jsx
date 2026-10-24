@@ -19,10 +19,10 @@ import {OrchestrationBadge, orchestrationOf} from "./OrchestrationBadge";
 import {PolicyTag} from "../ui/components/PolicyTag";
 import ActionDialogManager from "./ActionDialogManager";
 import ConsoleTerminal from "./ConsoleTerminal.jsx";
-import {CLEAR_ACTION, postAction, resourceActions} from "./objectActions";
+import {CLEAR_ACTION, postAction, resourceActions, syncVariant} from "./objectActions";
 import {DatastoreLinks, RefreshStatusButton, datastoresOf, volumesOf} from "./InstanceActions";
 import logger from "../utils/logger.js";
-import {explainedMenu} from "../app/action-menu";
+import {actionDescription, explainedMenu} from "../app/action-menu";
 
 /** Icon of an action in a menu: the action icons are sized to the menu line. */
 const ICON = "flex h-4 w-4 items-center justify-center text-ink-muted [&>svg]:h-4! [&>svg]:w-4!";
@@ -370,15 +370,20 @@ const ObjectStatus = ({path, onOrchestrationLogs, linkNode, linkResource, openCe
                 list: rows.map((r) => t("statusBoard.subjects.cell", {rid: r.name, where: where(nodesOf(r))})).join(", "),
                 path,
             });
+        const typeOf = (r) => (r.typ ? `${r.name.split("#")[0]}.${r.typ}` : undefined);
         return RESOURCE_ACTIONS
             .filter((a) => (a.name === "console" ? cellsPicked.length === 1 : true)
-                && rows.every((r) => resourceActions(r.name).some((b) => b.name === a.name)))
-            .map((a) => ({
-                key: a.name,
-                label: actionLabel(a.name),
-                icon: actionIcon(a),
-                onSelect: () => ask(a.name, {targets, subject, fromSelection: true}),
-            }));
+                && rows.every((r) => resourceActions(r.name, typeOf(r)).some((b) => b.name === a.name)))
+            .map((a) => {
+                const variant = syncVariant(a.name, rows.map(typeOf).filter(Boolean));
+                return {
+                    key: a.name,
+                    label: actionLabel(a.name),
+                    icon: actionIcon(a),
+                    description: actionDescription(t, "resource", a.name, variant),
+                    onSelect: () => ask(a.name, {targets, subject, fromSelection: true, variant}),
+                };
+            });
     })();
     const instanceItems = nodesPicked.length === 0
         ? []

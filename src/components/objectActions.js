@@ -40,7 +40,12 @@ export function actionUrl({path, action, node, rid}) {
     const base = `${URL_NODE}/${encodeURIComponent(node)}/instance/path/${pathParts(path)}`;
     if (action === CLEAR_ACTION.name && rid === undefined) return `${base}/clear`;
     const instance = `${base}/action`;
-    if (rid !== undefined) return `${instance}/${encodeURIComponent(action)}?rid=${encodeURIComponent(rid)}`;
+    // On resources: the endpoint of the action, "sync update" at "update", the resources picked by `rid`.
+    if (rid !== undefined) {
+        const endpoint = RESOURCE_ACTIONS.find((a) => a.name === action)?.endpoint
+            ?? INSTANCE_ACTIONS.find((a) => a.name === action)?.endpoint ?? encodeURIComponent(action);
+        return `${instance}/${endpoint}?rid=${encodeURIComponent(rid)}`;
+    }
     const endpoint = INSTANCE_ACTIONS.find((a) => a.name === action)?.endpoint ?? action;
     return `${instance}/${endpoint}`;
 }
@@ -88,15 +93,28 @@ export async function postAction(target) {
     return refusal;
 }
 
+/** The actions whose words differ for a store: a sync of a store backs up, into the store, no peer. */
+const STORE_WORDED = ["sync update", "sync full"];
+
 /**
- * The actions a resource takes, by its driver group, as the instance view offered
- * them: a task runs, a filesystem, a disk or an app starts and stops. Only a
- * container has a console: it is a shell inside it.
+ * The words of the action `name` on resources of these driver `types`: "Store", a
+ * backup into their store, all of them `sync.store`; "Either", to the peers or into a
+ * store, some of them; "", to the peers.
  */
-export function resourceActions(rid) {
-    const group = rid.split("#")[0].toLowerCase();
-    const actions = RESOURCE_ACTIONS.filter((a) => a.name !== "console" || group === "container");
-    if (group === "task") return actions.filter((a) => a.name === "run");
-    if (["fs", "disk", "app", "container"].includes(group)) return actions.filter((a) => a.name !== "run");
-    return actions;
+export function syncVariant(name, types) {
+    if (!STORE_WORDED.includes(name)) return "";
+    const syncs = types.filter((type) => /^(sync|disk)\./.test(String(type)) || String(type) === "sync");
+    const stores = syncs.filter((type) => type === "sync.store").length;
+    if (stores === 0) return "";
+    return stores === syncs.length ? "Store" : "Either";
+}
+
+/**
+ * The actions a resource takes, by its driver `type` ("sync.rsync", `RESOURCE_ACTIONS`):
+ * a task runs, a sync resource replicates, a disk reserves its devices, a container
+ * has a console. Its type unknown, the group of its id: the actions of its group alone.
+ */
+export function resourceActions(rid, type) {
+    const known = type && String(type).includes(".") ? String(type).toLowerCase() : rid.split("#")[0].toLowerCase();
+    return RESOURCE_ACTIONS.filter((a) => a.on(known));
 }

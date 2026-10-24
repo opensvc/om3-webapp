@@ -1083,7 +1083,8 @@
       "kinds": "Kinds",
       "namespaces": "Namespaces",
       "pools": "Pools",
-      "resources": "Ressources"
+      "resources": "Ressources",
+      "stores": "Magasins"
     },
     "main": "Principal",
     "loading": "Chargement...",
@@ -1108,7 +1109,8 @@
         "objects": "objets",
         "pools": "pools",
         "whoami": "utilisateur",
-        "resources": "ressources"
+        "resources": "ressources",
+        "stores": "magasins"
       }
     },
     "sections": {
@@ -1696,7 +1698,8 @@
       "config": "Configuration",
       "info": "Infos",
       "containerLogs": "Journaux du conteneur",
-      "locks": "Verrous"
+      "locks": "Verrous",
+      "snapshots": "Instantanés"
     },
     "crossLink": "Afficher la fiche ici ({{kind}})",
     "kinds": {
@@ -1706,7 +1709,8 @@
       "node": "nœud",
       "instance": "instance",
       "resource": "ressource",
-      "pool": "pool"
+      "pool": "pool",
+      "store": "magasin"
     },
     "logs": {
       "noNode": "Aucune instance dont lire les journaux."
@@ -2037,7 +2041,8 @@
         "optional": "facultative",
         "standby": "standby",
         "encap": "encapsulée"
-      }
+      },
+      "actions": "Actions sur la ressource"
     }
   },
   "actionTray": {
@@ -2087,7 +2092,8 @@
       "objectCreate": "Créer",
       "configCreate": "Créer la configuration"
     },
-    "noNews": "aucune nouvelle sous {{seconds}} s"
+    "noNews": "aucune nouvelle sous {{seconds}} s",
+    "logs": "Journaux de {{action}} {{subject}}"
   },
   "paramActions": {
     "resize": {
@@ -2281,14 +2287,33 @@
       "pgUpdate": "Appliquer à nouveau les mots-clés pg_* aux groupes de processus.",
       "info": "Collecter et afficher les informations de l'instance.",
       "status": "Évaluer à nouveau l'état de ses ressources.",
-      "delete": "Supprimer la configuration de l'instance sur ce nœud."
+      "delete": "Supprimer la configuration de l'instance sur ce nœud.",
+      "syncUpdateStore": "Sauvegarder les changements de ses jeux de données dans leurs magasins.",
+      "syncUpdateEither": "Copier les changements de ses jeux de données vers les pairs, ou les sauvegarder dans leurs magasins.",
+      "syncFullStore": "Sauvegarder tous ses jeux de données dans leurs magasins.",
+      "syncFullEither": "Copier tous ses jeux de données vers les pairs, ou les sauvegarder dans leurs magasins."
     },
     "resource": {
       "start": "Démarrer les ressources choisies.",
       "stop": "Arrêter les ressources choisies.",
       "restart": "Redémarrer les ressources choisies.",
       "run": "Exécuter les tâches choisies maintenant, hors de leur planification.",
-      "console": "Ouvrir une console dans le conteneur."
+      "console": "Ouvrir une console dans le conteneur.",
+      "startStandby": "Démarrer les ressources choisies destinées à rester actives sur un nœud de secours.",
+      "prstart": "Préempter la réservation d'écriture exclusive des périphériques des ressources choisies.",
+      "prstop": "Libérer la réservation d'écriture des périphériques des ressources choisies.",
+      "syncUpdate": "Copier les changements des ressources choisies vers les pairs.",
+      "syncFull": "Copier tout le jeu de données des ressources choisies vers les pairs.",
+      "syncResync": "Rétablir la synchronisation optimale des paires répliquées choisies.",
+      "syncSplit": "Rendre les deux extrémités des paires répliquées choisies accessibles en écriture.",
+      "syncIngest": "Intégrer les fichiers que les ressources choisies ont reçus de l'instance active.",
+      "boot": "Exécuter les actions de nettoyage des ressources choisies faites seulement au démarrage du nœud.",
+      "provision": "Allouer les ressources système des ressources choisies sur ce nœud.",
+      "unprovision": "Libérer les ressources système des ressources choisies sur ce nœud : leurs données sont perdues.",
+      "syncUpdateStore": "Sauvegarder les changements des ressources choisies dans leur magasin.",
+      "syncUpdateEither": "Copier les changements des ressources choisies vers les pairs, ou les sauvegarder dans leur magasin.",
+      "syncFullStore": "Sauvegarder tout le jeu de données des ressources choisies dans leur magasin.",
+      "syncFullEither": "Copier tout le jeu de données des ressources choisies vers les pairs, ou le sauvegarder dans leur magasin."
     },
     "impacts": {
       "dataLoss": "perte de données",
@@ -2508,6 +2533,204 @@
       "monitored": "surveillée",
       "optional": "facultative",
       "encap": "encapsulée"
+    }
+  },
+  "stores": {
+    "caption": "Magasins",
+    "loading": "Lecture des magasins",
+    "loadError": "Impossible de lire les magasins : {{message}}",
+    "empty": "Aucun magasin.",
+    "add": "Ajouter un magasin",
+    "none": "aucun",
+    "everyNamespace": "tous les espaces de noms",
+    "serves": "Sert {{namespaces}}",
+    "source": {
+      "cluster": "De la configuration du cluster",
+      "sec": "Déclaré par le secret",
+      "secNamed": "Déclaré par le secret {{sec}}"
+    },
+    "facts": {
+      "type": "Type",
+      "url": "Emplacement",
+      "share": "Sert",
+      "source": "Déclaré",
+      "keep": "Conserve",
+      "schedule": "Poussé"
+    },
+    "figures": {
+      "snapshots_one": "instantané",
+      "snapshots_other": "instantanés",
+      "objects_one": "objet",
+      "objects_other": "objets",
+      "protected_one": "protégé",
+      "protected_other": "protégés",
+      "latest": "dernier",
+      "incomplete_one": "incomplet",
+      "incomplete_other": "incomplets",
+      "saved": "sauvegardés",
+      "stored": "stockés",
+      "free": "libres",
+      "freeOn": "libres sur {{node}}"
+    },
+    "wizard": {
+      "title": "Nouveau magasin {{name}}",
+      "editTitle": "Modifier le magasin {{name}}",
+      "steps": "Étapes de l'assistant",
+      "step": {
+        "type": "Nom et type",
+        "settings": "Réglages",
+        "review": "Vérification"
+      },
+      "name": "Nom",
+      "nameHint": "Lettres, chiffres, tiret ou souligné : la section store#<nom> de la configuration du cluster.",
+      "nameKept": "Un magasin garde son nom.",
+      "nameInvalid": "Lettres, chiffres, tiret ou souligné uniquement.",
+      "nameTaken": "Un magasin {{name}} existe déjà.",
+      "typeQuestion": "Quel type de magasin ?",
+      "required": "{{key}} (requis)",
+      "onNode": "{{key}} sur {{node}}",
+      "byDefault": "Par défaut : {{value}}",
+      "unset": "Non réglé",
+      "listHint": "Plusieurs valeurs séparées par des espaces.",
+      "written": "Écrit dans la configuration du cluster, que chaque nœud applique :",
+      "back": "Retour",
+      "next": "Suivant",
+      "save": "Ajouter le magasin",
+      "update": "Modifier le magasin",
+      "saving": "Écriture…",
+      "readFailed": "Impossible de lire les mots-clés d'un magasin : {{message}}",
+      "saveFailed": "Non écrit : {{message}}",
+      "tray": "Ajouter le magasin {{name}}",
+      "trayEdit": "Modifier le magasin {{name}}",
+      "unchanged": "Rien n'a changé.",
+      "rewrite": "Son type passe de {{from}} à {{to}} : sa section est réécrite, les clés de {{from}} abandonnées."
+    },
+    "panel": {
+      "tabs": {
+        "overview": "Vue d'ensemble",
+        "snapshots": "Instantanés",
+        "config": "Configuration"
+      },
+      "store": "Magasin",
+      "snapshots": "Instantanés",
+      "byObject": "Instantanés par objet",
+      "latest": "dernier",
+      "noSnapshot": "Aucun instantané.",
+      "loading": "Lecture du magasin",
+      "none": "Aucun magasin {{name}}.",
+      "readFailed": "Impossible de lire le magasin : {{message}}",
+      "snapshotsFailed": "Impossible de lire les instantanés : {{message}}",
+      "ofSec": "Le magasin {{name}} est déclaré, et configuré, dans le secret",
+      "builtIn": "Aucune section de la configuration du cluster ne définit {{name}}.",
+      "configOf": "Configuration du magasin {{name}}",
+      "edit": "Modifier la configuration du magasin {{name}}",
+      "modify": "Modifier le magasin {{name}} dans l'assistant",
+      "editHint": "Une ligne clé = valeur, clé@nœud = valeur pour un nœud ; une clé retirée est supprimée. Écrit comme les clés modifiées, le reste de la configuration du cluster laissé tel quel.",
+      "invalidLines": "Pas une ligne clé = valeur : {{lines}}",
+      "trayEdit": "Mettre à jour le magasin {{name}}",
+      "delete": "Supprimer le magasin",
+      "deleting": "Suppression…",
+      "confirmTitle": "Supprimer le magasin {{name}} ?",
+      "confirmText": "La section store#{{name}} est retirée de la configuration du cluster, que chaque nœud applique. Les instantanés restent où ils sont.",
+      "inUse_one": "Il tient {{count}} instantané : aucun magasin du cluster ne le lit plus.",
+      "inUse_other": "Il tient {{count}} instantanés : aucun magasin du cluster ne les lit plus.",
+      "deleteFailed": "Non supprimé : {{message}}",
+      "tray": "Supprimer le magasin {{name}}",
+      "noStats": "Ses chiffres sont en cours de calcul.",
+      "byNode": "Par nœud",
+      "byCluster": "Par cluster",
+      "cluster": "Cluster",
+      "objectsFailed": "Impossible de lire ses objets : {{message}}",
+      "figuresComputed": "Chiffres calculés {{age}}"
+    },
+    "snapshots": {
+      "caption": "Instantanés du magasin {{name}}",
+      "filter": "Filtrer les instantanés",
+      "object": "Objet",
+      "taken": "Pris",
+      "holds": "Contient",
+      "note": "Note",
+      "protected": "Protégé : la rétention le garde",
+      "on": "{{node}} de {{cluster}}",
+      "deleting": "Suppression…",
+      "took": "Durée",
+      "size": "Taille",
+      "readSome_one": "Le dernier {{count}} lu",
+      "readSome_other": "Les {{count}} derniers lus",
+      "readAll_one": "{{count}} instantané",
+      "readAll_other": "{{count}} instantanés",
+      "older": "Lire {{count}} plus anciens",
+      "reading": "Lecture…",
+      "id": "ID",
+      "copyId": "Copier l'identifiant {{id}}",
+      "select": "Sélectionner l'instantané {{id}} de {{path}}",
+      "selectAll": "Sélectionner les instantanés affichés",
+      "selection": "Instantanés sélectionnés",
+      "selected_one": "{{count}} sélectionné",
+      "selected_other": "{{count}} sélectionnés",
+      "clear": "Effacer",
+      "deleteSelected_one": "Supprimer {{count}} instantané",
+      "deleteSelected_other": "Supprimer {{count}} instantanés",
+      "confirmManyTitle_one": "Supprimer {{count}} instantané ?",
+      "confirmManyTitle_other": "Supprimer {{count}} instantanés ?",
+      "confirmMany_one": "Cet instantané est retiré du magasin, définitivement :",
+      "confirmMany_other": "Ces {{count}} instantanés sont retirés du magasin, définitivement :",
+      "protectedMany_one": "{{count}} est protégé : la rétention ne l'aurait jamais retiré.",
+      "protectedMany_other": "{{count}} sont protégés : la rétention ne les aurait jamais retirés.",
+      "failedMany_one": "{{count}} non supprimé, toujours sélectionné :",
+      "failedMany_other": "{{count}} non supprimés, toujours sélectionnés :",
+      "trayMany_one": "Supprimer {{count}} instantané",
+      "trayMany_other": "Supprimer {{count}} instantanés",
+      "store": "Magasin",
+      "captionOf": "Instantanés de {{path}}"
+    },
+    "counts": {
+      "snapshots_one": "{{count}} instantané",
+      "snapshots_other": "{{count}} instantanés",
+      "protected_one": "{{count}} protégé",
+      "protected_other": "{{count}} protégés",
+      "incomplete_one": "{{count}} passage incomplet",
+      "incomplete_other": "{{count}} passages incomplets"
+    },
+    "open": "Ouvrir le magasin {{name}}",
+    "card": {
+      "cluster": "configuration du cluster",
+      "sec": "secret {{sec}}"
+    },
+    "check": {
+      "failed": "Injoignable à sa dernière tentative : {{message}}",
+      "unreached": "Injoignable à sa dernière tentative",
+      "reachedAgo": "joint pour la dernière fois {{age}}"
+    },
+    "columns": {
+      "snapshots": "Instantanés",
+      "objects": "Objets",
+      "latest": "Dernier",
+      "nodes": "Nœuds",
+      "saved": "Sauvegardés",
+      "free": "Libres",
+      "protected": "Protégés",
+      "incomplete": "Incomplets"
+    },
+    "timeline": {
+      "when": "Quand",
+      "object": "Objet",
+      "allObjects": "Tous les objets (les derniers)",
+      "presets": "Périodes",
+      "preset": {
+        "latest": "Dernier",
+        "24h": "24 h",
+        "7d": "7 j",
+        "30d": "30 j",
+        "1y": "1 an",
+        "all": "Tout"
+      },
+      "around": "Autour du",
+      "clear": "Effacer la période",
+      "before": "Dernier avant : {{id}}, {{date}}",
+      "after": "premier après : {{id}}, {{date}}",
+      "noneBefore": "Aucun avant",
+      "noneAfter": "aucun après"
     }
   }
 }

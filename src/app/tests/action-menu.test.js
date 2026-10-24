@@ -40,11 +40,29 @@ describe("explained action menus", () => {
         expect(out.find((e) => e.key === "sync split").description).toBe("Make both ends of a replicated pair read-write.");
     });
 
-    test("the resource actions: described, no heading; what the menu set itself kept", () => {
-        const out = explainedItems(t, "resource", [{key: "start", label: "Start"}, {key: "console", label: "Console", description: "mine", danger: true}]);
-        expect(out.map((e) => e.heading)).toEqual([undefined, undefined]);
+    test("the resource actions: described, under the headings of the instance's; what the menu set itself kept", () => {
+        const out = explainedItems(t, "resource", [
+            {key: "sync update", label: "Sync update"},
+            {key: "start", label: "Start"},
+            {key: "console", label: "Console", description: "mine", danger: true},
+            {key: "unprovision", label: "Unprovision"},
+        ]);
+        expect(out.map((e) => [e.key, e.heading])).toEqual([
+            ["start", "Operator"],
+            ["console", undefined],
+            ["sync update", "Operator · sync"],
+            ["unprovision", "Admin"],
+        ]);
         expect(out[0].description).toBe("Bring up the resources picked.");
         expect(out[1]).toMatchObject({description: "mine", danger: true});
+        expect(out[2].description).toBe("Copy the changes of the resources picked to the peers.");
+    });
+
+    test("a variant of its words, for what it acts on; its plain words without one", () => {
+        expect(actionDescription(t, "resource", "sync update", "Store")).toBe("Back up the changes of the resources picked into their store.");
+        expect(actionDescription(t, "instance", "sync full", "Either")).toBe("Copy its whole datasets to the peers, or back them up into their stores.");
+        expect(actionDescription(t, "resource", "start", "Store")).toBe("Bring up the resources picked.");
+        expect(actionDescription(t, "resource", "sync update")).toBe("Copy the changes of the resources picked to the peers.");
     });
 
     test("the masonry: none for one group, two columns for a few, three for many", () => {

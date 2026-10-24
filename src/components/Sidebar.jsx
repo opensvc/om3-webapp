@@ -24,6 +24,7 @@ export const NAV_SECTIONS = [
             {id: "namespaces", to: "/namespaces", labelKey: "nav.routes.namespaces"},
             {id: "networks", to: "/network", labelKey: "nav.routes.networks"},
             {id: "pools", to: "/pools", labelKey: "nav.routes.pools"},
+            {id: "stores", to: "/stores", labelKey: "nav.routes.stores"},
             {id: "resources", to: "/resources", labelKey: "nav.routes.resources"},
         ],
     },

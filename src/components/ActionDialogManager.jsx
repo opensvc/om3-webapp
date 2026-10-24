@@ -21,7 +21,7 @@ import {actionDescription} from '../app/action-menu';
 const labelOf = (t, action) => t(`actions.labels.${action.replace(/\s+(\w)/g, (_, c) => c.toUpperCase())}`,
     {defaultValue: action.charAt(0).toUpperCase() + action.slice(1)});
 
-export const SimpleConfirmDialog = ({open, onClose, onConfirm, action, scope = 'object', target, names, disabled, cancelDisabled}) => {
+export const SimpleConfirmDialog = ({open, onClose, onConfirm, action, scope = 'object', variant = '', target, names, disabled, cancelDisabled}) => {
     const {t} = useTranslation();
     const known = typeof action === 'string' && action;
     // The action name stays as is in the English sentence, French shows its translated label.
@@ -46,8 +46,8 @@ export const SimpleConfirmDialog = ({open, onClose, onConfirm, action, scope = '
             }
         >
             {/* What it does, before the question. */}
-            {known && actionDescription(t, scope, action) && (
-                <p className="mb-2 text-ink">{actionDescription(t, scope, action)}</p>
+            {known && actionDescription(t, scope, action, variant) && (
+                <p className="mb-2 text-ink">{actionDescription(t, scope, action, variant)}</p>
             )}
             <p className="text-ink">
                 {known
@@ -330,6 +330,7 @@ const ActionDialogManager = ({
                 },
                 action: pendingAction?.action,
                 scope,
+                variant: pendingAction?.variant ?? '',
                 target,
                 names,
                 disabled: false,

@@ -30,6 +30,11 @@ vi.mock('../ObjectTabs', () => ({
     ObjectSchedules: ({path}) => <div data-testid="object-schedules">{path}</div>,
 }));
 vi.mock('../NetworkDetails', () => ({default: ({name}) => <div data-testid="network-details">{name}</div>}));
+vi.mock('../StorePanel', () => ({
+    StoreOverview: ({name}) => <div data-testid="store-overview">{name}</div>,
+    StoreSnapshots: ({name}) => <div data-testid="store-snapshots">{name}</div>,
+    StoreConfig: ({name}) => <div data-testid="store-config">{name}</div>,
+}));
 vi.mock('../PoolPanel', () => ({
     PoolOverview: ({name}) => <div data-testid="pool-overview">{name}</div>,
     PoolVolumes: ({name}) => <div data-testid="pool-volumes">{name}</div>,
@@ -122,7 +127,7 @@ describe('record panels', () => {
         renderPeek('/nodes?peek=object:ns1/svc/web');
         const panel = screen.getByRole('dialog', {name: 'ns1/svc/web'});
         expect(within(panel).getAllByRole('tab').map((tab) => tab.textContent))
-            .toEqual(['Status', 'Usage', 'Capacity', 'Schedules', 'Configuration', 'Logs', 'Events']);
+            .toEqual(['Status', 'Usage', 'Capacity', 'Schedules', 'Snapshots', 'Configuration', 'Logs', 'Events']);
         expect(within(panel).queryByRole('tab', {name: 'Locks'})).not.toBeInTheDocument();
         expect(within(panel).getByRole('tab', {name: 'Status'})).toHaveAttribute('aria-selected', 'true');
         expect(within(panel).getByTestId('object-status')).toBeVisible();
@@ -135,7 +140,7 @@ describe('record panels', () => {
         expect(within(panel).getByTestId('object-status')).not.toBeVisible();
     });
 
-    test.each([['ns1/svc/web', 7], ['ns1/sec/key', 4]])('the %s tabs are titled by their name alone, no icon', (path, count) => {
+    test.each([['ns1/svc/web', 8], ['ns1/sec/key', 4]])('the %s tabs are titled by their name alone, no icon', (path, count) => {
         renderPeek(`/nodes?peek=object:${path}`);
         const panel = screen.getByRole('dialog', {name: path});
         const tabs = within(panel).getAllByRole('tab');
@@ -282,6 +287,15 @@ describe('record panels', () => {
         fireEvent.click(within(panel).getByRole('tab', {name: 'Volumes'}));
         expect(screen.getByTestId('search')).toHaveTextContent('peektab=volumes');
         expect(within(panel).getByTestId('pool-volumes')).toHaveTextContent('tank');
+    });
+
+    test('a store opens on its overview, its snapshots and configuration on tabs of their own; one of a secret titled by its name', () => {
+        renderPeek(`/objects?peek=${encodeURIComponent('store:from test/sec/stores store#tar2')}`);
+        const panel = screen.getByRole('dialog', {name: 'tar2'});
+        expect(within(panel).getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Overview', 'Snapshots', 'Configuration']);
+        expect(within(panel).getByTestId('store-overview')).toHaveTextContent('from test/sec/stores store#tar2');
+        fireEvent.click(within(panel).getByRole('tab', {name: 'Snapshots'}));
+        expect(screen.getByTestId('search')).toHaveTextContent('peektab=snapshots');
     });
 
     test('closing the panel leaves the view as it was', () => {

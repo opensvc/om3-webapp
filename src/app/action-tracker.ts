@@ -39,6 +39,8 @@ export interface Tracked {
   label?: string;
   subject: string;
   kind: "orchestration" | "exec";
+  /** The id the daemon runs it under, the orchestration or the exec: what its logs are filtered by. */
+  followedId?: string;
   /** The node answering for it: the one that accepted the orchestration, or ran the exec. */
   node: string;
   /** The object it acts on, whose instance monitors say where an orchestration stands. */
@@ -272,6 +274,7 @@ export function trackAccepted(
     action,
     subject,
     kind: orchestrationId ? "orchestration" : "exec",
+    followedId: orchestrationId || execId,
     node: answering,
     ...(path === undefined ? {} : { path }),
     state: "running",

@@ -33,13 +33,13 @@ export function useActionRunner(path) {
     const [running, setRunning] = useState(false);
     const [consoleTarget, setConsoleTarget] = useState(null);
 
-    const ask = useCallback((action, {targets, subject, onDone}) => {
+    const ask = useCallback((action, {targets, subject, onDone, variant}) => {
         if (action === "console") {
             const {namespace, kind, name} = parseObjectPath(path);
             setConsoleTarget({node: targets[0].node, namespace, kind, name, rid: targets[0].rid});
             return;
         }
-        setPending({action, targets, subject, onDone});
+        setPending({action, targets, subject, onDone, variant});
     }, [path]);
 
     const run = useCallback(async () => {

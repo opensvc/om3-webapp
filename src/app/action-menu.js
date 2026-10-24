@@ -17,6 +17,7 @@ import {INSTANCE_ACTIONS, OBJECT_ACTIONS, RESOURCE_ACTIONS} from "../constants/a
 export const ACTION_GROUPS = {
     object: ["operator", "admin"],
     instance: ["operatorInstance", "operatorDisk", "operatorTask", "operatorSync", "admin", "adminPg"],
+    resource: ["operator", "operatorDisk", "operatorTask", "operatorSync", "admin"],
 };
 
 const DEFS = {object: OBJECT_ACTIONS, instance: INSTANCE_ACTIONS, resource: RESOURCE_ACTIONS};
@@ -53,11 +54,14 @@ const keyOf = (name) => name.replace(/\s+(\w)/g, (_, c) => c.toUpperCase());
 
 /**
  * What the action `name` does, on an object, an instance or a resource (`scope`), as
- * om says it; undefined when it needs no word.
+ * om says it; undefined when it needs no word. `variant`, its words for what it acts
+ * on when they differ ("Store", the sync of a store, a backup; `syncVariant`), its
+ * plain words when it has none for it.
  */
-export function actionDescription(t, scope, name) {
+export function actionDescription(t, scope, name, variant = "") {
     if (typeof name !== "string" || name === "") return undefined;
-    return t(`actionMenus.${scope}.${keyOf(name)}`, {defaultValue: ""}) || undefined;
+    const key = `actionMenus.${scope}.${keyOf(name)}`;
+    return (variant && t(`${key}${variant}`, {defaultValue: ""})) || t(key, {defaultValue: ""}) || undefined;
 }
 
 /**

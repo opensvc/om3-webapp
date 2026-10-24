@@ -5,6 +5,13 @@ import { trackAccepted, trackPoll, trackRefused, trackResponse, useActionTracker
 import { resetClusterStatus } from "../../hooks/clusterStatusOnce";
 import useEventStore from "../../hooks/useEventStore.js";
 
+// The logs of an id, tested with the daemon tab: here, which id, of which kind, on which node.
+vi.mock("../../components/DaemonIdLogs", () => ({
+  DaemonIdLogs: ({ target }: { target: { kind: string; id: string; node: string; subject: string } }) => (
+    <div role="dialog" aria-label={`logs ${target.subject}`} data-kind={target.kind} data-id={target.id} data-node={target.node} />
+  ),
+}));
+
 const json = (status: number, body: unknown) =>
   Promise.resolve({ ok: status >= 200 && status < 300, status, json: () => Promise.resolve(body) } as Response);
 
@@ -213,6 +220,33 @@ describe("ActionTray", () => {
     expect(within(tray).getByText("fs#1: mount failed · exit code 1")).toHaveClass("text-state-down");
     fireEvent.click(within(tray).getByRole("button", { name: "Clear the ended actions" }));
     expect(screen.queryByRole("region", { name: "Actions asked" })).not.toBeInTheDocument();
+  });
+});
+
+describe("ActionTray, the logs of each action", () => {
+  test("an orchestration's logs and an exec's, in a modal, by their id; none for an action refused", () => {
+    // Held by the daemon: never ends while the test looks.
+    globalThis.fetch = vi.fn(() => new Promise<Response>(() => undefined)) as unknown as typeof fetch;
+    render(<ActionTray />);
+    act(() => {
+      trackAccepted({ orchestration_id: ORCH, node: "dev3n1" }, { action: "provision", subject: "foo" });
+      trackAccepted({ exec_id: EXEC }, { action: "start", subject: "foo on dev3n2", node: "dev3n2" });
+      trackRefused({ action: "stop", subject: "bar", reason: "HTTP 403" });
+    });
+    const tray = screen.getByRole("region", { name: "Actions asked" });
+    fireEvent.click(within(tray).getByRole("button", { name: "Logs of Provision foo" }));
+    const orchestration = screen.getByRole("dialog", { name: "logs Provision foo" });
+    expect(orchestration).toHaveAttribute("data-kind", "orchestration");
+    expect(orchestration).toHaveAttribute("data-id", ORCH);
+    fireEvent.click(within(tray).getByRole("button", { name: "Logs of Start foo on dev3n2" }));
+    const exec = screen.getByRole("dialog", { name: "logs Start foo on dev3n2" });
+    expect(exec).toHaveAttribute("data-kind", "exec");
+    expect(exec).toHaveAttribute("data-id", EXEC);
+    expect(exec).toHaveAttribute("data-node", "dev3n2");
+    expect(within(tray).queryByRole("button", { name: /^Logs of Stop/ })).toBeNull();
+    act(() => {
+      useActionTracker.setState({ tracked: [] });
+    });
   });
 });
 

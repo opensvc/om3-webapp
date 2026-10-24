@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { actionLabel } from "../constants/actions";
 import { cn } from "../ui/cn";
-import { AlertTriangleIcon, BanIcon, BoltIcon, CheckIcon, ChevronDownIcon, CloseIcon, TrashIcon } from "../ui/icons";
+import { AlertTriangleIcon, BanIcon, BoltIcon, CheckIcon, ChevronDownIcon, CloseIcon, FileIcon, TrashIcon } from "../ui/icons";
+import { DaemonIdLogs } from "../components/DaemonIdLogs";
 import useEventStore from "../hooks/useEventStore.js";
 import { type TrackState, type TrackStep, type Tracked, useActionTracker } from "./action-tracker";
 
@@ -101,6 +102,8 @@ function useMonitorStates(path: string | undefined, active: boolean): [string, s
 function Entry({ entry, now }: { entry: Tracked; now: number }) {
   const { t } = useTranslation();
   const dismiss = useActionTracker((s) => s.dismiss);
+  // Its logs in a modal: an orchestration's on every node, an exec's on its node.
+  const [logs, setLogs] = useState(false);
   const action = entry.label ?? actionLabel(entry.action);
   const took = (entry.endedAt ?? now) - entry.startedAt;
   const state = t(`actionTray.states.${entry.state}`);
@@ -127,6 +130,19 @@ function Entry({ entry, now }: { entry: Tracked; now: number }) {
           </p>
         </div>
         <span className="shrink-0 pt-0.5 text-data text-ink-muted tabular-nums">{formatDuration(took)}</span>
+        {entry.followedId !== undefined && (
+          <button
+            type="button"
+            title={t("actionTray.logs", { action, subject: entry.subject })}
+            onClick={() => {
+              setLogs(true);
+            }}
+            className="shrink-0 rounded-full p-1 text-ink-muted hover:text-ink"
+          >
+            <FileIcon className="h-3 w-3" />
+            <span className="sr-only">{t("actionTray.logs", { action, subject: entry.subject })}</span>
+          </button>
+        )}
         <button
           type="button"
           title={t("actionTray.dismiss", { action, subject: entry.subject })}
@@ -155,6 +171,14 @@ function Entry({ entry, now }: { entry: Tracked; now: number }) {
       )}
       {waiting && entry.steps.length === 0 && monitors.length === 0 && (
         <p className="pl-6 text-data text-ink-muted">{t("actionTray.noStep")}</p>
+      )}
+      {logs && entry.followedId !== undefined && (
+        <DaemonIdLogs
+          target={{ kind: entry.kind, id: entry.followedId, node: entry.node, subject: `${action} ${entry.subject}` }}
+          onClose={() => {
+            setLogs(false);
+          }}
+        />
       )}
     </li>
   );

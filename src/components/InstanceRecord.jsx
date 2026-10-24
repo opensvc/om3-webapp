@@ -21,14 +21,14 @@ import {InstanceLink, ResourceLink} from "./RecordLinks";
 import {ObjectLogs} from "./ObjectLogs";
 import ObjectConfig from "./ObjectConfig";
 import {DatastoreLinks, RefreshStatusButton, actionIcon, datastoresOf, useActionRunner, volumesOf} from "./InstanceActions";
-import {CLEAR_ACTION, resourceActions} from "./objectActions";
+import {CLEAR_ACTION, resourceActions, syncVariant} from "./objectActions";
 import {usePanelHeader} from "../app/panel-header";
 import {MenuButton} from "../ui/components/MenuButton";
 import {Button} from "../ui/components/Button";
 import {Checkbox} from "../ui/components/Field";
 import {BoltIcon, CloseIcon} from "../ui/icons";
 import {INSTANCE_ACTIONS, RESOURCE_ACTIONS, actionLabel} from "../constants/actions";
-import {explainedMenu} from "../app/action-menu";
+import {actionDescription, explainedMenu} from "../app/action-menu";
 
 const ZERO_TIME = "0001-01-01T00:00:00Z";
 const EMPTY = {};
@@ -170,8 +170,17 @@ export function InstanceStatus({path, node}) {
     // The instance: freeze and unfreeze both, as on an object; its monitor cleared once failed.
     const failed = (monitor.state ?? "").endsWith("failed");
     const onInstance = {targets: [{node}], subject: t("statusBoard.subjects.instance", {path, where: node})};
-    const instanceItems = [...(failed ? [CLEAR_ACTION] : []), ...INSTANCE_ACTIONS]
-        .map((a) => ({key: a.name, label: actionLabel(a.name), icon: actionIcon(a), onSelect: () => ask(a.name, onInstance)}));
+    const instanceTypes = resources.map(([, r]) => r.type).filter(Boolean);
+    const instanceItems = [...(failed ? [CLEAR_ACTION] : []), ...INSTANCE_ACTIONS].map((a) => {
+        const variant = syncVariant(a.name, instanceTypes);
+        return {
+            key: a.name,
+            label: actionLabel(a.name),
+            icon: actionIcon(a),
+            description: actionDescription(t, "instance", a.name, variant),
+            onSelect: () => ask(a.name, {...onInstance, variant}),
+        };
+    });
     const instanceMenu = (
         <MenuButton
             solid
@@ -190,10 +199,20 @@ export function InstanceStatus({path, node}) {
         subject: t("statusBoard.subjects.resource", {rid: pickedRids.join(", "), path, where: node}),
         onDone: () => setPicked([]),
     };
+    const pickedTypes = pickedRids.map((rid) => status.resources?.[rid]?.type).filter(Boolean);
     const resourceItems = RESOURCE_ACTIONS
         .filter((a) => (a.name === "console" ? pickedRids.length === 1 : true)
-            && pickedRids.every((rid) => resourceActions(rid).some((b) => b.name === a.name)))
-        .map((a) => ({key: a.name, label: actionLabel(a.name), icon: actionIcon(a), onSelect: () => ask(a.name, onResources)}));
+            && pickedRids.every((rid) => resourceActions(rid, status.resources?.[rid]?.type).some((b) => b.name === a.name)))
+        .map((a) => {
+            const variant = syncVariant(a.name, pickedTypes);
+            return {
+                key: a.name,
+                label: actionLabel(a.name),
+                icon: actionIcon(a),
+                description: actionDescription(t, "resource", a.name, variant),
+                onSelect: () => ask(a.name, {...onResources, variant}),
+            };
+        });
 
     return (
         <div className="space-y-4" data-testid="instance-status">
@@ -352,6 +371,50 @@ export function ResourceStatus({path, rid, node: onNode}) {
     );
 }
 
+/**
+ * The actions on a resource, in the title bar of its panel: those its driver takes
+ * (`resourceActions`), on the instance of its node, or on every node holding it; a
+ * console on one node alone. Each confirmed, then posted to the instances for it.
+ */
+function ResourceActions({path, rid, nodes, type}) {
+    const {t} = useTranslation();
+    const header = usePanelHeader();
+    const {ask, running, dialogs} = useActionRunner(path);
+    const on = {
+        targets: nodes.map((node) => ({node, rid})),
+        subject: t("statusBoard.subjects.resource", {rid, path, where: nodes.join(", ")}),
+    };
+    const items = resourceActions(rid, type)
+        .filter((a) => a.name !== "console" || nodes.length === 1)
+        .map((a) => {
+            const variant = syncVariant(a.name, type ? [type] : []);
+            return {
+                key: a.name,
+                label: actionLabel(a.name),
+                icon: actionIcon(a),
+                description: actionDescription(t, "resource", a.name, variant),
+                onSelect: () => ask(a.name, {...on, variant}),
+            };
+        });
+    const menu = (
+        <MenuButton
+            solid
+            text={t("statusBoard.actions.object")}
+            icon={<BoltIcon className="h-3.5 w-3.5"/>}
+            label={t("resource.panel.actions")}
+            align="end"
+            disabled={running || nodes.length === 0 || items.length === 0}
+            {...explainedMenu(t, "resource", items)}
+        />
+    );
+    return (
+        <>
+            {header.actions !== null && createPortal(menu, header.actions)}
+            {dialogs}
+        </>
+    );
+}
+
 /** Closes a panel once its record, seen, is gone. */
 function useCloseWhenGone(id, known, onClose) {
     const seen = useRef(false);
@@ -453,15 +516,21 @@ export function ResourceDetailPanel({id, tab, onTabChange, onClose}) {
             onTabChange={onTabChange}
             closeOnOutsideClick={false}
         >
-            {(active) => (parsed === null ? null : active === "config"
-                ? <ObjectConfig key={id} path={parsed.path} section={parsed.rid}/>
-                : active === "logs"
-                ? <ObjectLogs key={id} path={parsed.path} nodes={nodes} filters={[`RID=${parsed.rid}`]}/>
-                : active === "container" && container
-                ? <ContainerLogs key={id} path={parsed.path} rid={parsed.rid} nodes={resourceNodes.length > 0 ? resourceNodes : nodes} upNodes={upNodes}/>
-                : active === "info"
-                ? <ObjectResources key={id} path={parsed.path} rid={parsed.rid} node={onNode}/>
-                : <ResourceStatus key={id} path={parsed.path} rid={parsed.rid} node={onNode}/>)}
+            {(active) => (parsed === null ? null : (
+                <>
+                    {/* Its actions in the title bar, whatever the tab: on its node, or on the nodes holding it. */}
+                    <ResourceActions key={`actions:${id}`} path={parsed.path} rid={parsed.rid} nodes={resourceNodes} type={type}/>
+                    {active === "config"
+                        ? <ObjectConfig key={id} path={parsed.path} section={parsed.rid}/>
+                        : active === "logs"
+                        ? <ObjectLogs key={id} path={parsed.path} nodes={nodes} filters={[`RID=${parsed.rid}`]}/>
+                        : active === "container" && container
+                        ? <ContainerLogs key={id} path={parsed.path} rid={parsed.rid} nodes={resourceNodes.length > 0 ? resourceNodes : nodes} upNodes={upNodes}/>
+                        : active === "info"
+                        ? <ObjectResources key={id} path={parsed.path} rid={parsed.rid} node={onNode}/>
+                        : <ResourceStatus key={id} path={parsed.path} rid={parsed.rid} node={onNode}/>}
+                </>
+            ))}
         </RecordPanel>
     );
 }

@@ -61,6 +61,7 @@ export type ObjectKind =
   | "namespace"
   | "kind"
   | "pool"
+  | "store"
   | "heartbeat"
   | "config"
   | "secret"
@@ -127,6 +128,8 @@ const KINDS: Record<ObjectKind, { Icon: typeof ServerIcon; className: string }> 
   kind: { Icon: TagIcon, className: "text-icon-tag" },
   // A pool provides the volumes: the disk icon and tint.
   pool: { Icon: DatabaseIcon, className: "text-icon-disk" },
+  // A store keeps the backups, the copies of the past: the history arrow, in the disk tint.
+  store: { Icon: HistoryIcon, className: "text-icon-disk" },
   // Heartbeats are streams between the nodes: the broadcast waves, in the network tint.
   heartbeat: { Icon: RssIcon, className: "text-icon-network" },
   // Configuration objects: the file, in the network teal; secrets: the lock, and

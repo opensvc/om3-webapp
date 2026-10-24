@@ -136,6 +136,7 @@ describe("ObjectIcon", () => {
     namespace: "text-icon-node",
     kind: "text-icon-tag",
     pool: "text-icon-disk",
+    store: "text-icon-disk",
     heartbeat: "text-icon-network",
     config: "text-icon-network",
     secret: "text-icon-dashboard",

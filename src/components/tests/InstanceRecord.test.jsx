@@ -26,7 +26,7 @@ vi.mock('../ObjectConfig', () => ({
 // The confirmation dialogs are tested on their own: here, the action confirmed.
 vi.mock('../ActionDialogManager', () => ({
     default: ({pendingAction, handleConfirm, target}) => (pendingAction === null ? null : (
-        <div role="alertdialog" aria-label={`${pendingAction.action} ${target}`}>
+        <div role="alertdialog" aria-label={`${pendingAction.action} ${target}`} data-variant={pendingAction.variant ?? ''}>
             <button type="button" onClick={() => handleConfirm(pendingAction.action)}>Confirm</button>
         </div>
     )),
@@ -330,6 +330,47 @@ describe('ResourceStatus', () => {
         inRouter(<ResourceStatus path="prod/svc/web" rid="app#1"/>);
         const fact = screen.getByText('Datastores', {selector: 'dt'}).nextElementSibling;
         expect(within(fact).getAllByRole('button').map((b) => b.textContent)).toEqual(['prod/cfg/web']);
+    });
+
+    test('its actions in the title bar: those of its driver, on the nodes holding it, or on its node alone', async () => {
+        const {unmount} = render(<MemoryRouter><ResourceDetailPanel id="prod/svc/web:app#1" tab="status" onTabChange={vi.fn()} onClose={vi.fn()}/></MemoryRouter>);
+        fireEvent.click(screen.getByRole('button', {name: 'Resource actions'}));
+        const menu = screen.getByRole('menu', {name: 'Resource actions'});
+        // An app: started and stopped, its devices reserved, provisioned; no run, no sync, no console.
+        expect(within(menu).getByRole('menuitem', {name: 'Stop'})).toBeInTheDocument();
+        expect(within(menu).getByRole('menuitem', {name: 'Prstart'})).toBeInTheDocument();
+        expect(within(menu).queryByRole('menuitem', {name: 'Run'})).toBeNull();
+        expect(within(menu).queryByRole('menuitem', {name: /^Sync/})).toBeNull();
+        expect(within(menu).queryByRole('menuitem', {name: 'Console'})).toBeNull();
+        fireEvent.click(within(menu).getByRole('menuitem', {name: 'Restart'}));
+        const holding = Object.entries(useEventStore.getState().objectInstanceStatus['prod/svc/web'])
+            .filter(([, status]) => status?.resources?.['app#1']).map(([node]) => node).sort();
+        fireEvent.click(within(screen.getByRole('alertdialog', {name: `restart app#1 of prod/svc/web on ${holding.join(', ')}`})).getByRole('button', {name: 'Confirm'}));
+        await waitFor(() => expect(global.fetch).toHaveBeenCalledWith(
+            '/api/node/name/n1/instance/path/prod/svc/web/action/restart?rid=app%231',
+            expect.objectContaining({method: 'POST'}),
+        ));
+        unmount();
+
+        render(<MemoryRouter><ResourceDetailPanel id="prod/svc/web:app#1@n1" tab="logs" onTabChange={vi.fn()} onClose={vi.fn()}/></MemoryRouter>);
+        fireEvent.click(screen.getByRole('button', {name: 'Resource actions'}));
+        fireEvent.click(within(screen.getByRole('menu', {name: 'Resource actions'})).getByRole('menuitem', {name: 'Stop'}));
+        expect(screen.getByRole('alertdialog', {name: 'stop app#1 of prod/svc/web on n1'})).toBeInTheDocument();
+    });
+
+    test('a backup into a store: its sync actions said into its store, in the menu and to the confirmation', () => {
+        useEventStore.setState({objectInstanceStatus: {'prod/svc/web': {
+            n1: {avail: 'up', resources: {'sync#bk': {status: 'n/a', type: 'sync.store'}}},
+        }}});
+        render(<MemoryRouter><ResourceDetailPanel id="prod/svc/web:sync#bk@n1" tab="status" onTabChange={vi.fn()} onClose={vi.fn()}/></MemoryRouter>);
+        fireEvent.click(screen.getByRole('button', {name: 'Resource actions'}));
+        const menu = screen.getByRole('menu', {name: 'Resource actions'});
+        const update = within(menu).getByRole('menuitem', {name: /^Sync update/});
+        expect(update).toHaveTextContent('Back up the changes of the resources picked into their store.');
+        expect(update).not.toHaveTextContent('peers');
+        fireEvent.click(update);
+        // Its confirmation given the words of a store (said by the dialog, tested on its own).
+        expect(screen.getByRole('alertdialog', {name: 'sync update sync#bk of prod/svc/web on n1'})).toHaveAttribute('data-variant', 'Store');
     });
 
     test('its configuration tab: its section of the configuration of the object', () => {

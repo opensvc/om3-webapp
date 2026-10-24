@@ -1,0 +1,103 @@
+[
+  {
+    "section": "store",
+    "option": "host_key",
+    "types": [
+      "tar"
+    ],
+    "text": "The public key of the sftp server of the store, as `ssh-keyscan` prints it,\nwith or without the host before it.\n\nThe server must present this key: a store is never written to, nor read from, a\nserver it did not recognize.\n",
+    "default": "",
+    "defaultText": "",
+    "example": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBc1nVQ6Ck8M6zKQ1dHoRcgYzBH9Cf2rBG7aJ1LGq2xp",
+    "candidates": [],
+    "converter": "",
+    "required": false,
+    "scopable": false
+  },
+  {
+    "section": "store",
+    "option": "keep",
+    "types": [],
+    "text": "The retention of the runs of each object backed up into this store, when\nits `sync.store` resource sets none. A list of rules, a run kept by any of\nthem being kept:\n\n`<n>`\n  The `<n>` latest runs.\n\n`<n>h`, `<n>d`, `<n>w`, `<n>m`, `<n>y`\n  The latest run of each of the `<n>` latest hours, days, weeks (Monday to\n  Sunday), months or years holding a run.\n\nThe periods are counted among the ones holding a run, not back from now,\nso an object whose runs stopped for a while keeps its last ones. They are\nin UTC, of the time a run started, so runs written by different nodes\nafter a failover fall in the same periods. Without `keep`, no run is ever\ndeleted.\n\nFor example, `keep = 24h 7d 4w 6m` keeps 41 runs at most.\n",
+    "default": "",
+    "defaultText": "",
+    "example": "24h 7d 4w 6m",
+    "candidates": [],
+    "converter": "",
+    "required": false,
+    "scopable": false
+  },
+  {
+    "section": "store",
+    "option": "schedule",
+    "types": [],
+    "text": "Schedule parameter for the `pushbackup` node action.\n\nSee `usr/share/doc/schedule` for the schedule syntax.\n",
+    "default": "",
+    "defaultText": "",
+    "example": "",
+    "candidates": [],
+    "converter": "",
+    "required": false,
+    "scopable": false
+  },
+  {
+    "section": "store",
+    "option": "shared",
+    "types": [
+      "tar"
+    ],
+    "text": "Set to true when the directory of the store is the same on every node, as an\nnfs mount: a node reads it alone.\n\nOtherwise each node has a directory of its own, holding the runs it writes,\nand the store is the directories of every node: a node lists the runs of the\nothers, and restores or deletes a run in the directory of the node that wrote\nit, over ssh, as root, through the trust `om cluster ssh trust` sets up.\n",
+    "default": "false",
+    "defaultText": "",
+    "example": "",
+    "candidates": [],
+    "converter": "bool",
+    "required": false,
+    "scopable": false
+  },
+  {
+    "section": "store",
+    "option": "ssh_private_key",
+    "types": [
+      "tar"
+    ],
+    "text": "The private key the sftp user of the store authenticates with, written\n`from <sec> key <key>`: a key is never written in the section, nor read from a\nfile of the node.\n\nIn a store declared in a sec, `from .` is that sec, a relative path is of its\nnamespace, and the key is read as the object using the store, so the\ndatastore holding it must share with its namespace.\n",
+    "default": "",
+    "defaultText": "",
+    "example": "from system/sec/backup key ssh_private_key",
+    "candidates": [],
+    "converter": "",
+    "required": false,
+    "scopable": false
+  },
+  {
+    "section": "store",
+    "option": "type",
+    "types": [],
+    "text": "The driver of the store, the tool keeping the backups the `sync.store`\nresources of the objects write into it.\n\n`tar`\n  A directory holding a gzipped tar archive per member of a run. It\n  neither deduplicates nor encrypts: a test and reference store.\n",
+    "default": "",
+    "defaultText": "",
+    "example": "",
+    "candidates": [
+      "tar"
+    ],
+    "converter": "",
+    "required": true,
+    "scopable": false
+  },
+  {
+    "section": "store",
+    "option": "url",
+    "types": [
+      "tar"
+    ],
+    "text": "The directory holding the store: an absolute path or a `file://` url for a\ndirectory of the node, or `sftp://<user>@<host>[:<port>]/<path>` for a\ndirectory of an sftp server.\n\nA directory of the node is one per node, each holding the runs its node\nwrites, unless `shared` says it is the same on every node, as an nfs mount.\nThe store is never inside a head it backs up.\n\nAn sftp server is reached from every node by itself. Its user is authenticated\nby `ssh_private_key`, and the server by `host_key`. A store declared in a sec is\nan sftp store: the daemon reads and writes a store as root, and a namespace\ndoes not choose a directory of the node.\n",
+    "default": "",
+    "defaultText": "",
+    "example": "/srv/backups",
+    "candidates": [],
+    "converter": "",
+    "required": true,
+    "scopable": false
+  }
+]

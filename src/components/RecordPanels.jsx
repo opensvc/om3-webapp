@@ -10,6 +10,11 @@ import {ObjectSchedules} from "./ObjectTabs";
 import NetworkDetails from "./NetworkDetails";
 import {NetworkConfig, NetworkOverview} from "./NetworkPanel";
 import {PoolConfig, PoolOverview, PoolVolumes} from "./PoolPanel";
+import {StoreConfig, StoreOverview, StoreSnapshots} from "./StorePanel";
+
+/** The kinds of the objects acting on their nodes, those a store backs up: services and volumes. */
+const ACTOR_KINDS = ["svc", "vol"];
+import {storeSource} from "../app/store-config";
 import {NamespaceConfig, NamespaceUsage} from "./NamespacePanel";
 import {NamespaceClaims} from "./NamespaceClaims";
 import {ObjectUsage} from "./InstanceRecord";
@@ -105,6 +110,8 @@ export function ObjectDetailPanel({path, tab, onTabChange, onClose}) {
             // Its size and its caps: a service's and a volume's.
             ...(CAPACITY_KINDS.includes(kind) ? [{key: "capacity", label: t("panel.tabs.capacity")}] : []),
             {key: "schedules", label: t("panel.tabs.schedules")},
+            // An actor, a service or a volume: the snapshots its sync.store resources took, in every store.
+            ...(ACTOR_KINDS.includes(kind) ? [{key: "snapshots", label: t("panel.tabs.snapshots")}] : []),
             // The cluster object, the cluster: its locks, as om cluster lock list shows them.
             ...(kind === "ccfg" ? [{key: "locks", label: t("panel.tabs.locks")}] : []),
             {key: "config", label: t("panel.tabs.config")},
@@ -136,6 +143,7 @@ export function ObjectDetailPanel({path, tab, onTabChange, onClose}) {
                     {active === "usage" && <ObjectUsage key={path} path={path}/>}
                     {active === "capacity" && <ObjectCapacity key={path} path={path} nodes={nodes}/>}
                     {active === "schedules" && <ObjectSchedules key={path} path={path}/>}
+                    {active === "snapshots" && <StoreSnapshots key={path} path={path}/>}
                     {active === "locks" && <ClusterLocks/>}
                     {active === "events" && (
                         <div className="h-[calc(100dvh-10rem)]">
@@ -207,6 +215,35 @@ export function PoolDetailPanel({name, tab, onTabChange, onClose, onDeleted}) {
                 : active === "config"
                     ? <PoolConfig key={name} name={name} onDeleted={onDeleted ?? onClose}/>
                     : <PoolOverview key={name} name={name}/>)}
+        </RecordPanel>
+    );
+}
+
+/**
+ * A store, by its reference: what it is and holds; its snapshots; its configuration.
+ * A tab each, the tab in the URL, as for the other records. Titled by its name, a
+ * sec's said in its overview. `onDeleted`, the store deleted, the panel closed by its page.
+ */
+export function StoreDetailPanel({name, tab, onTabChange, onClose, onDeleted}) {
+    const {t} = useTranslation();
+    const tabs = ["overview", "snapshots", "config"].map((key) => ({key, label: t(`stores.panel.tabs.${key}`)}));
+    return (
+        <RecordPanel
+            open={name !== undefined}
+            kind="store"
+            recordId={name}
+            title={name === undefined ? "" : storeSource(name).name}
+            onClose={onClose}
+            tabs={tabs}
+            tab={tab}
+            onTabChange={onTabChange}
+            size="wide"
+        >
+            {(active) => (active === "snapshots"
+                ? <StoreSnapshots key={name} name={name}/>
+                : active === "config"
+                    ? <StoreConfig key={name} name={name} onDeleted={onDeleted ?? onClose}/>
+                    : <StoreOverview key={name} name={name}/>)}
         </RecordPanel>
     );
 }

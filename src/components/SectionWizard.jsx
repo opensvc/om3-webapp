@@ -68,7 +68,9 @@ export function SectionWizard({section, rules, prefix, items, nodes, edit, valid
                 if (!live) return;
                 const list = data.items ?? [];
                 setKeywords(list);
-                setType((current) => current ?? sectionTypes(list, section).default ?? null);
+                // The default of the daemon, or the one type there is.
+                const {types: all, default: first} = sectionTypes(list, section);
+                setType((current) => current ?? first ?? (all.length === 1 ? all[0] : null));
             }, (err) => live && setError(err.message));
         return () => {
             live = false;

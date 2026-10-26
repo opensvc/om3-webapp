@@ -6,7 +6,8 @@ import {MemoryRouter} from 'react-router-dom';
 import ClusterView from '../ClusterView';
 import {useMenuState} from '../../hooks/useSidebarAlerts';
 
-vi.mock('../../hooks/useClusterNodeOrder', () => ({useClusterNodeOrder: () => ['n1', 'n2', 'n3']}));
+const clusterNodes = vi.hoisted(() => ({current: ['n1', 'n2', 'n3']}));
+vi.mock('../../hooks/useClusterNodeOrder', () => ({useClusterNodeOrder: () => clusterNodes.current}));
 
 const beating =(peers) => ({streams: [{id: 'hb#1.rx', type: 'unicast', state: 'running', peers}]});
 
@@ -15,6 +16,7 @@ describe('ClusterView', () => {
 
     beforeEach(() => {
         resourcesFail = false;
+        clusterNodes.current = ['n1', 'n2', 'n3'];
         useMenuState.setState({
             ready: true,
             objects: {
@@ -64,7 +66,7 @@ describe('ClusterView', () => {
         render(<ClusterView/>, {wrapper: MemoryRouter});
         const cards = screen.getByRole('group', {name: 'Summary of the cluster'});
         expect([...cards.querySelectorAll('[data-card]')].map((c) => c.getAttribute('data-card')))
-            .toEqual(['links', 'nodes', 'objects', 'namespaces', 'networks', 'pools', 'stores', 'resources']);
+            .toEqual(['links', 'nodes', 'arbitrators', 'objects', 'namespaces', 'networks', 'pools', 'stores', 'resources']);
         expect(within(card('pools')).getByRole('link', {name: 'Open Pools'})).toHaveAttribute('href', '/pools');
         expect(within(card('links')).getByRole('link', {name: 'Open Links'})).toHaveAttribute('href', '/heartbeats');
         expect(card('objects')).toHaveTextContent(/Objects\s*7/);
@@ -112,6 +114,43 @@ describe('ClusterView', () => {
         expect(items[1]).toHaveTextContent(/^hb#2critical$/);
         expect(items[2]).not.toHaveClass('text-state-warn', 'text-state-down');
         expect(items[2]).toHaveTextContent(/^hb#10$/);
+    });
+
+    test('the arbitrators, a ring of the nodes reaching them, each named in the tint of how many do; a card of no page', () => {
+        const arb = (status) => ({arb1: {url: 'https://arb1:1215', status, weight: 1}});
+        useMenuState.setState((state) => ({
+            nodeStatus: {
+                n1: {...state.nodeStatus.n1, arbitrators: arb('up')},
+                n2: {...state.nodeStatus.n2, arbitrators: arb('down')},
+            },
+        }));
+        render(<ClusterView/>, {wrapper: MemoryRouter});
+        expect(card('arbitrators')).toHaveTextContent(/^Arbitrators1/);
+        expect(within(card('arbitrators')).queryByRole('link', {name: /Arbitrators/})).toBeNull();
+        // n3 dropped: it reaches none.
+        const ring = card('arbitrators').querySelector('[data-ring=arbitrators]');
+        expect(ring).toHaveAttribute('data-state', 'warn');
+        expect(ring).toHaveTextContent('1/3nodes reach itdegraded');
+        expect(ring.querySelector('[data-ring-legend]')).toHaveTextContent(/^not reached2up1$/);
+        const item = card('arbitrators').querySelector('[data-arbitrator=arb1]');
+        expect(item).toHaveClass('text-state-warn');
+        expect(item).toHaveAttribute('title', 'https://arb1:1215\n1 of 3 nodes reach it');
+        expect(within(card('arbitrators')).queryByRole('alert')).toBeNull();
+    });
+
+    test.each([
+        [['n1', 'n2'], true],
+        [['n1', 'n2', 'n3'], false],
+    ])('no arbitrator, the nodes %j: the risk of a tied quorum vote said when they are even', (names, risk) => {
+        clusterNodes.current = names;
+        render(<ClusterView/>, {wrapper: MemoryRouter});
+        expect(card('arbitrators').querySelector('[data-ring]')).toBeNull();
+        if (risk) {
+            expect(within(card('arbitrators')).getByRole('alert')).toHaveTextContent('No arbitrator, and an even number of nodes (2)');
+        } else {
+            expect(within(card('arbitrators')).queryByRole('alert')).toBeNull();
+            expect(card('arbitrators')).toHaveTextContent('No arbitrator.');
+        }
     });
 
     test('the objects: a ring of the services and volumes by availability, no object named; the kinds counted', () => {

@@ -43,6 +43,12 @@ const RESOURCE_STATES = [
     ["other", "stroke-line-strong", "bg-line-strong"],
 ];
 
+/** The arbitrators, as the nodes see them: up, or not reached. [state, arc, dot] */
+const ARBITRATOR_STATES = [
+    ["down", "stroke-state-down", "bg-state-down"],
+    ["up", "stroke-state-up", "bg-state-up"],
+];
+
 /** The tint of a heartbeat in the list of the links card: none of its links beating, some, all. */
 const HB_INK = {down: "text-state-down", warn: "text-state-warn", up: ""};
 
@@ -101,6 +107,7 @@ function usePolled(url) {
 /**
  * A card of the overview: the pictogram and the name of a menu entry, its count, the
  * name a link to its page, stretched over the whole card; then what it sums up of it.
+ * Without `to`, a card of no page: its name alone.
  */
 function Card({id, icon, title, to, count, children}) {
     const {t} = useTranslation();
@@ -108,19 +115,21 @@ function Card({id, icon, title, to, count, children}) {
         <section
             aria-labelledby={`cluster-card-${id}`}
             data-card={id}
-            className="relative mb-3 break-inside-avoid space-y-2 rounded-(--radius-panel) border border-line bg-surface-raised p-3 hover:border-line-strong has-[a[data-card-link]:focus-visible]:outline-2 has-[a[data-card-link]:focus-visible]:outline-accent"
+            className={`relative mb-3 break-inside-avoid space-y-2 rounded-(--radius-panel) border border-line bg-surface-raised p-3 ${to ? "hover:border-line-strong has-[a[data-card-link]:focus-visible]:outline-2 has-[a[data-card-link]:focus-visible]:outline-accent" : ""}`}
         >
             <h2 id={`cluster-card-${id}`} className="flex items-center gap-2 font-semibold">
                 <ObjectIcon kind={icon} className="h-4 w-4"/>
                 {/* The whole card its link: stretched over it, under what the card holds that is clicked or hovered on its own. */}
-                <Link
-                    to={to}
-                    data-card-link=""
-                    className="outline-none after:absolute after:inset-0 after:rounded-(--radius-panel)"
-                    aria-label={t("clusterView.open", {page: title})}
-                >
-                    {title}
-                </Link>
+                {to ? (
+                    <Link
+                        to={to}
+                        data-card-link=""
+                        className="outline-none after:absolute after:inset-0 after:rounded-(--radius-panel)"
+                        aria-label={t("clusterView.open", {page: title})}
+                    >
+                        {title}
+                    </Link>
+                ) : <span>{title}</span>}
                 {count !== undefined && <span className="ml-auto font-normal text-ink-muted tabular-nums">{count}</span>}
             </h2>
             <div data-card-body="" className="space-y-2 [&_a]:relative [&_button]:relative [&_[title]]:relative">{children}</div>
@@ -156,6 +165,8 @@ function Fullest({items, kind}) {
  *
  * - the links, the ring of the heartbeats page, each heartbeat its links beating;
  * - the nodes, a ring of those dropped, overloaded, optimal; those frozen said;
+ * - the arbitrators, a ring of the nodes reaching them, each listed; none, with an even
+ *   number of nodes, the risk of a tied vote said;
  * - the objects, a ring of the services and the volumes by availability; the objects by kind;
  * - the namespaces, the busiest;
  * - the networks and the pools, the fullest;
@@ -184,6 +195,21 @@ export default function ClusterView() {
     const nodeCounts = {dropped: 0, overloaded: 0, optimal: 0};
     for (const [, s] of nodes) nodeCounts[nodeState(s)] += 1;
     const frozen = nodes.filter(([, s]) => s?.frozen_at && s.frozen_at !== ZERO_TIME).length;
+
+    // The arbitrators, each as the nodes see it: how many reach it out of all the nodes, a dropped one none.
+    const arbitrators = [...new Set(nodes.flatMap(([, s]) => Object.keys(s?.arbitrators ?? {})))]
+        .sort((a, b) => a.localeCompare(b, undefined, {numeric: true}))
+        .map((name) => {
+            const seen = nodes.map(([, s]) => s?.arbitrators?.[name]);
+            const up = seen.filter((a) => a?.status === "up").length;
+            return {name, url: seen.find((a) => a?.url)?.url, up, total: nodes.length, state: up === nodes.length ? "up" : up === 0 ? "down" : "warn"};
+        });
+    const arbitratorCounts = {
+        up: arbitrators.reduce((sum, a) => sum + a.up, 0),
+        down: arbitrators.reduce((sum, a) => sum + a.total - a.up, 0),
+    };
+    // No arbitrator to break a tie: an even number of nodes split in halves, neither has a majority of the votes.
+    const tieRisk = arbitrators.length === 0 && nodes.length > 0 && nodes.length % 2 === 0;
 
     const paths = Object.keys(objects ?? {}).sort();
     const actors = paths.filter((p) => ACTORS.includes(kindOf(p)));
@@ -253,6 +279,37 @@ export default function ClusterView() {
                             );
                         })}
                     </ul>
+                </Card>
+
+                <Card id="arbitrators" icon="cluster" title={t("clusterView.arbitrators.title")} count={arbitrators.length}>
+                    {!ready ? <p className="text-ink-muted">{t("clusterView.reading")}</p> : arbitrators.length > 0 ? (
+                        <>
+                            <CountsRing
+                                name="arbitrators"
+                                states={ARBITRATOR_STATES}
+                                counts={arbitratorCounts}
+                                good="up"
+                                label={t("clusterView.arbitrators.operational", {count: arbitrators.length})}
+                                words="clusterView.arbitrators"
+                            />
+                            <ul aria-label={t("clusterView.arbitrators.title")} className="flex flex-wrap justify-center gap-x-3 gap-y-1">
+                                {arbitrators.map(({name, url, up, total, state}) => (
+                                    <li
+                                        key={name}
+                                        data-arbitrator={name}
+                                        data-state={state}
+                                        title={[url, t("clusterView.arbitrators.seen", {up, total})].filter(Boolean).join("\n")}
+                                        className={`font-medium ${HB_INK[state]}`}
+                                    >
+                                        {name}
+                                        {state !== "up" && <span className="sr-only">{t(`heartbeats.mesh.overall.${state}`)}</span>}
+                                    </li>
+                                ))}
+                            </ul>
+                        </>
+                    ) : tieRisk ? (
+                        <p role="alert" data-tie-risk="" className="text-data text-state-warn">{t("clusterView.arbitrators.tieRisk", {count: nodes.length})}</p>
+                    ) : <p className="text-data text-ink-muted">{t("clusterView.arbitrators.none")}</p>}
                 </Card>
 
                 <Card id="objects" icon="service" title={t("nav.sections.objects")} to="/objects" count={paths.length}>

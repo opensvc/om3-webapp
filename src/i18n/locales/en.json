@@ -2910,6 +2910,16 @@
     "links": {
       "heartbeats": "Heartbeats",
       "beating": "{{beating}} of {{total}} links beating"
+    },
+    "arbitrators": {
+      "title": "Arbitrators",
+      "operational_one": "nodes reach it",
+      "operational_other": "node views up",
+      "up": "up",
+      "down": "not reached",
+      "seen": "{{up}} of {{total}} nodes reach it",
+      "none": "No arbitrator.",
+      "tieRisk": "No arbitrator, and an even number of nodes ({{count}}): split in two halves, neither has a majority of the quorum votes. Add an arbitrator, or a node."
     }
   },
   "snapshots": {

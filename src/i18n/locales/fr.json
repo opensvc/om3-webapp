@@ -129,6 +129,119 @@
       "messageGeneric": "Voulez-vous vraiment exécuter cette action sur {{target}} ?"
     }
   },
+  "actionOptions": {
+    "summary": "Options",
+    "summarySet_one": "Options ({{count}} définie)",
+    "summarySet_other": "Options ({{count}} définies)",
+    "destination": {
+      "label": "--to",
+      "hint": "Le nœud vers lequel déplacer l'objet. Sans nœud choisi, le démon prend le nœud préféré suivant.",
+      "none": "Nœud préféré suivant"
+    },
+    "live": {
+      "label": "--live",
+      "hint": "Utiliser la migration à chaud là où les ressources le permettent."
+    },
+    "interrupt_syncs": {
+      "label": "--interrupt-syncs",
+      "hint": "Arrêter les synchronisations en cours sur l'instance arrêtée au lieu d'attendre leur fin."
+    },
+    "force": {
+      "label": "--force",
+      "hint": "Autoriser les opérations dangereuses."
+    },
+    "adopt": {
+      "label": "--adopt",
+      "hint": "Reprendre les ressources système qui occupent déjà ce que le provisionnement prendrait (par exemple le stockage répliqué que trouve un objet restauré) au lieu de les refuser."
+    },
+    "disable_rollback": {
+      "label": "--disable-rollback",
+      "hint": "En cas d'échec, laisser les ressources activées en l'état au lieu de les remettre dans leur état précédent."
+    },
+    "force_affinity": {
+      "label": "--force-affinity",
+      "hint": "Démarrer même là où les affinités strictes de l'objet ne sont pas satisfaites."
+    },
+    "leader": {
+      "label": "--leader",
+      "hint": "Agir sur toutes les ressources, y compris les ressources partagées, qui ne sont provisionnées qu'une fois."
+    },
+    "state_only": {
+      "label": "--state-only",
+      "hint": "Ne modifier que l'état enregistré par l'agent, pas le système."
+    },
+    "preflight": {
+      "label": "--preflight",
+      "hint": "Vérifier seulement que rien sur le nœud n'occupe ce que le provisionnement prendrait. Rien n'est provisionné."
+    },
+    "confirm": {
+      "label": "--confirm",
+      "hint": "Confirmer l'exécution d'une tâche configurée pour demander une confirmation."
+    },
+    "cron": {
+      "label": "--cron",
+      "hint": "Exécuter la tâche comme le démon le fait selon sa planification."
+    },
+    "env": {
+      "label": "--env",
+      "hint": "Variables définies dans l'environnement de la tâche, une VAR=valeur par ligne."
+    },
+    "move-to": {
+      "label": "--move-to",
+      "hint": "Le nœud vers lequel migrer à chaud les ressources qui le permettent.",
+      "none": "Aucun"
+    },
+    "sync-to": {
+      "label": "--sync-to",
+      "hint": "Après l'arrêt, envoyer les ressources de synchronisation qui répliquent vers ces nœuds (séparés par des virgules). Si un envoi échoue, l'instance est redémarrée.",
+      "placeholder": "n2,n3"
+    },
+    "target": {
+      "label": "--target",
+      "hint": "Les pairs vers lesquels synchroniser, séparés par des virgules : nodes, drpnodes ou des noms de nœuds.",
+      "placeholder": "nodes"
+    },
+    "to": {
+      "label": "--to",
+      "hint": "Arrêter le traitement une fois cette ressource ou ce groupe de drivers traité.",
+      "placeholder": "fs#1"
+    },
+    "subset": {
+      "label": "--subset",
+      "hint": "Seulement les ressources de ces sous-ensembles (séparés par des virgules).",
+      "placeholder": "g1,g2"
+    },
+    "tag": {
+      "label": "--tag",
+      "hint": "Seulement les ressources portant ces tags (séparés par des virgules).",
+      "placeholder": "t1,t2"
+    }
+  },
+  "configWrite": {
+    "wait": {
+      "hint": "Attendre que chaque nœud actif de l'objet ait la configuration (jusqu'à {{duration}}). Un nœud arrêté la reçoit à son retour."
+    },
+    "force": {
+      "button": "Écrire quand même (--force)",
+      "rootOnly": "Seul root peut l'écrire quand même, avec --force."
+    }
+  },
+  "configEval": {
+    "open": "Évaluer les mots-clés",
+    "title": "Mots-clés de {{subject}}, évalués",
+    "as": "Évaluer comme",
+    "answering": "Le nœud qui répond",
+    "keywords": "Mots-clés",
+    "keywordsHint": "Mots-clés ou motifs, comme fs#1.* ou DEFAULT.nodes. Aucun : les mots-clés que la configuration définit, sans les valeurs par défaut.",
+    "evaluate": "Évaluer",
+    "evaluatedAs": "Évalué comme {{node}}.",
+    "loading": "Évaluation",
+    "none": "Aucun mot-clé.",
+    "tableAria": "Mots-clés évalués",
+    "keyword": "Mot-clé",
+    "value": "Valeur",
+    "evaluated": "Évalué"
+  },
   "actions": {
     "labels": {
       "start": "Démarrer",
@@ -795,7 +908,16 @@
     "selectionHelp": "Cochez des clés pour les sélectionner.",
     "removeSelected_one": "Supprimer 1 clé",
     "removeSelected_other": "Supprimer {{count}} clés",
-    "selectAll": "Sélectionner toutes les clés"
+    "selectAll": "Sélectionner toutes les clés",
+    "rename": {
+      "button": "Renommer",
+      "title": "Renommer la clé {{key}}",
+      "newName": "Nouveau nom",
+      "exists": "Une clé {{key}} existe déjà.",
+      "submit": "Renommer",
+      "renaming": "Renommage",
+      "fromView": "Se renomme depuis la vue de la clé (Renommer)."
+    }
   },
   "containerLogs": {
     "node": "Nœud du conteneur",
@@ -1467,7 +1589,11 @@
       "copyFailed": "La configuration de {{path}} n'a pas pu être lue : {{message}}",
       "readFailed": "Le fichier n'a pas pu être lu : {{message}}"
     },
-    "datastoreHint": "Créé vide : ses clés s’ajoutent ensuite, dans son panneau."
+    "datastoreHint": "Créé vide : ses clés s’ajoutent ensuite, dans son panneau.",
+    "force": {
+      "replace": "Le remplacer (--force)",
+      "held": "Créer quand même (--force)"
+    }
   },
   "objects": {
     "noInstanceStatus": "Aucun état de {{node}} : le nœud est perdu ou ne répond pas",
@@ -1700,7 +1826,8 @@
       "info": "Infos",
       "containerLogs": "Journaux du conteneur",
       "locks": "Verrous",
-      "snapshots": "Instantanés"
+      "snapshots": "Instantanés",
+      "restore": "Restauration"
     },
     "crossLink": "Afficher la fiche ici ({{kind}})",
     "kinds": {
@@ -2091,7 +2218,8 @@
       "claimsUpdate": "Mettre à jour les réclamations",
       "claimDelete": "Retirer la réclamation {{section}}",
       "objectCreate": "Créer",
-      "configCreate": "Créer la configuration"
+      "configCreate": "Créer la configuration",
+      "keyRename": "Renommer la clé {{key}} en {{to}}"
     },
     "noNews": "aucune nouvelle sous {{seconds}} s",
     "logs": "Journaux de {{action}} {{subject}}"
@@ -2782,6 +2910,60 @@
     "links": {
       "heartbeats": "Heartbeats",
       "beating": "{{beating}} liens sur {{total}} battent"
+    }
+  },
+  "snapshots": {
+    "intro": "Les instantanés que les ressources de synchronisation de l'objet ont gardés dans leur magasin, comme om sync snapshot list les montre, le plus récent d'abord. Chacun se restaure à part, dans un répertoire, ou en place, dans ses têtes.",
+    "noStore": "Aucune ressource de synchronisation de l'objet ne garde d'instantanés : seule une sync.store le fait.",
+    "askedNode": "Lu depuis",
+    "refresh": "Rafraîchir",
+    "loading": "Lecture des instantanés",
+    "loadError": "Les instantanés n'ont pas pu être lus : {{message}}",
+    "unsupported": "Le démon de {{node}} ne liste aucun instantané : il est plus ancien que les instantanés des ressources de synchronisation. Mettez om3 à jour pour restaurer d'ici.",
+    "table": "Instantanés",
+    "id": "Instantané",
+    "resource": "Ressource",
+    "taken": "Pris",
+    "takenBy": "Par",
+    "holds": "Contient",
+    "store": "Magasin",
+    "actions": "Actions",
+    "none": "Aucun instantané gardé.",
+    "restore": "Restaurer",
+    "restoreOne": "Restaurer {{id}} de {{rid}}",
+    "dialog": {
+      "title": "Restaurer {{id}} de {{rid}}",
+      "taken": "Instantané {{id}}, pris par {{node}}, gardé dans {{location}}.",
+      "node": "Sur l'instance de",
+      "nodeHint": "Ses têtes sont celles écrites en place ; à part, le répertoire est sur ce nœud.",
+      "nodeUp": "{{node}} (up)",
+      "where": "Où",
+      "aside": "À part, dans un répertoire par tête : l'instance intacte, pour comparer ou recopier à la main.",
+      "inPlace": "En place, dans les têtes : chacune vidée, sauf ses chemins exclus, puis remplie de ce que l'instantané a sauvé.",
+      "heads": "Têtes",
+      "headsRequired": "Choisissez au moins une tête.",
+      "into": "Répertoire",
+      "intoHint": "Un chemin absolu sur le nœud : un répertoire par tête y est écrit.",
+      "intoRequired": "Un chemin absolu, comme /var/tmp/restore.",
+      "config": "Restaurer aussi la configuration de l'objet",
+      "refsInPlaceOnly": "Les clés des sec et cfg que l'objet référence ne se restaurent qu'en place : à part, elles seraient écrites en clair.",
+      "configAsideOnly": "La configuration de l'objet ne se restaure qu'à part.",
+      "refs": "Clés référencées",
+      "refsMode": {
+        "missing": "Les absentes",
+        "skip": "Aucune",
+        "overwrite": "Toutes, écrasées"
+      },
+      "refsHint": {
+        "missing": "Les clés absentes des sec et cfg que l'objet référence sont créées ; les autres laissées telles quelles.",
+        "skip": "Aucune clé des sec et cfg que l'objet référence n'est écrite.",
+        "overwrite": "Chaque clé des sec et cfg que l'objet référence est réécrite, les valeurs actuelles perdues."
+      },
+      "inPlaceWarning": "Ce que les têtes contiennent est perdu : elles sont vidées, puis remplies de ce que l'instantané a sauvé. Les apps, conteneurs et partages qui utilisent les données doivent être arrêtés (om instance stop --rid), sinon le démon refuse la restauration.",
+      "understood": "Je comprends que le contenu des têtes est remplacé par l'instantané.",
+      "submitAside": "Restaurer à part",
+      "submitInPlace": "Restaurer en place",
+      "restoring": "Demande de la restauration"
     }
   }
 }

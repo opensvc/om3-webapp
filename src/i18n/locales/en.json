@@ -129,6 +129,119 @@
       "messageGeneric": "Are you sure you want to perform this action on {{target}}?"
     }
   },
+  "actionOptions": {
+    "summary": "Options",
+    "summarySet_one": "Options ({{count}} set)",
+    "summarySet_other": "Options ({{count}} set)",
+    "destination": {
+      "label": "--to",
+      "hint": "The node to move the object to. Without one, the daemon picks the next preferred node.",
+      "none": "Next preferred node"
+    },
+    "live": {
+      "label": "--live",
+      "hint": "Use live migration where the resources allow it."
+    },
+    "interrupt_syncs": {
+      "label": "--interrupt-syncs",
+      "hint": "Stop the syncs running on the stopped instance instead of waiting for them to end."
+    },
+    "force": {
+      "label": "--force",
+      "hint": "Allow dangerous operations."
+    },
+    "adopt": {
+      "label": "--adopt",
+      "hint": "Take over the system resources already holding what the provision would take (for example, the replicated storage a restored object finds) instead of refusing them."
+    },
+    "disable_rollback": {
+      "label": "--disable-rollback",
+      "hint": "If the action fails, leave the activated resources as they are instead of returning them to their previous state."
+    },
+    "force_affinity": {
+      "label": "--force-affinity",
+      "hint": "Start even where the hard affinities of the object are not satisfied."
+    },
+    "leader": {
+      "label": "--leader",
+      "hint": "Act on all the resources, including the shared ones, which are provisioned only once."
+    },
+    "state_only": {
+      "label": "--state-only",
+      "hint": "Change only the state the agent records, not the system."
+    },
+    "preflight": {
+      "label": "--preflight",
+      "hint": "Only check that nothing on the node holds what the provision would take. Nothing is provisioned."
+    },
+    "confirm": {
+      "label": "--confirm",
+      "hint": "Confirm a run of a task configured to ask for a confirmation."
+    },
+    "cron": {
+      "label": "--cron",
+      "hint": "Run the task as the daemon runs it on its schedule."
+    },
+    "env": {
+      "label": "--env",
+      "hint": "Variables set in the environment of the task, one VAR=value per line."
+    },
+    "move-to": {
+      "label": "--move-to",
+      "hint": "The node to live-migrate the capable resources to.",
+      "none": "None"
+    },
+    "sync-to": {
+      "label": "--sync-to",
+      "hint": "After the stop, send the sync resources replicating to these nodes (comma-separated). If a send fails, the instance is started again.",
+      "placeholder": "n2,n3"
+    },
+    "target": {
+      "label": "--target",
+      "hint": "The peers to sync to, comma-separated: nodes, drpnodes, or node names.",
+      "placeholder": "nodes"
+    },
+    "to": {
+      "label": "--to",
+      "hint": "Stop processing once this resource or driver group is done.",
+      "placeholder": "fs#1"
+    },
+    "subset": {
+      "label": "--subset",
+      "hint": "Only the resources of these subsets (comma-separated).",
+      "placeholder": "g1,g2"
+    },
+    "tag": {
+      "label": "--tag",
+      "hint": "Only the resources with these tags (comma-separated).",
+      "placeholder": "t1,t2"
+    }
+  },
+  "configWrite": {
+    "wait": {
+      "hint": "Wait until every live node of the object has the configuration (up to {{duration}}). A node that is down gets it when it comes back."
+    },
+    "force": {
+      "button": "Write anyway (--force)",
+      "rootOnly": "Only root can write it anyway, with --force."
+    }
+  },
+  "configEval": {
+    "open": "Evaluate the keywords",
+    "title": "Keywords of {{subject}}, evaluated",
+    "as": "Evaluate as",
+    "answering": "The node answering",
+    "keywords": "Keywords",
+    "keywordsHint": "Keywords or patterns, as fs#1.* or DEFAULT.nodes. None: the keywords the configuration sets, defaults left out.",
+    "evaluate": "Evaluate",
+    "evaluatedAs": "Evaluated as {{node}}.",
+    "loading": "Evaluating",
+    "none": "No keyword.",
+    "tableAria": "Keywords evaluated",
+    "keyword": "Keyword",
+    "value": "Value",
+    "evaluated": "Evaluated"
+  },
   "actions": {
     "labels": {
       "start": "Start",
@@ -795,7 +908,16 @@
     "selectionHelp": "Check keys to select them.",
     "removeSelected_one": "Remove 1 key",
     "removeSelected_other": "Remove {{count}} keys",
-    "selectAll": "Select all the keys"
+    "selectAll": "Select all the keys",
+    "rename": {
+      "button": "Rename",
+      "title": "Rename the key {{key}}",
+      "newName": "New name",
+      "exists": "A key {{key}} exists already.",
+      "submit": "Rename",
+      "renaming": "Renaming",
+      "fromView": "Renamed from the key view (Rename)."
+    }
   },
   "containerLogs": {
     "node": "Node of the container",
@@ -1467,7 +1589,11 @@
       "copyFailed": "The configuration of {{path}} could not be read: {{message}}",
       "readFailed": "The file could not be read: {{message}}"
     },
-    "datastoreHint": "Created empty: its keys are added next, in its panel."
+    "datastoreHint": "Created empty: its keys are added next, in its panel.",
+    "force": {
+      "replace": "Replace it (--force)",
+      "held": "Create anyway (--force)"
+    }
   },
   "objects": {
     "noInstanceStatus": "No status from {{node}}: the node is gone or not heard from",
@@ -1700,7 +1826,8 @@
       "info": "Info",
       "containerLogs": "Container logs",
       "locks": "Locks",
-      "snapshots": "Snapshots"
+      "snapshots": "Snapshots",
+      "restore": "Restore"
     },
     "crossLink": "Show the {{kind}} here",
     "kinds": {
@@ -2091,7 +2218,8 @@
       "claimsUpdate": "Update the claims",
       "claimDelete": "Remove claim {{section}}",
       "objectCreate": "Create",
-      "configCreate": "Create the configuration"
+      "configCreate": "Create the configuration",
+      "keyRename": "Rename key {{key}} to {{to}}"
     },
     "noNews": "no news of it within {{seconds}} s",
     "logs": "Logs of {{action}} {{subject}}"
@@ -2782,6 +2910,60 @@
     "links": {
       "heartbeats": "Heartbeats",
       "beating": "{{beating}} of {{total}} links beating"
+    }
+  },
+  "snapshots": {
+    "intro": "The snapshots the sync resources of the object kept in their store, as om sync snapshot list shows them, the latest first. Each restores aside, into a directory, or in place, into its heads.",
+    "noStore": "No sync resource of the object keeps snapshots: only a sync.store one does.",
+    "askedNode": "Read from",
+    "refresh": "Refresh",
+    "loading": "Reading the snapshots",
+    "loadError": "The snapshots could not be read: {{message}}",
+    "unsupported": "The daemon of {{node}} lists no snapshots: it is older than the snapshots of the sync resources. Upgrade om3 to restore from here.",
+    "table": "Snapshots",
+    "id": "Snapshot",
+    "resource": "Resource",
+    "taken": "Taken",
+    "takenBy": "By",
+    "holds": "Holds",
+    "store": "Store",
+    "actions": "Actions",
+    "none": "No snapshot kept.",
+    "restore": "Restore",
+    "restoreOne": "Restore {{id}} of {{rid}}",
+    "dialog": {
+      "title": "Restore {{id}} of {{rid}}",
+      "taken": "Snapshot {{id}}, taken by {{node}}, kept in {{location}}.",
+      "node": "On the instance of",
+      "nodeHint": "Its heads are the ones written in place; aside, the directory is on that node.",
+      "nodeUp": "{{node}} (up)",
+      "where": "Where",
+      "aside": "Aside, into a directory per head: the instance untouched, to compare or copy back by hand.",
+      "inPlace": "In place, into the heads: each emptied, but its excluded paths, and filled with what the snapshot saved.",
+      "heads": "Heads",
+      "headsRequired": "Pick a head at least.",
+      "into": "Directory",
+      "intoHint": "An absolute path on the node: a directory per head is written there.",
+      "intoRequired": "An absolute path, as /var/tmp/restore.",
+      "config": "Also restore the configuration of the object",
+      "refsInPlaceOnly": "The keys of the sec and cfg the object references are restored in place only: aside, they would be written in clear.",
+      "configAsideOnly": "The configuration of the object restores aside only.",
+      "refs": "Referenced keys",
+      "refsMode": {
+        "missing": "Missing ones",
+        "skip": "None",
+        "overwrite": "All, overwritten"
+      },
+      "refsHint": {
+        "missing": "The keys absent from the sec and cfg the object references are created; the others left as they are.",
+        "skip": "No key of the sec and cfg the object references is written.",
+        "overwrite": "Every key of the sec and cfg the object references is written back, the current values lost."
+      },
+      "inPlaceWarning": "What the heads hold now is lost: they are emptied, then filled with what the snapshot saved. The apps, containers and shares using the data must be stopped (om instance stop --rid), or the daemon refuses the restore.",
+      "understood": "I understand what the heads hold is replaced by the snapshot.",
+      "submitAside": "Restore aside",
+      "submitInPlace": "Restore in place",
+      "restoring": "Asking the restore"
     }
   }
 }

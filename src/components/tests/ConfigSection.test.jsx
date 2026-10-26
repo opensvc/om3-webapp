@@ -183,7 +183,8 @@ describe('ConfigSection Component', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
-        mockLocalStorage.getItem.mockReturnValue('mock-token');
+        // The writes not waiting for the nodes (--wait), but in the tests of the wait.
+        mockLocalStorage.getItem.mockImplementation((key) => (key === 'om3.config.wait' ? 'false' : 'mock-token'));
         mockUseParams.mockReturnValue({objectName: 'root/cfg/cfg1'});
         global.fetch = vi.fn(defaultFetchMock);
         clearKeywordsCache();
@@ -409,7 +410,7 @@ describe('ConfigSection Component', () => {
             await act(() => user.click(screen.getByRole('button', {name: /Apply/i})));
             await waitFor(() => expect(posts()).toHaveLength(1));
             const [url, options] = posts()[0];
-            expect(url).toBe(`${URL_OBJECT}/dev/nscfg/namespace/config/file?set=orchestrate%3Dno`);
+            expect(url).toBe(`${URL_OBJECT}/dev/nscfg/namespace/config/file?set=orchestrate=no`);
             expect(options.body).toMatch(/^\[DEFAULT\]\nid = /);
             expect(global.fetch.mock.calls.some(([, o]) => o?.method === 'PATCH')).toBe(false);
             await waitFor(() => expect(tray()).toEqual([['Create the configuration', 'dev/nscfg/namespace', 'succeeded', null]]));
@@ -767,7 +768,8 @@ describe('ConfigSection Component', () => {
                 });
                 return defaultFetchMock(url, options);
             });
-        }, null, ['Update the configuration', 'root/cfg/cfg1', 'refused', 'HTTP 500'], true],
+        // Refused, the dialog stays open, saying why.
+        }, null, ['Update the configuration', 'root/cfg/cfg1', 'refused', 'HTTP 500'], false],
         ['network error', () => {
             global.fetch.mockImplementation((url, options) => {
                 if (url.includes('/config/file') && options.method === 'PUT') return Promise.reject(new Error('Network error'));
@@ -1050,13 +1052,16 @@ describe('ConfigSection Component', () => {
         await act(() => checkExisting(user, 1, 'nodes'));
         await act(() => checkExisting(user, 2, 'fs#1'));
         await act(() => user.click(screen.getByRole('button', {name: /Apply/i})));
-        // Each one refused, newest first.
+        // One request, all or none, the changes in the order the daemon applies them: refused once.
         await waitFor(() => expect(tray()).toEqual([
-            ['Delete section fs#1', 'root/cfg/cfg1', 'refused', 'HTTP 500'],
-            ['Unset nodes', 'root/cfg/cfg1', 'refused', 'HTTP 500'],
-            ['Set orchestrate = test', 'root/cfg/cfg1', 'refused', 'HTTP 500'],
+            ['Delete section fs#1; Unset nodes; Set orchestrate = test', 'root/cfg/cfg1', 'refused', 'HTTP 500'],
         ]));
+        const patches = global.fetch.mock.calls.filter(([, options]) => options?.method === 'PATCH').map(([url]) => url);
+        expect(patches).toEqual([`${URL_OBJECT}/root/cfg/cfg1/config?set=orchestrate=test&unset=nodes&delete=fs%231`]);
+        // Nothing written: the changes kept, and why said in the dialog.
         expect(screen.getByRole('heading', {name: 'Manage Configuration Parameters'})).toBeInTheDocument();
+        expect(within(getParamsTable()).getByText('orchestrate')).toBeInTheDocument();
+        expect(screen.getByRole('alert')).toHaveTextContent('HTTP 500');
     });
 
     test.each([
@@ -1165,7 +1170,8 @@ describe('ConfigSection Component', () => {
         await openManageDialog(user);
         await waitFor(() => expect(within(getDeleteGroup()).getByText('No sections.')).toBeInTheDocument());
         expect(within(getUnsetGroup()).getByText('No parameters set.')).toBeInTheDocument();
-        expect(screen.queryAllByRole('checkbox')).toHaveLength(0);
+        expect(within(getUnsetGroup()).queryAllByRole('checkbox')).toHaveLength(0);
+        expect(within(getDeleteGroup()).queryAllByRole('checkbox')).toHaveLength(0);
     });
 
     // ── Keywords dialog ──────────────────────────────────────────────────
@@ -1173,7 +1179,8 @@ describe('ConfigSection Component', () => {
     test('no button lists the keywords: the help of each one stands by its line', async () => {
         renderConfig();
         await screen.findByRole('group', {name: 'Configuration file'});
-        expect(screen.queryByRole('button', {name: /keywords/i})).not.toBeInTheDocument();
+        // The keywords evaluated have a button of their own (ConfigEvalDialog): no list of them.
+        expect(screen.queryByRole('button', {name: /keywords/i})).toHaveAccessibleName('Evaluate the keywords');
     });
 
     test('hovering the file reads the keywords of the kind once, and a "?" by each keyword tells what it does', async () => {

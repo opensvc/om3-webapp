@@ -1222,7 +1222,8 @@
       "namespaces": "Namespaces",
       "pools": "Pools",
       "resources": "Resources",
-      "stores": "Stores"
+      "stores": "Stores",
+      "glossary": "Glossary"
     },
     "main": "Main",
     "loading": "Loading...",
@@ -1249,12 +1250,14 @@
         "whoami": "whoami",
         "resources": "resources",
         "stores": "stores",
-        "cluster": "cluster"
+        "cluster": "cluster",
+        "glossary": "glossary"
       }
     },
     "sections": {
       "cluster": "Cluster",
-      "objects": "Objects"
+      "objects": "Objects",
+      "help": "Help"
     }
   },
   "networks": {
@@ -3179,5 +3182,293 @@
     "lacking_one": "Not usable on {{nodes}}: its driver is not among the capabilities of the node.",
     "lacking_other": "Not usable on {{nodes}}: its driver is not among the capabilities of these nodes.",
     "nowhere": "Usable on no node of the cluster: its driver is not among their capabilities."
+  },
+  "pageIntro": {
+    "label": "About this page",
+    "hide": "Hide this introduction",
+    "glossary": "What the words mean",
+    "pages": {
+      "cluster": "This is your cluster at a glance. A cluster is a group of servers (nodes) that watch each other and keep your applications running: if one node fails, its applications restart on another. Each card below summarizes a page of the menu; click it to open that page.",
+      "heartbeats": "Nodes send each other small messages, called heartbeats, to show they are alive. Each node both sends (tx) and receives (rx), over several paths in case one breaks. If a node goes silent on every path, the others treat it as failed and can restart its applications.",
+      "nodes": "These are the servers in your cluster. Each one runs the OpenSVC agent. Their load and free memory help decide where applications run. A frozen node is left alone: the cluster will not start or move anything on it automatically.",
+      "namespaces": "Namespaces group objects, like folders. An object's full name is namespace/kind/name, for example prod/svc/web. You can grant access per namespace, and limit how much storage, CPU, memory and IP addresses it may use.",
+      "networks": "These are the networks the cluster uses to give IP addresses to containers and services automatically.",
+      "pools": "Storage pools are where volumes get their disk space: a directory, an LVM volume group, a ZFS pool or a storage array, for example.",
+      "stores": "Backup stores hold copies (snapshots) of your services' data and configuration, so you can restore them later, even on another node.",
+      "resources": "This lists every resource of every service and volume, on every node: filesystems, IP addresses, disks, containers, applications. Filter by status to find what is down.",
+      "objects-services": "Services (svc) are the applications the cluster keeps running. Each one is built from resources, such as an IP address, a filesystem and a container. A service has one instance on each node it is allowed to run on.",
+      "objects-volumes": "Volumes (vol) are storage that a service asks for. The cluster creates each volume in a storage pool when the service is provisioned.",
+      "objects-configs": "Configurations (cfg) hold settings and files that are not secret. Services use them as files or environment variables. The cluster's own configuration is listed here too.",
+      "objects-secrets": "Secrets (sec) are like configurations, but stored encrypted. Use them for passwords, certificates and private keys.",
+      "objects-users": "Users (usr) are accounts that can sign in to this webapp and the API, each with its own permissions (grants).",
+      "objects-any": "All the objects in the cluster, of every kind: services, volumes, configurations, secrets and users."
+    }
+  },
+  "glossary": {
+    "title": "Glossary",
+    "intro": "The words of OpenSVC used in this webapp, said plainly. A dotted underline on a label means its definition is a hover or a focus away.",
+    "search": "Search the glossary",
+    "noMatch": "No term matches.",
+    "more": "More in the Glossary of the menu.",
+    "showIntros_one": "Show the hidden page introduction again",
+    "showIntros_other": "Show the {{count}} hidden page introductions again",
+    "groups": {
+      "concepts": "What a cluster is made of",
+      "kinds": "Kinds of objects",
+      "states": "States and flags",
+      "policies": "How objects are run",
+      "actions": "Actions"
+    },
+    "terms": {
+      "cluster": {
+        "term": "Cluster",
+        "definition": "A group of servers (nodes) that share one configuration and watch each other. If a node fails, the applications it was running can restart on another node."
+      },
+      "node": {
+        "term": "Node",
+        "definition": "One server in the cluster. It runs the OpenSVC agent, and the applications (instances) the cluster places on it."
+      },
+      "object": {
+        "term": "Object",
+        "definition": "Anything the cluster manages: a service, a volume, a configuration, a secret or a user. Its full name is namespace/kind/name, for example prod/svc/web."
+      },
+      "instance": {
+        "term": "Instance",
+        "definition": "One copy of an object on one node. A service allowed on two nodes has two instances; usually only one is running. Each instance has its own status."
+      },
+      "resource": {
+        "term": "Resource",
+        "definition": "One building block of an object: an IP address, a filesystem, a disk, a container, an application, a backup job… Its name says its type and number, for example fs#1 is the first filesystem."
+      },
+      "namespace": {
+        "term": "Namespace",
+        "definition": "A folder for objects. Permissions and limits are set per namespace. The default one is root; system holds the cluster's own objects."
+      },
+      "kinds": {
+        "term": "Kind",
+        "definition": "The type of an object: svc (service), vol (volume), cfg (configuration), sec (secret), usr (user), nscfg (namespace settings) or ccfg (cluster settings)."
+      },
+      "heartbeat": {
+        "term": "Heartbeat",
+        "definition": "A stream of small \"I'm alive\" messages between nodes. Each node sends (tx) and receives (rx). If a node stays silent longer than the timeout, the others treat it as failed."
+      },
+      "relay": {
+        "term": "Relay",
+        "definition": "A heartbeat that goes through a third server acting as a mailbox. Useful when the nodes cannot reach each other directly, or as an extra safety path."
+      },
+      "network": {
+        "term": "Network",
+        "definition": "A network the cluster gives IP addresses from, automatically, to services and containers that ask for one."
+      },
+      "pool": {
+        "term": "Pool",
+        "definition": "A place volumes get their disk space from: a directory, an LVM volume group, ZFS, DRBD or a storage array."
+      },
+      "store": {
+        "term": "Store",
+        "definition": "A place backups are kept. Every node can reach it, so a backup taken on one node can be restored on another."
+      },
+      "snapshot": {
+        "term": "Snapshot",
+        "definition": "One backup: a copy of a service's data and configuration at a point in time, with the node that took it. The store keeps a limited number of them."
+      },
+      "label": {
+        "term": "Label",
+        "definition": "A tag on a node, like az=fr2. Services can use labels to choose which nodes they run on."
+      },
+      "kindSvc": {
+        "term": "svc · Service",
+        "definition": "A service: an application the cluster keeps running, made of resources such as an IP address, filesystems and containers."
+      },
+      "kindVol": {
+        "term": "vol · Volume",
+        "definition": "A volume: storage for a service, created in a storage pool and attached to the service that asked for it."
+      },
+      "kindCfg": {
+        "term": "cfg · Configuration",
+        "definition": "A configuration: settings and files that are not secret, given to services as files or environment variables."
+      },
+      "kindSec": {
+        "term": "sec · Secret",
+        "definition": "A secret: like a configuration, but stored encrypted. For passwords, certificates and keys."
+      },
+      "kindUsr": {
+        "term": "usr · User",
+        "definition": "A user: an account for the API and this webapp, with its permissions. Not needed for people who sign in with OpenID."
+      },
+      "kindNscfg": {
+        "term": "nscfg · Namespace configuration",
+        "definition": "The settings of a namespace: for example the maximum storage, CPU, memory and IP addresses its objects may use."
+      },
+      "kindCcfg": {
+        "term": "ccfg · Cluster configuration",
+        "definition": "The cluster's own settings, shared by every node. There is only one."
+      },
+      "avail": {
+        "term": "Avail",
+        "definition": "Is it running? Only the resources it needs count. up: running. down: not running. warn: partly running, or running in too many places. stdby up: only the standby resources run. n/a: nothing to run."
+      },
+      "overall": {
+        "term": "Overall",
+        "definition": "The full health check: like Avail, but every resource and every warning counts. Overall can be warn while Avail is up: it works, but something needs a look."
+      },
+      "provisioned": {
+        "term": "Provisioned",
+        "definition": "Whether the system pieces it needs (filesystems, disks, volumes) have been created on the node. mixed means only some of them."
+      },
+      "frozen": {
+        "term": "Frozen",
+        "definition": "The cluster leaves it alone: no automatic start, stop or move. You can still run actions yourself."
+      },
+      "monitor": {
+        "term": "Monitor",
+        "definition": "What the cluster is doing with it right now. idle means nothing; starting, stopping or provisioning means an action is in progress; a value like start failed tells you an action failed."
+      },
+      "expect": {
+        "term": "Expect",
+        "definition": "The state the cluster is working towards. With a > in front, it was asked for the whole cluster (for example >started); without, it is this node keeping the instance running."
+      },
+      "globalExpect": {
+        "term": "Global expect",
+        "definition": "The goal of a cluster-wide action someone asked for, such as started, stopped or placed. Every instance works towards it until it is reached."
+      },
+      "localExpect": {
+        "term": "Local expect",
+        "definition": "What this node keeps the instance at. started means the node restarts it if it fails."
+      },
+      "orchestration": {
+        "term": "Orchestration",
+        "definition": "A cluster-wide action in progress, such as starting a service on its preferred node. All the instances involved share its id until it is done."
+      },
+      "standby": {
+        "term": "Standby",
+        "definition": "A resource kept running even on nodes where the service is not, so it is ready to take over (for example, receiving replicated data)."
+      },
+      "encap": {
+        "term": "Encap",
+        "definition": "A resource managed from inside a container, by an agent running in it, instead of by the node."
+      },
+      "optional": {
+        "term": "Optional",
+        "definition": "A resource whose failure is not fatal: actions continue and the service still counts as up. Its problems show in Overall."
+      },
+      "monitored": {
+        "term": "Monitored",
+        "definition": "A resource the cluster watches closely. If it fails and cannot be restarted, the cluster reacts: it switches the service to another node, or reboots the node."
+      },
+      "leader": {
+        "term": "Leader",
+        "definition": "The node that speaks for the cluster: the first one in the node list that is alive. It handles cluster-wide tasks. It has nothing to do with where services run."
+      },
+      "score": {
+        "term": "Score",
+        "definition": "How much spare capacity a node has, based on its load and free memory. Higher means freer. Services can be placed on the node with the highest score."
+      },
+      "overloaded": {
+        "term": "Overloaded",
+        "definition": "The node's free memory or swap is below the minimum set in its configuration."
+      },
+      "topology": {
+        "term": "Topology",
+        "definition": "How many copies of a service may run at the same time. failover: only one, on one node. flex: several at once, between a minimum and a maximum."
+      },
+      "orchestrate": {
+        "term": "Orchestrate",
+        "definition": "How much the cluster acts on its own. no: never starts or moves the service. start: starts it once after a node boots. ha: high availability, restarts it on another node when its node fails."
+      },
+      "placement": {
+        "term": "Placement",
+        "definition": "How the cluster picks the node a service runs on: the first node listed (nodes order), the least loaded, the highest score, spread across nodes, and so on."
+      },
+      "flex": {
+        "term": "Flex",
+        "definition": "For a flex service: the minimum and maximum number of copies that may run, and the target number the cluster aims for."
+      },
+      "actionProvision": {
+        "term": "Provision",
+        "definition": "Create what the service needs on its nodes: its filesystems, disks and volumes."
+      },
+      "actionUnprovision": {
+        "term": "Unprovision",
+        "definition": "Delete what provision created: the filesystems are wiped and the disks released. The data is lost; the configuration is kept."
+      },
+      "actionFreeze": {
+        "term": "Freeze",
+        "definition": "Tell the cluster to leave something alone: no automatic start, stop or move. Works on a service, a node or the whole cluster."
+      },
+      "actionUnfreeze": {
+        "term": "Unfreeze",
+        "definition": "Undo a freeze: the cluster acts automatically again."
+      },
+      "actionSwitch": {
+        "term": "Switch",
+        "definition": "Move a running service to another node: it stops here and starts on the next preferred node, or on the node you choose."
+      },
+      "actionTakeover": {
+        "term": "Takeover",
+        "definition": "Move a running service to this node: it stops where it runs and starts here."
+      },
+      "actionGiveback": {
+        "term": "Giveback",
+        "definition": "Move services back to their preferred nodes, for example after a failure has been fixed."
+      },
+      "actionDrain": {
+        "term": "Drain",
+        "definition": "Empty a node before maintenance: freeze it, then stop everything running on it. Services in high availability (ha) can then start on other nodes."
+      },
+      "actionPurge": {
+        "term": "Purge",
+        "definition": "Delete the service completely: its data and system resources, then its configuration on every node. This cannot be undone."
+      },
+      "actionAbort": {
+        "term": "Abort",
+        "definition": "Cancel the cluster-wide action in progress."
+      },
+      "actionClear": {
+        "term": "Clear",
+        "definition": "Reset a failed state (such as start failed) so the cluster acts on it again."
+      }
+    }
+  },
+  "legend": {
+    "title": "Symbols",
+    "toggle": "What the symbols mean",
+    "groups": {
+      "states": "Status",
+      "marks": "Marks on an instance",
+      "flags": "Flags on a resource"
+    },
+    "states": {
+      "up": "Up: running normally.",
+      "warn": "Warning: running, but something needs your attention.",
+      "down": "Down: not running, and it should be.",
+      "downQuiet": "Down, as expected. For example, the standby node of a failover service.",
+      "na": "Not applicable: there is nothing to run here.",
+      "undef": "Unknown: the node has not reported this yet."
+    },
+    "marks": {
+      "overallWarn": "Some of its resources have a warning.",
+      "running": "A task or sync is running right now.",
+      "rpoBreached": "Its last backup or replication is older than allowed (RPO breached).",
+      "drp": "Disaster recovery node: used only when the main site is lost.",
+      "leader": "Preferred node: where the service runs when everything is normal.",
+      "leaderNonOptimal": "Preferred node, but the service is not running where placement wants it. A giveback moves it back.",
+      "frozen": "Frozen: the cluster will not start, stop or move it automatically.",
+      "stopped": "Stopped on purpose by an operator: the cluster will not restart it.",
+      "notProvisioned": "Not provisioned: its filesystems, disks or volumes are not created on this node."
+    },
+    "flags": {
+      "R": "R, running: a task or sync of this resource is running now.",
+      "M": "M, monitored: if it fails, the cluster reacts (switches the service, or reboots the node).",
+      "D": "D, disabled: every action skips it.",
+      "O": "O, optional: if it fails, the service still counts as up.",
+      "E": "E, encapsulated: managed from inside a container.",
+      "S": "S, standby: kept running even on nodes where the service is not running.",
+      "P": "P, not provisioned on this node.",
+      "X": "X, stopped on purpose by an operator.",
+      "restarts": "A number: how many automatic restarts are left before the cluster gives up.",
+      "noRestart": "0: no automatic restart left.",
+      "manyRestarts": "+: more than 10 automatic restarts left."
+    }
   }
 }

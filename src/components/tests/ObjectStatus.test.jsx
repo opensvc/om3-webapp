@@ -85,22 +85,37 @@ describe('ObjectStatus', () => {
         expect(mockRelease).toHaveBeenCalled();
     });
 
+    test('what the symbols mean, folded under the summary, opened on demand', async () => {
+        answer(structuredClone(dns));
+        render(<ObjectStatus path="system/svc/dns"/>);
+        await screen.findByRole('table');
+        const toggle = screen.getByText('What the symbols mean');
+        const legend = toggle.closest('details');
+        expect(legend).not.toHaveAttribute('open');
+        fireEvent.click(toggle);
+        expect(legend).toHaveAttribute('open');
+        expect(within(legend).getByText('Down, as expected. For example, the standby node of a failover service.')).toBeInTheDocument();
+    });
+
     test('the summary: a status a line, said in full in its tint, then an issue a line, the policies and the actions apart', async () => {
         const broken = structuredClone(dns);
         broken.provisioned = 'false';
         answer(broken);
         render(<ObjectStatus path="system/svc/dns"/>);
         await screen.findByRole('table');
-        expect(screen.getByText('Avail').nextSibling).toHaveTextContent(/^down$/);
+        expect(screen.getByText('Avail').closest('dt').nextSibling).toHaveTextContent(/^down$/);
         // The word in full, bold, in the tint of its state: no badge, no glyph.
-        const avail = screen.getByText('Avail').nextSibling.querySelector('[data-state]');
+        const avail = screen.getByText('Avail').closest('dt').nextSibling.querySelector('[data-state]');
         expect(avail).toHaveClass('font-semibold', 'text-state-down');
-        expect(screen.getByText('Avail').nextSibling.querySelector('svg')).toBeNull();
-        const overall = screen.getByText('Overall').nextSibling.querySelector('[data-state]');
+        expect(screen.getByText('Avail').closest('dt').nextSibling.querySelector('svg')).toBeNull();
+        const overall = screen.getByText('Overall').closest('dt').nextSibling.querySelector('[data-state]');
         expect(overall.className).toMatch(/font-semibold text-(state-\w+|ink-muted)/);
         // One a line: label and value pairs of a two-column list.
-        expect(screen.getByText('Avail').tagName).toBe('DT');
-        expect(screen.getByText('Overall').tagName).toBe('DT');
+        expect(screen.getByText('Avail').closest('dt')).toBeInTheDocument();
+        expect(screen.getByText('Overall').closest('dt')).toBeInTheDocument();
+        // Words of OpenSVC: their definition on demand.
+        expect(screen.getByText('Avail')).toHaveAttribute('data-term', 'avail');
+        expect(screen.getByText('Overall')).toHaveAttribute('data-term', 'overall');
         expect(screen.getByRole('list', {name: 'Issues'})).toHaveTextContent('not provisioned');
         expect(screen.getByRole('list', {name: 'Issues'})).toHaveClass('flex-col');
         // Beside the summary, not under it: a state coming or going (frozen) moves nothing below.
@@ -328,7 +343,7 @@ describe('ObjectStatus', () => {
         act(() => {
             useEventStore.setState((s) => ({objectStatus: {...s.objectStatus, 'system/svc/dns': {avail: 'up'}}}));
         });
-        await waitFor(() => expect(screen.getByText('Avail').nextSibling).toHaveTextContent('up'));
+        await waitFor(() => expect(screen.getByText('Avail').closest('dt').nextSibling).toHaveTextContent('up'));
     });
 
     test('says why the status could not be read', async () => {
@@ -659,7 +674,8 @@ describe('ObjectStatus', () => {
             const wider = structuredClone(dns);
             wider.scope = [...wider.scope, 'dev3n3'];
             await ready(wider);
-            const unknown = document.querySelectorAll('[data-state="unknown"]');
+            // In the board: the legend draws its own "?".
+            const unknown = screen.getByRole('table').querySelectorAll('[data-state="unknown"]');
             expect(unknown).toHaveLength(1);
             expect(unknown[0]).toHaveTextContent('?');
             expect(unknown[0]).toHaveClass('text-state-down');

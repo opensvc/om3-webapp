@@ -44,6 +44,12 @@ export const NAV_SECTIONS = [
             list,
         })),
     },
+    {
+        // The words of OpenSVC, said plainly.
+        key: "help",
+        labelKey: "nav.sections.help",
+        entries: [{id: "glossary", to: "/glossary", labelKey: "nav.routes.glossary"}],
+    },
 ];
 
 /**

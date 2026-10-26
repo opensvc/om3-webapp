@@ -37,6 +37,7 @@ import {useLocalPaging} from "../app/paging";
 import {usePanelSearch} from "../app/panel-search";
 import {trackDone, trackRefused, trackResponse, useActionTracker} from "../app/action-tracker";
 import {driverCap, driverRows, nodeTools} from "../app/driver-caps";
+import {Term} from "../app/Term";
 import {refusalReason} from "./objectActions";
 import {MIN_AVAIL, MinAvailDialog, thresholdPct, useMinAvail} from "./NodeMinAvail";
 import {useGrants} from "../hooks/useGrants";
@@ -52,6 +53,18 @@ import {RawDataButton} from "./JsonCode";
 
 const ZERO_TIME = "0001-01-01T00:00:00Z";
 export const isSet = (time) => !!time && time !== ZERO_TIME;
+
+/** The facts of a node named by a word of the glossary, its key by fact. */
+const NODE_TERMS = {
+    state: "monitor",
+    globalExpect: "globalExpect",
+    localExpect: "localExpect",
+    orchestration: "orchestration",
+    frozen: "frozen",
+    leader: "leader",
+    score: "score",
+    overloaded: "overloaded",
+};
 
 /** The events that keep the state of the nodes current, the Nodes view's. */
 const NODE_EVENTS = ["NodeStatusUpdated", "NodeMonitorUpdated", "NodeStatsUpdated"];
@@ -277,7 +290,8 @@ function NodeStatusTab({node, onOrchestrationLogs}) {
 
     const frozen = isSet(status?.frozen_at);
     const none = "–";
-    const fact = (key, value) => [key, t(`nodePanel.status.${key}`), value];
+    // A fact named by a word of OpenSVC: its definition on demand.
+    const fact = (key, value) => [key, NODE_TERMS[key] ? <Term term={NODE_TERMS[key]}>{t(`nodePanel.status.${key}`)}</Term> : t(`nodePanel.status.${key}`), value];
     // When a value of the monitor was set, muted after it.
     const since = (at) => (isSet(at) ? <span className="text-ink-muted"><RelativeTime value={at} locale={i18n.language}/></span> : null);
     const withSince = (value, at) => <span className="inline-flex flex-wrap items-baseline gap-x-1.5">{value}{since(at)}</span>;

@@ -32,6 +32,7 @@ import {MoreRows, useRowsOnDemand} from "../ui/components/RowsOnDemand";
 import {ALL_LIST, OBJECT_LISTS, OBJECTS_TABS, listOfKind} from "../utils/objectLists";
 import {BoltIcon, ChevronDownIcon, FilterIcon, GearIcon, PlusIcon, SearchIcon} from "../ui/icons";
 import {menuColumns, menuFilter} from "../app/action-menu";
+import {Term} from "../app/Term";
 
 // The breakpoints of the MUI theme the view used: below md (900px) the filters fold
 // behind a button, from lg (1200px) the node columns are shown.
@@ -140,8 +141,8 @@ const NodeStatus = React.memo(({objectName, node}) => {
  * to place (cfg, sec, usr) have no orchestrate nor topology.
  */
 export const PROPERTY_COLUMNS = [
-    {key: "orchestrate", labelKey: "objects.columns.orchestrate", value: (status) => status?.orchestrate},
-    {key: "topology", labelKey: "objects.columns.topology", value: (status) => status?.topology},
+    {key: "orchestrate", labelKey: "objects.columns.orchestrate", term: "orchestrate", value: (status) => status?.orchestrate},
+    {key: "topology", labelKey: "objects.columns.topology", term: "topology", value: (status) => status?.topology},
 ];
 
 /**
@@ -977,8 +978,8 @@ const Objects = () => {
                                     <HeaderCell className="text-right" title={t("objects.columns.keysSizeHint")}>{t("objects.columns.keysSize")}</HeaderCell>
                                 </>
                             )}
-                            {!namesOnly && propertyColumns.map(({key, labelKey}) => (
-                                <HeaderCell key={key}>{t(labelKey)}</HeaderCell>
+                            {!namesOnly && propertyColumns.map(({key, labelKey, term}) => (
+                                <HeaderCell key={key}>{term ? <Term term={term}>{t(labelKey)}</Term> : t(labelKey)}</HeaderCell>
                             ))}
                             {!namesOnly && <HeaderCell>{t("common.status")}</HeaderCell>}
                             {!namesOnly && isWideScreen && allNodes.map((node, i) => (

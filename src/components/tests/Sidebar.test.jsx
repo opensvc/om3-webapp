@@ -38,9 +38,12 @@ describe('Sidebar', () => {
         mockPills.current = {};
     });
 
-    test('two sections: the cluster, its links, nodes, namespaces, networks, pools, stores and resources; the objects, their title all of them, then by kind', () => {
+    test('three sections: the cluster, its links, nodes, namespaces, networks, pools, stores and resources; the objects, their title all of them, then by kind; the help, its glossary', () => {
         renderSidebar();
-        expect(screen.getAllByRole('heading').map((h) => h.textContent)).toEqual(['Cluster', 'Objects']);
+        expect(screen.getAllByRole('heading').map((h) => h.textContent)).toEqual(['Cluster', 'Objects', 'Help']);
+        expect(linkNames(section('Help'))).toEqual(['Glossary']);
+        // A title of no page of its own: a heading, no link.
+        expect(within(screen.getByRole('heading', {name: 'Help'})).queryByRole('link')).not.toBeInTheDocument();
         expect(linkNames(section('Cluster'))).toEqual(CLUSTER);
         expect(linkNames(section('Objects'))).toEqual(OBJECTS);
         // No "All" entry: the title of the objects opens them all; the cluster's, its overview.
@@ -58,6 +61,7 @@ describe('Sidebar', () => {
             Cluster: '/cluster', Links: '/heartbeats', Nodes: '/nodes', Namespaces: '/namespaces', Networks: '/network', Pools: '/pools', Stores: '/stores', Resources: '/resources',
             Objects: '/objects?list=any', Services: '/objects', Volumes: '/objects?list=volumes',
             Configurations: '/objects?list=configs', Secrets: '/objects?list=secrets', Users: '/objects?list=users',
+            Glossary: '/glossary',
         });
         // The same for every entry, from the catalog.
         for (const {entries} of NAV_SECTIONS) {
@@ -247,7 +251,8 @@ describe('Sidebar in French', () => {
         await i18n.changeLanguage('fr');
         renderSidebar();
         expect(screen.getByRole('navigation', {name: 'Principal'})).toBeInTheDocument();
-        expect(screen.getAllByRole('heading').map((h) => h.textContent)).toEqual(['Cluster', 'Objets']);
+        expect(screen.getAllByRole('heading').map((h) => h.textContent)).toEqual(['Cluster', 'Objets', 'Aide']);
+        expect(screen.getByRole('link', {name: 'Glossaire'})).toHaveAttribute('href', '/glossary');
         expect(screen.getByRole('link', {name: 'Liens'})).toHaveAttribute('href', '/heartbeats');
         expect(screen.getByRole('link', {name: 'Nœuds'})).toHaveAttribute('href', '/nodes');
         expect(screen.getByRole('link', {name: 'Objets'})).toHaveAttribute('href', '/objects?list=any');

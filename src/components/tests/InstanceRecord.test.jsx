@@ -58,6 +58,8 @@ const nextReading = () => act(async () => {
     await vi.advanceTimersByTimeAsync(PG_POLL_MS);
 });
 const tile = (label) => screen.getByText(label, {selector: 'dt'}).nextElementSibling;
+/** The term of a fact by its whole text: a word of the glossary in it, its label inside a span. */
+const termOf = (label) => screen.getByText((_, el) => el?.tagName === 'DT' && el.textContent === label);
 
 beforeEach(() => {
     vi.useFakeTimers({shouldAdvanceTime: true});
@@ -173,7 +175,7 @@ describe('InstanceUsage', () => {
 describe('InstanceStatus', () => {
     test('the state of the instance as its node reports it, then its resources', () => {
         inRouter(<InstanceStatus path="prod/svc/web" node="n1"/>);
-        const fact = (label) => screen.getByText(label, {selector: 'dt'}).nextElementSibling;
+        const fact = (label) => termOf(label).nextElementSibling;
         expect(fact('Avail')).toHaveTextContent('up');
         expect(fact('Overall')).toHaveTextContent('warn');
         expect(fact('Frozen')).toHaveTextContent('no');
@@ -293,7 +295,7 @@ describe('InstanceStatus', () => {
 
     test('frozen, not provisioned', () => {
         inRouter(<InstanceStatus path="prod/svc/web" node="n2"/>);
-        const fact = (label) => screen.getByText(label, {selector: 'dt'}).nextElementSibling;
+        const fact = (label) => termOf(label).nextElementSibling;
         expect(fact('Frozen')).toHaveTextContent('yes');
         expect(within(fact('Provisioned')).getByRole('img', {name: 'Not provisioned'})).toBeInTheDocument();
         expect(screen.getByText('No resource.')).toBeInTheDocument();
@@ -346,7 +348,7 @@ describe('ResourceStatus', () => {
             n4: {avail: 'up', resources: {'app#1': {status: 'up', type: 'app.simple', label: 'run'}}},
         }}}));
         inRouter(<ResourceStatus path="prod/svc/web" rid="app#1"/>);
-        const fact = (label) => screen.getByText(label, {selector: 'dt'}).nextElementSibling;
+        const fact = (label) => termOf(label).nextElementSibling;
         expect(fact('Type')).toHaveTextContent('app.simple');
         const rows = within(screen.getByRole('table', {name: 'The resource on each node'})).getAllByRole('row').slice(1)
             .map((row) => within(row).getAllByRole('cell').map((c) => c.textContent));

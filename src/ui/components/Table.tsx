@@ -62,6 +62,8 @@ export function Table({
   return (
     <div
       ref={ref}
+      // The scroller of the rows, where those drawn on demand watch the end near (`MoreRows`).
+      data-table-scroll=""
       className={cn(
         "rounded-(--radius-panel) border border-line bg-surface-raised",
         sticky ? "overflow-auto" : "overflow-x-auto",
@@ -86,6 +88,21 @@ export function Table({
     </div>
   );
 }
+
+/**
+ * The page of a list on a wide screen: as wide as its table needs, no wider than
+ * the window, its toolbar and pager over the width of the table. The columns of a
+ * table filling a wide window drift apart, their row too long to be read across.
+ * For the root of a page of a list, whose side panel slides over it.
+ */
+export const LIST_PAGE_FIT = "2xl:w-fit 2xl:max-w-full";
+
+/**
+ * Wide enough for the tools of a list beside its table (`FilterRail`): its filters as
+ * facets, its actions and pager at their head. The width the list page fits its table
+ * from (2xl).
+ */
+export const LIST_RAIL_QUERY = "(min-width:1536px)";
 
 /** Header row. */
 export function HeaderRow({ className, ...props }: HTMLAttributes<HTMLTableRowElement>) {

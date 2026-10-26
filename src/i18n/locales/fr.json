@@ -1195,7 +1195,9 @@
       "tableLabel": "{{list}} de {{namespace}}",
       "empty": "Aucun objet de type {{list}} dans {{namespace}}.",
       "selectAll": "Sélectionner tous les objets de type {{list}}"
-    }
+    },
+    "count_one": "{{count}} namespace",
+    "count_other": "{{count}} namespaces"
   },
   "nav": {
     "openCluster": "Ouvrir le cluster",
@@ -1363,7 +1365,8 @@
       "bootedAt": "Démarré",
       "updatedAt": "Mis à jour",
       "env": "Env",
-      "labels": "Étiquettes"
+      "labels": "Étiquettes",
+      "metrics": "Métriques"
     },
     "bulkActions": "Actions",
     "selectAll": "Sélectionner tous les nœuds",
@@ -1380,7 +1383,10 @@
       "lost": "Aucun état : le nœud est perdu ou ne répond pas",
       "label": "Ligne du nœud {{node}}",
       "select": "Sélectionner le nœud {{node}}",
-      "connected": "Connecté à ce nœud"
+      "connected": "Connecté à ce nœud",
+      "versionDiff": "Agent {{version}}, la plupart des nœuds ont {{common}}",
+      "booted": "démarré",
+      "updated": "mis à jour"
     },
     "time": {
       "justNow": "À l'instant",
@@ -1388,7 +1394,13 @@
       "hoursAgo": "il y a {{count}} h",
       "daysAgo": "il y a {{count}} j"
     },
-    "selectHint": "Sélectionnez des nœuds pour agir dessus, ou ouvrez-en un"
+    "selectHint": "Sélectionnez des nœuds pour agir dessus, ou ouvrez-en un",
+    "short": {
+      "score": "score",
+      "load": "charge",
+      "mem": "mém",
+      "swap": "swap"
+    }
   },
   "objectTabs": {
     "schedules": {
@@ -1637,7 +1649,10 @@
       "globalState": "État global",
       "namespace": "Namespace",
       "kind": "Kind",
-      "unprovisioned": "Non provisionné"
+      "unprovisioned": "Non provisionné",
+      "rail": "Filtres",
+      "clear": "Effacer",
+      "clearOf": "Effacer le filtre {{filter}}"
     },
     "feedback": {
       "authTokenNotFound": "Jeton d'authentification introuvable"
@@ -1663,10 +1678,11 @@
       "namespace": "namespace"
     },
     "openNamespaceConfig": "Ouvrir la configuration de {{namespace}}",
-    "configure": "Configurer",
     "configureNamespace": "Configurer le namespace {{namespace}}",
-    "createIn": "Créer",
-    "createInNamespace": "Créer un objet dans {{namespace}}"
+    "createInNamespace": "Créer un objet dans {{namespace}}",
+    "count_one": "{{count}} objet",
+    "count_other": "{{count}} objets",
+    "clearSelection": "Effacer"
   },
   "pools": {
     "columns": {
@@ -2664,6 +2680,20 @@
       "monitored": "surveillée",
       "optional": "facultative",
       "encap": "encapsulée"
+    },
+    "rail": "Filtres",
+    "chosen_one": "{{count}} choisi",
+    "chosen_other": "{{count}} choisis",
+    "selection": {
+      "all": "Sélectionner toutes les ressources",
+      "one": "Sélectionner {{rid}} de {{path}} sur {{node}}",
+      "hint": "Sélectionnez des ressources pour agir dessus",
+      "clear": "Effacer",
+      "actions": "Actions sur les ressources sélectionnées",
+      "subject_one": "{{count}} ressource, sur {{instances}}",
+      "subject_other": "{{count}} ressources, sur {{instances}}",
+      "instances_one": "{{count}} instance",
+      "instances_other": "{{count}} instances"
     }
   },
   "stores": {
@@ -2977,5 +3007,10 @@
       "submitInPlace": "Restaurer en place",
       "restoring": "Demande de la restauration"
     }
+  },
+  "rowsOnDemand": {
+    "shown": "{{shown}} sur {{total}} affichés",
+    "more_one": "Afficher {{count}} de plus",
+    "more_other": "Afficher {{count}} de plus"
   }
 }

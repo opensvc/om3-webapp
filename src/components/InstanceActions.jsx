@@ -27,20 +27,21 @@ const SUPPORTED_ACTIONS = [...new Set([...OBJECT_ACTIONS, ...INSTANCE_ACTIONS, .
  * resources it runs on there as `rid` — confirmed first, then posted; what comes
  * of it, the actions tray says (postAction). A console opens a terminal on its
  * resource at once. `onDone` follows a run, to clear a selection. Render `dialogs`
- * once.
+ * once. A target of another object names it (`path`): the resources of many
+ * objects acted on together; `names`, what they are, listed in the confirmation.
  */
 export function useActionRunner(path) {
     const [pending, setPending] = useState(null);
     const [running, setRunning] = useState(false);
     const [consoleTarget, setConsoleTarget] = useState(null);
 
-    const ask = useCallback((action, {targets, subject, onDone, variant}) => {
+    const ask = useCallback((action, {targets, subject, onDone, variant, names}) => {
         if (action === "console") {
-            const {namespace, kind, name} = parseObjectPath(path);
+            const {namespace, kind, name} = parseObjectPath(targets[0].path ?? path);
             setConsoleTarget({node: targets[0].node, namespace, kind, name, rid: targets[0].rid});
             return;
         }
-        setPending({action, targets, subject, onDone, variant});
+        setPending({action, targets, subject, onDone, variant, names});
     }, [path]);
 
     // The nodes of the object, for the options naming one (stop --move-to).
@@ -51,7 +52,7 @@ export function useActionRunner(path) {
         const {action, targets, onDone} = pending;
         setPending(null);
         setRunning(true);
-        await Promise.all(targets.map(({node, rid}) => postAction({path, action, node, rid, options})));
+        await Promise.all(targets.map(({path: of = path, node, rid}) => postAction({path: of, action, node, rid, options})));
         onDone?.();
         setRunning(false);
     }, [pending, path]);
@@ -62,6 +63,7 @@ export function useActionRunner(path) {
                 pendingAction={pending}
                 handleConfirm={run}
                 target={pending?.subject ?? ""}
+                names={pending?.names}
                 instances={pending?.targets?.some(({node}) => node !== undefined) ?? false}
                 supportedActions={SUPPORTED_ACTIONS}
                 nodes={scope ?? []}

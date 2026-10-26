@@ -1,6 +1,7 @@
 import React from 'react';
 import {render as rtlRender, screen, fireEvent, within} from '@testing-library/react';
 import NodeRow from '../NodeRow';
+import {nodeLayout} from '../../app/node-layout';
 import i18n from '../../i18n';
 
 // A row lives in a table body.
@@ -41,6 +42,34 @@ describe('NodeRow Component', () => {
         expect(within(row).getByTitle('No status: the node is gone or not heard from')).toHaveClass('text-state-down');
         expect(within(row).getAllByText('?')).toHaveLength(10);
         expect(within(row).getByRole('checkbox')).toBeDisabled();
+    });
+
+    test('scaled down to the last step: its env a badge by its name, its dates under it, its figures in one cell, its version a mark if not most nodes\' one', () => {
+        render(<NodeRow {...defaultProps} info={{env: 'PRD', labels: {a: '1'}}} layout={nodeLayout(5)} commonVersion="v1.2.4"
+            status={{...defaultProps.status, booted_at: '2023-01-01T10:00:00Z'}} monitor={{state: 'idle', updated_at: '2023-01-01T11:59:00Z'}}/>);
+        const row = screen.getByRole('row', {name: /Node node1 row/i});
+        const cells = within(row).getAllByRole('cell');
+        // The checkbox, the name, the state, the figures.
+        expect(cells).toHaveLength(4);
+        expect(within(cells[1]).getByText('PRD')).toHaveAttribute('title', 'Env');
+        expect(cells[1].querySelector('[data-dates]')).toHaveTextContent(/^booted .+updated .+$/);
+        expect(within(cells[2]).getByRole('img', {name: 'Agent v1.2.3, most nodes run v1.2.4'})).toHaveClass('text-state-warn');
+        expect(cells[3].querySelector('[data-metrics]')).toHaveTextContent(/^score85load1.5mem60%swap75%$/);
+        expect(within(cells[3]).queryByRole('progressbar')).not.toBeInTheDocument();
+        expect(within(row).queryByText('a=1')).not.toBeInTheDocument();
+    });
+
+    test('its version that of most nodes, or its column shown: no mark', () => {
+        const {rerender} = render(<NodeRow {...defaultProps} layout={nodeLayout(2)} commonVersion="v1.2.3"/>);
+        expect(screen.queryByRole('img', {name: /^Agent /})).not.toBeInTheDocument();
+        rerender(<NodeRow {...defaultProps} layout={nodeLayout(1)} commonVersion="v9"/>);
+        expect(screen.queryByRole('img', {name: /^Agent /})).not.toBeInTheDocument();
+        expect(screen.getByText('v1.2.3')).toBeInTheDocument();
+    });
+
+    test('reporting nothing, scaled down: a "?" for each column the layout keeps', () => {
+        render(<NodeRow {...defaultProps} stats={undefined} status={undefined} monitor={undefined} layout={nodeLayout(5)}/>);
+        expect(within(screen.getByRole('row', {name: /Node node1 row/i})).getAllByText('?')).toHaveLength(2);
     });
 
     test('renders nodename correctly', () => {

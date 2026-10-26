@@ -318,14 +318,16 @@ describe('Namespaces', () => {
         ]);
     });
 
-    test('pages the namespaces, 50 a page, as oc3 does', async () => {
+    test('the first 100 namespaces drawn, more on demand, the count said', async () => {
         const many = {};
-        for (let i = 0; i < 60; i++) many[`ns${String(i).padStart(2, '0')}/svc/s`] = {avail: 'up'};
+        for (let i = 0; i < 160; i++) many[`ns${String(i).padStart(3, '0')}/svc/s`] = {avail: 'up'};
         useEventStore.setState({objectStatus: many});
         renderNamespaces();
-        expect(bodyRows()).toHaveLength(50);
-        fireEvent.click(screen.getByRole('button', {name: 'Next'}));
-        expect(bodyRows()).toHaveLength(10);
+        const drawn = () => bodyRows().filter((r) => !r.hasAttribute('data-more-rows'));
+        expect(drawn()).toHaveLength(100);
+        expect(screen.getByText('160 namespaces')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', {name: 'Show 60 more'}));
+        expect(drawn()).toHaveLength(160);
         await waitFor(() => expect(global.fetch).toHaveBeenCalledWith('/api/pool', expect.anything()));
     });
 
@@ -342,7 +344,7 @@ describe('Namespaces', () => {
             renderNamespaces();
             expect(screen.getByRole('button', {name: 'Réseaux'})).toBeInTheDocument();
             expect(screen.getByRole('button', {name: 'Mémoire'})).toBeInTheDocument();
-            expect(screen.getByLabelText('Par page')).toBeInTheDocument();
+            expect(screen.getByText('3 namespaces')).toBeInTheDocument();
             await waitFor(() => expect(within(cell('prod', 'Réseaux')).getByRole('img')).toHaveAccessibleName(/^Réseaux : default/));
         } finally {
             await i18n.changeLanguage('en');

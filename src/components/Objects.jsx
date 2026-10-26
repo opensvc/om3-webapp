@@ -13,7 +13,7 @@ import CreateObjectDialog from "./CreateObjectDialog";
 import {useObjectData} from "../hooks/useObjectData";
 import {useNodeData} from "../hooks/useNodeData";
 import {useClusterNodeOrder} from "../hooks/useClusterNodeOrder";
-import {Table, HeaderRow, HeaderCell, Row, Cell, EmptyRow, toggleCheckbox} from "../ui/components/Table";
+import {Table, HeaderRow, HeaderCell, Row, Cell, EmptyRow, toggleCheckbox, LIST_RAIL_QUERY} from "../ui/components/Table";
 import {NotProvisionedMark as PMark, StoppedMark, RpoBreachedMark} from "../ui/components/StateMarks";
 import {StatusMark} from "../ui/components/StatusMark";
 import {isQuietDown} from "../ui/components/status";
@@ -23,11 +23,12 @@ import {Button, IconButton} from "../ui/components/Button";
 import {cn} from "../ui/cn";
 import {Checkbox, Input} from "../ui/components/Field";
 import {useMediaQuery} from "../ui/lib/media";
+import {objectFacets} from "../app/object-facets";
+import {FilterRail} from "./FilterRail";
 import {BADGE, KeyCells, NotProvisionedMark, OrchestrateBadge, PropertyCells, SideText, StatusMarks, markState} from "./ObjectCells";
 import {useGrants} from "../hooks/useGrants";
 import {canWriteClaims} from "../app/namespace-claims";
-import {Pager} from "../ui/components/Pager";
-import {usePaging} from "../app/paging";
+import {MoreRows, useRowsOnDemand} from "../ui/components/RowsOnDemand";
 import {ALL_LIST, OBJECT_LISTS, OBJECTS_TABS, listOfKind} from "../utils/objectLists";
 import {BoltIcon, ChevronDownIcon, FilterIcon, GearIcon, PlusIcon, SearchIcon} from "../ui/icons";
 import {menuColumns, menuFilter} from "../app/action-menu";
@@ -168,22 +169,16 @@ const isNscfg = (objectName) => parseObjectName(objectName).kind === "nscfg";
  * their icons alone.
  */
 /**
- * A button of the line of a namespace, outlined, or of the accent fill when it
- * creates (`create`), low enough for the line to stay as high as the others: its icon and word, its icon alone when narrow; not a click of
- * the line.
+ * A button of the line of a namespace, its icon alone at the size of a table row,
+ * outlined, or of the accent fill when it creates (`create`): the line a separator,
+ * its buttons not drawing the eye from the objects. Not a click of the line.
  */
-const RowButton = ({narrow, icon, text, label, onClick, create = false}) => {
+const RowButton = ({icon, label, onClick, create = false}) => {
     const click = (event) => {
         event.stopPropagation();
         onClick();
     };
-    return narrow ? (
-        <IconButton label={label} tone={create ? "create" : undefined} className="h-6 w-6" onClick={click} onKeyDown={stopPropagation}>{icon}</IconButton>
-    ) : (
-        <Button size="sm" variant={create ? "create" : "secondary"} className="h-6 font-normal" icon={icon} aria-label={label} title={label} onClick={click} onKeyDown={stopPropagation}>
-            {text}
-        </Button>
-    );
+    return <IconButton size="sm" label={label} tone={create ? "create" : undefined} onClick={click} onKeyDown={stopPropagation}>{icon}</IconButton>;
 };
 
 const NamespaceRow = ({namespace, colSpan, selectedCount, total, onToggle, onOpen, mayConfigure, onCreate, narrow}) => {
@@ -224,8 +219,9 @@ const NamespaceRow = ({namespace, colSpan, selectedCount, total, onToggle, onOpe
                     aria-label={t("objects.selectNamespace", {namespace})}
                 />
             </td>
-            {/* The name alone names the line; its buttons in the last cell, out of its name. */}
-            <th scope="rowgroup" colSpan={colSpan - 1} className="px-2 py-1 text-left font-semibold text-ink">
+            {/* The name alone names the line, in the column of the names; its buttons in one cell across the
+                columns after it, at its end: no column of the objects widened by them. */}
+            <th scope="rowgroup" className="px-2 py-1 text-left font-semibold text-ink">
                 {narrow ? (
                     <span className="flex flex-col items-start gap-0.5">
                         <span className="flex h-4 items-center"><span className={cn(BADGE, "font-normal")}>{t("objects.badges.namespace")}</span></span>
@@ -233,22 +229,18 @@ const NamespaceRow = ({namespace, colSpan, selectedCount, total, onToggle, onOpe
                     </span>
                 ) : <span className="group-hover/band:underline">{namespace}</span>}
             </th>
-            <td className="px-2 py-1">
+            <td colSpan={colSpan - 1} className="px-2 py-1">
                 <span className="flex items-center justify-end gap-1 whitespace-nowrap">
                     {(exists || mayConfigure) && (
                         <RowButton
-                            narrow={narrow}
                             icon={<GearIcon/>}
-                            text={t("objects.configure")}
                             label={t("objects.configureNamespace", {namespace})}
                             onClick={open}
                         />
                     )}
                     <RowButton
-                        narrow={narrow}
                         create
                         icon={<PlusIcon/>}
-                        text={t("objects.createIn")}
                         label={t("objects.createInNamespace", {namespace})}
                         onClick={() => onCreate(namespace)}
                     />
@@ -471,6 +463,7 @@ const Objects = () => {
     const [searchQuery, setSearchQuery] = useState(rawSearchQuery);
     const isWideScreen = useMediaQuery(WIDE_QUERY);
     const isMobile = useMediaQuery(MOBILE_QUERY);
+    const hasRail = useMediaQuery(LIST_RAIL_QUERY);
 
     const [showFilters, setShowFilters] = useState(() => isWideScreen ? true : !isMobile);
 
@@ -619,10 +612,11 @@ const Objects = () => {
     const rowObjectNames = useMemo(() => sortedObjectNames.filter((name) => !isNscfg(name)
         || (namespaceObjects.get(extractNamespace(name)) ?? []).every(isNscfg)), [sortedObjectNames, namespaceObjects]);
 
-    // The rows of the page shown, as oc3 pages its lists.
-    const paging = usePaging("objects", rowObjectNames.length);
-    const {page: pageOf} = paging;
-    const visibleObjectNames = useMemo(() => pageOf(rowObjectNames), [pageOf, rowObjectNames]);
+    // The rows drawn as the end of the table nears; the list or a filter changed, the first ones again.
+    const drawn = useRowsOnDemand(rowObjectNames.length, [list, deferredSearchQuery, deferredSelectedNamespaces,
+        deferredSelectedKinds, deferredSelectedGlobalStates]);
+    const {rows: drawnOf} = drawn;
+    const visibleObjectNames = useMemo(() => drawnOf(rowObjectNames), [drawnOf, rowObjectNames]);
 
     const handleSelectObject = useCallback((event, objectName) => {
         setSelectedObjects((prev) =>
@@ -677,6 +671,10 @@ const Objects = () => {
             }
         });
     }, []);
+
+    const clearGlobalStates = useCallback(() => setSelectedGlobalStates([]), []);
+    const clearNamespaces = useCallback(() => setSelectedNamespaces([]), []);
+    const clearKinds = useCallback(() => setSelectedKinds([]), []);
 
     const handleKindChange = useCallback((kind) => {
         setSelectedKinds(prev => {
@@ -800,17 +798,13 @@ const Objects = () => {
             : prev.filter((name) => shown.has(name))));
     }, [filteredObjectNames]);
 
-    // All, the rows of the page shown: not those of the other pages, nor the
-    // configuration of a namespace its line stands for, unless that line is ticked.
-    // Unticked, the rows of the page leave the selection, those of others stay.
+    // All, every object the filters keep, drawn yet or not: not the configuration of a
+    // namespace its line stands for, unless that line is ticked. Unticked, none.
     const handleSelectAll = useCallback((e) => {
-        const {checked} = e.target;
-        setSelectedObjects((prev) => (checked
-            ? [...new Set([...prev, ...visibleObjectNames])]
-            : prev.filter((name) => !visibleObjectNames.includes(name))));
-    }, [visibleObjectNames]);
-    const allSelected = visibleObjectNames.length > 0
-        && visibleObjectNames.every((name) => selectedObjects.includes(name));
+        setSelectedObjects(e.target.checked ? rowObjectNames : []);
+    }, [rowObjectNames]);
+    const allSelected = rowObjectNames.length > 0
+        && rowObjectNames.every((name) => selectedObjects.includes(name));
 
     const globalStateOptions = useMemo(
         () => withSelected(globalStates, selectedGlobalStates).map((state) => ({
@@ -830,172 +824,228 @@ const Objects = () => {
         [kinds, selectedKinds]
     );
 
+    // The filters beside the table, each value counted under the others.
+    const facetCounts = useMemo(
+        () => (hasRail ? objectFacets(listObjectNames, {
+            search: deferredSearchQuery,
+            namespaces: deferredSelectedNamespaces,
+            kinds: deferredSelectedKinds,
+            globalStates: deferredSelectedGlobalStates,
+        }, {
+            objects,
+            namespaceOf: extractNamespace,
+            kindOf: (name) => parseObjectName(name).kind,
+            useGlobalState: hasGlobalState,
+            useKind: hasKindFilter,
+        }) : null),
+        [hasRail, listObjectNames, deferredSearchQuery, deferredSelectedNamespaces, deferredSelectedKinds,
+            deferredSelectedGlobalStates, objects, hasGlobalState, hasKindFilter]
+    );
+    const railFacets = facetCounts === null ? [] : [
+        hasGlobalState && {label: t("objects.filters.globalState"), options: globalStateOptions, selected: selectedGlobalStates,
+            counts: facetCounts.globalState, onToggle: handleGlobalStateChange, onClear: clearGlobalStates},
+        hasKindFilter && {label: t("objects.filters.kind"), options: kindOptions, selected: selectedKinds,
+            counts: facetCounts.kind, onToggle: handleKindChange, onClear: clearKinds},
+        {label: t("objects.filters.namespace"), options: namespaceOptions, selected: selectedNamespaces,
+            counts: facetCounts.namespace, onToggle: handleNamespaceChange, onClear: clearNamespaces},
+    ].filter(Boolean);
+
+    const objectCount = <p className="text-ink-muted tabular-nums">{t("objects.count", {count: rowObjectNames.length})}</p>;
+
+    // A new object, and the actions on the selection: over the table, or at the head of the rail.
+    const listActions = (align) => (
+        <>
+            <Button size="sm" variant="create" icon={<PlusIcon className="h-4 w-4"/>} onClick={() => {
+                setCreateIn(null);
+                setCreateOpen(true);
+            }}>
+                {t("createObject.open")}
+            </Button>
+            {/* Nothing selected, nothing to act on: how to select, in the place of the actions. */}
+            {selectedObjects.length > 0 ? (
+                <>
+                    <span className="whitespace-nowrap text-ink-muted">{t("common.selected", {count: selectedObjects.length})}</span>
+                    <Button size="sm" onClick={clearSelection}>{t("objects.clearSelection")}</Button>
+                    <MenuButton
+                        // The actions: a solid pill.
+                        prominent
+                        icon={<BoltIcon className="h-3.5 w-3.5"/>}
+                        label={t("objects.actionsMenu")}
+                        align={align}
+                        items={bulkActions}
+                        columns={menuColumns(bulkActions)}
+                        {...menuFilter(t, bulkActions)}
+                    />
+                </>
+            ) : (
+                <span className="text-ink-muted">{t("objects.selectHint")}</span>
+            )}
+        </>
+    );
+
     // Narrow, the orchestrate is a badge by the path: no column for it.
     const propertyColumns = isMobile ? NARROW_PROPERTY_COLUMNS : PROPERTY_COLUMNS;
     const columnCount = namesOnly ? 4 : 3 + propertyColumns.length + (isWideScreen ? allNodes.length : 0);
 
     return (
-        <div className="flex h-full flex-col gap-3 p-4">
-            <div className="flex shrink-0 flex-wrap items-center gap-3">
-                {isMobile && (
-                    <Button
-                        size="sm"
-                        icon={<FilterIcon className="h-4 w-4"/>}
-                        onClick={toggleShowFilters}
-                        aria-label={showFilters ? t("objects.filters.hide") : t("objects.filters.show")}
-                        aria-expanded={showFilters}
-                        aria-controls={filtersId}
-                    >
-                        <span className="hidden sm:inline">{t("common.filters")}</span>
-                        <ChevronDownIcon className={showFilters ? "h-4 w-4 rotate-180" : "h-4 w-4"}/>
-                    </Button>
-                )}
-                {(!isMobile || showFilters) && (
-                    <div id={filtersId} className="flex flex-wrap items-center gap-3">
-                        {hasGlobalState && (
-                            <FilterPopover
-                                label={t("objects.filters.globalState")}
-                                options={globalStateOptions}
-                                selected={selectedGlobalStates}
-                                onToggle={handleGlobalStateChange}
-                            />
+        <div className="flex h-full gap-6 p-4">
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
+                {/* Wide, the actions and the pager at the head of the rail: their rows to the table. */}
+                {!hasRail && (
+                    <div className="flex shrink-0 flex-wrap items-center gap-3">
+                        {isMobile && (
+                            <Button
+                                size="sm"
+                                icon={<FilterIcon className="h-4 w-4"/>}
+                                onClick={toggleShowFilters}
+                                aria-label={showFilters ? t("objects.filters.hide") : t("objects.filters.show")}
+                                aria-expanded={showFilters}
+                                aria-controls={filtersId}
+                            >
+                                <span className="hidden sm:inline">{t("common.filters")}</span>
+                                <ChevronDownIcon className={showFilters ? "h-4 w-4 rotate-180" : "h-4 w-4"}/>
+                            </Button>
                         )}
-                        {hasChoice(namespaces, selectedNamespaces) && (
-                            <FilterPopover
-                                label={t("objects.filters.namespace")}
-                                options={namespaceOptions}
-                                selected={selectedNamespaces}
-                                onToggle={handleNamespaceChange}
-                            />
-                        )}
-                        {hasKindFilter && hasChoice(kinds, selectedKinds) && (
-                            <FilterPopover
-                                label={t("objects.filters.kind")}
-                                options={kindOptions}
-                                selected={selectedKinds}
-                                onToggle={handleKindChange}
-                            />
-                        )}
-                        <label className="flex items-center gap-1 text-ink-muted">
-                            {t("common.name")}
-                            <span className="relative flex items-center">
-                                <SearchIcon className="pointer-events-none absolute left-2 h-3.5 w-3.5"/>
-                                <Input
-                                    type="search"
-                                    className="h-7 w-48 pl-7"
-                                    value={searchQuery}
-                                    onChange={handleSearchChange}
-                                />
-                            </span>
-                        </label>
-                    </div>
-                )}
-                <div className="ml-auto flex items-center gap-3">
-                    <Button size="sm" variant="create" icon={<PlusIcon className="h-4 w-4"/>} onClick={() => {
-                        setCreateIn(null);
-                        setCreateOpen(true);
-                    }}>
-                        {t("createObject.open")}
-                    </Button>
-                    {/* Nothing selected, nothing to act on: how to select, in the place of the actions. */}
-                    {selectedObjects.length > 0 ? (
-                        <>
-                            <span className="whitespace-nowrap text-ink-muted">{t("common.selected", {count: selectedObjects.length})}</span>
-                            <MenuButton
-                                // The actions: a solid pill.
-                                prominent
-                                icon={<BoltIcon className="h-3.5 w-3.5"/>}
-                                label={t("objects.actionsMenu")}
-                                align="end"
-                                items={bulkActions}
-                                columns={menuColumns(bulkActions)}
-                                {...menuFilter(t, bulkActions)}
-                            />
-                        </>
-                    ) : (
-                        <span className="whitespace-nowrap text-ink-muted">{t("objects.selectHint")}</span>
-                    )}
-                </div>
-            </div>
-
-            {feedback}
-
-            <Pager paging={paging}/>
-
-            <Table
-                sticky
-                aria-label={t("objects.tableLabel")}
-                className="min-h-0 flex-1"
-            >
-                <thead>
-                    <HeaderRow>
-                        <HeaderCell className="w-8">
-                            <Checkbox
-                                checked={allSelected}
-                                onChange={handleSelectAll}
-                                aria-label={t("objects.selectAll")}
-                            />
-                        </HeaderCell>
-                        {/* Fixed titles: the list is always in the order of the paths. */}
-                        <HeaderCell>{t("objects.columns.object")}</HeaderCell>
-                        {namesOnly && (
-                            <>
-                                <HeaderCell className="text-right">{t("objects.columns.keys")}</HeaderCell>
-                                <HeaderCell className="text-right" title={t("objects.columns.keysSizeHint")}>{t("objects.columns.keysSize")}</HeaderCell>
-                            </>
-                        )}
-                        {!namesOnly && propertyColumns.map(({key, labelKey}) => (
-                            <HeaderCell key={key}>{t(labelKey)}</HeaderCell>
-                        ))}
-                        {!namesOnly && <HeaderCell>{t("common.status")}</HeaderCell>}
-                        {!namesOnly && isWideScreen && allNodes.map((node, i) => (
-                            <HeaderCell key={node} className={i === 0 ? "border-l border-line" : undefined}>{node}</HeaderCell>
-                        ))}
-                    </HeaderRow>
-                </thead>
-                <tbody>
-                    {visibleObjectNames.map((objectName, i) => {
-                        const ns = extractNamespace(objectName);
-                        // A line opens each namespace, and the page, which may start inside one.
-                        const opens = i === 0 || extractNamespace(visibleObjectNames[i - 1]) !== ns;
-                        const members = namespaceObjects.get(ns) ?? [];
-                        return (
-                            <React.Fragment key={objectName}>
-                                {opens && (
-                                    <NamespaceRow
-                                        namespace={ns}
-                                        colSpan={columnCount - 1}
-                                        total={members.length}
-                                        selectedCount={members.filter((name) => selectedObjects.includes(name)).length}
-                                        onToggle={handleSelectNamespace}
-                                        onOpen={handleObjectClick}
-                                        mayConfigure={mayWriteNscfg}
-                                        onCreate={createInNamespace}
-                                        narrow={isMobile}
+                        {/* Wide, the filters stand beside the table, as facets. */}
+                        {(!isMobile || showFilters) && (
+                            <div id={filtersId} className="flex flex-wrap items-center gap-3">
+                                {hasGlobalState && (
+                                    <FilterPopover
+                                        label={t("objects.filters.globalState")}
+                                        options={globalStateOptions}
+                                        selected={selectedGlobalStates}
+                                        onToggle={handleGlobalStateChange}
                                     />
                                 )}
-                                {/* A configuration alone in its namespace: its line, the namespace's, alone. */}
-                                {!isNscfg(objectName) && <TableRowComponent
-                                    objectName={objectName}
-                                    isSelected={selectedObjects.includes(objectName)}
-                                    isOpen={panel.sel === objectName}
-                                    onSelectObject={handleSelectObject}
-                                    onObjectClick={handleObjectClick}
-                                    allNodes={allNodes}
-                                    isWideScreen={isWideScreen}
-                                    isNarrow={isMobile}
-                                    namesOnly={namesOnly}
-                                />}
-                            </React.Fragment>
-                        );
-                    })}
-                    {visibleObjectNames.length === 0 && (
-                        <EmptyRow colSpan={columnCount}>
-                            {t("objects.empty")}
-                        </EmptyRow>
+                                {hasChoice(namespaces, selectedNamespaces) && (
+                                    <FilterPopover
+                                        label={t("objects.filters.namespace")}
+                                        options={namespaceOptions}
+                                        selected={selectedNamespaces}
+                                        onToggle={handleNamespaceChange}
+                                    />
+                                )}
+                                {hasKindFilter && hasChoice(kinds, selectedKinds) && (
+                                    <FilterPopover
+                                        label={t("objects.filters.kind")}
+                                        options={kindOptions}
+                                        selected={selectedKinds}
+                                        onToggle={handleKindChange}
+                                    />
+                                )}
+                                <label className="flex items-center gap-1 text-ink-muted">
+                                    {t("common.name")}
+                                    <span className="relative flex items-center">
+                                        <SearchIcon className="pointer-events-none absolute left-2 h-3.5 w-3.5"/>
+                                        <Input
+                                            type="search"
+                                            className="h-7 w-48 pl-7"
+                                            value={searchQuery}
+                                            onChange={handleSearchChange}
+                                        />
+                                    </span>
+                                </label>
+                            </div>
+                        )}
+                        <div className="ml-auto flex items-center gap-3">{listActions("end")}</div>
+                    </div>
+                )}
+
+                {feedback}
+
+                {!hasRail && objectCount}
+
+                <Table
+                    sticky
+                    aria-label={t("objects.tableLabel")}
+                    className="min-h-0 flex-1"
+                >
+                    <thead>
+                        <HeaderRow>
+                            <HeaderCell className="w-8">
+                                <Checkbox
+                                    checked={allSelected}
+                                    onChange={handleSelectAll}
+                                    aria-label={t("objects.selectAll")}
+                                />
+                            </HeaderCell>
+                            {/* Fixed titles: the list is always in the order of the paths. */}
+                            <HeaderCell>{t("objects.columns.object")}</HeaderCell>
+                            {namesOnly && (
+                                <>
+                                    <HeaderCell className="text-right">{t("objects.columns.keys")}</HeaderCell>
+                                    <HeaderCell className="text-right" title={t("objects.columns.keysSizeHint")}>{t("objects.columns.keysSize")}</HeaderCell>
+                                </>
+                            )}
+                            {!namesOnly && propertyColumns.map(({key, labelKey}) => (
+                                <HeaderCell key={key}>{t(labelKey)}</HeaderCell>
+                            ))}
+                            {!namesOnly && <HeaderCell>{t("common.status")}</HeaderCell>}
+                            {!namesOnly && isWideScreen && allNodes.map((node, i) => (
+                                <HeaderCell key={node} className={i === 0 ? "border-l border-line" : undefined}>{node}</HeaderCell>
+                            ))}
+                        </HeaderRow>
+                    </thead>
+                    <tbody>
+                        {visibleObjectNames.map((objectName, i) => {
+                            const ns = extractNamespace(objectName);
+                            // A line opens each namespace, and the page, which may start inside one.
+                            const opens = i === 0 || extractNamespace(visibleObjectNames[i - 1]) !== ns;
+                            const members = namespaceObjects.get(ns) ?? [];
+                            return (
+                                <React.Fragment key={objectName}>
+                                    {opens && (
+                                        <NamespaceRow
+                                            namespace={ns}
+                                            colSpan={columnCount - 1}
+                                            total={members.length}
+                                            selectedCount={members.filter((name) => selectedObjects.includes(name)).length}
+                                            onToggle={handleSelectNamespace}
+                                            onOpen={handleObjectClick}
+                                            mayConfigure={mayWriteNscfg}
+                                            onCreate={createInNamespace}
+                                            narrow={isMobile}
+                                        />
+                                    )}
+                                    {/* A configuration alone in its namespace: its line, the namespace's, alone. */}
+                                    {!isNscfg(objectName) && <TableRowComponent
+                                        objectName={objectName}
+                                        isSelected={selectedObjects.includes(objectName)}
+                                        isOpen={panel.sel === objectName}
+                                        onSelectObject={handleSelectObject}
+                                        onObjectClick={handleObjectClick}
+                                        allNodes={allNodes}
+                                        isWideScreen={isWideScreen}
+                                        isNarrow={isMobile}
+                                        namesOnly={namesOnly}
+                                    />}
+                                </React.Fragment>
+                            );
+                        })}
+                        <MoreRows rows={drawn} colSpan={columnCount}/>
+                        {visibleObjectNames.length === 0 && (
+                            <EmptyRow colSpan={columnCount}>
+                                {t("objects.empty")}
+                            </EmptyRow>
+                        )}
+                    </tbody>
+                </Table>
+            </div>
+            {hasRail && (
+                <FilterRail
+                    head={(
+                        <>
+                            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">{listActions("start")}</div>
+                            {objectCount}
+                        </>
                     )}
-                </tbody>
-            </Table>
+                    label={t("objects.filters.rail")}
+                    search={searchQuery}
+                    onSearch={handleSearchChange}
+                    searchLabel={t("common.name")}
+                    facets={railFacets}
+                />
+            )}
 
             {actionDialog}
             <CreateObjectDialog

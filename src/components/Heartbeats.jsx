@@ -22,7 +22,6 @@ import {UNTIL_TIMEOUT_MS, trackDone, trackRefused, trackUntil} from "../app/acti
 import {refusalReason} from "./objectActions";
 import {streamOf, streamReached} from "../app/heartbeat-progress";
 import {useIsRoot} from "../hooks/useGrants";
-import {Pager} from "../ui/components/Pager";
 import {AgeTime} from "./AgeTime";
 import {HeartbeatMesh} from "./HeartbeatMesh";
 import {HeartbeatSummary} from "./HeartbeatSummary";
@@ -33,7 +32,7 @@ import {TabCount, TabList} from "../ui/components/Tabs";
 import {tabPanelProps, useTabsId} from "../ui/components/tabs-ids";
 import LogsViewer from "./LogsViewer";
 import {heartbeatLogs} from "../app/heartbeat-logs";
-import {usePaging} from "../app/paging";
+import {MoreRows, useRowsOnDemand} from "../ui/components/RowsOnDemand";
 import {ChevronDownIcon, CloseIcon, FilterIcon} from "../ui/icons";
 
 // The breakpoints of the MUI theme the view used: below md (900px) the filters fold
@@ -530,10 +529,10 @@ const Heartbeats = () => {
         });
     }, []);
 
-    // The rows of the page shown, as oc3 pages its lists.
-    const paging = usePaging("heartbeats", filteredRows.length);
-    const {page: pageOf, setOffset: setPageOffset} = paging;
-    const visibleRows = useMemo(() => pageOf(filteredRows), [pageOf, filteredRows]);
+    // The rows drawn as the end of the table nears; sorted again, the first ones again.
+    const drawn = useRowsOnDemand(filteredRows.length, [sortColumn, sortDirection]);
+    const {rows: drawnOf} = drawn;
+    const visibleRows = useMemo(() => drawnOf(filteredRows), [drawnOf, filteredRows]);
 
     const handleSort = useCallback((column) => {
         setSortColumn(prev => {
@@ -544,9 +543,7 @@ const Heartbeats = () => {
             setSortDirection("asc");
             return column;
         });
-        // Sorted again, the list starts over: from its first page.
-        setPageOffset(0);
-    }, [setPageOffset]);
+    }, []);
 
     const toggleShowFilters = useCallback(() => {
         setShowFilters(prev => !prev);
@@ -668,7 +665,6 @@ const Heartbeats = () => {
                         </div>
                     </div>
 
-                    <Pager paging={paging}/>
 
                     <Table sticky>
                         <thead>
@@ -692,6 +688,7 @@ const Heartbeats = () => {
                                     isSingleNode={isSingleNode}
                                 />
                             ))}
+                            <MoreRows rows={drawn} colSpan={COLUMNS.length}/>
                             {visibleRows.length === 0 && (
                                 <EmptyRow colSpan={COLUMNS.length}>
                                     {t("heartbeats.empty")}

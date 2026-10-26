@@ -13,6 +13,16 @@ vi.mock('../../eventSourceManager', () => ({
     },
 }));
 
+// The confirmation dialogs are tested on their own: here, what is confirmed, and the action posted.
+vi.mock('../ActionDialogManager', () => ({
+    default: ({pendingAction, handleConfirm, target, names}) => (pendingAction === null ? null : (
+        <div role="alertdialog" aria-label={`${pendingAction.action} ${target}`}>
+            <ul aria-label="names">{(names ?? []).map((n) => <li key={n}>{n}</li>)}</ul>
+            <button type="button" onClick={() => handleConfirm(pendingAction.action)}>Confirm</button>
+        </div>
+    )),
+}));
+
 /** A resource of an instance, as GET /resource lists it. */
 const item = (object, node, rid, status, extra = {}) => ({
     kind: 'ResourceItem',
@@ -57,7 +67,7 @@ describe('Resources', () => {
 
     const renderView = () => render(<MemoryRouter><Resources/><Search/></MemoryRouter>);
     const table = () => screen.getByRole('table', {name: 'The resources of the cluster'});
-    const rows = () => within(table()).getAllByRole('row').slice(1).map((row) => within(row).getAllByRole('cell').map((c) => c.textContent));
+    const rows = () => within(table()).getAllByRole('row').slice(1).map((row) => within(row).getAllByRole('cell').slice(1).map((c) => c.textContent));
 
     test('a line per resource of each instance, every object read, sorted by object, node and resource', async () => {
         renderView();
@@ -103,6 +113,81 @@ describe('Resources', () => {
         expect(rows().map((r) => r[2])).toEqual(['ip#0']);
         fireEvent.change(screen.getByRole('searchbox', {name: 'Filter the resources'}), {target: {value: 'nothing'}});
         expect(within(table()).getByText('No resource matches.')).toBeInTheDocument();
+    });
+
+    test('wide, the filters beside the table as facets, each value counted, several kept at once; the tools at their head', async () => {
+        window.matchMedia = (query) => ({matches: query.includes('1536px'), addEventListener() {}, removeEventListener() {}});
+        try {
+            renderView();
+            await waitFor(() => expect(rows()).toHaveLength(4));
+            const rail = screen.getByRole('complementary', {name: 'Filters'});
+            expect(screen.queryByRole('combobox', {name: 'Status'})).not.toBeInTheDocument();
+            const facet = (name) => within(rail).getByRole('region', {name});
+            // The text of a value and its count, not that of its mark.
+            const values = (name) => within(facet(name)).getAllByRole('button')
+                .filter((b) => b.hasAttribute('aria-pressed'))
+                .map((b) => b.textContent.slice((b.querySelector('[aria-hidden="true"]')?.textContent ?? '').length));
+            expect(values('Status')).toEqual(['down1', 'up2', 'warn1']);
+            expect(values('Node')).toEqual(['n12', 'n22']);
+            expect(values('Driver')).toEqual(['container1', 'fs2', 'ip1']);
+            fireEvent.click(within(facet('Status')).getByRole('button', {name: /^up/}));
+            fireEvent.click(within(facet('Status')).getByRole('button', {name: /^warn/}));
+            expect(rows().map((r) => r[2])).toEqual(['container#1', 'fs#1', 'ip#0']);
+            // The other facets counted under the statuses kept.
+            expect(values('Node')).toEqual(['n12', 'n21']);
+            fireEvent.change(within(rail).getByLabelText('Filter the resources'), {target: {value: 'dns'}});
+            expect(rows().map((r) => r[2])).toEqual(['ip#0']);
+            const head = rail.querySelector('[data-rail-head]');
+            expect(within(head).getByRole('button', {name: 'Refresh'})).toBeInTheDocument();
+            expect(head).toHaveTextContent('1 / 4');
+            expect(screen.queryByRole('navigation', {name: 'Pagination'})).not.toBeInTheDocument();
+        } finally {
+            delete window.matchMedia;
+        }
+    });
+
+    test('select all selects every resource the filters keep; their actions, those all take, posted once per instance', async () => {
+        renderView();
+        await waitFor(() => expect(rows()).toHaveLength(4));
+        expect(screen.getByText('Select resources to act on them')).toBeInTheDocument();
+        fireEvent.change(screen.getByRole('combobox', {name: 'Node'}), {target: {value: 'n1'}});
+        fireEvent.click(screen.getByRole('checkbox', {name: 'Select all the resources'}));
+        expect(screen.getByText('2 selected')).toBeInTheDocument();
+        // A filter hiding some: they leave the selection.
+        fireEvent.change(screen.getByRole('combobox', {name: 'Driver'}), {target: {value: 'fs'}});
+        expect(screen.getByText('1 selected')).toBeInTheDocument();
+        fireEvent.change(screen.getByRole('combobox', {name: 'Driver'}), {target: {value: ''}});
+        fireEvent.click(screen.getByRole('checkbox', {name: 'Select container#1 of ns1/svc/web on n1'}));
+        expect(screen.getByText('2 selected')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', {name: 'Actions on the resources selected'}));
+        const menu = screen.getByRole('menu', {name: 'Actions on the resources selected'});
+        // Two drivers: no console, of a container alone.
+        expect(within(menu).queryByRole('menuitem', {name: 'Console'})).toBeNull();
+        fireEvent.click(within(menu).getByRole('menuitem', {name: 'Stop'}));
+        const dialog = screen.getByRole('alertdialog', {name: 'stop 2 resources, on 1 instance'});
+        expect(within(within(dialog).getByRole('list', {name: 'names'})).getAllByRole('listitem').map((li) => li.textContent))
+            .toEqual(['ns1/svc/web@n1 container#1', 'ns1/svc/web@n1 fs#1']);
+        fireEvent.click(within(dialog).getByRole('button', {name: 'Confirm'}));
+        await waitFor(() => expect(global.fetch).toHaveBeenCalledWith(
+            '/api/node/name/n1/instance/path/ns1/svc/web/action/stop?rid=container%231%2Cfs%231',
+            expect.objectContaining({method: 'POST'}),
+        ));
+        // Done: the selection cleared.
+        await waitFor(() => expect(screen.getByText('Select resources to act on them')).toBeInTheDocument());
+    });
+
+    test('cleared from the actions; unticked, select all selects none', async () => {
+        renderView();
+        await waitFor(() => expect(rows()).toHaveLength(4));
+        const all = () => screen.getByRole('checkbox', {name: 'Select all the resources'});
+        fireEvent.click(all());
+        expect(screen.getByText('4 selected')).toBeInTheDocument();
+        expect(all()).toBeChecked();
+        fireEvent.click(screen.getByRole('button', {name: 'Clear'}));
+        expect(all()).not.toBeChecked();
+        fireEvent.click(all());
+        fireEvent.click(all());
+        expect(screen.getByText('Select resources to act on them')).toBeInTheDocument();
     });
 
     test('sorted by a column, then the other way', async () => {

@@ -1195,7 +1195,9 @@
       "tableLabel": "{{list}} of {{namespace}}",
       "empty": "No {{list}} in {{namespace}}.",
       "selectAll": "Select all the {{list}}"
-    }
+    },
+    "count_one": "{{count}} namespace",
+    "count_other": "{{count}} namespaces"
   },
   "nav": {
     "openCluster": "Open the cluster",
@@ -1363,7 +1365,8 @@
       "bootedAt": "Booted At",
       "updatedAt": "Updated At",
       "env": "Env",
-      "labels": "Labels"
+      "labels": "Labels",
+      "metrics": "Metrics"
     },
     "bulkActions": "Actions",
     "selectAll": "Select all nodes",
@@ -1380,7 +1383,10 @@
       "lost": "No status: the node is gone or not heard from",
       "label": "Node {{node}} row",
       "select": "Select node {{node}}",
-      "connected": "Connected to this node"
+      "connected": "Connected to this node",
+      "versionDiff": "Agent {{version}}, most nodes run {{common}}",
+      "booted": "booted",
+      "updated": "updated"
     },
     "time": {
       "justNow": "Just now",
@@ -1388,7 +1394,13 @@
       "hoursAgo": "{{count}}h ago",
       "daysAgo": "{{count}}d ago"
     },
-    "selectHint": "Select nodes to act on them, or open one"
+    "selectHint": "Select nodes to act on them, or open one",
+    "short": {
+      "score": "score",
+      "load": "load",
+      "mem": "mem",
+      "swap": "swap"
+    }
   },
   "objectTabs": {
     "schedules": {
@@ -1637,7 +1649,10 @@
       "globalState": "Global State",
       "namespace": "Namespace",
       "kind": "Kind",
-      "unprovisioned": "Unprovisioned"
+      "unprovisioned": "Unprovisioned",
+      "rail": "Filters",
+      "clear": "Clear",
+      "clearOf": "Clear the {{filter}} filter"
     },
     "feedback": {
       "authTokenNotFound": "Authentication token not found"
@@ -1663,10 +1678,11 @@
       "namespace": "namespace"
     },
     "openNamespaceConfig": "Open the configuration of {{namespace}}",
-    "configure": "Configure",
     "configureNamespace": "Configure the namespace {{namespace}}",
-    "createIn": "Create",
-    "createInNamespace": "Create an object in {{namespace}}"
+    "createInNamespace": "Create an object in {{namespace}}",
+    "count_one": "{{count}} object",
+    "count_other": "{{count}} objects",
+    "clearSelection": "Clear"
   },
   "pools": {
     "columns": {
@@ -2664,6 +2680,20 @@
       "monitored": "monitored",
       "optional": "optional",
       "encap": "encapsulated"
+    },
+    "rail": "Filters",
+    "chosen_one": "{{count}} chosen",
+    "chosen_other": "{{count}} chosen",
+    "selection": {
+      "all": "Select all the resources",
+      "one": "Select {{rid}} of {{path}} on {{node}}",
+      "hint": "Select resources to act on them",
+      "clear": "Clear",
+      "actions": "Actions on the resources selected",
+      "subject_one": "{{count}} resource, on {{instances}}",
+      "subject_other": "{{count}} resources, on {{instances}}",
+      "instances_one": "{{count}} instance",
+      "instances_other": "{{count}} instances"
     }
   },
   "stores": {
@@ -2977,5 +3007,10 @@
       "submitInPlace": "Restore in place",
       "restoring": "Asking the restore"
     }
+  },
+  "rowsOnDemand": {
+    "shown": "{{shown}} of {{total}} shown",
+    "more_one": "Show {{count}} more",
+    "more_other": "Show {{count}} more"
   }
 }

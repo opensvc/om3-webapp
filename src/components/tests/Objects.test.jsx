@@ -168,9 +168,12 @@ const setup = (customState = {}, locationSearch = '', mediaQuery = true, {daemon
     const mockedUseMediaQuery = vi.mocked(useMediaQuery);
     mockedUseMediaQuery.mockReset();
 
+    // The rail of the filters beside the table, asked for alone (`hasRail`): the toolbar's popovers otherwise.
+    const hasRail = typeof mediaQuery === 'object' && mediaQuery !== null && mediaQuery.hasRail === true;
     if (typeof mediaQuery === 'object' && mediaQuery !== null) {
         mockedUseMediaQuery.mockImplementation((query) => {
             if (typeof query === 'string') {
+                if (query.includes('1536px')) return hasRail;
                 if (query.includes('min-width')) {
                     return mediaQuery.isWideScreen;
                 }
@@ -181,7 +184,7 @@ const setup = (customState = {}, locationSearch = '', mediaQuery = true, {daemon
             return false;
         });
     } else {
-        mockedUseMediaQuery.mockReturnValue(mediaQuery);
+        mockedUseMediaQuery.mockImplementation((query) => (typeof query === 'string' && query.includes('1536px') ? false : mediaQuery));
     }
 
     global.fetch = vi.fn(() => Promise.resolve({ok: true, json: () => Promise.resolve({})}));
@@ -267,7 +270,7 @@ const getFeedback = () =>
 
 /** The rows of the objects, past the header, the lines of the namespaces left out. */
 const objectRows = () => within(screen.getByRole('table', {name: 'Objects'})).getAllByRole('row').slice(1)
-    .filter((row) => !row.hasAttribute('data-namespace-row'));
+    .filter((row) => !row.hasAttribute('data-namespace-row') && !row.hasAttribute('data-more-rows'));
 /** The lines opening the namespaces, in the order shown. */
 const namespaceRows = () => [...screen.getByRole('table', {name: 'Objects'}).querySelectorAll('[data-namespace-row]')];
 /** The names of the rows: the cell under the Object column, wherever the list puts it. */
@@ -1073,6 +1076,63 @@ describe('Objects Component', () => {
         await waitFor(() => expect(screen.getByText(/No objects found/)).toBeInTheDocument());
     });
 
+    describe('the rail of the filters, on a wide screen', () => {
+        const WIDE = {isWideScreen: true, isMobile: false, hasRail: true};
+        const rail = () => screen.getByRole('complementary', {name: 'Filters'});
+        const facet = (label) => within(rail()).getByRole('region', {name: label});
+        const values = (label) => within(facet(label)).getAllByRole('button')
+            .filter((b) => b.hasAttribute('aria-pressed'))
+            // The text of the value and its count, not that of its mark.
+            .map((b) => [b.textContent.slice((b.querySelector('[aria-hidden="true"]')?.textContent ?? '').length), b.getAttribute('aria-pressed')]);
+
+        test('beside the table in the place of the popovers, each value counted', async () => {
+            setup({}, '', WIDE);
+            await waitForLoad();
+            expect(screen.queryByRole('group', {name: 'Global State'})).not.toBeInTheDocument();
+            expect(within(rail()).getAllByRole('region').map((r) => r.getAttribute('data-facet'))).toEqual(['Global State', 'Namespace']);
+            expect(values('Global State')).toEqual([
+                ['Up1', 'false'], ['Down1', 'false'], ['Warn1', 'false'], ['N/a3', 'false'], ['Unprovisioned2', 'false'],
+            ]);
+            expect(values('Namespace')).toEqual([['root1', 'false'], ['test-ns5', 'false']]);
+        });
+
+        test('the actions and the count at the head of the rail: nothing over the table', async () => {
+            setup({}, '', WIDE);
+            await waitForLoad();
+            const head = rail().querySelector('[data-rail-head]');
+            expect(within(head).getByRole('button', {name: 'New object'})).toBeInTheDocument();
+            expect(head).toHaveTextContent('Select objects to act on them');
+            expect(head).toHaveTextContent('6 objects');
+            expect(screen.getAllByText('6 objects')).toHaveLength(1);
+            expect(screen.getAllByRole('button', {name: 'New object'})).toHaveLength(1);
+            // A selection: its actions there too.
+            fireEvent.click(screen.getByRole('checkbox', {name: /test-ns\/svc\/test1/}));
+            await waitFor(() => expect(head).toHaveTextContent('1 selected'));
+            expect(within(head).getByRole('button', {name: /Actions/})).toBeInTheDocument();
+        });
+
+        test('a value clicked filters the rows, the other facets counted under it; cleared, all again', async () => {
+            setup({}, '', WIDE);
+            await waitForLoad();
+            fireEvent.click(within(facet('Global State')).getByRole('button', {name: /^Up/}));
+            await waitFor(() => expect(screen.queryByRole('row', {name: /test-ns\/svc\/test2/})).not.toBeInTheDocument());
+            expect(screen.getByRole('row', {name: /test-ns\/svc\/test1/})).toBeInTheDocument();
+            await waitFor(() => expect(values('Namespace')).toEqual([['root0', 'false'], ['test-ns1', 'false']]));
+            expect(within(facet('Global State')).getByRole('button', {name: /^Up/})).toHaveAttribute('aria-pressed', 'true');
+            fireEvent.click(within(facet('Global State')).getByRole('button', {name: 'Clear the Global State filter'}));
+            await waitFor(() => expect(screen.getByRole('row', {name: /test-ns\/svc\/test2/})).toBeInTheDocument());
+            expect(within(facet('Global State')).queryByRole('button', {name: /^Clear/})).not.toBeInTheDocument();
+        });
+
+        test('the name searched from the rail', async () => {
+            setup({}, '', WIDE);
+            await waitForLoad();
+            fireEvent.change(within(rail()).getByLabelText('Name'), {target: {value: 'test3'}});
+            await waitFor(() => expect(screen.queryByRole('row', {name: /test-ns\/svc\/test1/})).not.toBeInTheDocument());
+            await waitFor(() => expect(values('Namespace')).toEqual([['root1', 'false'], ['test-ns0', 'false']]));
+        });
+    });
+
     describe('actions execution', () => {
         test('restart succeeds', async () => {
             setup();
@@ -1646,10 +1706,10 @@ describe('Objects Component', () => {
                 await waitForLoad();
                 const dev = namespaceRows().find((row) => row.dataset.namespaceRow === 'dev');
                 const configure = within(dev).getByRole('button', {name: 'Configure the namespace dev'});
-                expect(configure).toHaveTextContent('Configure');
-                // Outlined, as high as fits the line.
-                expect(configure).toHaveClass('border', 'h-6');
-                expect(within(dev).getByRole('button', {name: 'Create an object in dev'})).toHaveClass('bg-accent', 'h-6');
+                // Its icon alone, outlined, at the size of a table row.
+                expect(configure).toHaveTextContent(/^Configure the namespace dev$/);
+                expect(configure).toHaveClass('border', 'h-5', 'w-5');
+                expect(within(dev).getByRole('button', {name: 'Create an object in dev'})).toHaveClass('bg-accent', 'h-5', 'w-5');
                 global.fetch.mockClear();
                 fireEvent.click(configure);
                 // Its configuration tab: nothing written until a change is.
@@ -1675,14 +1735,17 @@ describe('Objects Component', () => {
             expect(within(screen.getByRole('dialog', {name: 'New object'})).getByLabelText('Namespace')).toHaveValue('root');
         });
 
-        test('narrow, the buttons of the line of a namespace their icons alone', async () => {
-            setup({objectStatus: {'prod/svc/web': {avail: 'up'}, 'prod/': {avail: 'n/a'}}, objectInstanceStatus: {}}, '', {isWideScreen: false, isMobile: true});
+        test.each([
+            ['narrow', {isWideScreen: false, isMobile: true}],
+            ['wide', {isWideScreen: true, isMobile: false}],
+        ])('%s, the buttons of the line of a namespace their icons alone', async (_, media) => {
+            setup({objectStatus: {'prod/svc/web': {avail: 'up'}, 'prod/': {avail: 'n/a'}}, objectInstanceStatus: {}}, '', media);
             await waitFor(() => expect(screen.getByRole('table')).toBeInTheDocument());
             const create = within(namespaceRows()[0]).getByRole('button', {name: 'Create an object in prod'});
             expect(create.querySelector('svg')).not.toBeNull();
             expect(create).toHaveTextContent(/^Create an object in prod$/);
             // It creates: the accent fill; Configure outlined.
-            expect(create).toHaveClass('bg-accent', 'h-6', 'w-6');
+            expect(create).toHaveClass('bg-accent', 'h-5', 'w-5');
             expect(within(namespaceRows()[0]).getByRole('button', {name: 'Configure the namespace prod'})).toBeInTheDocument();
         });
 
@@ -1701,7 +1764,7 @@ describe('Objects Component', () => {
             expect(objectNamesInOrder()).toEqual(['a-ns/vol/v', 'b-ns/svc/x', 'cluster', 'svc/dns']);
         });
 
-        test('a line opens each namespace, its name across the row; it opens nothing', async () => {
+        test('a line opens each namespace, its name in the column of the names; it opens nothing', async () => {
             setup({objectStatus: {
                 'prod/svc/web': {avail: 'up'}, 'prod/svc/api': {avail: 'up'}, 'dev/svc/x': {avail: 'up'},
             }, objectInstanceStatus: {}}, '', {isWideScreen: true, isMobile: false});
@@ -1709,8 +1772,10 @@ describe('Objects Component', () => {
             const rows = within(screen.getByRole('table', {name: 'Objects'})).getAllByRole('row').slice(1);
             expect(rows.map((row) => row.getAttribute('data-namespace-row') ?? 'object')).toEqual(['dev', 'object', 'prod', 'object', 'object']);
             const line = namespaceRows()[1];
-            // Across the row but the checkbox and the last cell, its buttons'.
-            expect(within(line).getByRole('rowheader', {name: 'prod'})).toHaveAttribute('colspan', String(rowCells(objectRows()[0]).length - 2));
+            // The name in the column of the names; its buttons in one cell across the columns after it.
+            expect(within(line).getByRole('rowheader', {name: 'prod'})).not.toHaveAttribute('colspan');
+            const buttons = within(line).getByRole('button', {name: 'Create an object in prod'}).closest('td');
+            expect(buttons).toHaveAttribute('colspan', String(rowCells(objectRows()[0]).length - 2));
             fireEvent.click(within(line).getByRole('rowheader'));
             expect(mockNavigate).not.toHaveBeenCalled();
         });
@@ -1740,47 +1805,41 @@ describe('Objects Component', () => {
         });
     });
 
-    describe('pages', () => {
+    describe('rows on demand', () => {
         const dataRows = objectRows;
 
-        test('pages the objects, 50 a page, as oc3 does: the next page, another size', async () => {
-            setup(makeMany(60), '', {isWideScreen: true, isMobile: false});
+        test('the first 100 objects drawn, more as the end nears or asked for, the count said', async () => {
+            setup(makeMany(160), '', {isWideScreen: true, isMobile: false});
             await waitForLoad();
-            expect(dataRows()).toHaveLength(50);
-            expect(screen.getByText('1–50 of 60')).toBeInTheDocument();
-
-            fireEvent.click(screen.getByRole('button', {name: 'Next'}));
-            expect(dataRows()).toHaveLength(10);
-            expect(screen.getByText('Page 2 of 2')).toBeInTheDocument();
-            expect(screen.getByRole('button', {name: 'Next'})).toBeDisabled();
-
-            fireEvent.change(screen.getByLabelText('Per page'), {target: {value: '25'}});
-            expect(dataRows()).toHaveLength(25);
-            expect(screen.getByText('Page 1 of 3')).toBeInTheDocument();
+            expect(dataRows()).toHaveLength(100);
+            expect(screen.getByText('160 objects')).toBeInTheDocument();
+            expect(screen.getByText('100 of 160 shown')).toBeInTheDocument();
+            expect(screen.queryByRole('navigation', {name: 'Pagination'})).not.toBeInTheDocument();
+            fireEvent.click(screen.getByRole('button', {name: 'Show 60 more'}));
+            expect(dataRows()).toHaveLength(160);
+            expect(screen.queryByText(/of 160 shown/)).not.toBeInTheDocument();
         });
 
-        test('a page starting inside a namespace opens with its line; its checkbox selects the objects of every page', async () => {
-            setup(makeMany(60), '', {isWideScreen: true, isMobile: false});
+        test('the checkbox of a namespace selects its objects, drawn or not', async () => {
+            setup(makeMany(160), '', {isWideScreen: true, isMobile: false});
             await waitForLoad();
-            expect(namespaceRows().map((row) => row.dataset.namespaceRow)).toEqual(['test-ns']);
-            fireEvent.click(screen.getByRole('button', {name: 'Next'}));
-            expect(namespaceRows().map((row) => row.dataset.namespaceRow)).toEqual(['test-ns']);
             fireEvent.click(screen.getByRole('checkbox', {name: 'Select the objects of test-ns'}));
-            expect(screen.getByText('60 selected')).toBeInTheDocument();
+            expect(screen.getByText('160 selected')).toBeInTheDocument();
         });
 
-        test('select all selects the rows of the page shown, unticked it leaves the other pages selected', async () => {
-            setup(makeMany(60), '', {isWideScreen: true, isMobile: false});
+        test('select all selects every object the filters keep, drawn or not; unticked, none; cleared from the actions', async () => {
+            setup(makeMany(160), '', {isWideScreen: true, isMobile: false});
             await waitForLoad();
             const selectAll = () => screen.getByRole('checkbox', {name: 'Select all objects'});
             fireEvent.click(selectAll());
-            expect(screen.getByText('50 selected')).toBeInTheDocument();
-            fireEvent.click(screen.getByRole('button', {name: 'Next'}));
+            expect(screen.getByText('160 selected')).toBeInTheDocument();
+            expect(selectAll()).toBeChecked();
+            fireEvent.click(selectAll());
+            expect(screen.getByText('Select objects to act on them')).toBeInTheDocument();
+            fireEvent.click(selectAll());
+            fireEvent.click(screen.getByRole('button', {name: 'Clear'}));
+            expect(screen.getByText('Select objects to act on them')).toBeInTheDocument();
             expect(selectAll()).not.toBeChecked();
-            fireEvent.click(selectAll());
-            expect(screen.getByText('60 selected')).toBeInTheDocument();
-            fireEvent.click(selectAll());
-            expect(screen.getByText('50 selected')).toBeInTheDocument();
         });
 
         test('a filter changed starts the list over from its first page', async () => {

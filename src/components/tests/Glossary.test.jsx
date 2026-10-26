@@ -71,7 +71,8 @@ describe('Glossary', () => {
         expect(within(symbols).getAllByRole('heading', {level: 3}).map((h) => h.textContent))
             .toEqual(['Status', 'Marks on an instance', 'Flags on a resource']);
         const frozen = symbols.querySelector('[data-legend="marks-frozen"]');
-        expect(within(frozen).getByRole('img', {name: 'frozen'})).toHaveAttribute('title', 'frozen');
+        // Said beside it: no tooltip of its own, as on the board, where the card of the cell says it.
+        expect(within(frozen).getByRole('img', {name: 'frozen'})).not.toHaveAttribute('title');
         expect(frozen.nextElementSibling).toHaveTextContent('Frozen: the cluster will not start, stop or move it automatically.');
         expect(symbols.querySelector('[data-legend="states-downQuiet"] [data-state="down"]')).toHaveClass('text-ink-muted');
         expect(symbols.querySelector('[data-legend="flags-M"]')).toHaveTextContent('M');

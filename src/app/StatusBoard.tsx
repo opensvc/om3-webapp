@@ -131,7 +131,7 @@ function Mark({ span }: { span: Span }) {
   if (span.mark === "P") return <NotProvisionedMark label={label} />;
   if (glyph === null) return null;
   return (
-    <span role="img" aria-label={label} title={label} className={cn("inline-flex", glyph[1])}>
+    <span role="img" aria-label={label} className={cn("inline-flex", glyph[1])}>
       {glyph[0]}
     </span>
   );

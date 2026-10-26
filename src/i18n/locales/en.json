@@ -453,14 +453,16 @@
     },
     "keywordHelp": {
       "open": "What {{keyword}} does",
-      "loadError": "The keywords help could not be read: {{message}}",
+      "loadError": "The documentation of the keyword could not be read: {{message}}",
       "default": "Default",
       "candidates": "Values",
       "example": "Example",
       "converter": "Type",
       "scopable": "Scopable",
       "deprecated": "Deprecated",
-      "replacedBy": "replaced by {{keyword}}"
+      "replacedBy": "replaced by {{keyword}}",
+      "loading": "Reading the documentation…",
+      "none": "No documentation for this keyword."
     }
   },
   "console": {

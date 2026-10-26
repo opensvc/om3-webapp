@@ -48,6 +48,8 @@ const defaultProps = {
     setConfigDialogOpen: vi.fn(),
 };
 const renderConfig = (props = {}) => render(<ConfigSection {...defaultProps} {...props} />);
+/** A line of the file shown by its whole text, its key a button of its own; any other element by its own text. */
+const fileLine = (re) => (content, element) => (element?.hasAttribute?.('data-line') ? re.test(element.textContent) : re.test(content));
 const getViewConfigButton = () => screen.getByRole('button', {name: 'View Configuration'});
 const getUploadButton = () => screen.getByRole('button', {name: /Upload new configuration file/i});
 const getManageButton = () => screen.getByRole('button', {name: /Manage configuration parameters/i});
@@ -95,6 +97,7 @@ const defaultFetchMock = (url, options) => {
         });
     }
     if (url.includes('/config/keywords')) {
+        const option = new URL(url, 'http://x').searchParams.get('option');
         return Promise.resolve({
             ok: true, status: 200,
             json: () => Promise.resolve({
@@ -139,7 +142,7 @@ const defaultFetchMock = (url, options) => {
                         scopable: false,
                         default: 'false'
                     },
-                ],
+                ].filter((k) => !option || k.option === option),
             }),
             headers: new Headers({Authorization: headers.Authorization || ''}),
         });
@@ -230,9 +233,9 @@ describe('ConfigSection Component', () => {
         renderConfig();
         await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument());
         expect(screen.getByText('Configuration')).toBeInTheDocument();
-        await waitFor(() => expect(screen.getByText(/nodes = \*/i)).toBeInTheDocument());
-        await waitFor(() => expect(screen.getByText(/orchestrate = ha/i)).toBeInTheDocument());
-        await waitFor(() => expect(screen.getByText(/size = 10GB/i)).toBeInTheDocument());
+        await waitFor(() => expect(screen.getByText(fileLine(/nodes = \*/i))).toBeInTheDocument());
+        await waitFor(() => expect(screen.getByText(fileLine(/orchestrate = ha/i))).toBeInTheDocument());
+        await waitFor(() => expect(screen.getByText(fileLine(/size = 10GB/i))).toBeInTheDocument());
     });
 
     test('close button calls setConfigDialogOpen(false)', async () => {
@@ -460,7 +463,7 @@ describe('ConfigSection Component', () => {
             const openSnackbar = vi.fn();
             mockDaemon({stored: '[DEFAULT]\nnodes = *\nsecret = s3cr3t'});
             renderConfig({openSnackbar});
-            expect(await screen.findByText(/secret = \*{8}/)).toBeInTheDocument();
+            expect(await screen.findByText(fileLine(/secret = \*{8}/))).toBeInTheDocument();
 
             const editor = await startEditing();
             // Written back redacted, the secrets would become asterisks.
@@ -479,7 +482,7 @@ describe('ConfigSection Component', () => {
             await waitFor(() => expect(tray()).toEqual([['Update the configuration', 'root/cfg/cfg1', 'succeeded', null]]));
             noWriteSnackbar(openSnackbar);
             // Back to the redacted view, reloaded.
-            expect(await screen.findByText(/nodes = node1/)).toBeInTheDocument();
+            expect(await screen.findByText(fileLine(/nodes = node1/))).toBeInTheDocument();
             expect(screen.queryByRole('textbox', {name: 'Configuration file'})).toBeNull();
             expect(screen.queryByText(/s3cr3t/)).toBeNull();
         });
@@ -487,9 +490,9 @@ describe('ConfigSection Component', () => {
         test('a section alone: shown, edited and put back in its place in the file; no upload nor wizard', async () => {
             mockDaemon({stored: '[DEFAULT]\nnodes = *\n\n[fs#1]\ntype = flag\nsecret = s3cr3t\n\n[app#1]\ntype = forking\n'});
             renderConfig({inline: true, section: 'fs#1'});
-            expect(await screen.findByText(/secret = \*{8}/)).toBeInTheDocument();
-            expect(screen.queryByText(/nodes = \*/)).toBeNull();
-            expect(screen.queryByText(/type = forking/)).toBeNull();
+            expect(await screen.findByText(fileLine(/secret = \*{8}/))).toBeInTheDocument();
+            expect(screen.queryByText(fileLine(/nodes = \*/))).toBeNull();
+            expect(screen.queryByText(fileLine(/type = forking/))).toBeNull();
             expect(screen.queryByRole('button', {name: 'Upload new configuration file'})).toBeNull();
             expect(screen.queryByRole('button', {name: 'Manage configuration parameters'})).toBeNull();
 
@@ -572,7 +575,7 @@ describe('ConfigSection Component', () => {
 
         test('says so when the file can not be loaded for editing', async () => {
             renderConfig();
-            await screen.findByText(/nodes = \*/);
+            await screen.findByText(fileLine(/nodes = \*/));
             global.fetch.mockImplementation(() => Promise.resolve({ok: false, status: 403}));
             await act(() => user.click(screen.getByRole('button', {name: 'Edit configuration file'})));
             expect(await screen.findByText('Failed to fetch config: HTTP 403')).toBeInTheDocument();
@@ -619,14 +622,14 @@ describe('ConfigSection Component', () => {
                 return defaultFetchMock(url, options);
             });
             renderConfig({configDialogOpen: true});
-            expect(await screen.findByText(/secret = \*{8}/)).toBeInTheDocument();
+            expect(await screen.findByText(fileLine(/secret = \*{8}/))).toBeInTheDocument();
             expect(screen.queryByText(/s3cr3t-value/)).toBeNull();
 
             await act(() => user.click(screen.getByRole('button', {name: 'Show secrets'})));
-            expect(await screen.findByText(/secret = s3cr3t-value/)).toBeInTheDocument();
+            expect(await screen.findByText(fileLine(/secret = s3cr3t-value/))).toBeInTheDocument();
 
             await act(() => user.click(screen.getByRole('button', {name: 'Hide secrets'})));
-            expect(await screen.findByText(/secret = \*{8}/)).toBeInTheDocument();
+            expect(await screen.findByText(fileLine(/secret = \*{8}/))).toBeInTheDocument();
             expect(screen.queryByText(/s3cr3t-value/)).toBeNull();
         });
 
@@ -646,17 +649,17 @@ describe('ConfigSection Component', () => {
                 return defaultFetchMock(url, options);
             });
             renderConfig({configDialogOpen: true});
-            expect(await screen.findByText(/secret = \*{8}/)).toBeInTheDocument();
+            expect(await screen.findByText(fileLine(/secret = \*{8}/))).toBeInTheDocument();
 
             await act(() => user.click(screen.getByRole('button', {name: 'Show secrets'})));
             const hide = await screen.findByRole('button', {name: 'Hide secrets'});
             await act(() => user.click(hide));
-            expect(await screen.findByText(/secret = \*{8}/)).toBeInTheDocument();
+            expect(await screen.findByText(fileLine(/secret = \*{8}/))).toBeInTheDocument();
             // The read in clear aborted, its late answer dropped.
             expect(signals.at(-2)?.aborted).toBe(true);
             await act(async () => { answerRevealed(); await revealed; });
             expect(screen.queryByText(/s3cr3t-value/)).toBeNull();
-            expect(screen.getByText(/secret = \*{8}/)).toBeInTheDocument();
+            expect(screen.getByText(fileLine(/secret = \*{8}/))).toBeInTheDocument();
             expect(screen.getByRole('button', {name: 'Show secrets'})).toBeInTheDocument();
         });
 
@@ -1183,24 +1186,19 @@ describe('ConfigSection Component', () => {
         expect(screen.queryByRole('button', {name: /keywords/i})).toHaveAccessibleName('Evaluate the keywords');
     });
 
-    test('hovering the file reads the keywords of the kind once, and a "?" by each keyword tells what it does', async () => {
+    test('each key of the file a button opening what its keyword does, read for it alone by its section and key', async () => {
         renderConfig();
         const file = await screen.findByRole('group', {name: 'Configuration file'});
-        fireEvent.mouseEnter(file.parentElement);
-        const help = await screen.findByRole('button', {name: 'What fs#1.size does'});
-        expect(screen.getByRole('button', {name: 'What nodes does'})).toBeInTheDocument();
-        expect(screen.getByRole('button', {name: 'What orchestrate does'})).toBeInTheDocument();
-        // A section header has no help.
-        expect(screen.getAllByRole('button', {name: /^What /})).toHaveLength(3);
-        fireEvent.click(help);
-        const doc = screen.getByRole('dialog', {name: 'fs#1.size'});
-        expect(doc).toHaveTextContent('Size of filesystem');
+        expect(within(file).getAllByRole('button').map((b) => b.getAttribute('aria-label')))
+            .toEqual(['What nodes does', 'What orchestrate does', 'What fs#1.size does']);
+        expect(global.fetch.mock.calls.filter(([url]) => url.includes('/config/keywords?'))).toHaveLength(0);
+        fireEvent.click(within(file).getByRole('button', {name: 'What fs#1.size does'}));
+        const doc = await screen.findByRole('dialog', {name: 'fs#1.size'});
+        expect(await within(doc).findByText('Size of filesystem')).toBeInTheDocument();
         expect(doc).toHaveTextContent('Default1GB');
-        // A click beside it closes it.
-        fireEvent.pointerDown(document.body);
+        expect(global.fetch).toHaveBeenCalledWith(expect.stringMatching(/\/config\/keywords\?section=fs%231&option=size$/), expect.any(Object));
+        fireEvent.keyDown(doc, {key: 'Escape'});
         expect(screen.queryByRole('dialog', {name: 'fs#1.size'})).not.toBeInTheDocument();
-        fireEvent.mouseEnter(file.parentElement);
-        expect(global.fetch.mock.calls.filter(([url]) => url.includes('/config/keywords'))).toHaveLength(1);
     });
 
     test('getUniqueSections: null keywordsData renders empty add combobox', async () => {

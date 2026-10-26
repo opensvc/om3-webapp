@@ -453,14 +453,16 @@
     },
     "keywordHelp": {
       "open": "Ce que fait {{keyword}}",
-      "loadError": "L'aide des mots-clés n'a pas pu être lue : {{message}}",
+      "loadError": "La documentation du mot-clé n'a pas pu être lue : {{message}}",
       "default": "Défaut",
       "candidates": "Valeurs",
       "example": "Exemple",
       "converter": "Type",
       "scopable": "Portée par nœud",
       "deprecated": "Obsolète",
-      "replacedBy": "remplacé par {{keyword}}"
+      "replacedBy": "remplacé par {{keyword}}",
+      "loading": "Lecture de la documentation…",
+      "none": "Pas de documentation pour ce mot-clé."
     }
   },
   "console": {

@@ -72,7 +72,8 @@ describe('Resources', () => {
     test('a line per resource of each instance, every object read, sorted by object, node and resource', async () => {
         renderView();
         await waitFor(() => expect(rows()).toHaveLength(4));
-        expect(global.fetch.mock.calls[0][0]).toBe('/api/resource?path=*');
+        // Every service and volume: a selection reaching a data object breaks the read.
+        expect(global.fetch.mock.calls[0][0]).toBe('/api/resource?path=*%2Fsvc%2F*%2C*%2Fvol%2F*');
         expect(global.fetch.mock.calls[0][1].headers).toEqual({Authorization: 'Bearer tok'});
         expect(rows()).toEqual([
             ['ns1/svc/web', 'n1', 'container#1', 'container.docker', 'upup', 'monitored, 2 restarts left', ''],

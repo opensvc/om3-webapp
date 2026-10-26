@@ -1,7 +1,7 @@
 import React, {useEffect, useMemo, useState} from "react";
 import {Link} from "react-router-dom";
 import {useTranslation} from "react-i18next";
-import {URL_RESOURCE, URL_STORE} from "../config/apiPath.js";
+import {URL_RESOURCES, URL_STORE} from "../config/apiPath.js";
 import {groupState, meshLinks} from "../app/heartbeat-mesh";
 import {CrossLink} from "../app/CrossLink";
 import {storeSource} from "../app/store-config";
@@ -266,7 +266,7 @@ export default function ClusterView() {
     const {t, i18n} = useTranslation();
     const {objects, nodeStatus, heartbeatStatus, pools, networks, ready} = useMenuState();
     const stores = usePolled(URL_STORE);
-    const resources = usePolled(URL_RESOURCE);
+    const resources = usePolled(URL_RESOURCES);
 
     const links = useMemo(() => meshLinks(heartbeatStatus ?? {}), [heartbeatStatus]);
     // The heartbeats, by name, each its links: the state they make, how many beat out of all.

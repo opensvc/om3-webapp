@@ -1,6 +1,6 @@
 import React, {useEffect, useMemo, useRef, useState} from "react";
 import {useTranslation} from "react-i18next";
-import {URL_RESOURCE} from "../config/apiPath.js";
+import {URL_RESOURCES} from "../config/apiPath.js";
 import useEventStore from "../hooks/useEventStore.js";
 import {retainEventReception} from "../eventSourceManager";
 import {getResponseErrorMessage} from "../services/api.jsx";
@@ -38,8 +38,6 @@ import {FilterField, matches} from "./NodePanel";
  * an action every one of them takes, posted once per instance.
  */
 
-/** Every object: an unfiltered read is refused by some daemons, a selector of all is not. */
-const ALL = "*";
 /** A burst of instance reports reads the list once. */
 const REREAD_DELAY_MS = 2000;
 const EVENTS = ["InstanceStatusUpdated"];
@@ -115,7 +113,7 @@ const Resources = () => {
     useEffect(() => {
         let live = true;
         setLoading(true);
-        fetch(`${URL_RESOURCE}?path=${encodeURIComponent(ALL)}`, {
+        fetch(URL_RESOURCES, {
             headers: {Authorization: `Bearer ${localStorage.getItem("authToken") || ""}`},
             cache: "no-cache",
         })

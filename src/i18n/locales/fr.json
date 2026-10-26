@@ -676,6 +676,36 @@
       "saving": "Écriture…",
       "saveFailed": "Le heartbeat n'a pas pu être écrit : {{message}}",
       "trayLabel": "Configurer"
+    },
+    "relays": {
+      "title": "Relais",
+      "refresh": "Rafraîchir",
+      "reading": "Lecture des relais",
+      "readError": "Impossible de lire les relais : {{message}}",
+      "of": "{{section}} · délai {{seconds}} s",
+      "unreached": "Le relais n'a pas pu être interrogé : {{message}}",
+      "slotsOf": "Les nœuds qui écrivent sur {{relay}}",
+      "noSlot": "Aucun nœud n'écrit sur ce relais.",
+      "staleHint": "Sa dernière écriture est plus ancienne que le délai du heartbeat, {{seconds}} s.",
+      "served": "Ce nœud relaie pour",
+      "overall": {
+        "up": "chaque nœud écrit",
+        "warn": "un nœud n'écrit pas",
+        "down": "ne relaie pas"
+      },
+      "state": {
+        "up": "écrit",
+        "stale": "en retard",
+        "missing": "n'a jamais écrit"
+      },
+      "columns": {
+        "state": "État",
+        "addr": "Adresse",
+        "written": "Dernière écriture",
+        "cluster": "Cluster"
+      },
+      "size_one": "Son message : {{count}} octet",
+      "size_other": "Son message : {{count}} octets"
     }
   },
   "instance": {

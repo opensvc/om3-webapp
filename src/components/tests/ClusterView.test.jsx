@@ -252,6 +252,9 @@ describe('ClusterView', () => {
         await waitFor(() => expect(card('stores')).toHaveTextContent('17 snapshots · 1 not reached'));
         expect(within(card('stores')).getByRole('button', {name: 'tar2'})).toBeInTheDocument();
         await waitFor(() => expect(card('resources').querySelector('[data-ring=resources]')).toHaveTextContent('1/5resources in warndegraded'));
+        // The services and volumes alone, as the Resources page reads them: a data object breaks the read.
+        expect(global.fetch.mock.calls.map(([u]) => String(u)).filter((u) => u.startsWith('/api/resource'))[0])
+            .toBe('/api/resource?path=*%2Fsvc%2F*%2C*%2Fvol%2F*');
         const ring = card('resources').querySelector('[data-ring=resources]');
         expect([...ring.querySelectorAll('[data-arc]')].map((a) => a.getAttribute('data-arc'))).toEqual(['warn', 'other']);
         expect(ring.querySelector('[data-ring-legend]')).toHaveTextContent(/^warn1other4$/);

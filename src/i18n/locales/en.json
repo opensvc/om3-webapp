@@ -676,6 +676,36 @@
       "saving": "Writing…",
       "saveFailed": "The heartbeat could not be written: {{message}}",
       "trayLabel": "Configure"
+    },
+    "relays": {
+      "title": "Relays",
+      "refresh": "Refresh",
+      "reading": "Reading the relays",
+      "readError": "Could not read the relays: {{message}}",
+      "of": "{{section}} · timeout {{seconds}}s",
+      "unreached": "The relay could not be asked: {{message}}",
+      "slotsOf": "The nodes writing to {{relay}}",
+      "noSlot": "No node writes to this relay.",
+      "staleHint": "Its last write is older than the timeout of the heartbeat, {{seconds}}s.",
+      "served": "This node relays for",
+      "overall": {
+        "up": "every node writes",
+        "warn": "a node does not write",
+        "down": "not relaying"
+      },
+      "state": {
+        "up": "writing",
+        "stale": "stale",
+        "missing": "never wrote"
+      },
+      "columns": {
+        "state": "State",
+        "addr": "Address",
+        "written": "Last write",
+        "cluster": "Cluster"
+      },
+      "size_one": "Its message: {{count}} byte",
+      "size_other": "Its message: {{count}} bytes"
     }
   },
   "instance": {

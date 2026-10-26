@@ -532,11 +532,33 @@ describe('NodesTable', () => {
         });
     });
 
+    describe('scaled down to its room', () => {
+        test('a step at a time while the table overflows its frame: labels, version, env, the figures grouped, the dates', async () => {
+            const scroll = vi.spyOn(HTMLElement.prototype, 'scrollWidth', 'get').mockReturnValue(2000);
+            const client = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(1000);
+            try {
+                renderWithRouter(<NodesTable/>);
+                await screen.findByTestId('props-node-1');
+                const headers = screen.getAllByRole('columnheader').slice(1).map((h) => h.textContent.replace(/[▲▼]/g, '').trim());
+                expect(headers).toEqual(['Name', 'State', 'Metrics']);
+            } finally {
+                scroll.mockRestore();
+                client.mockRestore();
+            }
+        });
+
+        test('room enough, the whole table', async () => {
+            renderWithRouter(<NodesTable/>);
+            await screen.findByTestId('props-node-1');
+            expect(screen.getAllByRole('columnheader')).toHaveLength(12);
+        });
+    });
+
     describe('menus', () => {
         test('passes each row its data and callbacks: no row actions, the panel holds them', async () => {
             renderWithRouter(<NodesTable/>);
             expect(await screen.findByTestId('props-node-1')).toHaveTextContent(
-                'daemonNodename,info,isOpen,isSelected,monitor,nodename,onOpen,onSelect,stats,status'
+                'commonVersion,daemonNodename,info,isOpen,isSelected,layout,monitor,nodename,onOpen,onSelect,stats,status'
             );
         });
 

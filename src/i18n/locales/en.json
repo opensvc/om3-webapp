@@ -1365,7 +1365,8 @@
       "bootedAt": "Booted At",
       "updatedAt": "Updated At",
       "env": "Env",
-      "labels": "Labels"
+      "labels": "Labels",
+      "metrics": "Metrics"
     },
     "bulkActions": "Actions",
     "selectAll": "Select all nodes",
@@ -1382,7 +1383,10 @@
       "lost": "No status: the node is gone or not heard from",
       "label": "Node {{node}} row",
       "select": "Select node {{node}}",
-      "connected": "Connected to this node"
+      "connected": "Connected to this node",
+      "versionDiff": "Agent {{version}}, most nodes run {{common}}",
+      "booted": "booted",
+      "updated": "updated"
     },
     "time": {
       "justNow": "Just now",
@@ -1390,7 +1394,13 @@
       "hoursAgo": "{{count}}h ago",
       "daysAgo": "{{count}}d ago"
     },
-    "selectHint": "Select nodes to act on them, or open one"
+    "selectHint": "Select nodes to act on them, or open one",
+    "short": {
+      "score": "score",
+      "load": "load",
+      "mem": "mem",
+      "swap": "swap"
+    }
   },
   "objectTabs": {
     "schedules": {

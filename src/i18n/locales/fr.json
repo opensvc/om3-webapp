@@ -1365,7 +1365,8 @@
       "bootedAt": "Démarré",
       "updatedAt": "Mis à jour",
       "env": "Env",
-      "labels": "Étiquettes"
+      "labels": "Étiquettes",
+      "metrics": "Métriques"
     },
     "bulkActions": "Actions",
     "selectAll": "Sélectionner tous les nœuds",
@@ -1382,7 +1383,10 @@
       "lost": "Aucun état : le nœud est perdu ou ne répond pas",
       "label": "Ligne du nœud {{node}}",
       "select": "Sélectionner le nœud {{node}}",
-      "connected": "Connecté à ce nœud"
+      "connected": "Connecté à ce nœud",
+      "versionDiff": "Agent {{version}}, la plupart des nœuds ont {{common}}",
+      "booted": "démarré",
+      "updated": "mis à jour"
     },
     "time": {
       "justNow": "À l'instant",
@@ -1390,7 +1394,13 @@
       "hoursAgo": "il y a {{count}} h",
       "daysAgo": "il y a {{count}} j"
     },
-    "selectHint": "Sélectionnez des nœuds pour agir dessus, ou ouvrez-en un"
+    "selectHint": "Sélectionnez des nœuds pour agir dessus, ou ouvrez-en un",
+    "short": {
+      "score": "score",
+      "load": "charge",
+      "mem": "mém",
+      "swap": "swap"
+    }
   },
   "objectTabs": {
     "schedules": {

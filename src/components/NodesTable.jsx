@@ -1,4 +1,4 @@
-import React, {useEffect, useState, useMemo} from "react";
+import React, {useEffect, useLayoutEffect, useRef, useState, useMemo} from "react";
 import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus.jsx";
 import {retainEventReception} from "../eventSourceManager";
 import useEventStore from "../hooks/useEventStore.js";
@@ -12,7 +12,7 @@ import {URL_NODE_INFO} from "../config/apiPath.js";
 import {nodeActionRequest, nodeMenuItems} from "../app/node-actions";
 import {useTranslation} from "react-i18next";
 import {NodeActionDialog} from "./NodeActionDialog";
-import {Table, HeaderRow, HeaderCell, SortHeaderCell, LIST_PAGE_FIT} from "../ui/components/Table";
+import {Table, HeaderRow, HeaderCell, SortHeaderCell} from "../ui/components/Table";
 import {Checkbox} from "../ui/components/Field";
 import {Button, IconButton} from "../ui/components/Button";
 import {MenuButton} from "../ui/components/MenuButton";
@@ -23,6 +23,7 @@ import {Spinner} from "../ui/components/Spinner";
 import {BoltIcon, CloseIcon, PlusIcon} from "../ui/icons";
 import {EnrollNodeDialog} from "./EnrollNodeDialog";
 import {useGrants} from "../hooks/useGrants";
+import {NODE_LAYOUT_STEPS, commonVersion, nodeColumns, nodeLayout} from "../app/node-layout";
 
 const ZERO_DATE = "0001-01-01T00:00:00Z";
 
@@ -37,19 +38,6 @@ export const labelsText = (labels) => Object.entries(labels ?? {})
 
 const isNodeFrozen = (status) => !!status?.frozen_at && status?.frozen_at !== ZERO_DATE;
 
-const SORT_COLUMNS = [
-    {key: "name", labelKey: "common.name"},
-    {key: "state", labelKey: "common.state"},
-    {key: "score", labelKey: "nodes.columns.score"},
-    {key: "load_15m", labelKey: "nodes.columns.load15m"},
-    {key: "mem_avail", labelKey: "nodes.columns.memAvail"},
-    {key: "swap_avail", labelKey: "nodes.columns.swapAvail"},
-    {key: "version", labelKey: "nodes.columns.version"},
-    {key: "env", labelKey: "nodes.columns.env"},
-    {key: "labels", labelKey: "nodes.columns.labels"},
-    {key: "booted_at", labelKey: "nodes.columns.bootedAt"},
-    {key: "updated_at", labelKey: "nodes.columns.updatedAt"},
-];
 
 /** Feedback tones, from the severities of the snackbar it replaces. */
 const TONES = {info: "info", success: "success", warning: "warning", error: "error"};
@@ -261,8 +249,37 @@ const NodesTable = () => {
 
     const nodeCount = Object.keys(nodeStatus).length;
 
+    // Scaled down to its room a step at a time, while it overflows its frame
+    // (`nodeLayout`); the page resized, the whole table tried again.
+    const page = useRef(null);
+    const frame = useRef(null);
+    const [step, setStep] = useState(0);
+    useLayoutEffect(() => {
+        const element = frame.current;
+        if (element && step < NODE_LAYOUT_STEPS && element.scrollWidth > element.clientWidth + 1) setStep((n) => n + 1);
+    });
+    useEffect(() => {
+        const element = page.current;
+        if (!element || typeof ResizeObserver !== "function") return undefined;
+        let width = element.clientWidth;
+        const observer = new ResizeObserver(() => {
+            if (element.clientWidth === width) return;
+            width = element.clientWidth;
+            setStep(0);
+        });
+        observer.observe(element);
+        return () => observer.disconnect();
+    }, []);
+    const layout = nodeLayout(step);
+    const columns = nodeColumns(layout);
+    // The version most nodes run: a node running another marked, once its column is dropped.
+    const version = useMemo(
+        () => commonVersion(Object.values(nodeStatus).map((s) => s?.agent), nodeStatus[daemon?.nodename]?.agent),
+        [nodeStatus, daemon?.nodename],
+    );
+
     return (
-        <div className={`p-4 space-y-3 ${LIST_PAGE_FIT}`}>
+        <div ref={page} className="p-4 space-y-3">
             {/* The actions on the nodes selected; on one node, its panel's. Nothing selected,
                 how to select, in the place of the actions. */}
             <div className="flex min-h-7 flex-wrap items-center justify-end gap-3">
@@ -327,7 +344,7 @@ const NodesTable = () => {
             ) : (
                 // Visible overflow, the panel as wide as the table: the row menus are not clipped,
                 // the header sticks to the top of the page scroll, which scrolls sideways if need be.
-                <Table sticky className="max-h-[calc(100dvh-12rem)]">
+                <Table ref={frame} sticky className="max-h-[calc(100dvh-12rem)]">
                     <thead>
                     <HeaderRow>
                         <HeaderCell className="w-8">
@@ -339,7 +356,7 @@ const NodesTable = () => {
                                 }
                             />
                         </HeaderCell>
-                        {SORT_COLUMNS.map(({key, labelKey}) => (
+                        {columns.map(({key, labelKey}) => (
                             <SortHeaderCell
                                 key={key}
                                 label={t(labelKey)}
@@ -364,6 +381,8 @@ const NodesTable = () => {
                             onSelect={handleSelectNode}
                             onOpen={handleOpenNode}
                             isOpen={panel.sel === nodename}
+                            layout={layout}
+                            commonVersion={version}
                         />
                     ))}
                     </tbody>

@@ -2910,6 +2910,16 @@
     "links": {
       "heartbeats": "Heartbeats",
       "beating": "{{beating}} liens sur {{total}} battent"
+    },
+    "arbitrators": {
+      "title": "Arbitres",
+      "operational_one": "nœuds le joignent",
+      "operational_other": "vues de nœuds up",
+      "up": "up",
+      "down": "injoignable",
+      "seen": "{{up}} nœuds sur {{total}} le joignent",
+      "none": "Aucun arbitre.",
+      "tieRisk": "Aucun arbitre, et un nombre pair de nœuds ({{count}}) : coupé en deux moitiés, aucune n'a la majorité des votes du quorum. Ajoutez un arbitre, ou un nœud."
     }
   },
   "snapshots": {

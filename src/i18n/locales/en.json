@@ -1471,7 +1471,27 @@
     "drivers": {
       "filter": "Filter the drivers and capabilities",
       "drivers": "Drivers",
-      "capabilities": "Capabilities"
+      "capabilities": "Capabilities",
+      "intro": "A driver is usable on the node when the node holds its capability: a configuration using a driver the node does not hold is refused there.",
+      "usableCount": "{{usable}} usable of {{total}}",
+      "views": {
+        "label": "Which drivers",
+        "all": "All",
+        "usable": "Usable here",
+        "unusable": "Not usable here"
+      },
+      "columns": {
+        "driver": "Driver",
+        "usable": "On this node",
+        "features": "Features"
+      },
+      "usable": "Usable",
+      "unusable": "Not usable: no capability",
+      "tools": "Node tools",
+      "capabilitiesShow": "Show every capability the node lists",
+      "rescan": "Rescan",
+      "scanning": "Scanning…",
+      "rescanHint": "Scan again what the node can run, as om node capabilities scan does"
     },
     "columns": {
       "property": "Property",
@@ -3124,5 +3144,10 @@
       "volume": "Storage drawn from a pool by what it needs, its size first; the pool is picked to match.",
       "claim": "The share of a pool or a network the namespace may take."
     }
+  },
+  "driverSupport": {
+    "lacking_one": "Not usable on {{nodes}}: its driver is not among the capabilities of the node.",
+    "lacking_other": "Not usable on {{nodes}}: its driver is not among the capabilities of these nodes.",
+    "nowhere": "Usable on no node of the cluster: its driver is not among their capabilities."
   }
 }

@@ -1,4 +1,4 @@
-import React, {useEffect, useMemo, useState} from "react";
+import React, {useEffect, useId, useMemo, useState} from "react";
 import {useTranslation} from "react-i18next";
 import {URL_CLUSTER} from "../config/apiPath.js";
 import {getResponseErrorMessage} from "../services/api.jsx";
@@ -17,6 +17,8 @@ import {
     typeDescriptions,
 } from "../app/section-config";
 import {refusalReason} from "./objectActions";
+import {nodesLacking} from "../app/driver-caps";
+import {useNodeCapabilities} from "../hooks/useNodeCapabilities";
 import {Alert} from "../ui/components/Alert";
 import {Button} from "../ui/components/Button";
 import {Dialog} from "../ui/components/Dialog";
@@ -30,6 +32,20 @@ const headers = () => ({Authorization: `Bearer ${localStorage.getItem("authToken
 const STEPS = ["type", "settings", "review"];
 
 const noChecks = () => ({errors: {}, warnings: []});
+
+/**
+ * The nodes that cannot run a type, by it: `lacking`, those whose capabilities were
+ * read that lack its driver; all the `total` nodes of the cluster, none can.
+ */
+function DriverSupport({id, lacking, total}) {
+    const {t} = useTranslation();
+    if (lacking.length === 0) return null;
+    return (
+        <span id={id} className="block text-data text-state-warn">
+            {lacking.length === total ? t("driverSupport.nowhere") : t("driverSupport.lacking", {nodes: lacking.join(", "), count: lacking.length})}
+        </span>
+    );
+}
 
 /**
  * The wizard of a typed section of the cluster configuration, `[<section>#<name>]`, a
@@ -79,6 +95,10 @@ export function SectionWizard({section, rules, prefix, items, nodes, edit, valid
 
     const {types} = useMemo(() => sectionTypes(keywords ?? [], section), [keywords, section]);
     const descriptions = useMemo(() => typeDescriptions(keywords ?? [], section), [keywords, section]);
+    // The nodes that cannot run a type, its driver `<section>.<type>` not among their
+    // capabilities: said by the type, not held back, as the daemon refuses it there.
+    const capabilities = useNodeCapabilities(nodes);
+    const typeId = useId();
     const fields = useMemo(() => (type ? sectionFields(keywords ?? [], section, type, rules) : []), [keywords, section, type, rules]);
     const fieldKeys = new Set(fields.map((f) => f.key));
     // The values of the type chosen: those typed for another type kept aside, not written.
@@ -232,15 +252,23 @@ export function SectionWizard({section, rules, prefix, items, nodes, edit, valid
                             </Field>
                             <fieldset className="space-y-2">
                                 <legend className="mb-1 font-medium">{p("typeQuestion")}</legend>
-                                {types.map((kind) => (
-                                    <label key={kind} className="flex cursor-pointer items-start gap-2 rounded-(--radius-control) border border-line p-2 hover:bg-surface-sunken">
-                                        <input type="radio" name={`${section}-type`} value={kind} checked={type === kind} onChange={() => setType(kind)} className="mt-1"/>
-                                        <span>
-                                            <span className="block font-medium">{kind}</span>
-                                            {descriptions[kind] && <span className="block text-data text-ink-muted">{descriptions[kind]}</span>}
-                                        </span>
-                                    </label>
-                                ))}
+                                {types.map((kind) => {
+                                    // Named by the type and its description; the nodes that cannot run it, its description.
+                                    const ids = {name: `${typeId}-${kind}`, text: `${typeId}-${kind}-text`, support: `${typeId}-${kind}-support`};
+                                    const lacking = nodesLacking(capabilities, `${section}.${kind}`);
+                                    return (
+                                        <label key={kind} className="flex cursor-pointer items-start gap-2 rounded-(--radius-control) border border-line p-2 hover:bg-surface-sunken">
+                                            <input type="radio" name={`${section}-type`} value={kind} checked={type === kind} onChange={() => setType(kind)} className="mt-1"
+                                                   aria-labelledby={descriptions[kind] ? `${ids.name} ${ids.text}` : ids.name}
+                                                   aria-describedby={lacking.length > 0 ? ids.support : undefined}/>
+                                            <span>
+                                                <span id={ids.name} className="block font-medium">{kind}</span>
+                                                {descriptions[kind] && <span id={ids.text} className="block text-data text-ink-muted">{descriptions[kind]}</span>}
+                                                <DriverSupport id={ids.support} lacking={lacking} total={Object.keys(capabilities).length}/>
+                                            </span>
+                                        </label>
+                                    );
+                                })}
                             </fieldset>
                         </div>
                     )}

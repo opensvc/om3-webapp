@@ -24,7 +24,7 @@ import {Input, Textarea} from "../ui/components/Field";
 import {Table, HeaderRow, HeaderCell, Row, Cell, EmptyRow} from "../ui/components/Table";
 import {FrozenMark} from "../ui/components/FrozenMark";
 import {RelativeTime} from "../ui/components/RelativeTime";
-import {BoltIcon, CodeIcon, EyeIcon, EyeOffIcon, PencilIcon, ResetIcon, SearchIcon} from "../ui/icons";
+import {BoltIcon, CodeIcon, EyeIcon, EyeOffIcon, PencilIcon, RefreshIcon, ResetIcon, SearchIcon} from "../ui/icons";
 import ConfigEvalDialog from "./ConfigEvalDialog";
 import {formatSeconds, useAutoHide} from "../ui/lib/reveal";
 import {formatBytes, formatSizeMiB} from "../ui/lib/format";
@@ -35,7 +35,8 @@ import {tabPanelProps} from "../ui/components/tabs-ids";
 import {Pager} from "../ui/components/Pager";
 import {useLocalPaging} from "../app/paging";
 import {usePanelSearch} from "../app/panel-search";
-import {trackDone, trackRefused, trackResponse} from "../app/action-tracker";
+import {trackDone, trackRefused, trackResponse, useActionTracker} from "../app/action-tracker";
+import {driverCap, driverRows, nodeTools} from "../app/driver-caps";
 import {refusalReason} from "./objectActions";
 import {MIN_AVAIL, MinAvailDialog, thresholdPct, useMinAvail} from "./NodeMinAvail";
 import {useGrants} from "../hooks/useGrants";
@@ -900,13 +901,78 @@ function NodeSchedules({node}) {
     );
 }
 
-/** What the node can run: the drivers of its agent, and the capabilities it found. */
+/** Which drivers the chips show: every one, those the node can run, those it cannot. */
+const DRIVER_VIEWS = ["all", "usable", "unusable"];
+
+/**
+ * The drivers built in the agent (`om node drivers`), each usable on the node or
+ * not as its capabilities say (`om node capabilities list`, app/driver-caps), what
+ * each can do there besides; then the tools of the node, and every capability as
+ * the node lists it. Scanned again on demand (`om node capabilities scan`), read
+ * again once the scan is done; what comes of it, the actions tray says.
+ */
 function NodeDrivers({node}) {
     const {t} = useTranslation();
     const drivers = useNodeResource(node, "drivers");
     const capabilities = useNodeResource(node, "capabilities");
     const [filter, setFilter] = useState("");
-    const names = (resource) => itemsOf(resource).map((d) => d.name).filter((name) => matches(filter, name)).sort();
+    const [view, setView] = useState(DRIVER_VIEWS[0]);
+    const viewsId = useId();
+    // The scan asked: `{execId}`, its exec followed in the tray, null when none runs.
+    const [scan, setScan] = useState(null);
+    const scanState = useActionTracker((s) => (scan?.execId ? s.tracked.find((e) => e.followedId === scan.execId)?.state : undefined));
+    const reloadCapabilities = capabilities.reload;
+    useEffect(() => {
+        if (scan?.execId && scanState !== undefined && scanState !== "running") {
+            setScan(null);
+            reloadCapabilities();
+        }
+    }, [scan, scanState, reloadCapabilities]);
+
+    const rescan = async () => {
+        const action = "capabilities";
+        const {url} = nodeActionRequest(node, action);
+        setScan({execId: null});
+        try {
+            const response = await fetch(url, {method: "POST", headers: {...authHeaders(), "Content-Type": "application/json"}});
+            if (!response.ok) {
+                const detail = await getResponseErrorMessage(response);
+                trackRefused({action, subject: node, reason: refusalReason({status: response.status, detail})});
+                setScan(null);
+                return;
+            }
+            const body = await response.clone().json().catch(() => null);
+            await trackResponse(response, {action, subject: node, node});
+            if (body?.exec_id) {
+                setScan({execId: body.exec_id});
+            } else {
+                // Scanned before the daemon answered: read again now.
+                setScan(null);
+                reloadCapabilities();
+            }
+        } catch (error) {
+            trackRefused({action, subject: node, reason: error.message});
+            setScan(null);
+        }
+    };
+
+    const caps = itemsOf(capabilities).map((c) => c.name);
+    const rows = driverRows(itemsOf(drivers).map((d) => d.name), caps);
+    const counts = {
+        all: rows.length,
+        usable: rows.filter((r) => r.usable).length,
+        unusable: rows.filter((r) => !r.usable).length,
+    };
+    const shown = rows.filter((r) => (view === "all" || r.usable === (view === "usable"))
+        && matches(filter, r.id, driverCap(r.id), ...r.features));
+    const tools = nodeTools(caps).filter((name) => matches(filter, name));
+    const allCaps = caps.filter((name) => matches(filter, name)).sort();
+    const chips = DRIVER_VIEWS.map((key) => ({
+        key,
+        label: t(`nodePanel.drivers.views.${key}`),
+        mark: <CategoryCount count={counts[key]}/>,
+        tone: key === "unusable" && counts.unusable > 0 ? "strong" : undefined,
+    }));
     const list = (label, items) => (
         <ul aria-label={label} className="flex flex-wrap gap-1">
             {items.map((name) => (
@@ -915,16 +981,53 @@ function NodeDrivers({node}) {
             {items.length === 0 && <li className="text-ink-muted">{t("nodePanel.none")}</li>}
         </ul>
     );
+    const scanning = scan !== null;
     return (
         <div className="space-y-6">
-            <div className="flex">
+            <div className="flex flex-wrap items-center gap-2">
+                <Button size="sm" icon={scanning ? <Spinner label={t("nodePanel.drivers.scanning")}/> : <RefreshIcon className="h-3.5 w-3.5"/>}
+                        onClick={rescan} disabled={scanning} title={t("nodePanel.drivers.rescanHint")}>
+                    {scanning ? t("nodePanel.drivers.scanning") : t("nodePanel.drivers.rescan")}
+                </Button>
                 <FilterField label={t("nodePanel.drivers.filter")} value={filter} onChange={setFilter}/>
             </div>
-            <Section id={`node-drivers-${node}`} title={t("nodePanel.drivers.drivers")} count={drivers.data ? names(drivers).length : undefined}>
-                <Loaded resource={drivers}>{list(t("nodePanel.drivers.drivers"), names(drivers))}</Loaded>
+            <Section id={`node-drivers-${node}`} title={t("nodePanel.drivers.drivers")}
+                     count={drivers.data && capabilities.data ? t("nodePanel.drivers.usableCount", {usable: counts.usable, total: counts.all}) : undefined}>
+                <Loaded resource={drivers}>
+                    <Loaded resource={capabilities}>
+                        <p className="text-ink-muted">{t("nodePanel.drivers.intro")}</p>
+                        <CategoryTabs label={t("nodePanel.drivers.views.label")} idPrefix={viewsId} tabs={chips} active={view} onSelect={setView}/>
+                        <div {...tabPanelProps(viewsId, view)}>
+                            <DataTable
+                                label={t("nodePanel.drivers.drivers")}
+                                rows={shown}
+                                rowKey={(r) => r.id}
+                                columns={[
+                                    {key: "id", label: t("nodePanel.drivers.columns.driver"), className: "font-mono text-data"},
+                                    {
+                                        key: "usable",
+                                        label: t("nodePanel.drivers.columns.usable"),
+                                        render: (r) => (r.usable
+                                            ? <span className="text-state-up">{t("nodePanel.drivers.usable")}</span>
+                                            : <span className="text-ink-muted" title={driverCap(r.id)}>{t("nodePanel.drivers.unusable")}</span>),
+                                    },
+                                    {key: "features", label: t("nodePanel.drivers.columns.features"), className: "font-mono text-data text-ink-muted", render: (r) => r.features.join(" ")},
+                                ]}
+                            />
+                        </div>
+                    </Loaded>
+                </Loaded>
             </Section>
-            <Section id={`node-capabilities-${node}`} title={t("nodePanel.drivers.capabilities")} count={capabilities.data ? names(capabilities).length : undefined}>
-                <Loaded resource={capabilities}>{list(t("nodePanel.drivers.capabilities"), names(capabilities))}</Loaded>
+            <Section id={`node-tools-${node}`} title={t("nodePanel.drivers.tools")} count={capabilities.data ? tools.length : undefined}>
+                <Loaded resource={capabilities}>{list(t("nodePanel.drivers.tools"), tools)}</Loaded>
+            </Section>
+            <Section id={`node-capabilities-${node}`} title={t("nodePanel.drivers.capabilities")} count={capabilities.data ? allCaps.length : undefined}>
+                <Loaded resource={capabilities}>
+                    <details>
+                        <summary className="cursor-pointer text-ink-muted">{t("nodePanel.drivers.capabilitiesShow")}</summary>
+                        <div className="mt-2">{list(t("nodePanel.drivers.capabilities"), allCaps)}</div>
+                    </details>
+                </Loaded>
             </Section>
         </div>
     );

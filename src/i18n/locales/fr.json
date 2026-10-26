@@ -1471,7 +1471,27 @@
     "drivers": {
       "filter": "Filtrer les pilotes et capacités",
       "drivers": "Pilotes",
-      "capabilities": "Capacités"
+      "capabilities": "Capacités",
+      "intro": "Un pilote est utilisable sur le nœud quand le nœud détient sa capacité : une configuration utilisant un pilote que le nœud ne détient pas y est refusée.",
+      "usableCount": "{{usable}} utilisables sur {{total}}",
+      "views": {
+        "label": "Quels pilotes",
+        "all": "Tous",
+        "usable": "Utilisables ici",
+        "unusable": "Non utilisables ici"
+      },
+      "columns": {
+        "driver": "Pilote",
+        "usable": "Sur ce nœud",
+        "features": "Fonctions"
+      },
+      "usable": "Utilisable",
+      "unusable": "Non utilisable : aucune capacité",
+      "tools": "Outils du nœud",
+      "capabilitiesShow": "Afficher toutes les capacités que le nœud liste",
+      "rescan": "Rescanner",
+      "scanning": "Scan en cours…",
+      "rescanHint": "Scanner à nouveau ce que le nœud peut exécuter, comme om node capabilities scan"
     },
     "columns": {
       "property": "Propriété",
@@ -3124,5 +3144,10 @@
       "volume": "Un stockage tiré d'un pool selon ses besoins, sa taille d'abord ; le pool est choisi pour y répondre.",
       "claim": "La part d'un pool ou d'un réseau que le namespace peut prendre."
     }
+  },
+  "driverSupport": {
+    "lacking_one": "Non utilisable sur {{nodes}} : son pilote n'est pas parmi les capacités du nœud.",
+    "lacking_other": "Non utilisable sur {{nodes}} : son pilote n'est pas parmi les capacités de ces nœuds.",
+    "nowhere": "Utilisable sur aucun nœud du cluster : son pilote n'est pas parmi leurs capacités."
   }
 }

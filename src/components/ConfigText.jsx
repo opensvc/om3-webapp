@@ -1,20 +1,26 @@
-import React, {useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState} from "react";
-import {createPortal} from "react-dom";
+import React, {useEffect, useMemo, useState} from "react";
 import {useTranslation} from "react-i18next";
 import {getResponseErrorMessage} from "../services/api.jsx";
-import {verticalPlacement} from "../ui/components/MenuButton";
+import {Dialog} from "../ui/components/Dialog";
+import {Spinner} from "../ui/components/Spinner";
 
 /*
- * A configuration file as stored, each keyword it sets documented in place: on
- * hovering its line, a "?" shows what the keyword does, as `om <path> config doc`
- * tells it. In the place of a dialog listing every keyword of the kind.
+ * A configuration file as stored, each keyword it sets documented on demand: its
+ * name a button opening a dialog of what the keyword does, as `om <path> config doc`
+ * tells it, read from the daemon for that keyword alone.
  */
 
-/** The keywords read, by what they document (a kind, the node): read once a session. */
-const keywordsCache = new Map();
+/** The documentation read, by its address: read once a session. */
+const docCache = new Map();
 
-function loadKeywords(cacheKey, url) {
-    if (!keywordsCache.has(cacheKey)) {
+/**
+ * The documentation of a key of a section, from the keywords address of what the
+ * file configures (`.../config/keywords`): the daemon resolves the keyword of the
+ * section's driver from the configuration itself.
+ */
+function loadDoc(keywordsUrl, section, option) {
+    const url = `${keywordsUrl}${keywordsUrl.includes("?") ? "&" : "?"}${new URLSearchParams({section, option})}`;
+    if (!docCache.has(url)) {
         const promise = fetch(url, {
             headers: {Authorization: `Bearer ${localStorage.getItem("authToken") || ""}`},
         }).then(async (response) => {
@@ -23,50 +29,45 @@ function loadKeywords(cacheKey, url) {
             return Array.isArray(data?.items) ? data.items : [];
         });
         // A read that failed is tried again the next time.
-        promise.catch(() => keywordsCache.delete(cacheKey));
-        keywordsCache.set(cacheKey, promise);
+        promise.catch(() => docCache.delete(url));
+        docCache.set(url, promise);
     }
-    return keywordsCache.get(cacheKey);
+    return docCache.get(url);
 }
 
-/** Forgets the keywords read, for the tests. */
-export const clearKeywordsCache = () => keywordsCache.clear();
+/** Forgets the documentation read, for the tests. */
+export const clearKeywordsCache = () => docCache.clear();
 
 const SECTION = /^\s*\[([^\]]+)\]\s*$/;
 // A key at the start of its line, not a comment nor the continuation of a value.
 const KEY = /^([^\s#;=[][^=]*?)\s*=/;
+/** The sections of free keys, no keyword of them: the data of a secret or a configuration, the env and labels. */
+const FREE_SECTIONS = new Set(["data", "env", "labels"]);
 
 /**
  * The lines of the file, each key line with its section, its key without the
- * scope (`nodes@n1` is `nodes`), and the type its section declares, which selects
- * the keywords of a driver.
+ * scope (`nodes@n1` is `nodes`), and where the key as written stands in the line;
+ * a key of a section of free keys, none.
  */
 export function parseConfig(text) {
-    const lines = text.split("\n");
-    const types = {};
     let section = "DEFAULT";
-    for (const line of lines) {
-        const s = line.match(SECTION);
-        if (s) section = s[1].trim();
-        const k = !s && line.match(KEY);
-        if (k && k[1].trim() === "type") types[section] = line.slice(line.indexOf("=") + 1).trim();
-    }
-    section = "DEFAULT";
-    return lines.map((line) => {
+    return text.split("\n").map((line) => {
         const s = line.match(SECTION);
         if (s) {
             section = s[1].trim();
             return {line};
         }
         const k = line.match(KEY);
-        if (!k) return {line};
-        return {line, section, key: k[1].trim().split("@")[0], type: types[section]};
+        if (!k || FREE_SECTIONS.has(section)) return {line};
+        const written = k[1].trim();
+        const start = line.indexOf(written);
+        return {line, section, key: written.split("@")[0], start, end: start + written.length};
     });
 }
 
 /**
- * The keyword a key of a section sets: of the kind of the section (`fs` for
- * `fs#1`), else of any section (`comment`), the one of the type of the section
+ * The keyword a key of a section sets, in a list of keywords: of the kind of the
+ * section (`fs` for `fs#1`), else of any section (`comment`), the one of `type`
  * when the keyword differs by driver.
  */
 export function findKeyword(keywords, {section, key, type}) {
@@ -80,44 +81,9 @@ export function findKeyword(keywords, {section, key, type}) {
         ?? candidates[0];
 }
 
-/** Room kept between the help and the edges of the window. */
-const WINDOW_MARGIN = 8;
-/** Width of the help at most, as `36rem`. */
-const DOC_WIDTH = 576;
-
-/**
- * What a keyword does, as its documentation says it, by the "?" that opened it.
- * In a portal, placed against the window: the file scrolling sideways and the
- * side panel around would otherwise cut it. Under the "?", or over it when the
- * room below is short, its right edge on the one of the "?" but kept in the
- * window; taller than the room left, scrolled.
- */
-function KeywordDoc({keyword, label, id, anchor, ref}) {
+/** The facts of a keyword, those it has: its default, its values, an example, its type, scopable, deprecated. */
+function KeywordFacts({keyword}) {
     const {t} = useTranslation();
-    const [position, setPosition] = useState(null);
-
-    useLayoutEffect(() => {
-        const place = () => {
-            const rect = anchor?.getBoundingClientRect();
-            if (!rect) return;
-            const viewport = document.documentElement.clientWidth || window.innerWidth;
-            const width = Math.min(DOC_WIDTH, viewport - 2 * WINDOW_MARGIN);
-            const left = Math.max(WINDOW_MARGIN, Math.min(rect.right - width, viewport - width - WINDOW_MARGIN));
-            // Measured at its width and full height: the room it is cut to depends on it.
-            if (ref.current) ref.current.style.width = `${width}px`;
-            const height = ref.current?.scrollHeight ?? 0;
-            setPosition({width, left, ...verticalPlacement(rect, height)});
-        };
-        place();
-        // Follows its "?" as the file or the panel scrolls, and the window resizes.
-        window.addEventListener("scroll", place, true);
-        window.addEventListener("resize", place);
-        return () => {
-            window.removeEventListener("scroll", place, true);
-            window.removeEventListener("resize", place);
-        };
-    }, [anchor, ref, keyword]);
-
     const facts = [
         ["default", keyword.default || keyword.defaultText],
         ["candidates", (keyword.candidates ?? []).join(", ")],
@@ -126,111 +92,107 @@ function KeywordDoc({keyword, label, id, anchor, ref}) {
         ["scopable", keyword.scopable ? t("common.yes") : ""],
         ["deprecated", keyword.deprecated && (keyword.replacedBy ? t("config.keywordHelp.replacedBy", {keyword: keyword.replacedBy}) : keyword.deprecated)],
     ].filter(([, value]) => value);
-    return createPortal(
-        <div
-            ref={ref}
-            id={id}
-            role="dialog"
-            aria-label={label}
-            style={position ?? {visibility: "hidden"}}
-            className="fixed z-[1350] space-y-2 rounded-(--radius-panel) border border-line bg-surface-raised p-3 font-sans text-ui whitespace-normal text-ink shadow-lg"
-        >
-            <p className="font-mono font-semibold">{label}</p>
-            {keyword.text && <p className="whitespace-pre-line">{keyword.text.trim()}</p>}
-            {facts.length > 0 && (
-                <dl className="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-0.5">
-                    {facts.map(([fact, value]) => (
-                        <React.Fragment key={fact}>
-                            <dt className="text-ink-muted">{t(`config.keywordHelp.${fact}`)}</dt>
-                            <dd className="font-mono text-data break-all">{value}</dd>
-                        </React.Fragment>
-                    ))}
-                </dl>
-            )}
-        </div>,
-        document.body,
+    if (facts.length === 0) return null;
+    return (
+        <dl className="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-0.5">
+            {facts.map(([fact, value]) => (
+                <React.Fragment key={fact}>
+                    <dt className="text-ink-muted">{t(`config.keywordHelp.${fact}`)}</dt>
+                    <dd className="font-mono text-data break-all">{value}</dd>
+                </React.Fragment>
+            ))}
+        </dl>
     );
 }
 
 /**
- * The file, a "?" by each keyword set, shown on hovering its line or reaching it
- * from the keyboard. The keywords are read the first time the file is hovered or
- * focused: the help of every key then stands ready.
+ * What a keyword does, in a dialog, read from the daemon on opening: its text and
+ * its facts; several keywords answered (an option of the drivers of a section of no
+ * type), each under its section and types. None answered, said.
  */
-export function ConfigText({text, keywordsUrl, cacheKey = keywordsUrl, label}) {
+function KeywordDocDialog({keywordsUrl, section, option, name, onClose}) {
+    const {t} = useTranslation();
+    const [state, setState] = useState({items: null, error: null});
+    useEffect(() => {
+        let live = true;
+        loadDoc(keywordsUrl, section, option).then(
+            (items) => live && setState({items, error: null}),
+            (err) => live && setState({items: null, error: err.message}),
+        );
+        return () => {
+            live = false;
+        };
+    }, [keywordsUrl, section, option]);
+    const {items, error} = state;
+    return (
+        <Dialog open title={<span className="font-mono">{name}</span>} onClose={onClose} size="md">
+            <div data-keyword-doc={name} className="space-y-3">
+                {error ? (
+                    <p role="alert" className="text-state-down">{t("config.keywordHelp.loadError", {message: error})}</p>
+                ) : items === null ? (
+                    <div className="flex justify-center py-4"><Spinner label={t("config.keywordHelp.loading")}/></div>
+                ) : items.length === 0 ? (
+                    <p className="text-ink-muted">{t("config.keywordHelp.none")}</p>
+                ) : items.map((keyword, index) => (
+                    <section key={index} className="space-y-2">
+                        {items.length > 1 && (
+                            <h3 className="font-mono font-semibold">
+                                {[keyword.section, keyword.option].filter(Boolean).join(".")}
+                                {(keyword.types ?? []).filter(Boolean).length > 0 && <span className="font-normal text-ink-muted"> ({keyword.types.filter(Boolean).join(", ")})</span>}
+                            </h3>
+                        )}
+                        {keyword.text && <p className="whitespace-pre-line">{keyword.text.trim()}</p>}
+                        <KeywordFacts keyword={keyword}/>
+                    </section>
+                ))}
+            </div>
+        </Dialog>
+    );
+}
+
+/**
+ * The file, the name of each key a button opening the documentation of its
+ * keyword, read from `keywordsUrl` for that keyword alone.
+ */
+export function ConfigText({text, keywordsUrl, label}) {
     const {t} = useTranslation();
     const lines = useMemo(() => parseConfig(text), [text]);
-    const [keywords, setKeywords] = useState(null);
-    const [error, setError] = useState(null);
     const [open, setOpen] = useState(null);
-    const root = useRef(null);
-    const doc = useRef(null);
-    const docId = useId();
-    const openButton = () => root.current?.querySelector(`[data-line="${open}"] button`) ?? null;
-
-    const load = useCallback(() => {
-        if (keywords !== null || !keywordsUrl) return;
-        loadKeywords(cacheKey, keywordsUrl).then(setKeywords, (err) => setError(err.message));
-    }, [keywords, keywordsUrl, cacheKey]);
-
-    // A click beside the help closes it: the help, in its portal, stands apart from its line.
-    // Escape closes it first, wherever the focus is, before the side panel around takes the key.
-    useEffect(() => {
-        if (open === null) return undefined;
-        const onPointerDown = (event) => {
-            if (doc.current?.contains(event.target)) return;
-            if (!root.current?.querySelector(`[data-line="${open}"]`)?.contains(event.target)) setOpen(null);
-        };
-        const onEscape = (event) => {
-            if (event.key !== "Escape") return;
-            event.preventDefault();
-            event.stopPropagation();
-            if (doc.current?.contains(document.activeElement)) root.current?.querySelector(`[data-line="${open}"] button`)?.focus();
-            setOpen(null);
-        };
-        document.addEventListener("pointerdown", onPointerDown);
-        document.addEventListener("keydown", onEscape, true);
-        return () => {
-            document.removeEventListener("pointerdown", onPointerDown);
-            document.removeEventListener("keydown", onEscape, true);
-        };
-    }, [open]);
+    const opened = open === null ? null : lines[open];
+    const nameOf = (l) => `${l.section === "DEFAULT" ? "" : `${l.section}.`}${l.key}`;
 
     return (
-        <div
-            ref={root}
-            onMouseEnter={load}
-            onFocus={load}
-            className="overflow-x-auto rounded-(--radius-control) border border-line bg-surface-sunken p-2"
-        >
-            {error && <p className="mb-1 text-data text-ink-muted">{t("config.keywordHelp.loadError", {message: error})}</p>}
-            <div role="group" aria-label={label} tabIndex={0} className="font-mono text-data whitespace-pre-wrap text-ink">
-                {lines.map((l, index) => {
-                    const keyword = l.key && keywords ? findKeyword(keywords, l) : null;
-                    const name = keyword && `${l.section === "DEFAULT" ? "" : `${l.section}.`}${l.key}`;
-                    return (
-                        <div key={index} data-line={index} className="group flex min-h-[1lh] items-start gap-2 hover:bg-surface">
-                            <span className="min-w-0 flex-1">{l.line}</span>
-                            {keyword && (
+        <div className="overflow-x-auto rounded-(--radius-control) border border-line bg-surface-sunken p-2">
+            <div role="group" aria-label={label} className="font-mono text-data whitespace-pre-wrap text-ink">
+                {lines.map((l, index) => (
+                    <div key={index} data-line={index} className="min-h-[1lh] hover:bg-surface">
+                        {l.key && keywordsUrl ? (
+                            <>
+                                {l.line.slice(0, l.start)}
                                 <button
                                     type="button"
-                                    aria-label={t("config.keywordHelp.open", {keyword: name})}
-                                    aria-expanded={open === index}
-                                    aria-controls={open === index ? docId : undefined}
-                                    title={t("config.keywordHelp.open", {keyword: name})}
-                                    onClick={() => setOpen(open === index ? null : index)}
-                                    className={`h-4 w-4 shrink-0 rounded-full border border-line bg-surface-raised text-[0.7rem] leading-none font-semibold text-ink-muted hover:text-ink focus:opacity-100 ${open === index ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}
+                                    aria-label={t("config.keywordHelp.open", {keyword: nameOf(l)})}
+                                    title={t("config.keywordHelp.open", {keyword: nameOf(l)})}
+                                    onClick={() => setOpen(index)}
+                                    className="cursor-pointer rounded-sm underline decoration-line-strong decoration-dotted underline-offset-2 hover:text-accent hover:decoration-accent focus-visible:outline-2 focus-visible:outline-accent"
                                 >
-                                    ?
+                                    {l.line.slice(l.start, l.end)}
                                 </button>
-                            )}
-                            {open === index && keyword && (
-                                <KeywordDoc keyword={keyword} label={name} id={docId} anchor={openButton()} ref={doc}/>
-                            )}
-                        </div>
-                    );
-                })}
+                                {l.line.slice(l.end)}
+                            </>
+                        ) : l.line}
+                    </div>
+                ))}
             </div>
+            {opened && (
+                <KeywordDocDialog
+                    keywordsUrl={keywordsUrl}
+                    section={opened.section}
+                    option={opened.key}
+                    name={nameOf(opened)}
+                    onClose={() => setOpen(null)}
+                />
+            )}
         </div>
     );
 }

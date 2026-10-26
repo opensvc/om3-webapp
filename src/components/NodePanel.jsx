@@ -870,7 +870,7 @@ function NodeConfig({node}) {
             {error && <Alert tone="error">{error}</Alert>}
             <Loaded resource={file}>
                 <ConfigText text={file.data ?? ""} label={t("nodePanel.config.file")}
-                            keywordsUrl={nodeUrl(node, "config/keywords")} cacheKey="node"/>
+                            keywordsUrl={nodeUrl(node, "config/keywords")}/>
             </Loaded>
         </div>
     );

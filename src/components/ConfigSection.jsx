@@ -1134,8 +1134,6 @@ const ConfigSection = ({
                                 text={shownText}
                                 label={t("config.view.fileLabel")}
                                 keywordsUrl={`${URL_OBJECT}/${keywordsPath}/config/keywords`}
-                                // The keywords are those of the kind: read once for all its objects.
-                                cacheKey={`object:${parseObjectPath(decodedObjectName).kind}`}
                             />
                         )}
                     </>

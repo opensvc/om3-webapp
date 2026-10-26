@@ -1,17 +1,42 @@
 import React from 'react';
-import {fireEvent, render, screen} from '@testing-library/react';
+import {fireEvent, render, screen, within} from '@testing-library/react';
 import {vi} from 'vitest';
 import {ConfigText, clearKeywordsCache, findKeyword, parseConfig} from '../ConfigText';
 
-// As the daemon describes them: by section kind, some by driver type, some of any section.
-const KEYWORDS = [
-    {section: 'DEFAULT', option: 'nodes', text: 'The nodes.', scopable: true},
-    {section: '', option: 'comment', text: 'A free form text.'},
-    {section: 'fs', option: 'mnt_opt', types: ['ext4'], text: 'ext4 options.'},
-    {section: 'fs', option: 'mnt_opt', types: ['xfs'], text: 'xfs options.'},
-    {section: 'fs', option: 'dev', types: [], aliases: ['device'], text: 'The device.', candidates: ['a', 'b']},
-    {section: 'app', option: 'start', text: 'Old start.', deprecated: '3.0', replacedBy: 'app.run'},
-];
+describe('findKeyword', () => {
+    // As the daemon lists them: by section kind, some by driver type, some of any section.
+    const KEYWORDS = [
+        {section: 'DEFAULT', option: 'nodes', text: 'The nodes.'},
+        {section: '', option: 'comment', text: 'A free form text.'},
+        {section: 'fs', option: 'mnt_opt', types: ['ext4'], text: 'ext4 options.'},
+        {section: 'fs', option: 'mnt_opt', types: ['xfs'], text: 'xfs options.'},
+        {section: 'fs', option: 'dev', types: [], aliases: ['device'], text: 'The device.'},
+    ];
+    const find = (section, key, type) => findKeyword(KEYWORDS, {section, key, type})?.text ?? null;
+
+    test('by the kind of the section, the one of its driver type', () => {
+        expect(find('fs#1', 'mnt_opt', 'xfs')).toBe('xfs options.');
+        expect(find('fs#2', 'mnt_opt', 'ext4')).toBe('ext4 options.');
+    });
+
+    test('by an alias, of any section, of DEFAULT; none unknown', () => {
+        expect(find('fs#1', 'device', 'xfs')).toBe('The device.');
+        expect(find('fs#1', 'comment', 'xfs')).toBe('A free form text.');
+        expect(find('DEFAULT', 'nodes')).toBe('The nodes.');
+        expect(find('env', 'FOO')).toBeNull();
+    });
+});
+
+// As the daemon answers a keyword asked by section and option, the driver of the section resolved.
+const DOCS = {
+    'DEFAULT nodes': [{section: 'DEFAULT', option: 'nodes', text: 'The nodes.', scopable: true}],
+    'fs#1 device': [{section: 'fs', option: 'dev', types: [], aliases: ['device'], text: 'The device.', candidates: ['a', 'b']}],
+    'fs#1 mnt_opt': [{section: 'fs', option: 'mnt_opt', types: ['xfs'], text: 'xfs options.'}],
+    'app#1 start': [
+        {section: 'app', option: 'start', types: ['forking'], text: 'Forking start.'},
+        {section: 'app', option: 'start', types: ['simple'], text: 'Simple start.', deprecated: '3.0', replacedBy: 'app.run'},
+    ],
+};
 
 const FILE = [
     '[DEFAULT]',
@@ -22,42 +47,24 @@ const FILE = [
     'type = xfs',
     'mnt_opt = rw',
     'device = /dev/sda',
-    'comment = data disk',
+    '[app#1]',
+    'start = /bin/true',
     '[data]',
     'private_key = crypt:abc',
+    '[env]',
+    'FOO = bar',
 ].join('\n');
 
 describe('parseConfig', () => {
-    test('the key lines, with their section, the key without its scope, and the type of the section', () => {
+    test('the key lines, with their section, the key without its scope, where it is written; none of a section of free keys', () => {
         const keys = parseConfig(FILE).filter((l) => l.key);
-        expect(keys.map(({section, key, type}) => [section, key, type])).toEqual([
-            ['DEFAULT', 'nodes', undefined],
-            ['fs#1', 'type', 'xfs'],
-            ['fs#1', 'mnt_opt', 'xfs'],
-            ['fs#1', 'device', 'xfs'],
-            ['fs#1', 'comment', 'xfs'],
-            ['data', 'private_key', undefined],
+        expect(keys.map(({section, key, start, end}) => [section, key, start, end])).toEqual([
+            ['DEFAULT', 'nodes', 0, 8],
+            ['fs#1', 'type', 0, 4],
+            ['fs#1', 'mnt_opt', 0, 7],
+            ['fs#1', 'device', 0, 6],
+            ['app#1', 'start', 0, 5],
         ]);
-    });
-});
-
-describe('findKeyword', () => {
-    const find = (section, key, type) => findKeyword(KEYWORDS, {section, key, type})?.text ?? null;
-
-    test('by the kind of the section, the one of its driver type', () => {
-        expect(find('fs#1', 'mnt_opt', 'xfs')).toBe('xfs options.');
-        expect(find('fs#2', 'mnt_opt', 'ext4')).toBe('ext4 options.');
-    });
-
-    test('by an alias, of any section, of DEFAULT', () => {
-        expect(find('fs#1', 'device', 'xfs')).toBe('The device.');
-        expect(find('fs#1', 'comment', 'xfs')).toBe('A free form text.');
-        expect(find('DEFAULT', 'nodes')).toBe('The nodes.');
-    });
-
-    test('no keyword for the free keys of a secret or a configuration', () => {
-        expect(find('data', 'private_key')).toBeNull();
-        expect(find('env', 'FOO')).toBeNull();
     });
 });
 
@@ -65,85 +72,82 @@ describe('ConfigText', () => {
     beforeEach(() => {
         clearKeywordsCache();
         localStorage.setItem('authToken', 'tok');
-        global.fetch = vi.fn(async () => new Response(JSON.stringify({items: KEYWORDS}), {status: 200}));
+        global.fetch = vi.fn(async (url) => {
+            const q = new URL(url, 'http://x').searchParams;
+            return new Response(JSON.stringify({items: DOCS[`${q.get('section')} ${q.get('option')}`] ?? []}), {status: 200});
+        });
     });
 
-    const hover = async () => {
+    test('the name of each key a button, as written, the rest of its line as it is; no keyword asked before one is opened', () => {
+        render(<ConfigText text={FILE} label="cfg" keywordsUrl="/kw"/>);
         const file = screen.getByRole('group', {name: 'cfg'});
-        fireEvent.focus(file);
-        await screen.findAllByRole('button', {name: /^What /});
-    };
-
-    test('a "?" by the keys a keyword documents only, shown on hovering its line', async () => {
-        render(<ConfigText text={FILE} label="cfg" keywordsUrl="/kw" cacheKey="svc"/>);
-        expect(screen.queryByRole('button')).not.toBeInTheDocument();
-        await hover();
-        expect(global.fetch).toHaveBeenCalledWith('/kw', {headers: {Authorization: 'Bearer tok'}});
-        expect(screen.getAllByRole('button').map((b) => b.getAttribute('aria-label'))).toEqual([
-            'What nodes does', 'What fs#1.mnt_opt does', 'What fs#1.device does', 'What fs#1.comment does',
+        expect(within(file).getAllByRole('button').map((b) => [b.getAttribute('aria-label'), b.textContent])).toEqual([
+            ['What nodes does', 'nodes@n1'],
+            ['What fs#1.type does', 'type'],
+            ['What fs#1.mnt_opt does', 'mnt_opt'],
+            ['What fs#1.device does', 'device'],
+            ['What app#1.start does', 'start'],
         ]);
-        expect(screen.getByRole('button', {name: 'What nodes does'})).toHaveClass('opacity-0', 'group-hover:opacity-100', 'focus:opacity-100');
+        expect(file.querySelector('[data-line="6"]')).toHaveTextContent(/^mnt_opt = rw$/);
+        expect(screen.getByText('private_key = crypt:abc')).toBeInTheDocument();
+        expect(screen.getByText('# nodes = commented out')).toBeInTheDocument();
+        expect(global.fetch).not.toHaveBeenCalled();
     });
 
-    test('the help says what the keyword does, its values, and Escape closes it', async () => {
-        render(<ConfigText text={FILE} label="cfg" keywordsUrl="/kw" cacheKey="svc"/>);
-        await hover();
+    test('opened, a dialog of what the keyword does, read for it alone, by its section and its key; closed by Escape', async () => {
+        render(<ConfigText text={FILE} label="cfg" keywordsUrl="/api/object/path/ns1/svc/web/config/keywords"/>);
         fireEvent.click(screen.getByRole('button', {name: 'What fs#1.device does'}));
-        const doc = screen.getByRole('dialog', {name: 'fs#1.device'});
-        expect(doc).toHaveTextContent('The device.');
+        const doc = await screen.findByRole('dialog', {name: 'fs#1.device'});
+        expect(await within(doc).findByText('The device.')).toBeInTheDocument();
         expect(doc).toHaveTextContent('Valuesa, b');
+        expect(global.fetch).toHaveBeenCalledWith(
+            '/api/object/path/ns1/svc/web/config/keywords?section=fs%231&option=device',
+            {headers: {Authorization: 'Bearer tok'}},
+        );
         fireEvent.keyDown(doc, {key: 'Escape'});
         expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });
 
-    test('the help stands out of the file, in the window, whatever the room around', async () => {
-        const {container} = render(<ConfigText text={FILE} label="cfg" keywordsUrl="/kw" cacheKey="svc"/>);
-        await hover();
-        // The "?" by the bottom right corner of a window 800 wide, 600 high.
-        const button = screen.getByRole('button', {name: 'What fs#1.device does'});
-        button.getBoundingClientRect = () => ({top: 560, bottom: 576, left: 780, right: 796, width: 16, height: 16});
-        Object.defineProperty(document.documentElement, 'clientWidth', {configurable: true, value: 800});
-        const innerHeight = window.innerHeight;
-        Object.defineProperty(window, 'innerHeight', {configurable: true, value: 600});
-        const scrollHeight = vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockReturnValue(200);
-        try {
-            fireEvent.click(button);
-            const doc = screen.getByRole('dialog', {name: 'fs#1.device'});
-            // Not in the file, which scrolls sideways and is cut by the panel.
-            expect(container.contains(doc)).toBe(false);
-            expect(doc).toHaveClass('fixed');
-            expect(button).toHaveAttribute('aria-controls', doc.id);
-            // Over the "?", short of room below; its right edge on the one of the "?", kept in the window.
-            expect(doc.style.bottom).toBe('44px');
-            expect(doc.style.top).toBe('');
-            expect(doc.style.width).toBe('576px');
-            expect(doc.style.left).toBe('216px');
-            // A click in it keeps it open.
-            fireEvent.pointerDown(doc);
-            expect(screen.getByRole('dialog', {name: 'fs#1.device'})).toBeInTheDocument();
-            fireEvent.pointerDown(document.body);
-            expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-        } finally {
-            scrollHeight.mockRestore();
-            delete document.documentElement.clientWidth;
-            Object.defineProperty(window, 'innerHeight', {configurable: true, value: innerHeight});
-        }
-    });
-
-    test('the keywords of a kind are read once for all its objects', async () => {
-        const {unmount} = render(<ConfigText text={FILE} label="cfg" keywordsUrl="/kw/a" cacheKey="svc"/>);
-        await hover();
+    test('a scoped key asked without its scope, a DEFAULT one by its section; read once a session', async () => {
+        const {unmount} = render(<ConfigText text={FILE} label="cfg" keywordsUrl="/kw"/>);
+        fireEvent.click(screen.getByRole('button', {name: 'What nodes does'}));
+        const doc = await screen.findByRole('dialog', {name: 'nodes'});
+        expect(await within(doc).findByText('The nodes.')).toBeInTheDocument();
+        expect(doc).toHaveTextContent('ScopableYes');
+        expect(global.fetch).toHaveBeenCalledWith('/kw?section=DEFAULT&option=nodes', expect.anything());
         unmount();
-        render(<ConfigText text={FILE} label="cfg" keywordsUrl="/kw/b" cacheKey="svc"/>);
-        await hover();
+        render(<ConfigText text={FILE} label="cfg" keywordsUrl="/kw"/>);
+        fireEvent.click(screen.getByRole('button', {name: 'What nodes does'}));
+        expect(await within(await screen.findByRole('dialog', {name: 'nodes'})).findByText('The nodes.')).toBeInTheDocument();
         expect(global.fetch).toHaveBeenCalledTimes(1);
     });
 
-    test('keywords not read: the file still shows, and says why there is no help', async () => {
+    test('several keywords answered, each under its section and types; none, said', async () => {
+        render(<ConfigText text={FILE} label="cfg" keywordsUrl="/kw"/>);
+        fireEvent.click(screen.getByRole('button', {name: 'What app#1.start does'}));
+        const doc = await screen.findByRole('dialog', {name: 'app#1.start'});
+        const headings = await within(doc).findAllByRole('heading', {level: 3});
+        expect(headings.map((h) => h.textContent)).toEqual(['app.start (forking)', 'app.start (simple)']);
+        expect(doc).toHaveTextContent('Deprecatedreplaced by app.run');
+        fireEvent.keyDown(doc, {key: 'Escape'});
+
+        fireEvent.click(screen.getByRole('button', {name: 'What fs#1.type does'}));
+        expect(await screen.findByText('No documentation for this keyword.')).toBeInTheDocument();
+    });
+
+    test('the documentation not read: why said, and tried again the next time', async () => {
         global.fetch = vi.fn(async () => new Response(JSON.stringify({detail: 'forbidden'}), {status: 403}));
-        render(<ConfigText text={FILE} label="cfg" keywordsUrl="/kw" cacheKey="svc"/>);
-        fireEvent.focus(screen.getByRole('group', {name: 'cfg'}));
-        expect(await screen.findByText(/keywords help could not be read: forbidden/)).toBeInTheDocument();
-        expect(screen.getByText('mnt_opt = rw')).toBeInTheDocument();
+        render(<ConfigText text={FILE} label="cfg" keywordsUrl="/kw"/>);
+        fireEvent.click(screen.getByRole('button', {name: 'What nodes does'}));
+        expect(await screen.findByRole('alert')).toHaveTextContent('The documentation of the keyword could not be read: forbidden');
+        fireEvent.keyDown(screen.getByRole('dialog'), {key: 'Escape'});
+        fireEvent.click(screen.getByRole('button', {name: 'What nodes does'}));
+        await screen.findByRole('alert');
+        expect(global.fetch).toHaveBeenCalledTimes(2);
+    });
+
+    test('no keywords address: the file as it is, no button', () => {
+        render(<ConfigText text={FILE} label="cfg"/>);
+        expect(screen.queryByRole('button')).not.toBeInTheDocument();
     });
 });

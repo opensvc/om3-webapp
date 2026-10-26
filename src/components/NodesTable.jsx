@@ -12,7 +12,7 @@ import {URL_NODE_INFO} from "../config/apiPath.js";
 import {nodeActionRequest, nodeMenuItems} from "../app/node-actions";
 import {useTranslation} from "react-i18next";
 import {NodeActionDialog} from "./NodeActionDialog";
-import {Table, HeaderRow, HeaderCell, SortHeaderCell} from "../ui/components/Table";
+import {Table, HeaderRow, HeaderCell, SortHeaderCell, LIST_PAGE_FIT} from "../ui/components/Table";
 import {Checkbox} from "../ui/components/Field";
 import {Button, IconButton} from "../ui/components/Button";
 import {MenuButton} from "../ui/components/MenuButton";
@@ -262,7 +262,7 @@ const NodesTable = () => {
     const nodeCount = Object.keys(nodeStatus).length;
 
     return (
-        <div className="p-4 space-y-3">
+        <div className={`p-4 space-y-3 ${LIST_PAGE_FIT}`}>
             {/* The actions on the nodes selected; on one node, its panel's. Nothing selected,
                 how to select, in the place of the actions. */}
             <div className="flex min-h-7 flex-wrap items-center justify-end gap-3">

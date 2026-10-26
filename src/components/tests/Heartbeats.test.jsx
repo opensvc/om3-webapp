@@ -109,7 +109,8 @@ const EMPTY_MESSAGE = "No heartbeats found matching the current filters.";
 
 /** The heartbeat rows of the body, without the row telling the table is empty, nor those of the details of the mesh. */
 const getDataRows = () =>
-    screen.getAllByRole("row").filter((row) => !row.closest("[data-details]")).slice(1).filter(row => !row.textContent.includes(EMPTY_MESSAGE));
+    screen.getAllByRole("row").filter((row) => !row.closest("[data-details]")).slice(1)
+        .filter(row => !row.textContent.includes(EMPTY_MESSAGE) && !row.hasAttribute("data-more-rows"));
 
 /** Shows a tab of the page, by the start of its name. */
 const showTab = (name) => fireEvent.click(screen.getByRole("tab", {name: new RegExp(`^${name}`)}));
@@ -747,8 +748,8 @@ describe("Heartbeats Component", () => {
             ]
         }]));
         renderWithRouter(<Heartbeats/>);
-        // The five filters, and the page size.
-        expect(screen.getAllByRole("combobox")).toHaveLength(6);
+        // The five filters.
+        expect(screen.getAllByRole("combobox")).toHaveLength(5);
         const ids = within(getFilter("id")).getAllByRole("option").map(o => o.value);
         expect(ids).toEqual(["all", "1"]);
     });
@@ -1309,27 +1310,18 @@ describe("Heartbeats Component", () => {
     });
 
     // ==================== FOLDED STREAMS ====================
-    test("pages the rows, 50 a page, as oc3 does: the next page, another size", () => {
-        mockHeartbeatStore(makeManyStreams(60));
+    test("the first 100 rows drawn, more on demand; sorted again, the first ones again", () => {
+        mockHeartbeatStore(makeManyStreams(160));
         renderWithRouter(<Heartbeats/>);
-        expect(getDataRows()).toHaveLength(50);
-        expect(screen.getByText("1–50 of 60")).toBeInTheDocument();
+        expect(getDataRows()).toHaveLength(100);
+        expect(screen.getByText("100 of 160 shown")).toBeInTheDocument();
+        expect(screen.queryByRole("navigation", {name: "Pagination"})).not.toBeInTheDocument();
 
-        fireEvent.click(screen.getByRole("button", {name: "Next"}));
-        expect(getDataRows()).toHaveLength(10);
-        expect(screen.getByText("51–60 of 60")).toBeInTheDocument();
+        fireEvent.click(screen.getByRole("button", {name: "Show 60 more"}));
+        expect(getDataRows()).toHaveLength(160);
 
-        fireEvent.change(screen.getByLabelText("Per page"), {target: {value: "25"}});
-        expect(getDataRows()).toHaveLength(25);
-        expect(screen.getByText("Page 1 of 3")).toBeInTheDocument();
-    });
-
-    test("a filter changed starts the list over from its first page, the page size kept", async () => {
-        mockHeartbeatStore(makeManyStreams(60));
-        renderWithRouter(<Heartbeats/>, {route: "/heartbeats?limit=25&offset=50"});
-        expect(screen.getByText("51–60 of 60")).toBeInTheDocument();
-        fireEvent.change(getFilter("running"), {target: {value: "running"}});
-        await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith("/heartbeats?limit=25&view=data&state=running", {replace: true}));
+        fireEvent.click(within(screen.getAllByRole("row")[0]).getByRole("button", {name: /^Heartbeat/}));
+        expect(getDataRows()).toHaveLength(100);
     });
 
     // ==================== RESPONSIVE FILTERS ====================

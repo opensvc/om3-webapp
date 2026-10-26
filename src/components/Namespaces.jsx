@@ -13,8 +13,7 @@ import {HoverCard} from "../ui/components/HoverCard";
 import {formatBytes} from "../ui/lib/format";
 import {usePanelSearch} from "../app/panel-search";
 import {NamespaceDetailPanel} from "./RecordPanels";
-import {Pager} from "../ui/components/Pager";
-import {usePaging} from "../app/paging";
+import {MoreRows, useRowsOnDemand} from "../ui/components/RowsOnDemand";
 
 /** The availabilities a service or volume pill counts, in the order they are shown. */
 const AVAILS = [["up", "up"], ["warn", "warn"], ["down", "down"], ["n/a", "na"]];
@@ -247,10 +246,10 @@ const Namespaces = () => {
         return deferredSortDirection === "asc" ? sorted : sorted.reverse();
     }, [rows, deferredSortColumn, deferredSortDirection]);
 
-    // The rows of the page shown, as oc3 pages its lists.
-    const paging = usePaging("namespaces", sortedRows.length);
-    const {page: pageOf, setOffset: setPageOffset} = paging;
-    const visibleRows = useMemo(() => pageOf(sortedRows), [pageOf, sortedRows]);
+    // The rows drawn as the end of the table nears; sorted again, the first ones again.
+    const drawn = useRowsOnDemand(sortedRows.length, [deferredSortColumn, deferredSortDirection]);
+    const {rows: drawnOf} = drawn;
+    const visibleRows = useMemo(() => drawnOf(sortedRows), [drawnOf, sortedRows]);
 
     const handleSort = useCallback((column) => {
         setSortColumn((prev) => {
@@ -262,9 +261,7 @@ const Namespaces = () => {
             setSortDirection(column === "namespace" ? "asc" : "desc");
             return column;
         });
-        // Sorted again, the list starts over: from its first page.
-        setPageOffset(0);
-    }, [setPageOffset]);
+    }, []);
 
     const handleShow = useCallback((url) => navigate(url), [navigate]);
     // A row opens its panel on its first tab, the usage, whatever tab was open before.
@@ -273,7 +270,7 @@ const Namespaces = () => {
 
     return (
         <div className="flex h-full flex-col gap-3 p-4">
-            <Pager paging={paging}/>
+            <p className="text-ink-muted tabular-nums">{t("namespaces.count", {count: sortedRows.length})}</p>
 
             <Table
                 sticky
@@ -305,6 +302,7 @@ const Namespaces = () => {
                             onOpen={handleOpen}
                         />
                     ))}
+                    <MoreRows rows={drawn} colSpan={COLUMNS.length}/>
                     {visibleRows.length === 0 && (
                         <EmptyRow colSpan={COLUMNS.length}>
                             <span data-testid="no-namespaces-message">{t("namespaces.empty")}</span>

@@ -98,6 +98,8 @@ export const INSTANCE_ACTIONS = [
     // filesystems declare installed again (nothing started), what it says of itself.
     {name: "start", group: "operatorInstance", icon: icon(PlayIcon), endpoint: "start"},
     {name: "stop", group: "operatorInstance", icon: icon(StopIcon), endpoint: "stop", impacts: ["downTime"]},
+    // The flags a stop raised lowered, nothing started: the daemon may start the instance again on its own.
+    {name: "unstop", group: "operatorInstance", icon: icon(ToggleOnIcon), endpoint: "unstop"},
     {name: "restart", group: "operatorInstance", icon: icon(RefreshIcon), endpoint: "restart", impacts: ["downTime"]},
     {name: "shutdown", group: "operatorInstance", icon: icon(PowerOffIcon), endpoint: "shutdown", impacts: ["downTime"]},
     {name: "start standby", group: "operatorInstance", icon: icon(PauseIcon), endpoint: "startstandby"},
@@ -152,6 +154,8 @@ const groupsBut = (...names) => (type) => !names.includes(groupOf(type));
 export const RESOURCE_ACTIONS = [
     {name: "start", group: "operator", icon: icon(PlayIcon), endpoint: "start", on: groupsBut("task", "sync")},
     {name: "stop", group: "operator", icon: icon(StopIcon), endpoint: "stop", impacts: ["downTime"], on: groupsBut("task", "sync")},
+    // The flags a stop raised on the resources lowered, nothing started: those stop takes.
+    {name: "unstop", group: "operator", icon: icon(ToggleOnIcon), endpoint: "unstop", on: groupsBut("task", "sync")},
     {name: "restart", group: "operator", icon: icon(RefreshIcon), endpoint: "restart", impacts: ["downTime"], on: groupsBut("task", "sync")},
     {name: "start standby", group: "operator", icon: icon(PauseIcon), endpoint: "startstandby", on: groupsBut("task", "sync")},
     {name: "console", group: "operator", icon: icon(TerminalIcon), on: groups("container")},

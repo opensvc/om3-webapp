@@ -241,6 +241,27 @@ describe('InstanceStatus', () => {
         ));
     });
 
+    test('unstop, on the instance and on resources picked: the flags a stop raised lowered, at its path', async () => {
+        inRouter(<InstanceStatus path="prod/svc/web" node="n1"/>);
+        fireEvent.click(screen.getByRole('button', {name: 'Instance actions'}));
+        fireEvent.click(within(screen.getByRole('menu', {name: 'Instance actions'})).getByRole('menuitem', {name: 'Unstop'}));
+        fireEvent.click(within(screen.getByRole('alertdialog', {name: 'unstop prod/svc/web on n1'})).getByRole('button', {name: 'Confirm'}));
+        await waitFor(() => expect(global.fetch).toHaveBeenCalledWith(
+            '/api/node/name/n1/instance/path/prod/svc/web/action/unstop',
+            expect.objectContaining({method: 'POST'}),
+        ));
+        fireEvent.click(screen.getByRole('checkbox', {name: 'Select fs#1'}));
+        // The instance's run over, its menu to act again.
+        await waitFor(() => expect(screen.getByRole('button', {name: 'Actions on 1 resource'})).toBeEnabled());
+        fireEvent.click(screen.getByRole('button', {name: 'Actions on 1 resource'}));
+        fireEvent.click(within(screen.getByRole('menu', {name: 'Actions on 1 resource'})).getByRole('menuitem', {name: 'Unstop'}));
+        fireEvent.click(within(screen.getByRole('alertdialog', {name: /^unstop fs#1/})).getByRole('button', {name: 'Confirm'}));
+        await waitFor(() => expect(global.fetch).toHaveBeenCalledWith(
+            '/api/node/name/n1/instance/path/prod/svc/web/action/unstop?rid=fs%231',
+            expect.objectContaining({method: 'POST'}),
+        ));
+    });
+
     test('the resources checked, the actions they all take, posted to the instance for them', async () => {
         inRouter(<InstanceStatus path="prod/svc/web" node="n1"/>);
         expect(screen.getByText('Check resources to select them.')).toBeInTheDocument();

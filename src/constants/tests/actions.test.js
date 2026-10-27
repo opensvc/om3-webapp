@@ -42,7 +42,7 @@ describe('INSTANCE_ACTIONS', () => {
     const OM3_INSTANCE_ACTIONS = [
         'boot', 'delete', 'freeze', 'info', 'provision', 'install', 'prstart', 'prstop', 'restart',
         'run', 'shutdown', 'start', 'startstandby', 'status', 'stop', 'pg/reset', 'pg/update',
-        'ingest', 'full', 'resync', 'split', 'update', 'unfreeze', 'unprovision',
+        'ingest', 'full', 'resync', 'split', 'update', 'unfreeze', 'unprovision', 'unstop',
     ];
 
     test('each posts to a path om3 serves', () => {

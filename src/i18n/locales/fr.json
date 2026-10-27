@@ -286,7 +286,8 @@
       "restartDaemon": "Redémarrer le démon",
       "resize": "Redimensionner",
       "cap": "Plafonner",
-      "evict": "Évincer"
+      "evict": "Évincer",
+      "unstop": "Lever l'arrêt"
     }
   },
   "alerts": {
@@ -2440,7 +2441,8 @@
       "syncUpdateStore": "Sauvegarder les changements de ses jeux de données dans leurs magasins.",
       "syncUpdateEither": "Copier les changements de ses jeux de données vers les pairs, ou les sauvegarder dans leurs magasins.",
       "syncFullStore": "Sauvegarder tous ses jeux de données dans leurs magasins.",
-      "syncFullEither": "Copier tous ses jeux de données vers les pairs, ou les sauvegarder dans leurs magasins."
+      "syncFullEither": "Copier tous ses jeux de données vers les pairs, ou les sauvegarder dans leurs magasins.",
+      "unstop": "Lever les marques posées par un arrêt sur l'instance, sans rien démarrer : le démon peut la redémarrer de lui-même."
     },
     "resource": {
       "start": "Démarrer les ressources choisies.",
@@ -2462,7 +2464,8 @@
       "syncUpdateStore": "Sauvegarder les changements des ressources choisies dans leur magasin.",
       "syncUpdateEither": "Copier les changements des ressources choisies vers les pairs, ou les sauvegarder dans leur magasin.",
       "syncFullStore": "Sauvegarder tout le jeu de données des ressources choisies dans leur magasin.",
-      "syncFullEither": "Copier tout le jeu de données des ressources choisies vers les pairs, ou le sauvegarder dans leur magasin."
+      "syncFullEither": "Copier tout le jeu de données des ressources choisies vers les pairs, ou le sauvegarder dans leur magasin.",
+      "unstop": "Lever les marques posées par un arrêt sur les ressources choisies, sans rien démarrer : le démon peut les redémarrer de lui-même."
     },
     "impacts": {
       "dataLoss": "perte de données",

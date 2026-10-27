@@ -286,7 +286,8 @@
       "restartDaemon": "Restart daemon",
       "resize": "Resize",
       "cap": "Cap",
-      "evict": "Evict"
+      "evict": "Evict",
+      "unstop": "Unstop"
     }
   },
   "alerts": {
@@ -2440,7 +2441,8 @@
       "syncUpdateStore": "Back up the changes of its datasets into their stores.",
       "syncUpdateEither": "Copy the changes of its datasets to the peers, or back them up into their stores.",
       "syncFullStore": "Back up its whole datasets into their stores.",
-      "syncFullEither": "Copy its whole datasets to the peers, or back them up into their stores."
+      "syncFullEither": "Copy its whole datasets to the peers, or back them up into their stores.",
+      "unstop": "Lower the flags a stop raised on the instance, starting nothing: the daemon may start it again on its own."
     },
     "resource": {
       "start": "Bring up the resources picked.",
@@ -2462,7 +2464,8 @@
       "syncUpdateStore": "Back up the changes of the resources picked into their store.",
       "syncUpdateEither": "Copy the changes of the resources picked to the peers, or back them up into their store.",
       "syncFullStore": "Back up the whole dataset of the resources picked into their store.",
-      "syncFullEither": "Copy the whole dataset of the resources picked to the peers, or back it up into their store."
+      "syncFullEither": "Copy the whole dataset of the resources picked to the peers, or back it up into their store.",
+      "unstop": "Lower the flags a stop raised on the resources picked, starting nothing: the daemon may restart them on its own."
     },
     "impacts": {
       "dataLoss": "data-loss",

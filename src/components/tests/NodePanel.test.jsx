@@ -477,26 +477,42 @@ describe('NodeDetailPanel', () => {
 
         openTab('Drivers');
         expect(screen.getByTestId('location')).toHaveTextContent('peektab=drivers');
-        const drivers = await within(panel()).findByRole('table', {name: 'Drivers'});
+        let drivers = await within(panel()).findByRole('table', {name: 'Drivers'});
         const row = (id) => within(drivers).getAllByRole('row').find((r) => r.cells[0]?.textContent === id);
         // Usable when the node holds its capability, a resource driver's under drivers.resource.
         expect(row('container.kvm')).toHaveTextContent('container.kvmUsablehvm partitions');
         expect(row('container.podman')).toHaveTextContent('Not usable: no capability');
         expect(row('pool.directory')).toHaveTextContent('Usable');
         expect(row('pool.rados')).toHaveTextContent('Not usable');
-        expect(within(panel()).getByRole('heading', {name: /^Drivers/})).toHaveTextContent('Drivers7 usable of 10');
+        // Each view on a chip at the head of the tab, its count on it: the drivers first.
+        const section = (name) => within(within(panel()).getByRole('tablist', {name: 'What the node can run'})).getByRole('tab', {name: new RegExp(`^${name}`)});
+        expect(section('Drivers')).toHaveAttribute('aria-selected', 'true');
+        expect(section('Drivers')).toHaveTextContent('Drivers10');
+        expect(within(panel()).queryByRole('list', {name: 'Node tools'})).toBeNull();
+        fireEvent.click(section('Node tools'));
+        expect(screen.getByTestId('location')).toHaveTextContent('peektab=drivers&view=tools');
         expect(within(panel()).getByRole('list', {name: 'Node tools'})).toHaveTextContent('scsi.sg_persistsystemd');
-        // The chips: those the node cannot run alone.
-        fireEvent.click(within(panel()).getByRole('tab', {name: /Not usable here/}));
+        expect(within(panel()).queryByRole('table', {name: 'Drivers'})).toBeNull();
+        fireEvent.click(section('Drivers'));
+        // Drawn again, back on its view.
+        drivers = within(panel()).getByRole('table', {name: 'Drivers'});
+        // Which drivers, a select apart from the chips of the views: those the node cannot run alone.
+        const which = within(panel()).getByRole('combobox', {name: 'Which drivers'});
+        expect([...which.options].map((o) => o.textContent)).toEqual(['All (10)', 'Usable here (7)', 'Not usable here (3)']);
+        expect(within(panel()).queryByRole('tab', {name: /usable/i})).toBeNull();
+        fireEvent.change(which, {target: {value: 'unusable'}});
         expect(within(drivers).getAllByRole('row').slice(1).map((r) => r.cells[0].textContent))
             .toEqual(['container.podman', 'fs.bind', 'pool.rados']);
-        fireEvent.click(within(panel()).getByRole('tab', {name: /^All/}));
+        fireEvent.change(which, {target: {value: 'all'}});
         // The filter reads the capability of a driver too, and its features.
         fireEvent.change(within(panel()).getByRole('searchbox', {name: 'Filter the drivers and capabilities'}), {target: {value: 'hvm'}});
         expect(within(drivers).getAllByRole('row').slice(1).map((r) => r.cells[0].textContent)).toEqual(['container.kvm']);
         fireEvent.change(within(panel()).getByRole('searchbox', {name: 'Filter the drivers and capabilities'}), {target: {value: 'drivers.pool'}});
-        expect(within(drivers).getAllByRole('row').slice(1).map((r) => r.cells[0].textContent)).toEqual(['pool.directory', 'pool.rados']);
-        expect(within(panel()).getByRole('list', {name: 'Capabilities', hidden: true})).toHaveTextContent('drivers.pool.directory');
+        // The filter reads every view: its counts on their chips.
+        expect(section('Drivers')).toHaveTextContent('Drivers2');
+        expect(section('Node tools')).toHaveTextContent('Node tools0');
+        fireEvent.click(section('Capabilities'));
+        expect(within(panel()).getByRole('list', {name: 'Capabilities'})).toHaveTextContent('drivers.pool.directory');
 
         openTab('Logs');
         expect(within(panel()).getByTestId('logs')).toHaveTextContent('node logs of dev3n1');

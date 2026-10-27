@@ -1521,7 +1521,9 @@
       "usable": "Utilisable",
       "unusable": "Non utilisable : aucune capacité",
       "tools": "Outils du nœud",
-      "capabilitiesShow": "Afficher toutes les capacités que le nœud liste",
+      "sections": "Ce que le nœud peut exécuter",
+      "toolsIntro": "Les commandes trouvées sur le nœud dont les pilotes dépendent, telles que le dernier scan les a vues.",
+      "capabilitiesIntro": "Toutes les capacités que le nœud liste : les pilotes qu'il peut exécuter et les outils dont il dispose, telles que le dernier scan les a vues.",
       "rescan": "Rescanner",
       "scanning": "Scan en cours…",
       "rescanHint": "Scanner à nouveau ce que le nœud peut exécuter, comme om node capabilities scan"

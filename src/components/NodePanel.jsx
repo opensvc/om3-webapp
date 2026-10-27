@@ -20,7 +20,7 @@ import {OrchestrationLogsFilter} from "./OrchestrationLogsFilter";
 import {Alert} from "../ui/components/Alert";
 import {Spinner} from "../ui/components/Spinner";
 import {Button, IconButton} from "../ui/components/Button";
-import {Input, Textarea} from "../ui/components/Field";
+import {Input, Select, Textarea} from "../ui/components/Field";
 import {Table, HeaderRow, HeaderCell, Row, Cell, EmptyRow} from "../ui/components/Table";
 import {FrozenMark} from "../ui/components/FrozenMark";
 import {RelativeTime} from "../ui/components/RelativeTime";
@@ -917,12 +917,15 @@ function NodeSchedules({node}) {
 
 /** Which drivers the chips show: every one, those the node can run, those it cannot. */
 const DRIVER_VIEWS = ["all", "usable", "unusable"];
+/** The views of the drivers tab, each on its chip: the drivers first. */
+const DRIVER_SECTIONS = ["drivers", "tools", "capabilities"];
 
 /**
  * The drivers built in the agent (`om node drivers`), each usable on the node or
  * not as its capabilities say (`om node capabilities list`, app/driver-caps), what
- * each can do there besides; then the tools of the node, and every capability as
- * the node lists it. Scanned again on demand (`om node capabilities scan`), read
+ * each can do there besides; the tools of the node, and every capability as the
+ * node lists it, each a view on its chip at the head of the tab, its count on it,
+ * the filter reading them all. Scanned again on demand (`om node capabilities scan`), read
  * again once the scan is done; what comes of it, the actions tray says.
  */
 function NodeDrivers({node}) {
@@ -931,7 +934,9 @@ function NodeDrivers({node}) {
     const capabilities = useNodeResource(node, "capabilities");
     const [filter, setFilter] = useState("");
     const [view, setView] = useState(DRIVER_VIEWS[0]);
-    const viewsId = useId();
+    const panel = usePanelSearch();
+    const section = DRIVER_SECTIONS.includes(panel.view) ? panel.view : DRIVER_SECTIONS[0];
+    const sectionsId = useId();
     // The scan asked: `{execId}`, its exec followed in the tray, null when none runs.
     const [scan, setScan] = useState(null);
     const scanState = useActionTracker((s) => (scan?.execId ? s.tracked.find((e) => e.followedId === scan.execId)?.state : undefined));
@@ -981,11 +986,16 @@ function NodeDrivers({node}) {
         && matches(filter, r.id, driverCap(r.id), ...r.features));
     const tools = nodeTools(caps).filter((name) => matches(filter, name));
     const allCaps = caps.filter((name) => matches(filter, name)).sort();
-    const chips = DRIVER_VIEWS.map((key) => ({
+    // The count of each view, what the filter keeps of it, once read.
+    const sectionCounts = {
+        drivers: drivers.data && capabilities.data ? rows.filter((r) => matches(filter, r.id, driverCap(r.id), ...r.features)).length : undefined,
+        tools: capabilities.data ? tools.length : undefined,
+        capabilities: capabilities.data ? allCaps.length : undefined,
+    };
+    const sections = DRIVER_SECTIONS.map((key) => ({
         key,
-        label: t(`nodePanel.drivers.views.${key}`),
-        mark: <CategoryCount count={counts[key]}/>,
-        tone: key === "unusable" && counts.unusable > 0 ? "strong" : undefined,
+        label: t(`nodePanel.drivers.${key}`),
+        mark: sectionCounts[key] === undefined ? undefined : <CategoryCount count={sectionCounts[key]}/>,
     }));
     const list = (label, items) => (
         <ul aria-label={label} className="flex flex-wrap gap-1">
@@ -1005,44 +1015,61 @@ function NodeDrivers({node}) {
                 </Button>
                 <FilterField label={t("nodePanel.drivers.filter")} value={filter} onChange={setFilter}/>
             </div>
-            <Section id={`node-drivers-${node}`} title={t("nodePanel.drivers.drivers")}
-                     count={drivers.data && capabilities.data ? t("nodePanel.drivers.usableCount", {usable: counts.usable, total: counts.all}) : undefined}>
-                <Loaded resource={drivers}>
-                    <Loaded resource={capabilities}>
-                        <p className="text-ink-muted">{t("nodePanel.drivers.intro")}</p>
-                        <CategoryTabs label={t("nodePanel.drivers.views.label")} idPrefix={viewsId} tabs={chips} active={view} onSelect={setView}/>
-                        <div {...tabPanelProps(viewsId, view)}>
-                            <DataTable
-                                label={t("nodePanel.drivers.drivers")}
-                                rows={shown}
-                                rowKey={(r) => r.id}
-                                columns={[
-                                    {key: "id", label: t("nodePanel.drivers.columns.driver"), className: "font-mono text-data"},
-                                    {
-                                        key: "usable",
-                                        label: t("nodePanel.drivers.columns.usable"),
-                                        render: (r) => (r.usable
-                                            ? <span className="text-state-up">{t("nodePanel.drivers.usable")}</span>
-                                            : <span className="text-ink-muted" title={driverCap(r.id)}>{t("nodePanel.drivers.unusable")}</span>),
-                                    },
-                                    {key: "features", label: t("nodePanel.drivers.columns.features"), className: "font-mono text-data text-ink-muted", render: (r) => r.features.join(" ")},
-                                ]}
-                            />
-                        </div>
+            <CategoryTabs
+                label={t("nodePanel.drivers.sections")}
+                idPrefix={sectionsId}
+                tabs={sections}
+                active={section}
+                onSelect={(next) => panel.setView(next === DRIVER_SECTIONS[0] ? undefined : next)}
+            />
+            <div {...tabPanelProps(sectionsId, section)} className="space-y-3">
+                {section === "drivers" && (
+                    <Loaded resource={drivers}>
+                        <Loaded resource={capabilities}>
+                            <p className="text-ink-muted">{t("nodePanel.drivers.intro")}</p>
+                            {/* Which drivers, a filter of the table: a select, not chips, apart from the views of the tab. */}
+                            <label className="flex w-fit items-center gap-2 text-ink-muted">
+                                {t("nodePanel.drivers.views.label")}
+                                <Select className="h-7" value={view} onChange={(e) => setView(e.target.value)}>
+                                    {DRIVER_VIEWS.map((key) => (
+                                        <option key={key} value={key}>{t(`nodePanel.drivers.views.${key}`)} ({counts[key]})</option>
+                                    ))}
+                                </Select>
+                            </label>
+                            <div>
+                                <DataTable
+                                    label={t("nodePanel.drivers.drivers")}
+                                    rows={shown}
+                                    rowKey={(r) => r.id}
+                                    columns={[
+                                        {key: "id", label: t("nodePanel.drivers.columns.driver"), className: "font-mono text-data"},
+                                        {
+                                            key: "usable",
+                                            label: t("nodePanel.drivers.columns.usable"),
+                                            render: (r) => (r.usable
+                                                ? <span className="text-state-up">{t("nodePanel.drivers.usable")}</span>
+                                                : <span className="text-ink-muted" title={driverCap(r.id)}>{t("nodePanel.drivers.unusable")}</span>),
+                                        },
+                                        {key: "features", label: t("nodePanel.drivers.columns.features"), className: "font-mono text-data text-ink-muted", render: (r) => r.features.join(" ")},
+                                    ]}
+                                />
+                            </div>
+                        </Loaded>
                     </Loaded>
-                </Loaded>
-            </Section>
-            <Section id={`node-tools-${node}`} title={t("nodePanel.drivers.tools")} count={capabilities.data ? tools.length : undefined}>
-                <Loaded resource={capabilities}>{list(t("nodePanel.drivers.tools"), tools)}</Loaded>
-            </Section>
-            <Section id={`node-capabilities-${node}`} title={t("nodePanel.drivers.capabilities")} count={capabilities.data ? allCaps.length : undefined}>
-                <Loaded resource={capabilities}>
-                    <details>
-                        <summary className="cursor-pointer text-ink-muted">{t("nodePanel.drivers.capabilitiesShow")}</summary>
-                        <div className="mt-2">{list(t("nodePanel.drivers.capabilities"), allCaps)}</div>
-                    </details>
-                </Loaded>
-            </Section>
+                )}
+                {section === "tools" && (
+                    <Loaded resource={capabilities}>
+                        <p className="text-ink-muted">{t("nodePanel.drivers.toolsIntro")}</p>
+                        {list(t("nodePanel.drivers.tools"), tools)}
+                    </Loaded>
+                )}
+                {section === "capabilities" && (
+                    <Loaded resource={capabilities}>
+                        <p className="text-ink-muted">{t("nodePanel.drivers.capabilitiesIntro")}</p>
+                        {list(t("nodePanel.drivers.capabilities"), allCaps)}
+                    </Loaded>
+                )}
+            </div>
         </div>
     );
 }

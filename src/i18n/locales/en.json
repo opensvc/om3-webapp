@@ -1521,7 +1521,9 @@
       "usable": "Usable",
       "unusable": "Not usable: no capability",
       "tools": "Node tools",
-      "capabilitiesShow": "Show every capability the node lists",
+      "sections": "What the node can run",
+      "toolsIntro": "The commands found on the node that drivers rely on, as the last scan saw them.",
+      "capabilitiesIntro": "Every capability the node lists: the drivers it can run and the tools it has, as the last scan saw them.",
       "rescan": "Rescan",
       "scanning": "Scanning…",
       "rescanHint": "Scan again what the node can run, as om node capabilities scan does"

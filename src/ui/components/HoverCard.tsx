@@ -1,10 +1,7 @@
 import { useId, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { usePlaceCard } from "./card-place";
 
-/** Room kept between the card and the edges of the window. */
-const MARGIN = 8;
-/** Width of the card at most, as `max-w-sm`. */
-const WIDTH = 384;
 
 /**
  * The details of what it wraps, in a card under it while the pointer is over it or
@@ -26,13 +23,15 @@ export function HoverCard({
 }) {
   const id = useId();
   const anchor = useRef<HTMLSpanElement>(null);
-  const [place, setPlace] = useState<{ top: number; left: number } | null>(null);
+  const [place, setPlace] = useState<{ top: number; left: number; right: number } | null>(null);
+  const shown = useRef<HTMLDivElement>(null);
+  usePlaceCard(shown, place);
 
   const show = () => {
     const rect = anchor.current?.getBoundingClientRect();
     if (rect === undefined) return;
-    const left = Math.max(MARGIN, Math.min(rect.left, window.innerWidth - WIDTH - MARGIN));
-    setPlace({ top: rect.bottom + 4, left });
+    // Under it, its left edge on the element's until drawn: placed by its width then (usePlaceCard).
+    setPlace({ top: rect.bottom + 4, left: rect.left, right: rect.right });
   };
   const hide = () => setPlace(null);
 
@@ -56,7 +55,8 @@ export function HoverCard({
           <div
             id={id}
             role="tooltip"
-            style={place}
+            ref={shown}
+            style={{ top: place.top, left: place.left }}
             className="pointer-events-none fixed z-[1250] w-max max-w-sm rounded-(--radius-panel) border border-line bg-surface-raised p-2 text-data text-ink shadow-lg"
           >
             {card}

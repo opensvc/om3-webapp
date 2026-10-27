@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { usePlaceCard } from "../ui/components/card-place";
 
 /*
  * The tooltips of the webapp, shown at once. A browser shows the `title` of an
@@ -11,10 +12,6 @@ import { createPortal } from "react-dom";
  * nothing: no hover there.
  */
 
-/** Room kept between the card and the edges of the window. */
-const MARGIN = 8;
-/** Width of the card at most, as `max-w-sm`. */
-const WIDTH = 384;
 /** Where a title hovered is kept, the browser seeing none meanwhile. */
 const ASIDE = "data-instant-title";
 
@@ -22,6 +19,7 @@ interface Shown {
   text: string;
   top: number;
   left: number;
+  right: number;
 }
 
 /** The element hovered whose title the card says, its title set aside. */
@@ -37,17 +35,16 @@ function restore() {
   hovered = null;
 }
 
-/** Where the card goes: under the element, kept inside the window. */
-function placeUnder(element: Element): { top: number; left: number } {
+/** Where the card goes: under the element, its left edge on the element's until drawn, placed by its width then (usePlaceCard). */
+function placeUnder(element: Element): { top: number; left: number; right: number } {
   const rect = element.getBoundingClientRect();
-  return {
-    top: rect.bottom + 4,
-    left: Math.max(MARGIN, Math.min(rect.left, window.innerWidth - WIDTH - MARGIN)),
-  };
+  return { top: rect.bottom + 4, left: rect.left, right: rect.right };
 }
 
 export function InstantTitles() {
   const [shown, setShown] = useState<Shown | null>(null);
+  const card = useRef<HTMLDivElement>(null);
+  usePlaceCard(card, shown);
 
   useEffect(() => {
     const hide = () => {
@@ -91,6 +88,7 @@ export function InstantTitles() {
   if (shown === null) return null;
   return createPortal(
     <div
+      ref={card}
       role="tooltip"
       data-instant-title-card=""
       style={{ top: shown.top, left: shown.left }}

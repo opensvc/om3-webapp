@@ -1,11 +1,10 @@
-import React, {useState, useEffect, useRef, useMemo, useReducer, useCallback, useId} from "react";
+import React, {useState, useEffect, useRef, useMemo, useReducer, useCallback} from "react";
 import {Dialog} from "../ui/components/Dialog";
 import {Button, IconButton} from "../ui/components/Button";
-import {Field, Input, Checkbox, Textarea} from "../ui/components/Field";
-import {Table, HeaderRow, HeaderCell, Row, Cell} from "../ui/components/Table";
+import {Checkbox, Textarea} from "../ui/components/Field";
 import {Alert} from "../ui/components/Alert";
 import {Spinner} from "../ui/components/Spinner";
-import {CodeIcon, EyeIcon, EyeOffIcon, FileIcon, PencilIcon, PlusIcon, SlidersIcon, TrashIcon, UploadIcon} from "../ui/icons";
+import {CodeIcon, EyeIcon, EyeOffIcon, FileIcon, PencilIcon, SlidersIcon, UploadIcon} from "../ui/icons";
 import {formatSeconds, useAutoHide} from "../ui/lib/reveal";
 import {URL_OBJECT} from "../config/apiPath.js";
 import {parseObjectPath} from "../utils/objectUtils";
@@ -20,6 +19,8 @@ import {ForceRefusal, WaitChoice} from "./ConfigWriteControls";
 import ConfigEvalDialog from "./ConfigEvalDialog";
 import useEventStore from "../hooks/useEventStore.js";
 import {newId, withId} from "../app/object-create";
+import {designChanges, designStart, parseDesign} from "../app/object-design";
+import {ObjectDesigner} from "./ObjectDesigner";
 
 /**
  * The object configuration file, its secrets redacted unless `showSecrets`: the
@@ -126,113 +127,6 @@ const useConfig = (decodedObjectName, configNode, setConfigNode, refreshTrigger,
     return {...state, fetchConfig};
 };
 
-const useKeywords = (decodedObjectName) => {
-    const initialState = {
-        data: null,
-        loading: false,
-        error: null,
-    };
-    const reducer = (state, action) => {
-        switch (action.type) {
-            case "FETCH_START":
-                return {...state, loading: true, error: null};
-            case "FETCH_SUCCESS":
-                return {...state, loading: false, data: action.payload};
-            case "FETCH_ERROR":
-                return {...state, loading: false, error: action.payload};
-            /* istanbul ignore next */
-            default:
-                return state;
-        }
-    };
-    const {t} = useTranslation();
-    const [state, dispatch] = useReducer(reducer, initialState);
-    const fetchKeywords = async () => {
-        const {namespace, kind, name} = parseObjectPath(decodedObjectName);
-        const token = localStorage.getItem("authToken") || "";
-        dispatch({type: "FETCH_START"});
-        const timeout = 60000;
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), timeout);
-        try {
-            const response = await fetch(`${URL_OBJECT}/${namespace}/${kind}/${name}/config/keywords`, {
-                headers: {Authorization: `Bearer ${token}`},
-                cache: "no-cache",
-                signal: controller.signal,
-            });
-            clearTimeout(timeoutId);
-            if (!response.ok) {
-                const error = new Error(`HTTP ${response.status}`);
-                dispatch({type: "FETCH_ERROR", payload: t("config.errors.fetchKeywords", {message: error.message})});
-                return;
-            }
-            const data = await response.json();
-            if (!data || !Array.isArray(data.items)) {
-                const error = new Error(t("config.errors.invalidFormat"));
-                dispatch({type: "FETCH_ERROR", payload: error.message});
-                return;
-            }
-            const seen = new Set();
-            const uniqueKeywords = data.items.filter((item) => {
-                const key = `${item.section || "default"}.${item.option}`;
-                if (seen.has(key)) return false;
-                seen.add(key);
-                return true;
-            });
-            dispatch({type: "FETCH_SUCCESS", payload: uniqueKeywords});
-        } catch (err) {
-            const errorMsg = err.name === "AbortError" ? t("config.errors.timeout") : t("config.errors.fetchKeywords", {message: err.message});
-            dispatch({type: "FETCH_ERROR", payload: errorMsg});
-        }
-    };
-    return {...state, fetchKeywords};
-};
-
-const useExistingParams = (decodedObjectName) => {
-    const initialState = {
-        data: null,
-        loading: false,
-        error: null,
-    };
-    const reducer = (state, action) => {
-        switch (action.type) {
-            case "FETCH_START":
-                return {...state, loading: true, error: null};
-            case "FETCH_SUCCESS":
-                return {...state, loading: false, data: action.payload};
-            case "FETCH_ERROR":
-                return {...state, loading: false, error: action.payload};
-            /* istanbul ignore next */
-            default:
-                return state;
-        }
-    };
-    const {t} = useTranslation();
-    const [state, dispatch] = useReducer(reducer, initialState);
-    const fetchExistingParams = async () => {
-        const {namespace, kind, name} = parseObjectPath(decodedObjectName);
-        const token = localStorage.getItem("authToken") || "";
-        dispatch({type: "FETCH_START"});
-        try {
-            const response = await fetch(`${URL_OBJECT}/${namespace}/${kind}/${name}/config`, {
-                headers: {Authorization: `Bearer ${token}`},
-                cache: "no-cache",
-            });
-            if (!response.ok) {
-                const error = new Error(`HTTP ${response.status}`);
-                dispatch({type: "FETCH_ERROR", payload: t("config.errors.fetchParams", {message: error.message})});
-                return;
-            }
-            const data = await response.json();
-            dispatch({type: "FETCH_SUCCESS", payload: data.items || []});
-        } catch (err) {
-            dispatch({type: "FETCH_ERROR", payload: t("config.errors.fetchParams", {message: err.message})});
-        }
-    };
-    return {...state, fetchExistingParams};
-};
-
-/** "section.option", or "option" alone for a keyword without section. */
 /** The configuration file of an object as stored, its secrets in clear, for editing. */
 const fetchRawConfigFile = async (decodedObjectName) => {
     const {namespace, kind, name} = parseObjectPath(decodedObjectName);
@@ -261,8 +155,6 @@ const refusal = async (response) => {
     const message = await problemMessage(response);
     return message.startsWith("HTTP ") ? message : `HTTP ${response.status} ${message}`;
 };
-
-const keywordLabel = (keyword) => `${keyword.section ? `${keyword.section}.` : ""}${keyword.option}`;
 
 /**
  * File picker: the native input, hidden but focusable, behind a label drawn as a
@@ -349,356 +241,91 @@ const UpdateConfigDialog = ({
     );
 };
 
-/** A group of checkboxes, one per choice, in a bordered scrolling box. */
-const CheckboxGroup = ({legend, hint, choices, isChecked, onToggle, disabled, emptyText}) => (
-    <fieldset className="space-y-1">
-        <legend className="mb-1 font-semibold">{legend}</legend>
-        {choices.length === 0 ? (
-            <p className="text-ink-muted">{emptyText}</p>
-        ) : (
-            <div
-                className="max-h-40 space-y-1 overflow-y-auto rounded-(--radius-control) border border-line bg-surface px-2 py-1">
-                {choices.map(({key, label, value}) => (
-                    <div key={key}>
-                        <Checkbox
-                            label={<span className="font-mono">{label}</span>}
-                            checked={isChecked(value)}
-                            onChange={() => onToggle(value)}
-                            disabled={disabled}
-                        />
-                    </div>
-                ))}
-            </div>
-        )}
-        <p className="text-data text-ink-muted">{hint}</p>
-    </fieldset>
-);
-
-const ManageParamsDialog = ({
+/**
+ * The configuration changed in the designer, seeded with the file as stored: its
+ * sections on the left, the keywords of the one picked on the right, each
+ * documented. Applied, the changes made, in one request; refused, the daemon's
+ * words, the design kept, written anyway on demand when force lifts the refusal.
+ */
+const DesignConfigDialog = ({
                                 open,
                                 onClose,
-                                keywordsData,
-                                existingParams,
-                                keywordsLoading,
-                                existingParamsLoading,
-                                keywordsError,
-                                existingParamsError,
-                                paramsToSet,
-                                setParamsToSet,
-                                paramsToUnset,
-                                setParamsToUnset,
-                                paramsToDelete,
-                                setParamsToDelete,
+                                kind,
+                                namespace,
+                                keywordsUrl,
+                                design,
+                                onChange,
+                                loading,
+                                error,
+                                changes,
                                 actionLoading,
-                                handleManageParamsSubmit,
-                                openSnackbar,
-                                wait,
-                                setWait,
+                                onSubmit,
                                 refused,
                                 isRoot,
                             }) => {
     const {t} = useTranslation();
-    const listId = useId();
-    // The text of the "add" field: a keyword when it names one, else free text.
-    const [keywordInput, setKeywordInput] = useState("");
-
-    const selectedKeyword = useMemo(() => {
-        const text = keywordInput.trim();
-        if (!text) return null;
-        return (keywordsData || []).find((keyword) => keywordLabel(keyword) === text) || text;
-    }, [keywordInput, keywordsData]);
-
-    const existingKeywords = useMemo(() => {
-        if (!existingParams) return [];
-        return existingParams.map((param) => {
-            const parts = param.keyword.split(".");
-            return {
-                section: parts.length > 1 ? parts[0] : "",
-                option: parts.length > 1 ? parts.slice(1).join(".") : param.keyword,
-                value: param.value,
-            };
-        });
-    }, [existingParams]);
-
-    const existingSections = useMemo(() => {
-        if (!existingParams) return [];
-        const sections = new Set(
-            existingParams.map((param) => {
-                const parts = param.keyword.split(".");
-                return parts.length > 1 ? parts[0] : "";
-            }).filter(Boolean)
-        );
-        return Array.from(sections);
-    }, [existingParams]);
-
-    const existingSectionSuffixes = useMemo(() => {
-        const suffixMap = {};
-        existingSections.forEach((section) => {
-            const hashIndex = section.indexOf("#");
-            if (hashIndex !== -1) {
-                const prefix = section.substring(0, hashIndex);
-                const suffix = section.substring(hashIndex + 1);
-                if (!suffixMap[prefix]) suffixMap[prefix] = [];
-                if (!suffixMap[prefix].includes(suffix)) suffixMap[prefix].push(suffix);
-            }
-        });
-        return suffixMap;
-    }, [existingSections]);
-
-    const addParameter = () => {
-        if (selectedKeyword) {
-            if (typeof selectedKeyword === 'string') {
-                openSnackbar(t("config.feedback.invalidParam", {name: selectedKeyword}), 'error');
-                return;
-            }
-            const keywordSection = selectedKeyword.section || "";
-            const hasSection = keywordSection && keywordSection !== "DEFAULT";
-            if (hasSection) {
-                const newParam = {
-                    sectionPrefix: keywordSection,
-                    sectionSuffix: "",
-                    option: selectedKeyword.option,
-                    value: "",
-                    id: `${selectedKeyword.option}-${Date.now()}`,
-                    keyword: {...selectedKeyword},
-                };
-                setParamsToSet([...paramsToSet, newParam]);
-            } else {
-                const newParam = {
-                    section: "",
-                    option: selectedKeyword.option,
-                    value: "",
-                    id: `${selectedKeyword.option}-${Date.now()}`,
-                    keyword: {...selectedKeyword},
-                };
-                setParamsToSet([...paramsToSet, newParam]);
-            }
-            setKeywordInput("");
-        }
-    };
-
-    const removeParameter = (index) => {
-        const newParams = paramsToSet.filter((_, i) => i !== index);
-        setParamsToSet(newParams);
-    };
-
-    const updateParamSection = (index, newSection) => {
-        const updated = [...paramsToSet];
-        updated[index].section = newSection;
-        setParamsToSet(updated);
-    };
-
-    const updateParamSectionSuffix = (index, newSuffix) => {
-        const updated = [...paramsToSet];
-        updated[index].sectionSuffix = newSuffix;
-        setParamsToSet(updated);
-    };
-
-    const updateParamValue = (index, newValue) => {
-        const updated = [...paramsToSet];
-        updated[index].value = newValue;
-        setParamsToSet(updated);
-    };
-
-    const toggleUnset = (keyword) => {
-        const label = keywordLabel(keyword);
-        const selected = paramsToUnset.some((item) => keywordLabel(item) === label)
-            ? paramsToUnset.filter((item) => keywordLabel(item) !== label)
-            : [...paramsToUnset, keyword];
-        setParamsToUnset(selected.map((item, index) => ({...item, id: `unset-${item.option}-${index}`})));
-    };
-
-    const toggleDelete = (section) => {
-        setParamsToDelete(
-            paramsToDelete.includes(section)
-                ? paramsToDelete.filter((item) => item !== section)
-                : [...paramsToDelete, section]
-        );
-    };
-
+    // Root's choice of the keywords only root may set, by the buttons.
+    const [showRoot, setShowRoot] = useState(false);
+    const lines = [
+        ...changes.delete.map((section) => t("actionTray.writes.deleteSection", {section})),
+        ...changes.unset.map((keyword) => t("actionTray.writes.unset", {keyword})),
+        ...changes.set.map(({keyword, value}) => t("actionTray.writes.set", {keyword, value})),
+    ];
     return (
         <Dialog
             open={open}
             onClose={onClose}
-            title={t("config.params.title")}
-            size="lg"
+            title={t("config.design.title")}
+            size="xl"
             footer={
                 <>
-                    <div className="mr-auto self-center"><WaitChoice compact wait={wait} onChange={setWait} disabled={actionLoading}/></div>
+                    <div className="mr-auto self-center">
+                        {isRoot && <Checkbox label={t("objectDesigner.showRoot")} checked={showRoot} onChange={(e) => setShowRoot(e.target.checked)}/>}
+                    </div>
                     <Button onClick={onClose} disabled={actionLoading}>{t("common.cancel")}</Button>
                     <Button
-                        onClick={() => handleManageParamsSubmit()}
-                        disabled={actionLoading}
-                        icon={actionLoading ? <Spinner label={t("config.params.applying")}/> : undefined}
+                        onClick={() => onSubmit()}
+                        disabled={actionLoading || lines.length === 0}
+                        icon={actionLoading ? <Spinner label={t("config.design.applying")}/> : undefined}
                     >
-                        {t("config.params.apply")}
+                        {lines.length === 0 ? t("config.design.noChange") : t("config.design.apply", {count: lines.length})}
                     </Button>
                 </>
             }
         >
-            {(keywordsLoading || existingParamsLoading) && <Spinner/>}
-            {/* Refused, nothing written: why, the changes kept, forced on demand when force lifts it. */}
-            <ForceRefusal
-                messages={refused?.messages}
-                lifts={refused?.lifts}
-                isRoot={isRoot}
-                onForce={() => handleManageParamsSubmit(true)}
-                disabled={actionLoading}
-            />
-            {keywordsError && <Alert>{keywordsError}</Alert>}
-            {existingParamsError && <Alert>{existingParamsError}</Alert>}
-
-            <section className="space-y-2">
-                <h3 className="font-semibold">{t("config.params.addHeading")}</h3>
-                <div className="flex items-end gap-2">
-                    <div className="min-w-0 flex-1">
-                        <Field label={t("config.params.selectLabel")} hint={t("config.params.selectHint")}>
-                            {(control) => (
-                                <Input
-                                    {...control}
-                                    list={`${listId}-keywords`}
-                                    placeholder={t("config.params.selectPlaceholder")}
-                                    autoComplete="off"
-                                    className="font-mono"
-                                    value={keywordInput}
-                                    onChange={(e) => setKeywordInput(e.target.value)}
-                                    disabled={actionLoading || keywordsLoading}
-                                />
-                            )}
-                        </Field>
-                        <datalist id={`${listId}-keywords`}>
-                            {(keywordsData || []).map((keyword, index) => (
-                                <option key={`${keywordLabel(keyword)}-${index}`} value={keywordLabel(keyword)}/>
-                            ))}
-                        </datalist>
-                    </div>
-                    {/* Aligned with the field, above its hint. */}
-                    <div className="mb-6">
-                        <Button
-                            icon={<PlusIcon/>}
-                            onClick={addParameter}
-                            disabled={!selectedKeyword || actionLoading}
-                        >
-                            {t("config.params.addButton")}
-                        </Button>
-                    </div>
-                </div>
-
-                {paramsToSet.length > 0 && (
-                    <Table aria-label={t("config.params.tableLabel")}>
-                        <thead>
-                        <HeaderRow>
-                            <HeaderCell className="w-1/4">{t("config.params.section")}</HeaderCell>
-                            <HeaderCell>{t("config.params.parameter")}</HeaderCell>
-                            <HeaderCell className="w-1/4">{t("config.params.value")}</HeaderCell>
-                            <HeaderCell>{t("config.params.description")}</HeaderCell>
-                            <HeaderCell><span className="sr-only">{t("common.actions")}</span></HeaderCell>
-                        </HeaderRow>
-                        </thead>
-                        <tbody>
-                        {paramsToSet.map((param, index) => {
-                            const keyword = param.keyword;
-                            const hasSectionPrefix = param.sectionPrefix !== undefined;
-                            const sectionListId = `${listId}-sections-${index}`;
-                            return (
-                                <Row key={param.id}>
-                                    <Cell>
-                                        {hasSectionPrefix ? (
-                                            <div className="flex items-center gap-1">
-                                                <span
-                                                    className="font-mono whitespace-nowrap">{param.sectionPrefix}#</span>
-                                                <Input
-                                                    aria-label={t("config.params.index")}
-                                                    list={sectionListId}
-                                                    autoComplete="off"
-                                                    placeholder={t("config.params.indexPlaceholder")}
-                                                    className="h-7 font-mono"
-                                                    value={param.sectionSuffix}
-                                                    onChange={(e) => updateParamSectionSuffix(index, e.target.value)}
-                                                    disabled={actionLoading}
-                                                />
-                                                <datalist id={sectionListId}>
-                                                    {(existingSectionSuffixes[param.sectionPrefix] || []).map((suffix) => (
-                                                        <option key={suffix} value={suffix}/>
-                                                    ))}
-                                                </datalist>
-                                            </div>
-                                        ) : (
-                                            <>
-                                                <Input
-                                                    aria-label={t("config.params.sectionOptional")}
-                                                    list={sectionListId}
-                                                    autoComplete="off"
-                                                    placeholder={t("config.params.sectionPlaceholder")}
-                                                    className="h-7 font-mono"
-                                                    value={param.section || ""}
-                                                    onChange={(e) => updateParamSection(index, e.target.value)}
-                                                    disabled={actionLoading}
-                                                />
-                                                <datalist id={sectionListId}>
-                                                    {existingSections.map((section) => (
-                                                        <option key={section} value={section}/>
-                                                    ))}
-                                                </datalist>
-                                            </>
-                                        )}
-                                    </Cell>
-                                    <Cell className="font-mono whitespace-nowrap" title={keyword?.text || ""}>
-                                        {param.option}
-                                    </Cell>
-                                    <Cell>
-                                        <Input
-                                            aria-label={t("config.params.value")}
-                                            className="h-7 font-mono"
-                                            value={param.value}
-                                            onChange={(e) => updateParamValue(index, e.target.value)}
-                                            disabled={actionLoading}
-                                        />
-                                    </Cell>
-                                    <Cell className="max-w-60 truncate text-ink-muted" title={keyword?.text || ""}>
-                                        {keyword?.text || t("common.notAvailable")}
-                                    </Cell>
-                                    <Cell>
-                                        <IconButton
-                                            size="sm"
-                                            label={t("config.params.removeParam")}
-                                            onClick={() => removeParameter(index)}
-                                            disabled={actionLoading}
-                                        >
-                                            <TrashIcon/>
-                                        </IconButton>
-                                    </Cell>
-                                </Row>
-                            );
-                        })}
-                        </tbody>
-                    </Table>
+            <div className="space-y-3">
+                {loading && <Spinner label={t("config.design.loading")}/>}
+                {/* Refused, nothing written: why, the design kept, forced on demand when force lifts it. */}
+                <ForceRefusal
+                    messages={refused?.messages}
+                    lifts={refused?.lifts}
+                    isRoot={isRoot}
+                    onForce={() => onSubmit(true)}
+                    disabled={actionLoading}
+                />
+                {error && <Alert>{error}</Alert>}
+                {design && (
+                    <ObjectDesigner
+                        kind={kind}
+                        namespace={namespace}
+                        sections={design}
+                        onChange={onChange}
+                        keywordsUrl={keywordsUrl}
+                        isRoot={isRoot}
+                        showRoot={showRoot}
+                        onShowRoot={setShowRoot}
+                    />
                 )}
-            </section>
-
-            <CheckboxGroup
-                legend={t("config.params.unsetLegend")}
-                hint={t("config.params.unsetHint")}
-                emptyText={t("config.params.unsetEmpty")}
-                choices={existingKeywords.map((keyword) => ({
-                    key: keywordLabel(keyword),
-                    label: keywordLabel(keyword),
-                    value: keyword,
-                }))}
-                isChecked={(keyword) => paramsToUnset.some((item) => keywordLabel(item) === keywordLabel(keyword))}
-                onToggle={toggleUnset}
-                disabled={actionLoading || existingParamsLoading}
-            />
-
-            <CheckboxGroup
-                legend={t("config.params.deleteLegend")}
-                hint={t("config.params.deleteHint")}
-                emptyText={t("config.params.deleteEmpty")}
-                choices={existingSections.map((section) => ({key: section, label: section, value: section}))}
-                isChecked={(section) => paramsToDelete.includes(section)}
-                onToggle={toggleDelete}
-                disabled={actionLoading || existingParamsLoading}
-            />
+                {/* The changes applied, as the actions tray will say them. */}
+                {lines.length > 0 && (
+                    <section aria-label={t("config.design.changes")} className="rounded-(--radius-panel) border border-line bg-surface-sunken p-2">
+                        <h3 className="mb-1 font-semibold">{t("config.design.changes")}</h3>
+                        <ul className="space-y-0.5 font-mono text-data">
+                            {lines.map((line, i) => <li key={i} className="break-all">{line}</li>)}
+                        </ul>
+                    </section>
+                )}
+            </div>
         </Dialog>
     );
 };
@@ -734,18 +361,6 @@ const ConfigSection = ({
         configRefreshTrigger,
         showSecrets,
     );
-    const {
-        data: keywordsData,
-        loading: keywordsLoading,
-        error: keywordsError,
-        fetchKeywords
-    } = useKeywords(decodedObjectName);
-    const {
-        data: existingParams,
-        loading: existingParamsLoading,
-        error: existingParamsError,
-        fetchExistingParams,
-    } = useExistingParams(decodedObjectName);
 
     const [updateConfigDialogOpen, setUpdateConfigDialogOpen] = useState(false);
     // The keywords evaluated, as on a node of the object (om config eval --impersonate).
@@ -755,9 +370,15 @@ const ConfigSection = ({
     // Why the daemon refused the file uploaded, and who may write it anyway.
     const [uploadRefused, setUploadRefused] = useState(null);
     const [manageParamsDialogOpen, setManageParamsDialogOpen] = useState(false);
-    const [paramsToSet, setParamsToSet] = useState([]);
-    const [paramsToUnset, setParamsToUnset] = useState([]);
-    const [paramsToDelete, setParamsToDelete] = useState([]);
+    // The design the dialog started from, the file as stored, and as changed since.
+    const [designBase, setDesignBase] = useState(null);
+    const [design, setDesign] = useState(null);
+    const [designLoading, setDesignLoading] = useState(false);
+    const [designError, setDesignError] = useState(null);
+    const designChanged = useMemo(
+        () => (designBase && design ? designChanges(designBase, design) : {set: [], unset: [], delete: []}),
+        [designBase, design],
+    );
     // The changes refused that force would lift: the daemon's words, and who may force them.
     const [paramsRefused, setParamsRefused] = useState(null);
     const [actionLoading, setActionLoading] = useState(false);
@@ -862,11 +483,33 @@ const ConfigSection = ({
         }
     };
 
-    const handleOpenManageParamsDialog = () => {
+    /**
+     * The designer opened on the file as stored, read again each time: its secrets
+     * in clear, as an edit, the keys of a datastore left out. None yet: the sections
+     * every design starts with, env for a service or a volume.
+     */
+    const openDesign = async () => {
+        const start = designStart(["svc", "vol"].includes(parseObjectPath(decodedObjectName).kind));
+        setParamsRefused(null);
+        setDesignError(null);
+        setDesignBase(null);
+        setDesign(null);
         setManageParamsDialogOpen(true);
-        void fetchKeywords();
-        // None yet: nothing set to read.
-        if (!absent) void fetchExistingParams();
+        if (absent) {
+            setDesignBase(start);
+            setDesign(start);
+            return;
+        }
+        setDesignLoading(true);
+        try {
+            const seeded = parseDesign(await fetchRawConfigFile(decodedObjectName), start);
+            setDesignBase(seeded);
+            setDesign(seeded);
+        } catch (err) {
+            setDesignError(t("config.errors.fetchConfig", {message: err.message}));
+        } finally {
+            setDesignLoading(false);
+        }
     };
 
     // `force`, written anyway past a refusal force lifts.
@@ -918,17 +561,8 @@ const ConfigSection = ({
         }
     };
 
-    /** The keyword a parameter to set names: [<section>.]<option>, the index of its section given. */
-    const keywordOf = (param) => {
-        if (param.sectionPrefix !== undefined) {
-            const section = param.sectionSuffix ? `${param.sectionPrefix}#${param.sectionSuffix}` : param.sectionPrefix;
-            return section ? `${section}.${param.option}` : param.option;
-        }
-        return param.section ? `${param.section}.${param.option}` : param.option;
-    };
-
     /**
-     * Writes the changes asked in one request, as om config update does: the
+     * Writes the changes designed in one request, as om config update does: the
      * sections deleted, the keywords unset, then set, the daemon applying them in
      * that order, all or none; one wait for the nodes. The object none yet: created
      * with the keywords set. Done, the dialog closes; refused, nothing is written,
@@ -936,27 +570,11 @@ const ConfigSection = ({
      * (`force`) by whom may when force lifts the refusal.
      */
     const handleManageParamsSubmit = async (force = false) => {
-        if (!paramsToSet.length && !paramsToUnset.length && !paramsToDelete.length) {
+        const {set: sets, unset: unsets, delete: paramsToDelete} = designChanged;
+        if (!sets.length && !unsets.length && !paramsToDelete.length) {
             openSnackbar(t("config.feedback.noSelection"), "error");
             return;
         }
-        // A change not valid is said before anything is sent: all are written, or none.
-        const sets = [];
-        for (const param of paramsToSet) {
-            const keyword = keywordOf(param);
-            /* istanbul ignore next */
-            if (!param.keyword) {
-                openSnackbar(t("config.feedback.invalidParam", {name: param.option}), "error");
-                return;
-            }
-            if (param.keyword.converter === "converters.TListLowercase" && param.value.includes(",")
-                && param.value.split(",").some((v) => !v.trim())) {
-                openSnackbar(t("config.feedback.invalidList", {keyword}), "error");
-                return;
-            }
-            sets.push({keyword, value: param.value});
-        }
-        const unsets = paramsToUnset.map(({section, option}) => (section ? `${section}.${option}` : option));
         const token = localStorage.getItem("authToken");
         if (!token) {
             openSnackbar(t("config.feedback.tokenNotFound"), "error");
@@ -995,13 +613,11 @@ const ConfigSection = ({
                 return;
             }
             if (absent) setCreated(true);
-            setParamsToSet([]);
-            setParamsToUnset([]);
-            setParamsToDelete([]);
             setManageParamsDialogOpen(false);
+            setDesignBase(null);
+            setDesign(null);
             if (configNode) {
                 await fetchConfig(configNode, true);
-                await fetchExistingParams();
                 setConfigDialogOpen(true);
             }
         } catch (err) {
@@ -1100,10 +716,10 @@ const ConfigSection = ({
                                     </IconButton>
                                     <IconButton
                                         label={t("config.view.manageParams")}
-                                        onClick={handleOpenManageParamsDialog}
+                                        onClick={openDesign}
                                         disabled={actionLoading}
                                     >
-                                        {/* The parameters set one by one, in the wizard: the sliders. */}
+                                        {/* The configuration designed, its sections and keywords: the sliders. */}
                                         <SlidersIcon/>
                                     </IconButton>
                                     {/* None yet: nothing to evaluate. */}
@@ -1181,29 +797,22 @@ const ConfigSection = ({
                 refused={uploadRefused}
                 isRoot={isRoot}
             />
-            <ManageParamsDialog
+            <DesignConfigDialog
                 open={manageParamsDialogOpen}
                 onClose={() => {
                     setManageParamsDialogOpen(false);
                     setParamsRefused(null);
                 }}
-                keywordsData={keywordsData}
-                existingParams={absent ? [] : existingParams}
-                keywordsLoading={keywordsLoading}
-                existingParamsLoading={existingParamsLoading}
-                keywordsError={keywordsError}
-                existingParamsError={absent ? null : existingParamsError}
-                paramsToSet={paramsToSet}
-                setParamsToSet={setParamsToSet}
-                paramsToUnset={paramsToUnset}
-                setParamsToUnset={setParamsToUnset}
-                paramsToDelete={paramsToDelete}
-                setParamsToDelete={setParamsToDelete}
+                kind={parseObjectPath(decodedObjectName).kind}
+                namespace={parseObjectPath(decodedObjectName).namespace}
+                keywordsUrl={`${URL_OBJECT}/${keywordsPath}/config/keywords`}
+                design={design}
+                onChange={setDesign}
+                loading={designLoading}
+                error={designError}
+                changes={designChanged}
                 actionLoading={actionLoading}
-                handleManageParamsSubmit={handleManageParamsSubmit}
-                openSnackbar={openSnackbar}
-                wait={wait}
-                setWait={setWait}
+                onSubmit={handleManageParamsSubmit}
                 refused={paramsRefused}
                 isRoot={isRoot}
             />

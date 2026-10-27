@@ -8,6 +8,16 @@
  * Over the nodes, the figures of an object add up: its instances share nothing,
  * the cpu and the memory they use are the object's, their limits what the object
  * may use in all, unlimited if one of them is. Over the objects, a namespace's.
+ *
+ * A reading also tells of the opensvc slice of the node, every opensvc cgroup
+ * there, the daemon's included (`scope="opensvc"`): what opensvc uses on the node,
+ * shown to whom the whole node may be shown only; and of the slice of each namespace
+ * there but the root one, whose objects stand in the opensvc slice itself
+ * (`scope="namespace"`); of the whole host, the root cgroup and the memory of the
+ * machine (`scope="host"`), and of the other top-level slices, by name
+ * (`scope="slice"`: system.slice, user.slice, machine.slice…). Asked for an object
+ * (`?path=`), the groups in its slice: its subsets (`scope="subset"`) and its
+ * resources (`scope="resource"`, by rid, with their subset).
  */
 import { parsePrometheusText } from "../utils/cgroupMetrics";
 
@@ -19,19 +29,49 @@ export interface PgSample {
   memoryCurrent?: number;
   /** Infinity: no limit. */
   memoryMax?: number;
+  /** Bytes read and written so far, over the devices: told where the io controller is on. */
+  ioReadBytes?: number;
+  ioWriteBytes?: number;
+  /** Its tasks: told where the pids controller is on. */
+  tasks?: number;
+  /** The cpus it runs on. */
+  cpus?: number;
 }
 
-/** A reading of a node: when, and its objects by path. */
+/**
+ * A reading of a node: when, its objects by path, its opensvc slice when told, its
+ * namespace slices by namespace, the host when told, the other top-level slices by name.
+ */
 export interface NodeReading {
   at: number;
   byPath: Record<string, PgSample>;
+  opensvc?: PgSample;
+  namespaces?: Record<string, PgSample>;
+  host?: PgSample;
+  slices?: Record<string, PgSample>;
+  /** The groups in the slices of the objects asked for, by object path. */
+  details?: Record<string, ObjectDetail<PgSample>>;
 }
 
-/** The usage of an instance: the cpu in cpus, null until a second reading tells it. */
+/** The groups in the slice of an object: its subsets by name, its resources by rid with their subset. */
+export interface ObjectDetail<T> {
+  subsets: Record<string, T>;
+  resources: Record<string, { subset: string; sample: T }>;
+}
+
+/**
+ * The usage of an instance: the cpu in cpus, null until a second reading tells it;
+ * the bytes read and written a second likewise, undefined where not told; its tasks.
+ */
 export interface Usage {
   cpu: number | null;
   memory?: number;
   limit?: number;
+  read?: number | null;
+  write?: number | null;
+  tasks?: number;
+  /** The cpus it runs on: for the share of the capacity. */
+  cpus?: number;
 }
 
 /** The usage of the instances of each node, by object path. */
@@ -41,20 +81,113 @@ const FIELDS: Record<string, keyof Omit<PgSample, "namespace">> = {
   opensvc_pg_cgroup_cpu_usage_usec: "cpuUsageUsec",
   opensvc_pg_cgroup_memory_current_bytes: "memoryCurrent",
   opensvc_pg_cgroup_memory_max_bytes: "memoryMax",
+  opensvc_pg_cgroup_io_read_bytes: "ioReadBytes",
+  opensvc_pg_cgroup_io_write_bytes: "ioWriteBytes",
+  opensvc_pg_cgroup_tasks: "tasks",
+  opensvc_pg_cgroup_cpu_cpus: "cpus",
 };
 
 /**
- * The objects a reading tells of, with a cgroup on the node: those the daemon
- * knows without one there (`opensvc_pg_cgroup_exists 0`, no usage) left out.
+ * A counter between two readings, by unit of time: none on a first reading, nor for
+ * a counter gone back (a cgroup recreated); undefined when the counter is not told.
  */
-export function readPg(text: string): Record<string, PgSample> {
+function rate(before: number | undefined, now: number | undefined, elapsed: number): number | null | undefined {
+  if (now === undefined) return undefined;
+  return before === undefined || now < before || elapsed <= 0 ? null : (now - before) / elapsed;
+}
+
+/** The usage a sample tells, against the one before it, `elapsedMs` earlier. */
+function sampleUsage(before: PgSample | undefined, sample: PgSample, elapsedMs: number): Usage {
+  const usage: Usage = {
+    cpu: rate(before?.cpuUsageUsec, sample.cpuUsageUsec, elapsedMs * 1000) ?? null,
+    memory: sample.memoryCurrent,
+    limit: sample.memoryMax,
+  };
+  const read = rate(before?.ioReadBytes, sample.ioReadBytes, elapsedMs / 1000);
+  const write = rate(before?.ioWriteBytes, sample.ioWriteBytes, elapsedMs / 1000);
+  if (read !== undefined) usage.read = read;
+  if (write !== undefined) usage.write = write;
+  if (sample.tasks !== undefined) usage.tasks = sample.tasks;
+  if (sample.cpus !== undefined) usage.cpus = sample.cpus;
+  return usage;
+}
+
+/**
+ * What a reading tells: the objects with a cgroup on the node, those the daemon
+ * knows without one there (`opensvc_pg_cgroup_exists 0`, no usage) left out; and the
+ * opensvc slice of the node, when the reader may see it and it is there.
+ */
+export function readPgScopes(text: string): Omit<NodeReading, "at"> {
   const byPath: Record<string, PgSample> = {};
   const absent = new Set<string>();
+  const namespaces: Record<string, PgSample> = {};
+  const absentNamespaces = new Set<string>();
+  const slices: Record<string, PgSample> = {};
+  const absentSlices = new Set<string>();
+  let opensvc: PgSample | undefined;
+  let opensvcAbsent = false;
+  let host: PgSample | undefined;
+  const details: Record<string, ObjectDetail<PgSample>> = {};
+  const absentGroups = new Set<string>();
   for (const { name, labels, value } of parsePrometheusText(text) as {
     name: string;
     labels: Record<string, string>;
     value: number;
   }[]) {
+    if (labels.scope === "opensvc") {
+      if (name === "opensvc_pg_cgroup_exists" && value === 0) opensvcAbsent = true;
+      const field = FIELDS[name];
+      if (!field) continue;
+      opensvc ??= { namespace: "" };
+      opensvc[field] = value;
+      continue;
+    }
+    if (labels.scope === "subset" || labels.scope === "resource") {
+      const path = labels.path;
+      const subset = labels.subset ?? "";
+      const rid = labels.rid ?? "";
+      if (!path || (labels.scope === "subset" ? !subset : !rid)) continue;
+      const key = `${labels.scope}\u0000${path}\u0000${labels.scope === "subset" ? subset : rid}`;
+      if (name === "opensvc_pg_cgroup_exists" && value === 0) absentGroups.add(key);
+      const field = FIELDS[name];
+      if (!field) continue;
+      details[path] ??= { subsets: {}, resources: {} };
+      if (labels.scope === "subset") {
+        details[path].subsets[subset] ??= { namespace: labels.namespace ?? "" };
+        details[path].subsets[subset][field] = value;
+      } else {
+        details[path].resources[rid] ??= { subset, sample: { namespace: labels.namespace ?? "" } };
+        details[path].resources[rid].sample[field] = value;
+      }
+      continue;
+    }
+    if (labels.scope === "host") {
+      const field = FIELDS[name];
+      if (!field) continue;
+      host ??= { namespace: "" };
+      host[field] = value;
+      continue;
+    }
+    if (labels.scope === "slice") {
+      const slice = labels.path;
+      if (!slice) continue;
+      if (name === "opensvc_pg_cgroup_exists" && value === 0) absentSlices.add(slice);
+      const field = FIELDS[name];
+      if (!field) continue;
+      slices[slice] ??= { namespace: "" };
+      slices[slice][field] = value;
+      continue;
+    }
+    if (labels.scope === "namespace") {
+      const namespace = labels.namespace;
+      if (!namespace) continue;
+      if (name === "opensvc_pg_cgroup_exists" && value === 0) absentNamespaces.add(namespace);
+      const field = FIELDS[name];
+      if (!field) continue;
+      namespaces[namespace] ??= { namespace };
+      namespaces[namespace][field] = value;
+      continue;
+    }
     const path = labels.path;
     if (!path) continue;
     if (name === "opensvc_pg_cgroup_exists" && value === 0) absent.add(path);
@@ -64,7 +197,23 @@ export function readPg(text: string): Record<string, PgSample> {
     byPath[path][field] = value;
   }
   for (const path of absent) delete byPath[path];
-  return byPath;
+  for (const namespace of absentNamespaces) delete namespaces[namespace];
+  for (const slice of absentSlices) delete slices[slice];
+  for (const key of absentGroups) {
+    const [scope, path, name] = key.split("\u0000");
+    if (scope === "subset") delete details[path]?.subsets[name];
+    else delete details[path]?.resources[name];
+  }
+  const reading: Omit<NodeReading, "at"> = { byPath, namespaces, slices };
+  if (Object.keys(details).length > 0) reading.details = details;
+  if (opensvc && !opensvcAbsent) reading.opensvc = opensvc;
+  if (host) reading.host = host;
+  return reading;
+}
+
+/** The objects a reading tells of, with a cgroup on the node (`readPgScopes`). */
+export function readPg(text: string): Record<string, PgSample> {
+  return readPgScopes(text).byPath;
 }
 
 /**
@@ -74,27 +223,91 @@ export function readPg(text: string): Record<string, PgSample> {
  */
 export function nodeUsage(previous: NodeReading | undefined, current: NodeReading): Record<string, Usage> {
   const out: Record<string, Usage> = {};
-  const elapsedUsec = previous ? (current.at - previous.at) * 1000 : 0;
+  const elapsedMs = previous ? current.at - previous.at : 0;
   for (const [path, sample] of Object.entries(current.byPath)) {
-    const before = previous?.byPath[path]?.cpuUsageUsec;
-    const now = sample.cpuUsageUsec;
-    const cpu =
-      before === undefined || now === undefined || now < before || elapsedUsec <= 0 ? null : (now - before) / elapsedUsec;
-    out[path] = { cpu, memory: sample.memoryCurrent, limit: sample.memoryMax };
+    out[path] = sampleUsage(previous?.byPath[path], sample, elapsedMs);
   }
   return out;
 }
 
-/** The sum of usages: the cpus told, the memories, the limits, unlimited if one is. */
+/** The usage of the namespace slices of a node, as that of its objects (nodeUsage): the cpu from a second reading. */
+export function namespaceSlicesUsage(previous: NodeReading | undefined, current: NodeReading): Record<string, Usage> {
+  return nodeUsage(
+    previous && { at: previous.at, byPath: previous.namespaces ?? {} },
+    { at: current.at, byPath: current.namespaces ?? {} },
+  );
+}
+
+/** The usage of the other top-level slices of a node, by name, as that of its objects. */
+export function topSlicesUsage(previous: NodeReading | undefined, current: NodeReading): Record<string, Usage> {
+  return nodeUsage(
+    previous && { at: previous.at, byPath: previous.slices ?? {} },
+    { at: current.at, byPath: current.slices ?? {} },
+  );
+}
+
+/** The usage of the groups in the slices of the objects asked for, by object path, as that of the objects. */
+export function detailsUsage(previous: NodeReading | undefined, current: NodeReading): Record<string, ObjectDetail<Usage>> {
+  const out: Record<string, ObjectDetail<Usage>> = {};
+  const elapsedMs = previous ? current.at - previous.at : 0;
+  for (const [path, detail] of Object.entries(current.details ?? {})) {
+    const before = previous?.details?.[path];
+    out[path] = {
+      subsets: Object.fromEntries(Object.entries(detail.subsets).map(([name, sample]) => [name, sampleUsage(before?.subsets[name], sample, elapsedMs)])),
+      resources: Object.fromEntries(Object.entries(detail.resources).map(([rid, { subset, sample }]) => [
+        rid,
+        { subset, sample: sampleUsage(before?.resources[rid]?.sample, sample, elapsedMs) },
+      ])),
+    };
+  }
+  return out;
+}
+
+/** The usage of the whole host, as that of its opensvc slice (opensvcUsage): undefined when not told. */
+export function hostUsage(previous: NodeReading | undefined, current: NodeReading): Usage | undefined {
+  if (current.host === undefined) return undefined;
+  return sampleUsage(previous?.host, current.host, previous ? current.at - previous.at : 0);
+}
+
+/**
+ * The usage of the opensvc slice of a node, from its last reading and the one
+ * before: the cpu used between them in cpus, null on a first reading; undefined
+ * when the reading does not tell it (the reader may not see the whole node).
+ */
+export function opensvcUsage(previous: NodeReading | undefined, current: NodeReading): Usage | undefined {
+  if (current.opensvc === undefined) return undefined;
+  return sampleUsage(previous?.opensvc, current.opensvc, previous ? current.at - previous.at : 0);
+}
+
+/**
+ * The figures of a usage beyond the cpu and the memory its readings tell, in the
+ * order of the columns: the tasks, the bytes read and written a second.
+ */
+export const IO_FIGURES = ["tasks", "read", "write"] as const;
+
+/**
+ * The sum of usages: the cpus told, the memories, the limits, unlimited if one is;
+ * the io rates and the tasks where told, a rate null while one of them waits for its
+ * second reading.
+ */
 export function sumUsage(usages: Usage[]): Usage {
   const cpus = usages.map((u) => u.cpu).filter((c): c is number => c !== null && c !== undefined);
   const memories = usages.map((u) => u.memory).filter((m): m is number => m !== undefined);
   const limits = usages.map((u) => u.limit).filter((l): l is number => l !== undefined);
-  return {
+  const sum: Usage = {
     cpu: cpus.length === 0 ? null : cpus.reduce((a, b) => a + b, 0),
     memory: memories.length === 0 ? undefined : memories.reduce((a, b) => a + b, 0),
     limit: limits.length === 0 ? undefined : limits.reduce((a, b) => a + b, 0),
   };
+  for (const key of ["read", "write"] as const) {
+    const told = usages.map((u) => u[key]).filter((v) => v !== undefined);
+    if (told.length > 0) sum[key] = told.some((v) => v === null) ? null : (told as number[]).reduce((a, b) => a + b, 0);
+  }
+  for (const key of ["tasks", "cpus"] as const) {
+    const told = usages.map((u) => u[key]).filter((v): v is number => v !== undefined);
+    if (told.length > 0) sum[key] = told.reduce((a, b) => a + b, 0);
+  }
+  return sum;
 }
 
 /** An instance of an object: its node, its usage there. */

@@ -779,16 +779,34 @@ describe('Objects Component', () => {
     });
 
     describe('new object', () => {
+        // Root, offered every namespace known.
+        beforeEach(() => {
+            mockGrants.value = {root: null};
+        });
+        afterEach(() => {
+            mockGrants.value = {};
+        });
+        // The kind of the dialog a card pressed; its namespace, in a window as narrow as these, a select.
+        const kindCard = (dialog, kind) => dialog.querySelector(`[data-kind=${kind}]`);
+        const create = (dialog, kind, ns, name) => {
+            fireEvent.click(kindCard(dialog, kind));
+            fireEvent.change(within(dialog).getByLabelText('Namespace'), {target: {value: ns}});
+            fireEvent.change(within(dialog).getByLabelText('Name'), {target: {value: name}});
+            // A datastore, of no configuration to choose, created from there.
+            const next = within(dialog).queryByRole('button', {name: 'Next'});
+            if (next) fireEvent.click(next);
+            fireEvent.click(within(dialog).getByRole('button', {name: 'Create'}));
+        };
+
         test('opens on the kind of the tab, the namespace filtered on', async () => {
             setup({}, '?list=configs&namespace=test-ns');
             await waitForLoad();
             fireEvent.click(screen.getByRole('button', {name: 'New object'}));
             const dialog = screen.getByRole('dialog', {name: 'New object'});
-            expect(within(dialog).getByLabelText('Kind')).toHaveValue('cfg');
+            expect(kindCard(dialog, 'cfg')).toHaveAttribute('aria-pressed', 'true');
             expect(within(dialog).getByLabelText('Namespace')).toHaveValue('test-ns');
             // An object listed is refused as a new one.
-            fireEvent.change(within(dialog).getByLabelText('Namespace'), {target: {value: 'test-ns'}});
-            fireEvent.change(within(dialog).getByLabelText('Kind'), {target: {value: 'svc'}});
+            fireEvent.click(kindCard(dialog, 'svc'));
             fireEvent.change(within(dialog).getByLabelText('Name'), {target: {value: 'test1'}});
             expect(within(dialog).getByText('test-ns/svc/test1 already exists.')).toBeInTheDocument();
         });
@@ -798,10 +816,7 @@ describe('Objects Component', () => {
             await waitForLoad();
             fireEvent.click(screen.getByRole('button', {name: 'New object'}));
             const dialog = screen.getByRole('dialog', {name: 'New object'});
-            fireEvent.change(within(dialog).getByLabelText('Kind'), {target: {value: 'sec'}});
-            fireEvent.change(within(dialog).getByLabelText('Namespace'), {target: {value: 'test-ns'}});
-            fireEvent.change(within(dialog).getByLabelText('Name'), {target: {value: 'tls'}});
-            fireEvent.click(within(dialog).getByRole('button', {name: 'Create'}));
+            create(dialog, 'sec', 'test-ns', 'tls');
             // A datastore, created empty: on its keys.
             await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/objects?name=t&list=secrets&sel=test-ns%2Fsec%2Ftls&tab=keys'));
             // Created waiting for the nodes, as by default (--wait).
@@ -817,11 +832,8 @@ describe('Objects Component', () => {
             await waitForLoad();
             fireEvent.click(screen.getByRole('button', {name: 'New object'}));
             const dialog = screen.getByRole('dialog', {name: 'New object'});
-            expect(within(dialog).getByLabelText('Kind')).toHaveValue('svc');
-            fireEvent.change(within(dialog).getByLabelText('Kind'), {target: {value: 'sec'}});
-            fireEvent.change(within(dialog).getByLabelText('Namespace'), {target: {value: 'test-ns'}});
-            fireEvent.change(within(dialog).getByLabelText('Name'), {target: {value: 'tls'}});
-            fireEvent.click(within(dialog).getByRole('button', {name: 'Create'}));
+            expect(kindCard(dialog, 'svc')).toHaveAttribute('aria-pressed', 'true');
+            create(dialog, 'sec', 'test-ns', 'tls');
             await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/objects?list=any&sel=test-ns%2Fsec%2Ftls&tab=keys'));
         });
     });
@@ -1721,18 +1733,24 @@ describe('Objects Component', () => {
         });
 
         test('create from the line of a namespace: the wizard in that namespace', async () => {
-            setup({objectStatus: {'dev/svc/x': {avail: 'up'}, 'prod/svc/web': {avail: 'up'}}, objectInstanceStatus: {}}, '?list=any', {isWideScreen: true, isMobile: false});
-            await waitForLoad();
-            const dev = namespaceRows().find((row) => row.dataset.namespaceRow === 'dev');
-            fireEvent.click(within(dev).getByRole('button', {name: 'Create an object in dev'}));
-            const dialog = screen.getByRole('dialog', {name: 'New object'});
-            expect(within(dialog).getByLabelText('Namespace')).toHaveValue('dev');
-            // The line is not opened by it.
-            expect(screen.getByTestId('router-search')).not.toHaveTextContent('peek=namespace:dev');
-            fireEvent.click(within(dialog).getByRole('button', {name: 'Cancel'}));
-            // The top button: no namespace filtered on, root again.
-            fireEvent.click(screen.getByRole('button', {name: 'New object'}));
-            expect(within(screen.getByRole('dialog', {name: 'New object'})).getByLabelText('Namespace')).toHaveValue('root');
+            mockGrants.value = {root: null};
+            try {
+                setup({objectStatus: {'dev/svc/x': {avail: 'up'}, 'prod/svc/web': {avail: 'up'}}, objectInstanceStatus: {}}, '?list=any', {isWideScreen: true, isMobile: false});
+                await waitForLoad();
+                const dev = namespaceRows().find((row) => row.dataset.namespaceRow === 'dev');
+                fireEvent.click(within(dev).getByRole('button', {name: 'Create an object in dev'}));
+                const dialog = screen.getByRole('dialog', {name: 'New object'});
+                const pressed = (d) => within(within(d).getByRole('group', {name: 'My namespaces'})).getByRole('button', {pressed: true});
+                expect(pressed(dialog)).toHaveTextContent('dev');
+                // The line is not opened by it.
+                expect(screen.getByTestId('router-search')).not.toHaveTextContent('peek=namespace:dev');
+                fireEvent.click(within(dialog).getByRole('button', {name: 'Cancel'}));
+                // The top button: no namespace filtered on, root again.
+                fireEvent.click(screen.getByRole('button', {name: 'New object'}));
+                expect(pressed(screen.getByRole('dialog', {name: 'New object'}))).toHaveTextContent('root');
+            } finally {
+                mockGrants.value = {};
+            }
         });
 
         test.each([

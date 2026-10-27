@@ -82,7 +82,7 @@ export function findKeyword(keywords, {section, key, type}) {
 }
 
 /** The facts of a keyword, those it has: its default, its values, an example, its type, scopable, deprecated. */
-function KeywordFacts({keyword}) {
+export function KeywordFacts({keyword}) {
     const {t} = useTranslation();
     const facts = [
         ["default", keyword.default || keyword.defaultText],

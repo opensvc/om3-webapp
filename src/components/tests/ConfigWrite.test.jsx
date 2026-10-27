@@ -5,6 +5,7 @@ import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
 import ConfigSection from '../ConfigSection';
 import CreateObjectDialog from '../CreateObjectDialog';
 import {clearKeywordsCache} from '../ConfigText';
+import {clearDesignerCache} from '../ObjectDesigner';
 import {clearGrants} from '../../hooks/useGrants';
 import {useActionTracker} from '../../app/action-tracker';
 import {clearConfigStamps} from '../../app/config-stamps';
@@ -31,6 +32,7 @@ beforeEach(() => {
     localStorage.setItem('authToken', 'tok');
     clearGrants();
     clearKeywordsCache();
+    clearDesignerCache();
     clearConfigStamps();
     useActionTracker.setState({tracked: [], revealed: 0});
     useEventStore.setState({objectStatus: {}, objectInstanceStatus: {}});
@@ -160,34 +162,24 @@ describe('the force of a configuration write', () => {
         refusals[`PATCH ${OBJ}/config`] = [{status: 409, body: HELD}, null];
         renderConfig();
         await screen.findByRole('group', {name: 'Configuration file'});
-        await act(() => user.click(screen.getByRole('button', {name: /Manage configuration parameters/i})));
-        await waitFor(() => expect(screen.getByRole('heading', {name: 'Manage Configuration Parameters'})).toBeInTheDocument());
-        const add = async (keyword, value) => {
-            await act(() => user.type(screen.getByRole('combobox', {name: 'Select parameter to add'}), keyword));
-            await act(() => user.click(screen.getByRole('button', {name: /Add Parameter/i})));
-            const values = screen.getAllByRole('textbox', {name: 'Value'});
-            fireEvent.change(values[values.length - 1], {target: {value}});
-        };
-        await add('DEFAULT.nodes', 'n1 n2');
-        await add('fs.mnt', '/srv');
-        const indexes = screen.getAllByRole('combobox', {name: 'Index'});
-        fireEvent.change(indexes[0], {target: {value: '1'}});
-        await act(() => user.click(screen.getByRole('button', {name: 'Apply'})));
+        await act(() => user.click(screen.getByRole('button', {name: 'Design the configuration'})));
+        await screen.findByRole('navigation', {name: 'Sections'});
+        const dialog = screen.getAllByRole('dialog').find((d) => within(d).queryByRole('heading', {name: 'Configuration design'}));
+        // No wait to choose there: root's choice of its keywords by the buttons, once.
+        expect(within(dialog).queryByRole('checkbox', {name: /--wait/})).toBeNull();
+        expect(within(dialog).getAllByRole('checkbox', {name: 'Show the keywords only root may set'})).toHaveLength(1);
+        fireEvent.change(within(dialog).getByRole('textbox', {name: 'Value of nodes'}), {target: {value: 'n1 n2'}});
+        await act(() => user.click(within(dialog).getByRole('button', {name: /^Apply \d+ changes?$/})));
 
-        const dialog = screen.getAllByRole('dialog').find((d) => within(d).queryByRole('heading', {name: 'Manage Configuration Parameters'}));
         const alert = await within(dialog).findByRole('alert');
         expect(alert).toHaveTextContent(HELD.detail);
-        expect(writes().map((w) => decodeURIComponent(w.url))).toEqual([
-            `${OBJ}/config?set=nodes=n1 n2&set=fs#1.mnt=/srv&wait=30s`,
-        ]);
-        // Refused, nothing written: every change is kept.
-        expect(within(dialog).getAllByRole('textbox', {name: 'Value'}).map((i) => i.value)).toEqual(['n1 n2', '/srv']);
+        expect(writes().map((w) => decodeURIComponent(w.url))).toEqual([`${OBJ}/config?set=nodes=n1 n2&wait=30s`]);
 
         await act(() => user.click(within(alert).getByRole('button', {name: 'Write anyway (--force)'})));
         await waitFor(() => expect(writes()).toHaveLength(2));
-        expect(decodeURIComponent(writes()[1].url)).toBe(`${OBJ}/config?set=nodes=n1 n2&set=fs#1.mnt=/srv&wait=30s&force=true`);
-        await waitFor(() => expect(screen.queryByRole('heading', {name: 'Manage Configuration Parameters'})).toBeNull());
-        expect(tray()[0]).toEqual(['Set nodes = n1 n2; Set fs#1.mnt = /srv', 'succeeded', null]);
+        expect(decodeURIComponent(writes()[1].url)).toBe(`${OBJ}/config?set=nodes=n1 n2&wait=30s&force=true`);
+        await waitFor(() => expect(screen.queryByRole('heading', {name: 'Configuration design'})).toBeNull());
+        expect(tray()[0]).toEqual(['Set nodes = n1 n2', 'succeeded', null]);
     });
 
     test('a file uploaded and refused: the dialog stays open, the file written anyway on demand', async () => {
@@ -213,6 +205,7 @@ describe('the force and the wait of a creation', () => {
     );
     const create = (name) => {
         fireEvent.change(screen.getByLabelText('Name'), {target: {value: name}});
+        fireEvent.click(screen.getByRole('button', {name: 'Next'}));
         fireEvent.click(screen.getByRole('button', {name: 'Create'}));
     };
 

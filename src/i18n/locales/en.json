@@ -392,32 +392,6 @@
       "submit": "Update",
       "updating": "Updating"
     },
-    "params": {
-      "title": "Manage Configuration Parameters",
-      "apply": "Apply",
-      "applying": "Applying",
-      "addHeading": "Add parameters",
-      "selectLabel": "Select parameter to add",
-      "selectHint": "Select a parameter to add, then click Add",
-      "selectPlaceholder": "Select parameter",
-      "addButton": "Add Parameter",
-      "tableLabel": "Parameters to add",
-      "section": "Section",
-      "parameter": "Parameter",
-      "value": "Value",
-      "description": "Description",
-      "index": "Index",
-      "indexPlaceholder": "e.g., prod, 1, data",
-      "sectionOptional": "Section (optional)",
-      "sectionPlaceholder": "e.g., database, fs#data",
-      "removeParam": "Remove parameter",
-      "unsetLegend": "Unset parameters",
-      "unsetHint": "Select existing parameters to remove their values",
-      "unsetEmpty": "No parameters set.",
-      "deleteLegend": "Delete sections",
-      "deleteHint": "Select existing sections to delete",
-      "deleteEmpty": "No sections."
-    },
     "view": {
       "button": "View Configuration",
       "title": "Configuration",
@@ -431,7 +405,7 @@
       "showSecrets": "Show secrets",
       "editFile": "Edit configuration file",
       "uploadFile": "Upload new configuration file",
-      "manageParams": "Manage configuration parameters",
+      "manageParams": "Design the configuration",
       "noInstance": "No instance selected to view configuration.",
       "loadingForEdit": "Loading configuration for editing",
       "loading": "Loading configuration",
@@ -446,8 +420,6 @@
       "updateFailed": "Failed to update config: {{message}}",
       "fileRequired": "Configuration file is required.",
       "paramRequired": "Parameter input is required.",
-      "invalidParam": "Invalid parameter: {{name}}",
-      "invalidList": "Invalid value for {{keyword}}: must be comma-separated lowercase strings",
       "unknownParam": "unknown",
       "unsetErrorUnknown": "Error unsetting parameter {{keyword}}",
       "noSelection": "No selection made"
@@ -464,6 +436,15 @@
       "replacedBy": "replaced by {{keyword}}",
       "loading": "Reading the documentation…",
       "none": "No documentation for this keyword."
+    },
+    "design": {
+      "title": "Configuration design",
+      "apply_one": "Apply 1 change",
+      "apply_other": "Apply {{count}} changes",
+      "applying": "Applying",
+      "loading": "Reading the configuration",
+      "changes": "Changes",
+      "noChange": "No change"
     }
   },
   "console": {
@@ -1576,16 +1557,15 @@
     "nscfgName": "A namespace configuration is always named {{name}}.",
     "source": "Start from",
     "sources": {
-      "empty": "An empty configuration",
-      "copy": "A copy of an object",
-      "file": "A file"
+      "empty": "Nothing",
+      "copy": "Copy",
+      "edit": "Write",
+      "design": "Design"
     },
     "copyFrom": "Object to copy",
     "noObject": "No object matches",
     "reading": "Reading the configuration",
-    "noFile": "No file chosen",
     "config": "Configuration",
-    "configHint": "Edited here before it is sent. The new object gets an id of its own.",
     "provision": "Provision once created",
     "submit": "Create",
     "creating": "Creating",
@@ -1608,7 +1588,49 @@
     "force": {
       "replace": "Replace it (--force)",
       "held": "Create anyway (--force)"
-    }
+    },
+    "myNamespaces": "My namespaces",
+    "newNamespace": "New namespace",
+    "newNamespaceName": "Name of the new namespace",
+    "noNamespace": "You administer no namespace: ask for the admin grant of one.",
+    "kinds": {
+      "svc": {
+        "name": "Service",
+        "role": "Runs an application: its processes, containers, addresses and storage, started and moved by the cluster."
+      },
+      "vol": {
+        "name": "Volume",
+        "role": "Storage for services: a filesystem cut from a pool, mounted by the services that use it, following them."
+      },
+      "cfg": {
+        "name": "Configuration",
+        "role": "Settings the services read: keys installed as files or variables in their containers."
+      },
+      "sec": {
+        "name": "Secret",
+        "role": "Secrets the services use: keys kept encrypted, installed as files or variables."
+      },
+      "usr": {
+        "name": "User",
+        "role": "An account of the API: its grants, for a person or a tool driving the cluster."
+      },
+      "nscfg": {
+        "name": "Namespace",
+        "role": "The namespace itself: its settings and what it may take of the pools and networks."
+      }
+    },
+    "sourceHints": {
+      "empty": "An object with its id alone, configured later.",
+      "copy": "The configuration of an object, edited before it is sent.",
+      "edit": "A configuration written here, or a file dropped.",
+      "design": "Sections and keywords picked, each documented."
+    },
+    "dropHint": "Drop a configuration file here, or",
+    "fileRead": "{{name}} read: edited here before it is sent.",
+    "back": "Back",
+    "next": "Next",
+    "free": "Free",
+    "designToText": "Edit as text"
   },
   "objects": {
     "noInstanceStatus": "No status from {{node}}: the node is gone or not heard from",
@@ -3054,5 +3076,53 @@
     "host": "the host",
     "rest": "the rest of the host: its own processes, the kernel",
     "subset": "subset"
+  },
+  "objectDesigner": {
+    "byDefault": "default: {{value}}",
+    "findKeyword": "Find a keyword",
+    "keywords": "Keywords to add",
+    "noKeyword": "No keyword matches.",
+    "readDoc": "What {{keyword}} does",
+    "addKeyword": "Add {{keyword}}",
+    "moreKeyword": "More",
+    "reading": "Reading the drivers",
+    "unknownDriver": "{{driver}} could not be read: {{message}}",
+    "types": "Types",
+    "driver": "Driver, as group.type",
+    "addResource": "Add a resource",
+    "readFailed": "The keywords could not be read: {{message}}",
+    "showRoot": "Show the keywords only root may set",
+    "sections": "Sections",
+    "incomplete": "A required keyword without a value",
+    "removeSection": "Remove {{section}}",
+    "envHint": "Free variables of the object, read by its resources as {env.<name>}.",
+    "noEntry": "Nothing set: the defaults apply.",
+    "entries": "The keywords of {{section}}",
+    "variable": "Variable",
+    "required": "required",
+    "valueOf": "Value of {{keyword}}",
+    "removeEntry": "Remove {{keyword}}",
+    "addVariable": "Add a variable",
+    "missing": "Required without a value: {{keys}}.",
+    "showFile": "Show the file",
+    "hideFile": "Hide the file",
+    "emptyFile": "(empty: the object gets its id alone)",
+    "use": "Use",
+    "useExample": "Use the example {{value}}",
+    "useExampleHint": "Take the example as the value (→)",
+    "grantSome": "{{grant}} for some values",
+    "groups": "Driver groups",
+    "groupRoles": {
+      "app": "Runs the processes of the application: its start, stop and check commands.",
+      "container": "Runs a container from an image, the application or a part of it.",
+      "disk": "Brings up the block devices the data lives on: loop, LVM, ZFS, DRBD…",
+      "fs": "Mounts a filesystem the application reads and writes.",
+      "ip": "Gives the service an address its clients reach it by.",
+      "share": "Exports data to other hosts, over NFS.",
+      "sync": "Replicates the data to the other nodes or sites.",
+      "task": "A command run on demand or on a schedule, not kept running.",
+      "volume": "Storage drawn from a pool by what it needs, its size first; the pool is picked to match.",
+      "claim": "The share of a pool or a network the namespace may take."
+    }
   }
 }

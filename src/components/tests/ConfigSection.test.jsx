@@ -2,6 +2,7 @@ import React from 'react';
 import {render, screen, waitFor, act, within, fireEvent} from '@testing-library/react';
 import ConfigSection from '../ConfigSection';
 import {clearKeywordsCache} from '../ConfigText';
+import {clearDesignerCache} from '../ObjectDesigner';
 import userEvent from '@testing-library/user-event';
 import {URL_OBJECT} from '../../config/apiPath.js';
 import {vi, describe, test, expect, beforeEach, afterEach} from 'vitest';
@@ -52,24 +53,10 @@ const renderConfig = (props = {}) => render(<ConfigSection {...defaultProps} {..
 const fileLine = (re) => (content, element) => (element?.hasAttribute?.('data-line') ? re.test(element.textContent) : re.test(content));
 const getViewConfigButton = () => screen.getByRole('button', {name: 'View Configuration'});
 const getUploadButton = () => screen.getByRole('button', {name: /Upload new configuration file/i});
-const getManageButton = () => screen.getByRole('button', {name: /Manage configuration parameters/i});
+const getManageButton = () => screen.getByRole('button', {name: 'Design the configuration'});
 const getKeywordsButton = () => screen.getByRole('button', {name: /View configuration keywords/i});
 const getDialogByTitle = (title) => screen.getAllByRole('dialog').find(d => within(d).queryByRole('heading', {name: title}));
 const queryLoading = () => screen.queryByRole('status', {name: /^Loading/i});
-// The "add" field: free text completed from the keywords list.
-const getAddInput = () => screen.getByRole('combobox', {name: 'Select parameter to add'});
-const getUnsetGroup = () => screen.getByRole('group', {name: 'Unset parameters'});
-const getDeleteGroup = () => screen.getByRole('group', {name: 'Delete sections'});
-const getParamsTable = () => screen.getByRole('table', {name: 'Parameters to add'});
-const queryParamsTable = () => screen.queryByRole('table', {name: 'Parameters to add'});
-// Checks an existing parameter to unset (comboIdx 1) or an existing section to delete (comboIdx 2).
-const checkExisting = (user, comboIdx, input) =>
-    user.click(within(comboIdx === 1 ? getUnsetGroup() : getDeleteGroup()).getByRole('checkbox', {name: input}));
-const addParam = async (user, input) => {
-    await act(() => user.type(getAddInput(), input));
-    await act(() => user.click(screen.getByRole('button', {name: /Add Parameter/i})));
-};
-
 const openUpdateDialogWithFile = async (user, fileName = 'config.ini', content = '[DEFAULT]\nnodes = node2') => {
     await waitFor(() => expect(screen.getAllByRole('dialog').length).toBeGreaterThan(0));
     await act(() => user.click(getUploadButton()));
@@ -79,11 +66,12 @@ const openUpdateDialogWithFile = async (user, fileName = 'config.ini', content =
     return file;
 };
 
-const openManageDialog = async (user) => {
-    await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument());
-    await act(() => user.click(getManageButton()));
-    await waitFor(() => expect(screen.getByRole('heading', {name: 'Manage Configuration Parameters'})).toBeInTheDocument());
-    await waitFor(() => expect(queryLoading()).not.toBeInTheDocument());
+// The designer opened, on the file read.
+const openDesigner = async (user) => {
+    const open = await screen.findByRole('button', {name: 'Design the configuration'});
+    await act(() => user.click(open));
+    await screen.findByRole('navigation', {name: 'Sections'});
+    return getDialogByTitle('Configuration design');
 };
 
 const defaultFetchMock = (url, options) => {
@@ -191,6 +179,7 @@ describe('ConfigSection Component', () => {
         mockUseParams.mockReturnValue({objectName: 'root/cfg/cfg1'});
         global.fetch = vi.fn(defaultFetchMock);
         clearKeywordsCache();
+        clearDesignerCache();
         useActionTracker.setState({tracked: [], revealed: 0});
     });
 
@@ -399,18 +388,16 @@ describe('ConfigSection Component', () => {
             await waitFor(() => expect(tray()).toEqual([['Create the configuration', 'dev/nscfg/namespace', 'succeeded', null]]));
         });
 
-        test('the parameters set in the wizard: the object created with them all, in one request', async () => {
+        test('the configuration designed: the object created with it, in one request', async () => {
             renderConfig({inline: true, configNode: null, decodedObjectName: 'dev/nscfg/namespace', absent: true});
-            await act(() => user.click(getManageButton()));
-            await waitFor(() => expect(queryLoading()).not.toBeInTheDocument());
-            // Nothing set yet to read.
-            expect(global.fetch.mock.calls.some(([u, o]) => /\/config$/.test(u) && (o?.method ?? 'GET') === 'GET')).toBe(false);
-            await act(() => user.type(getAddInput(), 'DEFAULT.orchestrate{Enter}'));
-            await act(() => user.click(screen.getByRole('button', {name: /Add Parameter/i})));
-            await waitFor(() => expect(within(getParamsTable()).getByText('orchestrate')).toBeInTheDocument());
-            await user.clear(screen.getByLabelText('Value'));
-            await user.type(screen.getByLabelText('Value'), 'no');
-            await act(() => user.click(screen.getByRole('button', {name: /Apply/i})));
+            const dialog = await openDesigner(user);
+            // Nothing to read yet.
+            expect(configFileGets()).toHaveLength(0);
+            const more = await within(dialog).findByRole('button', {name: 'More'});
+            await act(() => user.click(more));
+            await act(() => user.click(within(dialog).getByRole('button', {name: 'Add orchestrate'})));
+            fireEvent.change(within(dialog).getByRole('textbox', {name: 'Value of orchestrate'}), {target: {value: 'no'}});
+            await act(() => user.click(within(dialog).getByRole('button', {name: 'Apply 1 change'})));
             await waitFor(() => expect(posts()).toHaveLength(1));
             const [url, options] = posts()[0];
             expect(url).toBe(`${URL_OBJECT}/dev/nscfg/namespace/config/file?set=orchestrate=no`);
@@ -449,12 +436,12 @@ describe('ConfigSection Component', () => {
             return screen.findByRole('textbox', {name: 'Configuration file'});
         };
 
-        test('the pencil edits the file; the sliders open the parameters wizard', async () => {
+        test('the pencil edits the file; the sliders open the designer', async () => {
             mockDaemon({stored: '[DEFAULT]\nnodes = *'});
             renderConfig();
             const glyph = (Icon) => render(<Icon/>).container.querySelector('svg').innerHTML;
             const edit = await screen.findByRole('button', {name: 'Edit configuration file'});
-            const wizard = screen.getByRole('button', {name: 'Manage configuration parameters'});
+            const wizard = screen.getByRole('button', {name: 'Design the configuration'});
             expect(edit.querySelector('svg').innerHTML).toBe(glyph(PencilIcon));
             expect(wizard.querySelector('svg').innerHTML).toBe(glyph(SlidersIcon));
         });
@@ -494,7 +481,7 @@ describe('ConfigSection Component', () => {
             expect(screen.queryByText(fileLine(/nodes = \*/))).toBeNull();
             expect(screen.queryByText(fileLine(/type = forking/))).toBeNull();
             expect(screen.queryByRole('button', {name: 'Upload new configuration file'})).toBeNull();
-            expect(screen.queryByRole('button', {name: 'Manage configuration parameters'})).toBeNull();
+            expect(screen.queryByRole('button', {name: 'Design the configuration'})).toBeNull();
 
             const editor = await startEditing();
             expect(editor).toHaveValue('[fs#1]\ntype = flag\nsecret = s3cr3t\n');
@@ -820,361 +807,70 @@ describe('ConfigSection Component', () => {
         await waitFor(() => expect(screen.queryByRole('heading', {name: 'Update Configuration'})).not.toBeInTheDocument());
     });
 
-    // ── Manage params dialog (add / unset / delete) ──────────────────────
-    test('manage params: no selection shows error', async () => {
-        const openSnackbar = vi.fn();
-        renderConfig({openSnackbar});
-        await openManageDialog(user);
-        await act(() => user.click(screen.getByRole('button', {name: /Apply/i})));
-        await waitFor(() => expect(openSnackbar).toHaveBeenCalledWith('No selection made', 'error'));
-        expect(screen.getByRole('heading', {name: 'Manage Configuration Parameters'})).toBeInTheDocument();
-    });
+    // ── The designer, on the file as stored ──────────────────────────────
+    describe('the designer', () => {
+        const patches = () => global.fetch.mock.calls.filter(([, options]) => options?.method === 'PATCH').map(([url]) => decodeURIComponent(url));
 
-    test('manage params dialog: cancel button closes it', async () => {
-        renderConfig();
-        await openManageDialog(user);
-        const dlg = getDialogByTitle('Manage Configuration Parameters');
-        await act(() => user.click(within(dlg).getByRole('button', {name: /Cancel/i})));
-        await waitFor(() => expect(screen.queryByRole('heading', {name: 'Manage Configuration Parameters'})).not.toBeInTheDocument());
-    });
-
-    test('manage params: add invalid parameter shows error', async () => {
-        const openSnackbar = vi.fn();
-        renderConfig({openSnackbar});
-        await openManageDialog(user);
-        await act(() => user.type(getAddInput(), 'invalid_param{Enter}'));
-        await act(() => user.click(screen.getByRole('button', {name: /Add Parameter/i})));
-        await waitFor(() => expect(openSnackbar).toHaveBeenCalledWith('Invalid parameter: invalid_param', 'error'));
-    });
-
-    test('manage params: add DEFAULT.orchestrate and apply', async () => {
-        const openSnackbar = vi.fn();
-        renderConfig({openSnackbar});
-        await openManageDialog(user);
-        await act(() => user.type(getAddInput(), 'DEFAULT.orchestrate{Enter}'));
-        await act(() => user.click(screen.getByRole('button', {name: /Add Parameter/i})));
-        await waitFor(() => expect(within(getParamsTable()).getByText('orchestrate')).toBeInTheDocument());
-        await act(() => user.type(screen.getByLabelText('Value'), 'new-value'));
-        await act(() => user.click(screen.getByRole('button', {name: /Apply/i})));
-        await waitFor(() => expect(tray()).toEqual([['Set orchestrate = new-value', 'root/cfg/cfg1', 'succeeded', null]]));
-        await waitFor(() => expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining('/config/file'), expect.any(Object)));
-        await waitFor(() => expect(screen.queryByRole('heading', {name: 'Manage Configuration Parameters'})).not.toBeInTheDocument());
-    });
-
-    test('manage params: add fs.size with indexed section and apply', async () => {
-        const openSnackbar = vi.fn();
-        renderConfig({openSnackbar});
-        await openManageDialog(user);
-        await act(() => user.type(getAddInput(), 'fs.size{Enter}'));
-        await act(() => user.click(screen.getByRole('button', {name: /Add Parameter/i})));
-        await waitFor(() => expect(within(getParamsTable()).getByText('size')).toBeInTheDocument());
-        await act(() => user.type(screen.getByLabelText('Index'), '2'));
-        await act(() => user.type(screen.getByLabelText('Value'), '20GB'));
-        await act(() => user.click(screen.getByRole('button', {name: /Apply/i})));
-        await waitFor(() => expect(tray()).toEqual([['Set fs#2.size = 20GB', 'root/cfg/cfg1', 'succeeded', null]]));
-        expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining('set=fs%232.size=20GB'), expect.objectContaining({
-            method: 'PATCH',
-            headers: expect.objectContaining({Authorization: 'Bearer mock-token'}),
-        }));
-        await waitFor(() => expect(screen.queryByRole('heading', {name: 'Manage Configuration Parameters'})).not.toBeInTheDocument());
-    });
-
-    test('manage params: add fs.size without index and apply', async () => {
-        const openSnackbar = vi.fn();
-        renderConfig({openSnackbar});
-        await openManageDialog(user);
-        await act(() => user.type(getAddInput(), 'fs.size{Enter}'));
-        await act(() => user.click(screen.getByRole('button', {name: /Add Parameter/i})));
-        await waitFor(() => expect(within(getParamsTable()).getByText('size')).toBeInTheDocument());
-        await act(() => user.type(screen.getByLabelText('Value'), '30GB'));
-        await act(() => user.click(screen.getByRole('button', {name: /Apply/i})));
-        await waitFor(() => expect(tray()).toEqual([['Set fs.size = 30GB', 'root/cfg/cfg1', 'succeeded', null]]));
-        expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining('set=fs.size=30GB'), expect.objectContaining({
-            method: 'PATCH',
-            headers: expect.objectContaining({Authorization: 'Bearer mock-token'}),
-        }));
-        await waitFor(() => expect(screen.queryByRole('heading', {name: 'Manage Configuration Parameters'})).not.toBeInTheDocument());
-    });
-
-    test('manage params: TListLowercase with empty split shows error', async () => {
-        const openSnackbar = vi.fn();
-        renderConfig({openSnackbar});
-        await openManageDialog(user);
-        await act(() => user.type(getAddInput(), 'DEFAULT.roles{Enter}'));
-        await act(() => user.click(screen.getByRole('button', {name: /Add Parameter/i})));
-        await waitFor(() => expect(within(getParamsTable()).getByText('roles')).toBeInTheDocument());
-        const valueInput = screen.getByLabelText('Value');
-        await user.clear(valueInput);
-        await user.type(valueInput, 'admin, , guest');
-        await act(() => user.click(screen.getByRole('button', {name: /Apply/i})));
-        await waitFor(() => expect(openSnackbar).toHaveBeenCalledWith(
-            expect.stringMatching(/Invalid value for .*: must be comma-separated lowercase strings/), 'error'
-        ));
-        expect(global.fetch).not.toHaveBeenCalledWith(expect.stringContaining('set=DEFAULT.roles='), expect.any(Object));
-    });
-
-    test('manage params: TListLowercase success', async () => {
-        const openSnackbar = vi.fn();
-        renderConfig({openSnackbar});
-        await openManageDialog(user);
-        await act(() => user.type(getAddInput(), 'DEFAULT.roles{Enter}'));
-        await act(() => user.click(screen.getByRole('button', {name: /Add Parameter/i})));
-        await waitFor(() => expect(within(getParamsTable()).getByText('roles')).toBeInTheDocument());
-        await user.clear(screen.getByLabelText('Value'));
-        await user.type(screen.getByLabelText('Value'), 'admin,user,guest');
-        await act(() => user.click(screen.getByRole('button', {name: /Apply/i})));
-        await waitFor(() => expect(tray()).toEqual([['Set roles = admin,user,guest', 'root/cfg/cfg1', 'succeeded', null]]));
-        expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining('set=roles=admin%2Cuser%2Cguest'), expect.anything());
-    });
-
-    test('manage params: modify section of added parameter', async () => {
-        const openSnackbar = vi.fn();
-        renderConfig({openSnackbar});
-        await openManageDialog(user);
-        await act(() => user.type(getAddInput(), 'DEFAULT.orchestrate{Enter}'));
-        await act(() => user.click(screen.getByRole('button', {name: /Add Parameter/i})));
-        await waitFor(() => expect(within(getParamsTable()).getByText('orchestrate')).toBeInTheDocument());
-        const sectionInput = screen.getByLabelText('Section (optional)');
-        await user.clear(sectionInput);
-        await user.type(sectionInput, 'database');
-        await user.clear(screen.getByLabelText('Value'));
-        await user.type(screen.getByLabelText('Value'), 'test-value');
-        await act(() => user.click(screen.getByRole('button', {name: /Apply/i})));
-        await waitFor(() => expect(tray()).toEqual([['Set database.orchestrate = test-value', 'root/cfg/cfg1', 'succeeded', null]]));
-        expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining('set=database.orchestrate=test-value'), expect.any(Object));
-    });
-
-    test('manage params: remove parameter from list', async () => {
-        renderConfig();
-        await openManageDialog(user);
-        await act(() => user.type(getAddInput(), 'DEFAULT.orchestrate{Enter}'));
-        await act(() => user.click(screen.getByRole('button', {name: /Add Parameter/i})));
-        await waitFor(() => expect(within(getParamsTable()).getByText('orchestrate')).toBeInTheDocument());
-        await act(() => user.click(screen.getByRole('button', {name: /Remove parameter/i})));
-        await waitFor(() => expect(queryParamsTable()).not.toBeInTheDocument());
-    });
-
-    test.each([
-        ['unset', 1, 'nodes', 'unset=nodes', 'Unset nodes'],
-        ['delete', 2, 'fs#1', 'delete=fs%231', 'Delete section fs#1'],
-    ])('manage params: %s success', async (_, comboIdx, input, urlFragment, label) => {
-        const openSnackbar = vi.fn();
-        renderConfig({openSnackbar});
-        await openManageDialog(user);
-        await act(() => checkExisting(user, comboIdx, input));
-        await waitFor(() => expect(within(comboIdx === 1 ? getUnsetGroup() : getDeleteGroup())
-            .getByRole('checkbox', {name: input})).toBeChecked());
-        await act(() => user.click(screen.getByRole('button', {name: /Apply/i})));
-        await waitFor(() => expect(tray()).toEqual([[label, 'root/cfg/cfg1', 'succeeded', null]]));
-        noWriteSnackbar(openSnackbar);
-        expect(global.fetch).toHaveBeenCalledWith(
-            expect.stringContaining(`${URL_OBJECT}/root/cfg/cfg1/config?${urlFragment}`),
-            expect.objectContaining({
-                method: 'PATCH',
-                headers: expect.objectContaining({Authorization: 'Bearer mock-token'}),
-            })
-        );
-        await waitFor(() => expect(screen.queryByRole('heading', {name: 'Manage Configuration Parameters'})).not.toBeInTheDocument());
-    });
-
-    test.each([
-        ['unset', 1, 'nodes', 'Unset nodes'],
-        ['delete', 2, 'fs#1', 'Delete section fs#1'],
-    ])('manage params: %s API failure', async (_, comboIdx, input, label) => {
-        global.fetch.mockImplementation((url, options) => {
-            if (url.includes(`/config?${comboIdx === 1 ? 'unset' : 'delete'}=`))
-                return Promise.resolve({
-                    ok: false,
-                    status: 500,
-                    json: () => Promise.resolve({}),
-                    headers: new Headers(),
-                });
-            return defaultFetchMock(url, options);
+        test('seeded with the file as stored, secrets in clear: a value changed, set alone', async () => {
+            renderConfig();
+            const dialog = await openDesigner(user);
+            expect(configFileGets().map(([url]) => url)).toEqual(expect.arrayContaining([expect.stringContaining('redact-secrets=false')]));
+            const sections = within(within(dialog).getByRole('navigation', {name: 'Sections'})).getAllByRole('button').map((b) => b.textContent);
+            expect(sections.join(' ')).toMatch(/DEFAULT.*fs#1/);
+            const orchestrate = within(dialog).getByRole('textbox', {name: 'Value of orchestrate'});
+            expect(orchestrate).toHaveValue('ha');
+            expect(within(dialog).getByRole('textbox', {name: 'Value of nodes'})).toHaveValue('*');
+            // Nothing changed: nothing to apply.
+            expect(within(dialog).getByRole('button', {name: 'No change'})).toBeDisabled();
+            fireEvent.change(orchestrate, {target: {value: 'no'}});
+            expect(within(within(dialog).getByRole('region', {name: 'Changes'})).getByText('Set orchestrate = no')).toBeInTheDocument();
+            await act(() => user.click(within(dialog).getByRole('button', {name: 'Apply 1 change'})));
+            await waitFor(() => expect(patches()).toEqual([`${URL_OBJECT}/root/cfg/cfg1/config?set=orchestrate=no`]));
+            await waitFor(() => expect(getDialogByTitle('Configuration design')).toBeUndefined());
+            expect(tray()[0]).toEqual(['Set orchestrate = no', 'root/cfg/cfg1', 'succeeded', null]);
         });
-        const openSnackbar = vi.fn();
-        renderConfig({openSnackbar});
-        await openManageDialog(user);
-        await act(() => checkExisting(user, comboIdx, input));
-        await act(() => user.click(screen.getByRole('button', {name: /Apply/i})));
-        await waitFor(() => expect(tray()).toEqual([[label, 'root/cfg/cfg1', 'refused', 'HTTP 500']]));
-        expect(screen.getByRole('heading', {name: 'Manage Configuration Parameters'})).toBeInTheDocument();
-    });
 
-    test('manage params: add parameter network error is said in the tray', async () => {
-        global.fetch.mockImplementation((url) => {
-            if (url.includes('/config?set=')) return Promise.reject(new Error('Network failure'));
-            return defaultFetchMock(url);
+        test('a keyword removed unset, a resource removed deleted, in the same request', async () => {
+            renderConfig();
+            const dialog = await openDesigner(user);
+            await act(() => user.click(within(dialog).getByRole('button', {name: 'Remove nodes'})));
+            await act(() => user.click(within(dialog).getByRole('button', {name: 'Remove fs#1'})));
+            await act(() => user.click(within(dialog).getByRole('button', {name: 'Apply 2 changes'})));
+            await waitFor(() => expect(patches()).toEqual([`${URL_OBJECT}/root/cfg/cfg1/config?unset=nodes&delete=fs#1`]));
         });
-        const openSnackbar = vi.fn();
-        renderConfig({openSnackbar});
-        await openManageDialog(user);
-        await act(() => user.type(getAddInput(), 'DEFAULT.orchestrate{Enter}'));
-        await act(() => user.click(screen.getByRole('button', {name: /Add Parameter/i})));
-        await waitFor(() => expect(within(getParamsTable()).getByText('orchestrate')).toBeInTheDocument());
-        await user.clear(screen.getByLabelText('Value'));
-        await user.type(screen.getByLabelText('Value'), 'test');
-        await act(() => user.click(screen.getByRole('button', {name: /Apply/i})));
-        await waitFor(() => expect(tray()).toEqual([['Set orchestrate = test', 'root/cfg/cfg1', 'refused', 'Network failure']]));
-    });
 
-    test.each([
-        ['unset', 1, 'nodes', 'Unset nodes'],
-        ['delete', 2, 'fs#1', 'Delete section fs#1'],
-    ])('manage params: %s network error', async (_, comboIdx, input, label) => {
-        global.fetch.mockImplementation((url) => {
-            if (url.includes(`/config?${comboIdx === 1 ? 'unset' : 'delete'}=`)) return Promise.reject(new Error('Network failure'));
-            return defaultFetchMock(url);
+        test('cancelled, nothing written; opened again, read again from the file', async () => {
+            renderConfig();
+            let dialog = await openDesigner(user);
+            fireEvent.change(within(dialog).getByRole('textbox', {name: 'Value of orchestrate'}), {target: {value: 'no'}});
+            await act(() => user.click(within(dialog).getByRole('button', {name: 'Cancel'})));
+            expect(patches()).toEqual([]);
+            const reads = configFileGets().length;
+            dialog = await openDesigner(user);
+            await waitFor(() => expect(within(dialog).getByRole('textbox', {name: 'Value of orchestrate'})).toHaveValue('ha'));
+            expect(configFileGets().length).toBeGreaterThan(reads);
         });
-        const openSnackbar = vi.fn();
-        renderConfig({openSnackbar});
-        await openManageDialog(user);
-        await act(() => checkExisting(user, comboIdx, input));
-        await act(() => user.click(screen.getByRole('button', {name: /Apply/i})));
-        await waitFor(() => expect(tray()).toEqual([[label, 'root/cfg/cfg1', 'refused', 'Network failure']]));
-    });
 
-    test('manage params: all operations fail keeps dialog open', async () => {
-        global.fetch.mockImplementation((url, options) => {
-            if (url.includes('/config?set=') || url.includes('/config?unset=') || url.includes('/config?delete='))
-                return Promise.resolve({
-                    ok: false,
-                    status: 500,
-                    json: () => Promise.resolve({}),
-                    headers: new Headers(),
-                });
-            return defaultFetchMock(url, options);
+        test('a file that can not be read: said', async () => {
+            global.fetch.mockImplementation((url, options) => (url.includes('/config/file')
+                ? Promise.resolve({ok: false, status: 403, text: () => Promise.resolve('')})
+                : defaultFetchMock(url, options)));
+            renderConfig();
+            const open = await screen.findByRole('button', {name: 'Design the configuration'});
+    await act(() => user.click(open));
+            const dialog = getDialogByTitle('Configuration design');
+            expect(await within(dialog).findByText(/HTTP 403/)).toBeInTheDocument();
+            expect(within(dialog).queryByRole('navigation', {name: 'Sections'})).toBeNull();
         });
-        const openSnackbar = vi.fn();
-        renderConfig({openSnackbar});
-        await openManageDialog(user);
-        await act(() => user.type(getAddInput(), 'DEFAULT.orchestrate{Enter}'));
-        await act(() => user.click(screen.getByRole('button', {name: /Add Parameter/i})));
-        await waitFor(() => expect(within(getParamsTable()).getByText('orchestrate')).toBeInTheDocument());
-        await user.clear(screen.getByLabelText('Value'));
-        await user.type(screen.getByLabelText('Value'), 'test');
-        await act(() => checkExisting(user, 1, 'nodes'));
-        await act(() => checkExisting(user, 2, 'fs#1'));
-        await act(() => user.click(screen.getByRole('button', {name: /Apply/i})));
-        // One request, all or none, the changes in the order the daemon applies them: refused once.
-        await waitFor(() => expect(tray()).toEqual([
-            ['Delete section fs#1; Unset nodes; Set orchestrate = test', 'root/cfg/cfg1', 'refused', 'HTTP 500'],
-        ]));
-        const patches = global.fetch.mock.calls.filter(([, options]) => options?.method === 'PATCH').map(([url]) => url);
-        expect(patches).toEqual([`${URL_OBJECT}/root/cfg/cfg1/config?set=orchestrate=test&unset=nodes&delete=fs%231`]);
-        // Nothing written: the changes kept, and why said in the dialog.
-        expect(screen.getByRole('heading', {name: 'Manage Configuration Parameters'})).toBeInTheDocument();
-        expect(within(getParamsTable()).getByText('orchestrate')).toBeInTheDocument();
-        expect(screen.getByRole('alert')).toHaveTextContent('HTTP 500');
-    });
 
-    test.each([
-        ['add', 0, 'DEFAULT.roles'],
-        ['unset', 1, 'nodes'],
-        ['delete', 2, 'fs#1'],
-    ])('manage params: missing token for %s shows error', async (_, comboIdx, input) => {
-        mockLocalStorage.getItem.mockReturnValue(null);
-        const openSnackbar = vi.fn();
-        renderConfig({openSnackbar});
-        await openManageDialog(user);
-        if (comboIdx !== 0) await act(() => checkExisting(user, comboIdx, input));
-        if (comboIdx === 0) {
-            await addParam(user, input);
-            await waitFor(() => expect(within(getParamsTable()).getByText(input.split('.')[1] || input)).toBeInTheDocument());
-            await user.clear(screen.getByLabelText('Value'));
-            await user.type(screen.getByLabelText('Value'), 'admin');
-        }
-        await act(() => user.click(screen.getByRole('button', {name: /Apply/i})));
-        await waitFor(() => expect(openSnackbar).toHaveBeenCalledWith('Auth token not found.', 'error'));
-    });
-
-    // The unset list offers the parameters set in the configuration: an option
-    // with its section is sent as "section.option", one without as "option".
-    test.each([
-        ['with a section', 'fs#1.size', 'unset=fs%231.size'],
-        ['without a section', 'orchestrate', 'unset=orchestrate'],
-    ])('manage params: unset an existing parameter %s', async (_, keyword, urlFragment) => {
-        const openSnackbar = vi.fn();
-        renderConfig({openSnackbar});
-        await openManageDialog(user);
-        await act(() => checkExisting(user, 1, keyword));
-        await act(() => user.click(screen.getByRole('button', {name: /Apply/i})));
-        await waitFor(() => expect(tray()).toEqual([[`Unset ${keyword}`, 'root/cfg/cfg1', 'succeeded', null]]));
-        expect(global.fetch).toHaveBeenCalledWith(
-            expect.stringContaining(`${URL_OBJECT}/root/cfg/cfg1/config?${urlFragment}`),
-            expect.objectContaining({method: 'PATCH'})
-        );
-    });
-
-    test('manage params: unchecking a parameter or a section takes it out of the selection', async () => {
-        const openSnackbar = vi.fn();
-        renderConfig({openSnackbar});
-        await openManageDialog(user);
-        await act(() => checkExisting(user, 1, 'nodes'));
-        await act(() => checkExisting(user, 1, 'orchestrate'));
-        await act(() => checkExisting(user, 1, 'nodes'));
-        await act(() => checkExisting(user, 2, 'fs#1'));
-        await act(() => checkExisting(user, 2, 'fs#1'));
-        await act(() => user.click(screen.getByRole('button', {name: /Apply/i})));
-        await waitFor(() => expect(tray()).toEqual([['Unset orchestrate', 'root/cfg/cfg1', 'succeeded', null]]));
-        const patched = global.fetch.mock.calls.filter(([, options]) => options?.method === 'PATCH').map(([url]) => url);
-        expect(patched).toEqual([`${URL_OBJECT}/root/cfg/cfg1/config?unset=orchestrate`]);
-    });
-
-    test('manage params: existing parameters and sections are disabled while loading', async () => {
-        global.fetch.mockImplementation((url, options) => {
-            if (url.includes('/config?unset=')) return new Promise(() => {});
-            return defaultFetchMock(url, options);
+        test('written, with no instance to read the file from: nothing read again', async () => {
+            renderConfig({configNode: null, inline: true});
+            const dialog = await openDesigner(user);
+            fireEvent.change(within(dialog).getByRole('textbox', {name: 'Value of orchestrate'}), {target: {value: 'no'}});
+            await act(() => user.click(within(dialog).getByRole('button', {name: 'Apply 1 change'})));
+            await waitFor(() => expect(patches()).toHaveLength(1));
+            expect(defaultProps.setConfigDialogOpen).not.toHaveBeenCalledWith(true);
         });
-        renderConfig();
-        await openManageDialog(user);
-        await act(() => checkExisting(user, 1, 'nodes'));
-        await act(() => user.click(screen.getByRole('button', {name: /Apply/i})));
-        await waitFor(() => expect(within(getUnsetGroup()).getByRole('checkbox', {name: 'nodes'})).toBeDisabled());
-        expect(within(getDeleteGroup()).getByRole('checkbox', {name: 'fs#1'})).toBeDisabled();
-        expect(screen.getByRole('button', {name: /Apply/i})).toBeDisabled();
-        expect(getAddInput()).toBeDisabled();
-    });
-
-    // ── Fetch existing params edge cases ─────────────────────────────────
-    test.each([
-        ['HTTP error', () => ({
-            ok: false,
-            status: 403,
-            json: () => Promise.resolve({}),
-            headers: new Headers(),
-        }), 'Failed to fetch existing parameters: HTTP 403'],
-        ['network error', () => Promise.reject(new Error('Network failure')), 'Failed to fetch existing parameters: Network failure'],
-    ])('fetchExistingParams: %s', async (_, fetchImpl, expectedText) => {
-        global.fetch.mockImplementation((url) => {
-            if (url.includes('/config') && !url.includes('file') && !url.includes('set') && !url.includes('unset') && !url.includes('delete') && !url.includes('keywords'))
-                return fetchImpl();
-            return defaultFetchMock(url);
-        });
-        renderConfig();
-        await openManageDialog(user);
-        await waitFor(() => {
-            const alerts = screen.getAllByRole('alert');
-            expect(alerts.find(a => a.textContent.includes(expectedText))).toBeInTheDocument();
-        });
-    });
-
-    test('getExistingSections: null existingParams renders no parameter nor section to choose', async () => {
-        global.fetch.mockImplementation((url) => {
-            if (url.includes('/config') && !url.includes('file') && !url.includes('set') && !url.includes('unset') && !url.includes('delete'))
-                return Promise.resolve({
-                    ok: true,
-                    status: 200,
-                    json: () => Promise.resolve({items: null}),
-                    headers: new Headers(),
-                });
-            return defaultFetchMock(url);
-        });
-        renderConfig();
-        await openManageDialog(user);
-        await waitFor(() => expect(within(getDeleteGroup()).getByText('No sections.')).toBeInTheDocument());
-        expect(within(getUnsetGroup()).getByText('No parameters set.')).toBeInTheDocument();
-        expect(within(getUnsetGroup()).queryAllByRole('checkbox')).toHaveLength(0);
-        expect(within(getDeleteGroup()).queryAllByRole('checkbox')).toHaveLength(0);
     });
 
     // ── Keywords dialog ──────────────────────────────────────────────────
@@ -1199,80 +895,5 @@ describe('ConfigSection Component', () => {
         expect(global.fetch).toHaveBeenCalledWith(expect.stringMatching(/\/config\/keywords\?section=fs%231&option=size$/), expect.any(Object));
         fireEvent.keyDown(doc, {key: 'Escape'});
         expect(screen.queryByRole('dialog', {name: 'fs#1.size'})).not.toBeInTheDocument();
-    });
-
-    test('getUniqueSections: null keywordsData renders empty add combobox', async () => {
-        global.fetch.mockImplementation((url) => {
-            if (url.includes('/config/keywords')) return Promise.resolve({
-                ok: true,
-                status: 200,
-                json: () => Promise.resolve({items: null}),
-                headers: new Headers(),
-            });
-            return defaultFetchMock(url);
-        });
-        renderConfig();
-        await openManageDialog(user);
-        await waitFor(() => expect(getAddInput()).toHaveValue(''));
-    });
-
-    test('add parameter without section (empty section)', async () => {
-        const openSnackbar = vi.fn();
-        renderConfig({openSnackbar});
-        await openManageDialog(user);
-        await act(() => user.type(getAddInput(), 'debug{Enter}'));
-        await act(() => user.click(screen.getByRole('button', {name: /Add Parameter/i})));
-        await waitFor(() => expect(within(getParamsTable()).getByText('debug')).toBeInTheDocument());
-        expect(screen.getByLabelText('Section (optional)')).toBeInTheDocument();
-        await user.clear(screen.getByLabelText('Value'));
-        await user.type(screen.getByLabelText('Value'), 'true');
-        await act(() => user.click(screen.getByRole('button', {name: /Apply/i})));
-        await waitFor(() => expect(tray()).toEqual([['Set debug = true', 'root/cfg/cfg1', 'succeeded', null]]));
-        expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining('set=debug=true'), expect.any(Object));
-    });
-
-    test('manage params: add success with empty configNode does not refetch or open dialog', async () => {
-        const openSnackbar = vi.fn();
-        const setConfigDialogOpen = vi.fn();
-        renderConfig({openSnackbar, configNode: '', setConfigDialogOpen});
-        await openManageDialog(user);
-        await act(() => user.type(getAddInput(), 'DEFAULT.orchestrate{Enter}'));
-        await act(() => user.click(screen.getByRole('button', {name: /Add Parameter/i})));
-        await waitFor(() => expect(within(getParamsTable()).getByText('orchestrate')).toBeInTheDocument());
-        await user.clear(screen.getByLabelText('Value'));
-        await user.type(screen.getByLabelText('Value'), 'new-value');
-        const fetchCallsBefore = global.fetch.mock.calls.length;
-        await act(() => user.click(screen.getByRole('button', {name: /Apply/i})));
-        await waitFor(() => expect(tray()).toEqual([['Set orchestrate = new-value', 'root/cfg/cfg1', 'succeeded', null]]));
-        const fetchCallsAfter = global.fetch.mock.calls;
-        const configFileCallsAfter = fetchCallsAfter.slice(fetchCallsBefore).filter(call => call[0].includes('/config/file'));
-        expect(configFileCallsAfter).toHaveLength(0);
-        expect(setConfigDialogOpen).not.toHaveBeenCalledWith(true);
-    });
-
-    test('manage params: unset success with empty configNode does not refetch or open dialog', async () => {
-        const openSnackbar = vi.fn();
-        const setConfigDialogOpen = vi.fn();
-        renderConfig({openSnackbar, configNode: '', setConfigDialogOpen});
-        await openManageDialog(user);
-        await act(() => checkExisting(user, 1, 'nodes'));
-        await act(() => user.click(screen.getByRole('button', {name: /Apply/i})));
-        await waitFor(() => expect(tray()).toEqual([['Unset nodes', 'root/cfg/cfg1', 'succeeded', null]]));
-        const configFileCalls = global.fetch.mock.calls.filter(call => call[0].includes('/config/file'));
-        expect(configFileCalls).toHaveLength(0);
-        expect(setConfigDialogOpen).not.toHaveBeenCalledWith(true);
-    });
-
-    test('manage params: delete success with empty configNode does not refetch or open dialog', async () => {
-        const openSnackbar = vi.fn();
-        const setConfigDialogOpen = vi.fn();
-        renderConfig({openSnackbar, configNode: '', setConfigDialogOpen});
-        await openManageDialog(user);
-        await act(() => checkExisting(user, 2, 'fs#1'));
-        await act(() => user.click(screen.getByRole('button', {name: /Apply/i})));
-        await waitFor(() => expect(tray()).toEqual([['Delete section fs#1', 'root/cfg/cfg1', 'succeeded', null]]));
-        const configFileCalls = global.fetch.mock.calls.filter(call => call[0].includes('/config/file'));
-        expect(configFileCalls).toHaveLength(0);
-        expect(setConfigDialogOpen).not.toHaveBeenCalledWith(true);
     });
 });

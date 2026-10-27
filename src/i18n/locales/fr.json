@@ -392,32 +392,6 @@
       "submit": "Mettre à jour",
       "updating": "Mise à jour"
     },
-    "params": {
-      "title": "Gérer les paramètres de configuration",
-      "apply": "Appliquer",
-      "applying": "Application",
-      "addHeading": "Ajouter des paramètres",
-      "selectLabel": "Paramètre à ajouter",
-      "selectHint": "Choisissez un paramètre, puis cliquez sur Ajouter",
-      "selectPlaceholder": "Choisir un paramètre",
-      "addButton": "Ajouter le paramètre",
-      "tableLabel": "Paramètres à ajouter",
-      "section": "Section",
-      "parameter": "Paramètre",
-      "value": "Valeur",
-      "description": "Description",
-      "index": "Index",
-      "indexPlaceholder": "ex. : prod, 1, data",
-      "sectionOptional": "Section (facultative)",
-      "sectionPlaceholder": "ex. : database, fs#data",
-      "removeParam": "Retirer le paramètre",
-      "unsetLegend": "Désaffecter des paramètres",
-      "unsetHint": "Choisissez des paramètres existants pour retirer leur valeur",
-      "unsetEmpty": "Aucun paramètre défini.",
-      "deleteLegend": "Supprimer des sections",
-      "deleteHint": "Choisissez des sections existantes à supprimer",
-      "deleteEmpty": "Aucune section."
-    },
     "view": {
       "button": "Voir la configuration",
       "title": "Configuration",
@@ -431,7 +405,7 @@
       "showSecrets": "Afficher les secrets",
       "editFile": "Éditer le fichier de configuration",
       "uploadFile": "Envoyer un nouveau fichier de configuration",
-      "manageParams": "Gérer les paramètres de configuration",
+      "manageParams": "Concevoir la configuration",
       "noInstance": "Aucune instance sélectionnée pour afficher la configuration.",
       "loadingForEdit": "Chargement de la configuration pour l'édition",
       "loading": "Chargement de la configuration",
@@ -446,8 +420,6 @@
       "updateFailed": "Échec de la mise à jour de la configuration : {{message}}",
       "fileRequired": "Le fichier de configuration est requis.",
       "paramRequired": "Un paramètre est requis.",
-      "invalidParam": "Paramètre invalide : {{name}}",
-      "invalidList": "Valeur invalide pour {{keyword}} : une liste de chaînes en minuscules séparées par des virgules est attendue",
       "unknownParam": "inconnu",
       "unsetErrorUnknown": "Erreur lors de la désaffectation du paramètre {{keyword}}",
       "noSelection": "Aucune sélection"
@@ -464,6 +436,15 @@
       "replacedBy": "remplacé par {{keyword}}",
       "loading": "Lecture de la documentation…",
       "none": "Pas de documentation pour ce mot-clé."
+    },
+    "design": {
+      "title": "Conception de la configuration",
+      "apply_one": "Appliquer 1 changement",
+      "apply_other": "Appliquer {{count}} changements",
+      "applying": "Application",
+      "loading": "Lecture de la configuration",
+      "changes": "Changements",
+      "noChange": "Aucun changement"
     }
   },
   "console": {
@@ -1576,16 +1557,15 @@
     "nscfgName": "Une configuration de namespace s'appelle toujours {{name}}.",
     "source": "Partir de",
     "sources": {
-      "empty": "Une configuration vide",
-      "copy": "La copie d'un objet",
-      "file": "Un fichier"
+      "empty": "Rien",
+      "copy": "Copier",
+      "edit": "Écrire",
+      "design": "Concevoir"
     },
     "copyFrom": "Objet à copier",
     "noObject": "Aucun objet ne correspond",
     "reading": "Lecture de la configuration",
-    "noFile": "Aucun fichier choisi",
     "config": "Configuration",
-    "configHint": "Modifiable ici avant l'envoi. Le nouvel objet reçoit son propre id.",
     "provision": "Provisionner une fois créé",
     "submit": "Créer",
     "creating": "Création",
@@ -1608,7 +1588,49 @@
     "force": {
       "replace": "Le remplacer (--force)",
       "held": "Créer quand même (--force)"
-    }
+    },
+    "myNamespaces": "Mes namespaces",
+    "newNamespace": "Nouveau namespace",
+    "newNamespaceName": "Nom du nouveau namespace",
+    "noNamespace": "Vous n'administrez aucun namespace : demandez le droit admin de l'un d'eux.",
+    "kinds": {
+      "svc": {
+        "name": "Service",
+        "role": "Fait tourner une application : ses processus, conteneurs, adresses et stockage, démarrés et déplacés par le cluster."
+      },
+      "vol": {
+        "name": "Volume",
+        "role": "Du stockage pour les services : un système de fichiers pris dans un pool, monté par les services qui l'utilisent."
+      },
+      "cfg": {
+        "name": "Configuration",
+        "role": "Des réglages lus par les services : des clés installées en fichiers ou variables dans leurs conteneurs."
+      },
+      "sec": {
+        "name": "Secret",
+        "role": "Des secrets utilisés par les services : des clés chiffrées, installées en fichiers ou variables."
+      },
+      "usr": {
+        "name": "Utilisateur",
+        "role": "Un compte de l'API : ses droits, pour une personne ou un outil pilotant le cluster."
+      },
+      "nscfg": {
+        "name": "Namespace",
+        "role": "Le namespace lui-même : ses réglages et ce qu'il peut prendre des pools et réseaux."
+      }
+    },
+    "sourceHints": {
+      "empty": "Un objet avec son seul id, configuré ensuite.",
+      "copy": "La configuration d'un objet, modifiée avant l'envoi.",
+      "edit": "Une configuration écrite ici, ou un fichier déposé.",
+      "design": "Sections et mots-clés choisis, chacun documenté."
+    },
+    "dropHint": "Déposez un fichier de configuration ici, ou",
+    "fileRead": "{{name}} lu : modifiable ici avant l'envoi.",
+    "back": "Retour",
+    "next": "Suivant",
+    "free": "Libre",
+    "designToText": "Modifier en texte"
   },
   "objects": {
     "noInstanceStatus": "Aucun état de {{node}} : le nœud est perdu ou ne répond pas",
@@ -3054,5 +3076,53 @@
     "host": "l'hôte",
     "rest": "le reste de l'hôte : ses propres processus, le noyau",
     "subset": "sous-ensemble"
+  },
+  "objectDesigner": {
+    "byDefault": "par défaut : {{value}}",
+    "findKeyword": "Chercher un mot-clé",
+    "keywords": "Mots-clés à ajouter",
+    "noKeyword": "Aucun mot-clé ne correspond.",
+    "readDoc": "Ce que fait {{keyword}}",
+    "addKeyword": "Ajouter {{keyword}}",
+    "moreKeyword": "Plus",
+    "reading": "Lecture des drivers",
+    "unknownDriver": "{{driver}} n'a pas pu être lu : {{message}}",
+    "types": "Types",
+    "driver": "Driver, en groupe.type",
+    "addResource": "Ajouter une ressource",
+    "readFailed": "Les mots-clés n'ont pas pu être lus : {{message}}",
+    "showRoot": "Afficher les mots-clés réservés à root",
+    "sections": "Sections",
+    "incomplete": "Un mot-clé requis sans valeur",
+    "removeSection": "Retirer {{section}}",
+    "envHint": "Variables libres de l'objet, lues par ses ressources en {env.<nom>}.",
+    "noEntry": "Rien de réglé : les valeurs par défaut s'appliquent.",
+    "entries": "Les mots-clés de {{section}}",
+    "variable": "Variable",
+    "required": "requis",
+    "valueOf": "Valeur de {{keyword}}",
+    "removeEntry": "Retirer {{keyword}}",
+    "addVariable": "Ajouter une variable",
+    "missing": "Requis sans valeur : {{keys}}.",
+    "showFile": "Voir le fichier",
+    "hideFile": "Masquer le fichier",
+    "emptyFile": "(vide : l'objet n'a que son id)",
+    "use": "Utiliser",
+    "useExample": "Utiliser l'exemple {{value}}",
+    "useExampleHint": "Prendre l'exemple comme valeur (→)",
+    "grantSome": "{{grant}} pour certaines valeurs",
+    "groups": "Groupes de drivers",
+    "groupRoles": {
+      "app": "Lance les processus de l'application : ses commandes start, stop et check.",
+      "container": "Exécute un conteneur à partir d'une image, l'application ou une partie.",
+      "disk": "Active les périphériques bloc où vivent les données : loop, LVM, ZFS, DRBD…",
+      "fs": "Monte un système de fichiers où l'application lit et écrit.",
+      "ip": "Donne au service une adresse où ses clients le joignent.",
+      "share": "Exporte des données vers d'autres hôtes, en NFS.",
+      "sync": "Réplique les données vers les autres nœuds ou sites.",
+      "task": "Une commande lancée à la demande ou planifiée, sans rester active.",
+      "volume": "Un stockage tiré d'un pool selon ses besoins, sa taille d'abord ; le pool est choisi pour y répondre.",
+      "claim": "La part d'un pool ou d'un réseau que le namespace peut prendre."
+    }
   }
 }

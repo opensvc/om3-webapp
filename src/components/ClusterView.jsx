@@ -7,6 +7,11 @@ import {CrossLink} from "../app/CrossLink";
 import {storeSource} from "../app/store-config";
 import {kindOf, useMenuState} from "../hooks/useSidebarAlerts";
 import {useClusterNodeOrder} from "../hooks/useClusterNodeOrder";
+import {usePgReadings} from "../hooks/usePgUsage";
+import {IO_FIGURES, sumUsage} from "../app/pg-usage";
+import {ioFigure} from "./ClusterUsage";
+import {formatCpu} from "../app/namespace-usage";
+import {formatBytes} from "../ui/lib/format";
 import {ObjectIcon} from "../ui/components/ObjectIcon";
 import {UsageBar} from "../ui/components/UsageBar";
 import {FrozenMark} from "../ui/components/FrozenMark";
@@ -82,6 +87,86 @@ function CountsRing({name, states, counts, good, shown = good, label, words}) {
                 ))}
             </dl>
         </div>
+    );
+}
+
+/**
+ * What opensvc uses on the nodes, every opensvc cgroup of each the daemon's included
+ * (the opensvc slice, `usePgReadings` totals): the cpu and the memory over all the
+ * nodes, then node by node. The cpu from a second reading of a node on; the whole of
+ * a node shown to whom the whole node may be, said to the others.
+ */
+function OpensvcUsage({nodes}) {
+    const {t, i18n} = useTranslation();
+    const {usage, totals, hosts, errors} = usePgReadings(nodes);
+    const told = nodes.filter((node) => totals[node] !== undefined);
+    const read = nodes.filter((node) => usage[node] !== undefined || errors[node] !== undefined);
+    const failed = nodes.filter((node) => errors[node] !== undefined);
+    const all = sumUsage(told.map((node) => totals[node]));
+    const figures = IO_FIGURES.filter((key) => all[key] !== undefined);
+    // The whole hosts, every node told: what opensvc uses of what they use, and of what they have.
+    const host = told.every((node) => hosts[node] !== undefined) ? sumUsage(told.map((node) => hosts[node])) : undefined;
+    const share = (part, whole) => (typeof part === "number" && typeof whole === "number" && whole > 0
+        ? `${(100 * part / whole).toLocaleString(i18n.language, {maximumFractionDigits: part / whole < 0.1 ? 1 : 0})} %`
+        : undefined);
+    const cpuShare = host && share(all.cpu, host.cpu);
+    const memoryShare = host && share(all.memory, host.memory);
+    const cpu = (value) => (value === null || value === undefined ? "…" : formatCpu(value, i18n.language));
+    const memory = (value) => formatBytes(value, i18n.language) || "-";
+    if (told.length === 0) {
+        return (
+            <p className="text-data text-ink-muted">
+                {read.length === 0 ? t("clusterView.reading") : failed.length === read.length ? t("clusterView.opensvc.unread") : t("clusterView.opensvc.notShown")}
+            </p>
+        );
+    }
+    return (
+        <>
+            <dl data-opensvc-total="" className="grid grid-cols-2 gap-3">
+                <div>
+                    <dt className="text-data text-ink-muted">{t("clusterView.opensvc.cpu")}</dt>
+                    <dd className="text-2xl font-semibold tabular-nums">{cpu(all.cpu)}</dd>
+                    {cpuShare && (
+                        <dd data-share="cpu" className="text-data text-ink-muted">
+                            {t("clusterView.opensvc.cpuShare", {share: cpuShare, used: cpu(host.cpu), count: host.cpus ?? 0})}
+                        </dd>
+                    )}
+                </div>
+                <div>
+                    <dt className="text-data text-ink-muted">{t("clusterView.opensvc.memory")}</dt>
+                    <dd className="text-2xl font-semibold tabular-nums">{memory(all.memory)}</dd>
+                    {memoryShare && (
+                        <dd data-share="memory" className="text-data text-ink-muted">
+                            {t("clusterView.opensvc.memoryShare", {share: memoryShare, used: memory(host.memory), total: memory(host.limit)})}
+                        </dd>
+                    )}
+                </div>
+            </dl>
+            {/* The tasks and the io, where the readings tell them: a line of their own, under the cpu and the memory. */}
+            {figures.length > 0 && (
+                <dl data-opensvc-io="" className="grid grid-cols-3 gap-3">
+                    {figures.map((key) => (
+                        <div key={key} data-figure={key}>
+                            <dt className="text-data text-ink-muted">{t(`clusterUsage.${key}`)}</dt>
+                            <dd className="text-lg font-semibold tabular-nums">{ioFigure(key, all[key], i18n.language)}</dd>
+                        </div>
+                    ))}
+                </dl>
+            )}
+            <p className="text-data text-ink-muted">{t("clusterView.opensvc.over", {count: told.length, total: nodes.length})}</p>
+            <ul aria-label={t("clusterView.opensvc.byNode")} className="space-y-0.5 text-data">
+                {told.map((node) => (
+                    <li key={node} data-node={node} className="flex items-center gap-2">
+                        <CrossLink kind="node" id={node}>{node}</CrossLink>
+                        <span className="ml-auto tabular-nums">{cpu(totals[node].cpu)}</span>
+                        <span className="w-20 text-right tabular-nums">{memory(totals[node].memory)}</span>
+                    </li>
+                ))}
+            </ul>
+            {failed.length > 0 && (
+                <p className="text-data text-state-warn">{t("clusterView.opensvc.failed", {nodes: failed.join(", ")})}</p>
+            )}
+        </>
     );
 }
 
@@ -165,6 +250,7 @@ function Fullest({items, kind}) {
  *
  * - the links, the ring of the heartbeats page, each heartbeat its links beating;
  * - the nodes, a ring of those dropped, overloaded, optimal; those frozen said;
+ * - what opensvc uses, its cpu and memory over the nodes, then node by node;
  * - the arbitrators, a ring of the nodes reaching them, each listed; none, with an even
  *   number of nodes, the risk of a tied vote said;
  * - the objects, a ring of the services and the volumes by availability; the objects by kind;
@@ -279,6 +365,11 @@ export default function ClusterView() {
                             );
                         })}
                     </ul>
+                </Card>
+
+                {/* Its tree, as systemd-cgtop shows the cgroups: the usage tab of the cluster's panel. */}
+                <Card id="opensvc" icon="chart" title={t("clusterView.opensvc.title")} to={{search: "?peek=object:cluster&peektab=usage"}}>
+                    <OpensvcUsage nodes={nodes.filter(([, s]) => s !== undefined).map(([node]) => node)}/>
                 </Card>
 
                 <Card id="arbitrators" icon="cluster" title={t("clusterView.arbitrators.title")} count={arbitrators.length}>

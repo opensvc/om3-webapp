@@ -1,6 +1,11 @@
 import React, {useCallback, useEffect, useMemo, useRef, useState} from "react";
 import {createPortal} from "react-dom";
 import {useTranslation} from "react-i18next";
+import {CrossLink} from "../app/CrossLink";
+import {StatusMark} from "../ui/components/StatusMark";
+import {toObjectState} from "../ui/components/status";
+import {InstanceLink} from "./RecordLinks";
+import {useMenuState} from "../hooks/useSidebarAlerts";
 import useEventStore from "../hooks/useEventStore.js";
 import {retainEventReception} from "../eventSourceManager.jsx";
 import {URL_CLUSTER_STATUS, URL_OBJECT} from "../config/apiPath.js";
@@ -58,6 +63,45 @@ const REFRESH_DELAY_MS = 300;
  * status for the frozen nodes and the agent versions. Read again on each event
  * about the object.
  */
+/** The availability of a relation: of the instance a `path@node` names, else of the object. */
+/**
+ * The availability of a relation: of the instance a `path@node` names when the events
+ * of its object come here, else of the object, as the menu keeps every object's.
+ */
+const relationAvail = (state, objects, relation) => {
+    const [path, node] = relation.split("@");
+    return (node === undefined ? undefined : state.objectInstanceStatus?.[path]?.[node]?.avail) ?? objects?.[path]?.avail ?? "";
+};
+
+/**
+ * The children or the parents of an object, as its instances' configurations name
+ * them: a badge each, the mark of its availability at its left, opening the object, or
+ * the instance a `path@node` names. What an orchestration waits for, seen at once.
+ */
+function RelationLinks({relations}) {
+    const {t} = useTranslation();
+    // Every object's, the menu's live state; as a string, for the selector to give the same value while nothing changes.
+    const objects = useMenuState((s) => s.objects);
+    const avails = useEventStore((s) => relations.map((r) => relationAvail(s, objects, r)).join("\n")).split("\n");
+    return (
+        <span className="inline-flex flex-wrap items-center gap-1.5">
+            {relations.map((relation, i) => {
+                const [path, node] = relation.split("@");
+                // Its state in the badge, then its name: the relation as written, its node with it.
+                const label = (
+                    <span data-relation={relation} className="inline-flex items-center gap-1">
+                        <StatusMark state={toObjectState(avails[i])} label={avails[i] || t("instance.unknown")}/>
+                        {relation}
+                    </span>
+                );
+                return node === undefined
+                    ? <CrossLink key={relation} kind="object" id={path}>{label}</CrossLink>
+                    : <InstanceLink key={relation} path={path} node={node} label={label}/>;
+            })}
+        </span>
+    );
+}
+
 const ObjectStatus = ({path, onOrchestrationLogs, linkNode, linkResource, openCell}) => {
     const {t} = useTranslation();
     const [digest, setDigest] = useState(null);
@@ -337,9 +381,15 @@ const ObjectStatus = ({path, onOrchestrationLogs, linkNode, linkResource, openCe
     const resourcesOfInstances = Object.values(instances ?? {}).flatMap((i) => Object.values(i?.resources ?? {}));
     const datastores = datastoresOf(resourcesOfInstances);
     const volumes = volumesOf(resourcesOfInstances);
+    // Its children and parents, as the configurations of its instances name them, once each.
+    const relationsOf = (key) => [...new Set(Object.values(configs ?? {}).flatMap((c) => c?.[key] ?? []))].sort();
+    const children = relationsOf("children");
+    const parents = relationsOf("parents");
     const facts = [
         ...(datastores.length > 0 ? [{label: t("statusBoard.datastores"), value: <DatastoreLinks paths={datastores}/>}] : []),
         ...(volumes.length > 0 ? [{label: t("statusBoard.volumes"), value: <DatastoreLinks paths={volumes}/>}] : []),
+        ...(children.length > 0 ? [{label: t("statusBoard.children"), value: <RelationLinks relations={children}/>}] : []),
+        ...(parents.length > 0 ? [{label: t("statusBoard.parents"), value: <RelationLinks relations={parents}/>}] : []),
     ];
 
     // The policies of the object over its status board, its actions at the right of the title of its panel.

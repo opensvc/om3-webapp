@@ -1,7 +1,7 @@
 import {useEffect, useMemo, useSyncExternalStore} from "react";
 import useEventStore from "./useEventStore.js";
 import {URL_NODE} from "../config/apiPath.js";
-import {nodeUsage, readPg} from "../app/pg-usage";
+import {detailsUsage, hostUsage, namespaceSlicesUsage, nodeUsage, opensvcUsage, readPgScopes, topSlicesUsage} from "../app/pg-usage";
 import logger from "../utils/logger.js";
 
 /**
@@ -14,12 +14,18 @@ export const PG_POLL_MS = 16000;
 /*
  * One reader for every view: the nodes asked for, each by how many views, are read
  * every PG_POLL_MS, a node newly asked for at once. The state is the usage of the
- * instances of each node read (`ClusterUsage`), and the error of each node whose
- * last reading failed.
+ * instances of each node read (`ClusterUsage`), that of the opensvc slice of each
+ * node told (`totals`), that of its namespace slices (`namespaces`), that of the whole
+ * host told (`hosts`) and of its other top-level slices (`slices`), that of the groups
+ * in the slices of the objects asked for on it (`details`: their subsets and
+ * resources, read with `?path=`), and the error of each node whose last reading failed.
  */
 const wanted = new Map();
+/** The objects whose subsets and resources are asked for, by node: path to how many views. */
+const wantedPaths = new Map();
 const readings = {};
-let state = {usage: {}, errors: {}};
+const EMPTY = {usage: {}, totals: {}, namespaces: {}, hosts: {}, slices: {}, details: {}, errors: {}};
+let state = EMPTY;
 const listeners = new Set();
 let timer = null;
 
@@ -32,18 +38,35 @@ function publish(next) {
 
 async function readNode(node) {
     try {
-        const response = await fetch(`${URL_NODE}/${encodeURIComponent(node)}/metrics/pg`, {
+        const paths = [...(wantedPaths.get(node)?.keys() ?? [])].sort();
+        const query = paths.length === 0 ? "" : `?${paths.map((path) => `path=${encodeURIComponent(path)}`).join("&")}`;
+        const response = await fetch(`${URL_NODE}/${encodeURIComponent(node)}/metrics/pg${query}`, {
             headers: authHeaders(),
             cache: "no-cache",
         });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const current = {at: Date.now(), byPath: readPg(await response.text())};
+        const current = {at: Date.now(), ...readPgScopes(await response.text())};
         const usage = nodeUsage(readings[node], current);
+        const total = opensvcUsage(readings[node], current);
+        const nsSlices = namespaceSlicesUsage(readings[node], current);
+        const host = hostUsage(readings[node], current);
+        const slices = topSlicesUsage(readings[node], current);
+        const details = detailsUsage(readings[node], current);
         readings[node] = current;
         // A node no longer asked for while it was read is dropped.
         if (!wanted.has(node)) return;
         const {[node]: _cleared, ...errors} = state.errors;
-        publish({usage: {...state.usage, [node]: usage}, errors});
+        const {[node]: _untold, ...totals} = state.totals;
+        const {[node]: _noHost, ...hosts} = state.hosts;
+        publish({
+            usage: {...state.usage, [node]: usage},
+            totals: total === undefined ? totals : {...totals, [node]: total},
+            namespaces: {...state.namespaces, [node]: nsSlices},
+            hosts: host === undefined ? hosts : {...hosts, [node]: host},
+            slices: {...state.slices, [node]: slices},
+            details: {...state.details, [node]: details},
+            errors,
+        });
     } catch (error) {
         logger.warn(`Failed to read the cgroup metrics of ${node}:`, error);
         if (!wanted.has(node)) return;
@@ -53,6 +76,34 @@ async function readNode(node) {
 
 function readAll() {
     for (const node of wanted.keys()) void readNode(node);
+}
+
+/** The objects asked for on a node, counted; a new one reads the node at once. */
+function wantPaths(nodes, paths) {
+    for (const node of nodes) {
+        if (!wantedPaths.has(node)) wantedPaths.set(node, new Map());
+        const byPath = wantedPaths.get(node);
+        let added = false;
+        for (const path of paths) {
+            const count = byPath.get(path) ?? 0;
+            byPath.set(path, count + 1);
+            if (count === 0) added = true;
+        }
+        if (added && (wanted.get(node) ?? 0) > 0) void readNode(node);
+    }
+}
+
+function releasePaths(nodes, paths) {
+    for (const node of nodes) {
+        const byPath = wantedPaths.get(node);
+        if (!byPath) continue;
+        for (const path of paths) {
+            const count = (byPath.get(path) ?? 1) - 1;
+            if (count > 0) byPath.set(path, count);
+            else byPath.delete(path);
+        }
+        if (byPath.size === 0) wantedPaths.delete(node);
+    }
 }
 
 function want(nodes) {
@@ -73,10 +124,11 @@ function release(nodes) {
         }
         wanted.delete(node);
         delete readings[node];
-        if (state.usage[node] || state.errors[node]) {
-            const {[node]: _gone, ...usage} = state.usage;
-            const {[node]: _error, ...errors} = state.errors;
-            publish({usage, errors});
+        if (Object.values(state).some((byNode) => byNode[node] !== undefined)) {
+            publish(Object.fromEntries(Object.entries(state).map(([key, byNode]) => {
+                const {[node]: _gone, ...others} = byNode;
+                return [key, others];
+            })));
         }
     }
     if (wanted.size === 0 && timer !== null) {
@@ -88,10 +140,11 @@ function release(nodes) {
 /** Forgets every reading: for the tests. */
 export function resetPgUsage() {
     wanted.clear();
+    wantedPaths.clear();
     for (const node of Object.keys(readings)) delete readings[node];
     if (timer !== null) clearInterval(timer);
     timer = null;
-    state = {usage: {}, errors: {}};
+    state = EMPTY;
     listeners.clear();
 }
 
@@ -109,17 +162,32 @@ const pick = (byNode, key) => {
 /**
  * The cgroup usage of the instances on `nodes` (`ClusterUsage`): the cpu in cpus,
  * from the second reading of a node, the memory and its limit. Read while asked.
- * `errors`: why the last reading of a node failed, by node.
+ * `totals`: the usage of the opensvc slice of each node told, by node; `namespaces`:
+ * that of its namespace slices, by node then namespace; `hosts`: that of the whole
+ * host, by node; `slices`: that of its other top-level slices, by node then name;
+ * `details`: that of the subsets and resources of the objects of `paths`, by node then
+ * object, read on those nodes while asked; `errors`: why the last reading of a node
+ * failed, by node.
  */
-export function usePgReadings(nodes) {
+export function usePgReadings(nodes, {paths = []} = {}) {
     const key = [...new Set(nodes)].sort().join(",");
+    const pathsKey = [...new Set(paths)].sort().join("\n");
     useEffect(() => {
         const list = key === "" ? [] : key.split(",");
+        const objects = pathsKey === "" ? [] : pathsKey.split("\n");
+        // The objects asked for before the nodes: the first reading of a node asks for them.
+        wantPaths(list, objects);
         want(list);
-        return () => release(list);
-    }, [key]);
-    const {usage, errors} = useSyncExternalStore(subscribe, snapshot);
-    return useMemo(() => ({usage: pick(usage, key), errors: pick(errors, key)}), [usage, errors, key]);
+        return () => {
+            release(list);
+            releasePaths(list, objects);
+        };
+    }, [key, pathsKey]);
+    const current = useSyncExternalStore(subscribe, snapshot);
+    return useMemo(
+        () => Object.fromEntries(Object.entries(current).map(([name, byNode]) => [name, pick(byNode, key)])),
+        [current, key],
+    );
 }
 
 /** The cgroup usage of the instances on `nodes` (usePgReadings), without the errors. */

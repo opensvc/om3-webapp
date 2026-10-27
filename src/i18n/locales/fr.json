@@ -991,10 +991,10 @@
     "footer": "Additionné sur les nœuds du cluster, rafraîchi toutes les {{seconds}} secondes. Le CPU est en pourcentage d'un CPU.",
     "object": {
       "total": "Usage de l'objet",
-      "instances": "Usage par instance",
       "openInstance": "Ouvrir l'instance sur {{node}}",
       "none": "Aucune instance.",
-      "footer": "Additionné sur ses instances, rafraîchi toutes les {{seconds}} secondes. Le CPU est en pourcentage d'un CPU ; les limites s'additionnent, illimitées si l'une l'est."
+      "footer": "Additionné sur ses instances, rafraîchi toutes les {{seconds}} secondes. Le CPU est en pourcentage d'un CPU ; les limites s'additionnent, illimitées si l'une l'est.",
+      "noGroup": "Pas de cgroup pour cet objet sur ses nœuds."
     },
     "instance": {
       "total": "Usage de l'instance",
@@ -1985,7 +1985,9 @@
     "refresh": "Rafraîchir l'état",
     "refreshAll": "Rafraîchir l'état de toutes les instances",
     "refreshFailed": "Rafraîchissement refusé : {{detail}}",
-    "volumes": "Volumes"
+    "volumes": "Volumes",
+    "children": "Enfants",
+    "parents": "Parents"
   },
   "shortcuts": {
     "title": "Raccourcis clavier",
@@ -2952,6 +2954,20 @@
       "seen": "{{up}} nœuds sur {{total}} le joignent",
       "none": "Aucun arbitre.",
       "tieRisk": "Aucun arbitre, et un nombre pair de nœuds ({{count}}) : coupé en deux moitiés, aucune n'a la majorité des votes du quorum. Ajoutez un arbitre, ou un nœud."
+    },
+    "opensvc": {
+      "title": "Usage d'OpenSVC",
+      "cpu": "CPU",
+      "memory": "Mémoire",
+      "over_one": "Tous les cgroups opensvc, démon compris, sur {{count}} nœud sur {{total}}",
+      "over_other": "Tous les cgroups opensvc, démon compris, sur {{count}} nœuds sur {{total}}",
+      "byNode": "Par nœud",
+      "notShown": "L'usage des nœuds entiers n'est pas montré à vos droits.",
+      "unread": "L'usage des nœuds n'a pas pu être lu.",
+      "failed": "Non lus : {{nodes}}",
+      "cpuShare_one": "{{share}} des {{used}} utilisés par les hôtes, sur {{count}} CPU",
+      "cpuShare_other": "{{share}} des {{used}} utilisés par les hôtes, sur {{count}} CPU",
+      "memoryShare": "{{share}} des {{used}} utilisés par les hôtes, sur {{total}}"
     }
   },
   "snapshots": {
@@ -3012,5 +3028,28 @@
     "shown": "{{shown}} sur {{total}} affichés",
     "more_one": "Afficher {{count}} de plus",
     "more_other": "Afficher {{count}} de plus"
+  },
+  "clusterUsage": {
+    "allNodes": "Tous les nœuds",
+    "order": "Ordre",
+    "orders": {
+      "cpu": "CPU",
+      "memory": "Mémoire",
+      "name": "Nom"
+    },
+    "caption": "Les cgroups d'opensvc",
+    "group": "Groupe de contrôle",
+    "cpu": "CPU",
+    "memory": "Mémoire",
+    "other": "opensvc-server.service et le reste",
+    "fold": "Plier ou déplier {{name}}",
+    "tasks": "Tâches",
+    "read": "Lus/s",
+    "write": "Écrits/s",
+    "limit": "Limite",
+    "unlimited": "illimitée",
+    "host": "l'hôte",
+    "rest": "le reste de l'hôte : ses propres processus, le noyau",
+    "subset": "sous-ensemble"
   }
 }

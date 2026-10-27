@@ -18,6 +18,7 @@ import {storeSource} from "../app/store-config";
 import {NamespaceConfig, NamespaceUsage} from "./NamespacePanel";
 import {NamespaceClaims} from "./NamespaceClaims";
 import {ObjectUsage} from "./InstanceRecord";
+import {ClusterUsage} from "./ClusterUsage";
 import {CAPACITY_KINDS, ObjectCapacity} from "./ObjectCapacity";
 import {ClusterLocks} from "./ClusterLocks";
 import {ObjectSnapshots, useSnapshotNodes} from "./ObjectSnapshots";
@@ -48,7 +49,8 @@ import {KEY_KINDS} from "../constants/actions";
 /**
  * An object. A service or a volume shows its status as `om <path> status` does, with
  * its actions (ObjectStatus), then its usage summed over its instances and node by
- * node (ObjectUsage), then the tasks scheduled for it on each node (ObjectTabs), then
+ * node (ObjectUsage; the cluster object, what opensvc uses on the nodes, a tree of
+ * its cgroups: ClusterUsage), then the tasks scheduled for it on each node (ObjectTabs), then
  * the logs of its instances merged over their nodes (ObjectLogs), then its
  * configuration (ObjectConfig). What its
  * resources report is in the panels of its instances and of its resources.
@@ -145,7 +147,7 @@ export function ObjectDetailPanel({path, tab, onTabChange, onClose}) {
                             : <ObjectStatus key={path} path={path} onOrchestrationLogs={showOrchestrationLogs}
                                             linkNode={linkNode} linkResource={linkResource} openCell={openCell}/>}
                     </div>
-                    {active === "usage" && <ObjectUsage key={path} path={path}/>}
+                    {active === "usage" && (kind === "ccfg" ? <ClusterUsage/> : <ObjectUsage key={path} path={path}/>)}
                     {active === "capacity" && <ObjectCapacity key={path} path={path} nodes={nodes}/>}
                     {active === "schedules" && <ObjectSchedules key={path} path={path}/>}
                     {active === "snapshots" && <StoreSnapshots key={path} path={path}/>}

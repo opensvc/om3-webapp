@@ -41,6 +41,13 @@ const page = (usec, memory, max = '+Inf') => [
     `opensvc_pg_cgroup_cpu_usage_usec{namespace="prod",path="prod/svc/web"} ${usec}`,
     `opensvc_pg_cgroup_memory_current_bytes{namespace="prod",path="prod/svc/web"} ${memory}`,
     `opensvc_pg_cgroup_memory_max_bytes{namespace="prod",path="prod/svc/web"} ${max}`,
+    // The slices around it: the opensvc one of the node, its namespace's.
+    `opensvc_pg_cgroup_memory_current_bytes{namespace="",path="",scope="opensvc"} ${10 * memory}`,
+    `opensvc_pg_cgroup_memory_current_bytes{namespace="prod",path="",scope="namespace"} ${2 * memory}`,
+    // The groups in its slice, asked for: a subset and its resource, a resource of none.
+    `opensvc_pg_cgroup_memory_current_bytes{namespace="prod",path="prod/svc/web",rid="",scope="subset",subset="front"} ${memory / 2}`,
+    `opensvc_pg_cgroup_memory_current_bytes{namespace="prod",path="prod/svc/web",rid="app#1",scope="resource",subset="front"} ${memory / 2}`,
+    `opensvc_pg_cgroup_memory_current_bytes{namespace="prod",path="prod/svc/web",rid="fs#1",scope="resource",subset=""} ${memory / 4}`,
 ].join('\n');
 
 let pages;
@@ -84,7 +91,7 @@ beforeEach(() => {
                 item('n1', 'fs#1', 'mnt', '/srv'),
             ]})});
         }
-        const node = /\/api\/node\/name\/([^/]+)\/metrics\/pg$/.exec(url)?.[1];
+        const node = /\/api\/node\/name\/([^/]+)\/metrics\/pg(\?.*)?$/.exec(url)?.[1];
         const list = pages[node];
         if (!list) return Promise.resolve({ok: false, status: 404, text: () => Promise.resolve('')});
         if (list.length > 1) list.shift();
@@ -99,20 +106,33 @@ afterEach(() => {
 });
 
 describe('ObjectUsage', () => {
-    test('the object summed over its instances, then each instance by node', async () => {
+    test('the object summed over its instances, then the cgroups around it, its instances node by node', async () => {
         inRouter(<ObjectUsage path="prod/svc/web"/>);
-        const table = await screen.findByRole('table', {name: 'Usage by instance'});
+        const table = await screen.findByRole('table', {name: 'The cgroups of opensvc'});
         // Its instance nodes only are read.
+        // Its instance nodes only are read, its subsets and resources asked for.
         expect(global.fetch.mock.calls.map(([url]) => url).sort()).toEqual([
-            '/api/node/name/n1/metrics/pg', '/api/node/name/n2/metrics/pg', '/api/node/name/n3/metrics/pg',
+            '/api/node/name/n1/metrics/pg?path=prod%2Fsvc%2Fweb',
+            '/api/node/name/n2/metrics/pg?path=prod%2Fsvc%2Fweb',
+            '/api/node/name/n3/metrics/pg?path=prod%2Fsvc%2Fweb',
         ]);
         const rows = within(table).getAllByRole('row').slice(1).map((row) => within(row).getAllByRole('cell').map((c) => c.textContent));
-        // n3 has no cgroup for it: dashes.
+        // The opensvc slice and the namespace slice over its nodes; the object, its line marked; n3 has no cgroup for it: dashes.
         expect(rows).toEqual([
-            ['on n1', '-', '1.0 MiB', '64.0 MiB'],
-            ['on n2', '-', '2.0 MiB', 'unlimited'],
-            ['on n3', '-', '-', '-'],
+            ['opensvc.slice', '…', '30 MiB', '-'],
+            ['prodopensvc-ns.prod.slice', '…', '6 MiB', '-'],
+            ['prod/svc/web', '…', '3 MiB', 'unlimited'],
+            ['on n1', '…', '1 MiB', '64 MiB'],
+            ['frontsubset', '…', '512 KiB', '-'],
+            ['app#1', '…', '512 KiB', '-'],
+            ['fs#1', '…', '256 KiB', '-'],
+            ['on n2', '…', '2 MiB', 'unlimited'],
+            ['frontsubset', '…', '1 MiB', '-'],
+            ['app#1', '…', '1 MiB', '-'],
+            ['fs#1', '…', '512 KiB', '-'],
+            ['on n3', '…', '-', '-'],
         ]);
+        expect(within(table).getAllByRole('row')[3]).toHaveAttribute('aria-current', 'true');
         expect(tile('Memory')).toHaveTextContent('3.0 MiB');
         expect(tile('Limit')).toHaveTextContent('unlimited');
         // Half a cpu on n1, a quarter on n2.
@@ -124,18 +144,24 @@ describe('ObjectUsage', () => {
 
     test('each node the badge of its instance, opening it over the view', async () => {
         inRouter(<ObjectUsage path="prod/svc/web"/>);
-        await screen.findByRole('table', {name: 'Usage by instance'});
+        await screen.findByRole('table', {name: 'The cgroups of opensvc'});
         fireEvent.click(screen.getByRole('button', {name: 'on n2'}));
         expect(screen.getByTestId('search')).toHaveTextContent('peek=instance%3Aprod%2Fsvc%2Fweb%40n2');
     });
 });
 
 describe('InstanceUsage', () => {
-    test('the cgroup of the instance on its node alone', async () => {
+    test('the cgroup of the instance on its node alone, then the cgroups around it there', async () => {
         inRouter(<InstanceUsage path="prod/svc/web" node="n2"/>);
         expect(await screen.findByText('2.0 MiB')).toBeInTheDocument();
-        expect(global.fetch.mock.calls.map(([url]) => url)).toEqual(['/api/node/name/n2/metrics/pg']);
+        expect(global.fetch.mock.calls.map(([url]) => url)).toEqual(['/api/node/name/n2/metrics/pg?path=prod%2Fsvc%2Fweb']);
         expect(tile('Limit')).toHaveTextContent('unlimited');
+        const table = await screen.findByRole('table', {name: 'The cgroups of opensvc'});
+        expect(within(table).getAllByRole('row').slice(1).map((row) => within(row).getAllByRole('cell')[0].textContent))
+            .toEqual(['opensvc.slice', 'prodopensvc-ns.prod.slice', 'prod/svc/web', 'frontsubset', 'app#1', 'fs#1']);
+        // A resource, its panel on that instance.
+        fireEvent.click(within(table).getByRole('button', {name: 'fs#1'}));
+        expect(screen.getByTestId('search')).toHaveTextContent('peek=resource%3Aprod%2Fsvc%2Fweb%3Afs%231%40n2');
     });
 
     test('no cgroup for it on its node: said so', async () => {

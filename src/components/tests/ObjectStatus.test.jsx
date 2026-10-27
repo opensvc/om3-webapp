@@ -5,6 +5,7 @@ import ObjectStatus from '../ObjectStatus';
 import {PanelHeaderContext} from '../../app/panel-header';
 import {MemoryRouter} from 'react-router-dom';
 import useEventStore from '../../hooks/useEventStore.js';
+import {useMenuState} from '../../hooks/useSidebarAlerts';
 import {useActionTracker} from '../../app/action-tracker';
 
 /** What the actions tray holds, the latest first: action, subject, state, reason. */
@@ -161,6 +162,39 @@ describe('ObjectStatus', () => {
             expect(within(volumes.nextElementSibling).getAllByRole('button').map((b) => b.textContent)).toEqual(['system/vol/dns']);
         } finally {
             useEventStore.setState({objectInstanceStatus: {}});
+        }
+    });
+
+    test('its children and parents, as its instances configure them, a badge each after the mark of its availability', async () => {
+        answer(dns);
+        useEventStore.setState({
+            instanceConfig: {'system/svc/dns': {
+                dev3n1: {children: ['system/svc/web', 'system/svc/api@dev3n2'], parents: ['system/svc/db']},
+                dev3n2: {children: ['system/svc/web']},
+            }},
+            objectInstanceStatus: {'system/svc/api': {dev3n2: {avail: 'warn'}}},
+        });
+        // Every object's availability, as the menu keeps it.
+        useMenuState.setState({objects: {'system/svc/web': {avail: 'down'}, 'system/svc/db': {avail: 'up'}}});
+        try {
+            render(<MemoryRouter><ObjectStatus path="system/svc/dns"/></MemoryRouter>);
+            await screen.findByRole('table');
+            const children = screen.getByText('Children', {selector: 'dt'}).nextElementSibling;
+            // A badge each, its state inside at its left, then the relation as written.
+            const badges = within(children).getAllByRole('button');
+            expect(badges.map((b) => b.querySelector('[data-relation]').getAttribute('data-relation'))).toEqual(['system/svc/api@dev3n2', 'system/svc/web']);
+            const web = badges[1].querySelector('[data-relation]');
+            expect(web.firstElementChild).toHaveAttribute('data-state', 'down');
+            expect(web).toHaveTextContent(/system\/svc\/web$/);
+            expect(badges[0]).toHaveTextContent(/system\/svc\/api@dev3n2$/);
+            const parents = screen.getByText('Parents', {selector: 'dt'}).nextElementSibling;
+            expect(within(parents).getByRole('button')).toHaveTextContent(/system\/svc\/db$/);
+            expect(parents.querySelector('[data-state]')).toHaveAttribute('data-state', 'up');
+            // An instance, its own state where its events come; a click, its panel.
+            expect(children.querySelector('[data-relation="system/svc/api@dev3n2"] [data-state]')).toHaveAttribute('data-state', 'warn');
+        } finally {
+            useEventStore.setState({instanceConfig: {}, objectInstanceStatus: {}});
+            useMenuState.setState({objects: {}});
         }
     });
 

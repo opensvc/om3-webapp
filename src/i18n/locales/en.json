@@ -991,10 +991,10 @@
     "footer": "Summed over the nodes of the cluster, refreshed every {{seconds}} seconds. CPU is in percent of one CPU.",
     "object": {
       "total": "Usage of the object",
-      "instances": "Usage by instance",
       "openInstance": "Open the instance on {{node}}",
       "none": "No instance.",
-      "footer": "Summed over its instances, refreshed every {{seconds}} seconds. CPU is in percent of one CPU; the limits add up, unlimited if one is."
+      "footer": "Summed over its instances, refreshed every {{seconds}} seconds. CPU is in percent of one CPU; the limits add up, unlimited if one is.",
+      "noGroup": "No cgroup for this object on its nodes."
     },
     "instance": {
       "total": "Usage of the instance",
@@ -1985,7 +1985,9 @@
     "refresh": "Refresh the status",
     "refreshAll": "Refresh the status of all the instances",
     "refreshFailed": "Refresh refused: {{detail}}",
-    "volumes": "Volumes"
+    "volumes": "Volumes",
+    "children": "Children",
+    "parents": "Parents"
   },
   "shortcuts": {
     "title": "Keyboard shortcuts",
@@ -2952,6 +2954,20 @@
       "seen": "{{up}} of {{total}} nodes reach it",
       "none": "No arbitrator.",
       "tieRisk": "No arbitrator, and an even number of nodes ({{count}}): split in two halves, neither has a majority of the quorum votes. Add an arbitrator, or a node."
+    },
+    "opensvc": {
+      "title": "OpenSVC usage",
+      "cpu": "CPU",
+      "memory": "Memory",
+      "over_one": "Every opensvc cgroup, the daemon included, over {{count}} of {{total}} node",
+      "over_other": "Every opensvc cgroup, the daemon included, over {{count}} of {{total}} nodes",
+      "byNode": "By node",
+      "notShown": "The usage of the whole nodes is not shown to your grants.",
+      "unread": "The usage of the nodes could not be read.",
+      "failed": "Not read: {{nodes}}",
+      "cpuShare_one": "{{share}} of the {{used}} the hosts use, on {{count}} CPU",
+      "cpuShare_other": "{{share}} of the {{used}} the hosts use, on {{count}} CPUs",
+      "memoryShare": "{{share}} of the {{used}} the hosts use, of {{total}}"
     }
   },
   "snapshots": {
@@ -3012,5 +3028,28 @@
     "shown": "{{shown}} of {{total}} shown",
     "more_one": "Show {{count}} more",
     "more_other": "Show {{count}} more"
+  },
+  "clusterUsage": {
+    "allNodes": "All nodes",
+    "order": "Order",
+    "orders": {
+      "cpu": "CPU",
+      "memory": "Memory",
+      "name": "Name"
+    },
+    "caption": "The cgroups of opensvc",
+    "group": "Control group",
+    "cpu": "CPU",
+    "memory": "Memory",
+    "other": "opensvc-server.service and the rest",
+    "fold": "Fold or unfold {{name}}",
+    "tasks": "Tasks",
+    "read": "Read/s",
+    "write": "Write/s",
+    "limit": "Limit",
+    "unlimited": "unlimited",
+    "host": "the host",
+    "rest": "the rest of the host: its own processes, the kernel",
+    "subset": "subset"
   }
 }

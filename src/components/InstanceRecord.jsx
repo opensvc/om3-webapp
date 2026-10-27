@@ -4,6 +4,9 @@ import {useTranslation} from "react-i18next";
 import useEventStore from "../hooks/useEventStore.js";
 import {parseInstanceId, parseResourceId} from "../app/peek";
 import {objectUsage} from "../app/pg-usage";
+import {objectUsageTree} from "../app/pg-tree";
+import {namespaceOf} from "../app/namespace-usage";
+import {UsageTreeTable} from "./ClusterUsage";
 import {PG_POLL_MS, usePgReadings} from "../hooks/usePgUsage";
 import {formatBytes} from "../utils/cgroupMetrics";
 import {RecordPanel} from "../app/RecordPanel";
@@ -55,16 +58,20 @@ const UsageTiles = ({usage, label}) => {
 
 /**
  * The usage of a service or a volume: the cpu, memory and memory limit of its
- * instances summed over the nodes, then the instances node by node, each a badge
- * opening its own panel.
+ * instances summed over the nodes, then the cgroups around it as systemd-cgtop shows
+ * them (UsageTreeTable): the opensvc slice and its namespace slice over its nodes, the
+ * object, its instances node by node, each a badge opening its own panel, and under
+ * each its subsets and resources.
  */
 export function ObjectUsage({path}) {
     const {t} = useTranslation();
     const nodes = useInstanceNodes(path);
-    const {usage, errors} = usePgReadings(nodes);
+    // Its subsets and resources too, on each node.
+    const readings = usePgReadings(nodes, {paths: [path]});
+    const {usage, errors} = readings;
     const read = Object.keys(usage).length + Object.keys(errors).length > 0;
     const total = useMemo(() => objectUsage(usage, path), [usage, path]);
-    const byNode = Object.fromEntries(total.instances.map((i) => [i.node, i]));
+    const tree = useMemo(() => objectUsageTree(nodes, readings, path, namespaceOf, {instances: true}), [nodes, readings, path]);
 
     if (!read && nodes.length > 0) {
         return <div className="flex justify-center"><Spinner label={t("metrics.loading")}/></div>;
@@ -73,41 +80,26 @@ export function ObjectUsage({path}) {
         <div className="flex flex-col gap-3" data-testid="object-usage">
             <ReadErrors errors={errors}/>
             <UsageTiles usage={total} label={t("metrics.object.total")}/>
-            <Table aria-label={t("metrics.object.instances")}>
-                <thead>
-                    <HeaderRow>
-                        <HeaderCell>{t("metrics.columns.node")}</HeaderCell>
-                        <HeaderCell>{t("metrics.columns.cpu")}</HeaderCell>
-                        <HeaderCell>{t("metrics.columns.memory")}</HeaderCell>
-                        <HeaderCell>{t("metrics.columns.limit")}</HeaderCell>
-                    </HeaderRow>
-                </thead>
-                <tbody>
-                    {nodes.map((node) => {
-                        // An instance without a cgroup on its node, or not read yet: dashes.
-                        const u = byNode[node] ?? {cpu: null};
-                        return (
-                            <Row key={node}>
-                                <Cell className="whitespace-nowrap"><InstanceLink path={path} node={node}/></Cell>
-                                <Cell numeric>{cpuText(u.cpu)}</Cell>
-                                <Cell numeric>{formatBytes(u.memory)}</Cell>
-                                <Cell numeric>{formatBytes(u.limit)}</Cell>
-                            </Row>
-                        );
-                    })}
-                    {nodes.length === 0 && <EmptyRow colSpan={4}>{t("metrics.object.none")}</EmptyRow>}
-                </tbody>
-            </Table>
+            {nodes.length === 0 ? <p className="text-ink-muted">{t("metrics.object.none")}</p>
+                : tree === null ? <p className="text-ink-muted">{t("metrics.object.noGroup")}</p>
+                    : <UsageTreeTable tree={tree} limits/>}
             <p className="text-ink-muted">{t("metrics.object.footer", {seconds: PG_POLL_MS / 1000})}</p>
         </div>
     );
 }
 
-/** The usage of an instance: the cpu, memory and memory limit of its cgroup on its node. */
+/**
+ * The usage of an instance: the cpu, memory and memory limit of its cgroup on its
+ * node, then the cgroups around it there as systemd-cgtop shows them: the opensvc
+ * slice, its namespace slice, the instance, and in it its subsets and resources.
+ */
 export function InstanceUsage({path, node}) {
     const {t} = useTranslation();
     const nodes = useMemo(() => [node], [node]);
-    const {usage, errors} = usePgReadings(nodes);
+    // Its subsets and resources too.
+    const readings = usePgReadings(nodes, {paths: [path]});
+    const {usage, errors} = readings;
+    const tree = useMemo(() => objectUsageTree(nodes, readings, path, namespaceOf), [nodes, readings, path]);
     if (usage[node] === undefined && errors[node] === undefined) {
         return <div className="flex justify-center"><Spinner label={t("metrics.loading")}/></div>;
     }
@@ -118,6 +110,7 @@ export function InstanceUsage({path, node}) {
             {usage[node] === undefined ? null : u === undefined
                 ? <p className="text-ink-muted">{t("metrics.instance.none", {node})}</p>
                 : <UsageTiles usage={u} label={t("metrics.instance.total")}/>}
+            {tree && <UsageTreeTable tree={tree} limits/>}
             <p className="text-ink-muted">{t("metrics.instance.footer", {node, seconds: PG_POLL_MS / 1000})}</p>
         </div>
     );

@@ -370,6 +370,20 @@ const EventDrawerContent = ({
     const [manualSubscriptions, setManualSubscriptions] = useState([]);
     const logsContainerRef = useRef(null);
     const typesLabelId = React.useId();
+    // The list of the types under its button, its left edge on the button's; past the
+    // right edge of the window, the panel at the right of it say, its right edge on it.
+    const [typesAtEnd, setTypesAtEnd] = useState(false);
+    const typesMenu = useRef(null);
+    const placeTypes = (event) => {
+        const menu = typesMenu.current;
+        if (!event.currentTarget.open || menu === null) {
+            setTypesAtEnd(false);
+            return;
+        }
+        const button = event.currentTarget.getBoundingClientRect();
+        const width = menu.getBoundingClientRect().width;
+        setTypesAtEnd(button.left + width > window.innerWidth - 8 && button.right - width >= 8);
+    };
 
     const filteredEventTypes = useMemo(() => {
         return eventTypes.filter(et => !CONNECTION_EVENTS.includes(et));
@@ -661,7 +675,7 @@ const EventDrawerContent = ({
                 </label>
                 <div className="flex items-center gap-1 text-ink-muted">
                     <span id={typesLabelId}>{t("events.types")}</span>
-                    <details className="relative">
+                    <details className="relative" onToggle={placeTypes}>
                         <summary
                             aria-describedby={typesLabelId}
                             className="flex h-7 max-w-64 cursor-pointer list-none items-center gap-1 rounded-(--radius-control) border border-line bg-surface px-2 text-ink [&::-webkit-details-marker]:hidden"
@@ -670,9 +684,13 @@ const EventDrawerContent = ({
                             <ChevronDownIcon className="h-3 w-3 shrink-0 text-ink-muted"/>
                         </summary>
                         <div
+                            ref={typesMenu}
                             role="group"
                             aria-label={t("events.filterByType")}
-                            className="absolute left-0 z-10 mt-1 flex min-w-[14rem] flex-col gap-1 rounded-(--radius-control) border border-line bg-surface-raised p-2 text-ink shadow-lg"
+                            className={cn(
+                                "absolute z-10 mt-1 flex max-w-[calc(100vw-1rem)] min-w-[14rem] flex-col gap-1 rounded-(--radius-control) border border-line bg-surface-raised p-2 text-ink shadow-lg",
+                                typesAtEnd ? "right-0" : "left-0",
+                            )}
                         >
                             {availableEventTypes.length === 0 && <span className="text-ink-muted">{t("common.none")}</span>}
                             {availableEventTypes.map((eventType) => (

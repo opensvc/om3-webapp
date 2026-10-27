@@ -4,6 +4,7 @@ import {MemoryRouter, useLocation} from 'react-router-dom';
 import {vi} from 'vitest';
 import Resources, {resourceColumns, resourceLayout, toLine} from '../Resources';
 import useEventStore from '../../hooks/useEventStore.js';
+import {useMenuState} from '../../hooks/useSidebarAlerts';
 
 const {mockRetain, mockRelease} = vi.hoisted(() => ({mockRetain: vi.fn(), mockRelease: vi.fn()}));
 vi.mock('../../eventSourceManager', () => ({
@@ -58,6 +59,7 @@ describe('Resources', () => {
             return new Response(JSON.stringify(answer.body), {status: answer.status});
         });
         useEventStore.setState({objectInstanceStatus: {}});
+        useMenuState.setState({objects: {}});
     });
 
     afterEach(() => {
@@ -226,6 +228,24 @@ describe('Resources', () => {
     test('a resource of an encapsulated node: shown on that node, opened on its host', () => {
         const line = toLine(item('ns1/svc/web', 'n1', 'app#1', 'up', {encap: 'c1'}));
         expect([line.node, line.hostNode]).toEqual(['c1', 'n1']);
+    });
+
+    test('down on the passive node of an object up elsewhere: gray, said passive; Problems only keeps the others down and those in warn', async () => {
+        // web up on n1, its instance on n2 down, as a failover service waits there.
+        // The objects as the menu has them; the instances not reported yet: the object up is enough.
+        useMenuState.setState({objects: {'ns1/svc/web': {avail: 'up'}, 'system/svc/dns': {avail: 'warn'}}});
+        renderView();
+        await waitFor(() => expect(rows()).toHaveLength(4));
+        const passive = within(table()).getAllByRole('row').find((r) => r.textContent.includes('n2') && r.textContent.includes('fs#1'));
+        expect(passive).toHaveTextContent('down· passive');
+        expect(passive.querySelector('[data-muted]')).not.toBeNull();
+        // Down on n1, its object up: still a problem, not gray.
+        fireEvent.click(screen.getByRole('checkbox', {name: 'Problems only'}));
+        expect(rows().map((r) => `${r[0]} ${r[1]} ${r[2]}`)).toEqual(['system/svc/dns n2 ip#0']);
+        await waitFor(() => expect(screen.getByTestId('search')).toHaveTextContent('problems=1'));
+        // The instance on n2 reporting up, its object's active one: its resource down a problem again.
+        act(() => useEventStore.setState({objectInstanceStatus: {'ns1/svc/web': {n2: {avail: 'up'}}}}));
+        await waitFor(() => expect(rows().map((r) => `${r[1]} ${r[2]}`)).toEqual(['n2 fs#1', 'n2 ip#0']));
     });
 
     test('filtered from the address, as the cluster overview links it; the filters written back to it', async () => {

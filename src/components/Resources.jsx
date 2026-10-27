@@ -3,6 +3,7 @@ import {useTranslation} from "react-i18next";
 import {useSearchParams} from "react-router-dom";
 import {URL_RESOURCES} from "../config/apiPath.js";
 import useEventStore from "../hooks/useEventStore.js";
+import {useMenuState} from "../hooks/useSidebarAlerts";
 import {retainEventReception} from "../eventSourceManager";
 import {getResponseErrorMessage} from "../services/api.jsx";
 import {Table, HeaderRow, HeaderCell, SortHeaderCell, Row, Cell, EmptyRow, LIST_PAGE_FIT, LIST_RAIL_QUERY} from "../ui/components/Table";
@@ -13,7 +14,7 @@ import {MenuButton} from "../ui/components/MenuButton";
 import {Spinner} from "../ui/components/Spinner";
 import {StatusMark} from "../ui/components/StatusMark";
 import {MoreRows, useRowsOnDemand} from "../ui/components/RowsOnDemand";
-import {toObjectState} from "../ui/components/status";
+import {isQuietDown, toObjectState} from "../ui/components/status";
 import {BoltIcon, RefreshIcon} from "../ui/icons";
 import {actionLabel} from "../constants/actions";
 import {actionDescription, explainedMenu} from "../app/action-menu";
@@ -40,6 +41,9 @@ import {BADGE} from "./ObjectCells";
  * instances report.
  * Selected, every one the filters keep or some, the resources are acted on together:
  * an action every one of them takes, posted once per instance.
+ * A resource down on a passive node, its object up on another, no issue: its mark
+ * gray, said passive, as the objects' node columns draw it (isQuietDown); kept out by
+ * Problems only, which keeps the resources down elsewhere and those in warn.
  * The table scaled down to its room a step at a time, the least missed first: the
  * flags dropped; the label dropped; the type a badge by the resource; the node a
  * badge by the object.
@@ -103,6 +107,9 @@ export const toLine = (item) => {
     };
 };
 
+/** A resource worth a look: down but on a passive node, or in warn. */
+const isProblem = (l) => (l.status === "down" && !l.passive) || l.status === "warn";
+
 const byText = (key) => (a, b) => String(a[key]).localeCompare(String(b[key]));
 const SORTS = {
     object: (a, b) => byText("object")(a, b) || byText("node")(a, b) || byText("rid")(a, b),
@@ -127,6 +134,8 @@ const Resources = () => {
     const [status, setStatus] = useState(() => fromAddress("status"));
     const [node, setNode] = useState(() => fromAddress("node"));
     const [group, setGroup] = useState(() => fromAddress("group"));
+    // The problems alone: down but on a passive node, or in warn.
+    const [problemsOnly, setProblemsOnly] = useState(() => params.get("problems") === "1");
     // Then written back as they change, the other parameters kept: a panel open, say.
     useEffect(() => {
         setParams((prev) => {
@@ -135,9 +144,11 @@ const Resources = () => {
                 if (values.length > 0) next.set(key, values.join(","));
                 else next.delete(key);
             }
+            if (problemsOnly) next.set("problems", "1");
+            else next.delete("problems");
             return next.toString() === prev.toString() ? prev : next;
         }, {replace: true});
-    }, [status, node, group, setParams]);
+    }, [status, node, group, problemsOnly, setParams]);
     const hasRail = useMediaQuery(LIST_RAIL_QUERY);
     const [sortColumn, setSortColumn] = useState("object");
     const [sortDirection, setSortDirection] = useState("asc");
@@ -186,7 +197,18 @@ const Resources = () => {
         return () => clearTimeout(timer);
     }, [reports]);
 
-    const lines = useMemo(() => (items ?? []).map(toLine), [items]);
+    // Passive: down, its object up on another node. The objects as the menu has them,
+    // live; the instance, once it reports: one up there, its object's active one, a
+    // resource of it down is a problem.
+    const objectStatus = useMenuState((s) => s.objects);
+    const lines = useMemo(() => (items ?? []).map(toLine).map((l) => {
+        const objectAvail = objectStatus?.[l.object]?.avail;
+        const instanceAvail = reports?.[l.object]?.[l.hostNode]?.avail;
+        return {
+            ...l,
+            passive: l.status === "down" && isQuietDown(instanceAvail ?? "down", objectAvail),
+        };
+    }), [items, reports, objectStatus]);
     const nodes = useMemo(() => [...new Set(lines.map((l) => l.node))].sort(), [lines]);
     const statuses = useMemo(() => [...new Set(lines.map((l) => l.status))].filter(Boolean).sort(), [lines]);
     const groups = useMemo(() => [...new Set(lines.map((l) => l.group))].filter(Boolean).sort(), [lines]);
@@ -195,22 +217,23 @@ const Resources = () => {
         const keeps = (selected, value) => selected.length === 0 || selected.includes(value);
         return lines
             .filter((l) => keeps(status, l.status)
+                && (!problemsOnly || isProblem(l))
                 && keeps(node, l.node)
                 && keeps(group, l.group)
                 && matches(filter, l.object, l.rid, l.type, l.label, l.node))
             .sort((a, b) => (sortDirection === "asc" ? sort(a, b) : -sort(a, b)));
-    }, [lines, status, node, group, filter, sortColumn, sortDirection]);
+    }, [lines, status, node, group, problemsOnly, filter, sortColumn, sortDirection]);
     // Beside the table, each value of the filters counted under the others.
     const counts = useMemo(() => (hasRail ? facetCounts(lines, {
-        match: (l) => matches(filter, l.object, l.rid, l.type, l.label, l.node),
+        match: (l) => (!problemsOnly || isProblem(l)) && matches(filter, l.object, l.rid, l.type, l.label, l.node),
         facets: {
             status: {selected: status, valuesOf: (l) => (l.status ? [l.status] : [])},
             node: {selected: node, valuesOf: (l) => [l.node]},
             group: {selected: group, valuesOf: (l) => (l.group ? [l.group] : [])},
         },
-    }) : null), [hasRail, lines, filter, status, node, group]);
+    }) : null), [hasRail, lines, filter, problemsOnly, status, node, group]);
     // The rows drawn as the end of the table nears; a filter or the sort changed, the first ones again.
-    const drawn = useRowsOnDemand(shown.length, [status, node, group, filter, sortColumn, sortDirection]);
+    const drawn = useRowsOnDemand(shown.length, [status, node, group, problemsOnly, filter, sortColumn, sortDirection]);
 
     // The resources selected, by their line; one a filter hides, or gone, leaves the selection.
     const [selected, setSelected] = useState(() => new Set());
@@ -317,6 +340,14 @@ const Resources = () => {
             {t("resources.refresh")}
         </Button>
     );
+    const problems = (
+        <Checkbox
+            label={t("resources.problemsOnly")}
+            title={t("resources.problemsOnlyHint")}
+            checked={problemsOnly}
+            onChange={(e) => setProblemsOnly(e.target.checked)}
+        />
+    );
     const count = <span className="text-ink-muted tabular-nums">{t("resources.count", {shown: shown.length, total: lines.length})}</span>;
     // Nothing selected, nothing to act on: how to select, in the place of the actions.
     const actions = selectedLines.length > 0 ? (
@@ -347,6 +378,7 @@ const Resources = () => {
                         {choice(t("common.status"), status, setStatus, statuses)}
                         {choice(t("common.node"), node, setNode, nodes)}
                         {choice(t("resources.group"), group, setGroup, groups)}
+                        {problems}
                         {count}
                         {/* The words filter, at the right end, as on the other lists. */}
                         <FilterField label={t("resources.filter")} value={filter} onChange={setFilter}/>
@@ -408,8 +440,9 @@ const Resources = () => {
                                 {layout.typeColumn && <Cell className="text-ink-muted">{l.type}</Cell>}
                                 <Cell className="whitespace-nowrap">
                                     <span className="inline-flex items-center gap-1.5">
-                                        <StatusMark state={toObjectState(l.status)} label={l.status || t("instance.unknown")}/>
-                                        {l.status || "-"}
+                                        <StatusMark state={toObjectState(l.status)} label={l.status || t("instance.unknown")} muted={l.passive}/>
+                                        <span className={l.passive ? "text-ink-muted" : undefined}>{l.status || "-"}</span>
+                                        {l.passive && <span className="text-ink-muted" title={t("resources.passiveHint")}>· {t("resources.passive")}</span>}
                                         {l.notProvisioned && <span className="text-state-warn">{t("resources.notProvisioned")}</span>}
                                     </span>
                                 </Cell>
@@ -436,6 +469,7 @@ const Resources = () => {
                     head={(
                         <>
                             <div className="flex flex-wrap items-center gap-x-3 gap-y-2">{refresh}{count}</div>
+                            {problems}
                             <div className="flex flex-wrap items-center gap-x-3 gap-y-2">{actions}</div>
                         </>
                     )}

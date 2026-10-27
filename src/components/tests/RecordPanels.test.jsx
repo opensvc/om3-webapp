@@ -134,7 +134,7 @@ describe('record panels', () => {
         renderPeek('/nodes?peek=object:ns1/svc/web');
         const panel = screen.getByRole('dialog', {name: 'ns1/svc/web'});
         expect(within(panel).getAllByRole('tab').map((tab) => tab.textContent))
-            .toEqual(['Status', 'Usage', 'Capacity', 'Schedules', 'Snapshots', 'Configuration', 'Logs', 'Events']);
+            .toEqual(['Status', 'Usage', 'Capacity', 'Schedules', 'Configuration', 'Logs', 'Events']);
         expect(within(panel).queryByRole('tab', {name: 'Locks'})).not.toBeInTheDocument();
         expect(within(panel).getByRole('tab', {name: 'Status'})).toHaveAttribute('aria-selected', 'true');
         expect(within(panel).getByTestId('object-status')).toBeVisible();
@@ -147,7 +147,7 @@ describe('record panels', () => {
         expect(within(panel).getByTestId('object-status')).not.toBeVisible();
     });
 
-    test.each([['ns1/svc/web', 8], ['ns1/sec/key', 4]])('the %s tabs are titled by their name alone, no icon', (path, count) => {
+    test.each([['ns1/svc/web', 7], ['ns1/sec/key', 4]])('the %s tabs are titled by their name alone, no icon', (path, count) => {
         renderPeek(`/nodes?peek=object:${path}`);
         const panel = screen.getByRole('dialog', {name: path});
         const tabs = within(panel).getAllByRole('tab');
@@ -172,7 +172,7 @@ describe('record panels', () => {
         expect(within(panel).getByTestId('cluster-locks')).toBeInTheDocument();
     });
 
-    test('a service with a sync resource keeping snapshots restores them on a tab; one without, none', () => {
+    test('a service with a sync resource keeping snapshots shows and restores them on tabs; one without, neither', () => {
         store.set({objectInstanceStatus: {'ns1/svc/web': {
             node1: {resources: {'fs#1': {type: 'fs.flag'}, 'sync#1': {type: 'sync.store'}}},
             node2: {resources: {'sync#1': {type: 'sync.rsync'}}},
@@ -188,7 +188,17 @@ describe('record panels', () => {
         }
         cleanup();
         renderPeek('/objects?peek=object:ns1/svc/web');
+        // Its sync resources none keeping snapshots, or none at all: neither tab.
         expect(within(screen.getByRole('dialog', {name: 'ns1/svc/web'})).queryByRole('tab', {name: 'Restore'})).not.toBeInTheDocument();
+        expect(within(screen.getByRole('dialog', {name: 'ns1/svc/web'})).queryByRole('tab', {name: 'Snapshots'})).not.toBeInTheDocument();
+        cleanup();
+        store.set({objectInstanceStatus: {'ns1/svc/web': {node1: {resources: {'sync#1': {type: 'sync.rsync'}}}}}});
+        try {
+            renderPeek('/objects?peek=object:ns1/svc/web');
+            expect(within(screen.getByRole('dialog', {name: 'ns1/svc/web'})).queryByRole('tab', {name: 'Snapshots'})).not.toBeInTheDocument();
+        } finally {
+            store.reset();
+        }
     });
 
     test('a datastore has no capacity tab', () => {

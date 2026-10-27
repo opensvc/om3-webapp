@@ -5,7 +5,6 @@ import {AlertMark} from "../ui/components/AlertMark";
 import {cn} from "../ui/cn";
 import {GlobalSearch} from "../app/GlobalSearch";
 import {loadSearchIndex} from "./searchIndex";
-import {applyPanelUpdate} from "../app/panel-search";
 import {StateGlyph} from "../ui/components/StateGlyph";
 import {ProductTag} from "../ui/components/ProductTag";
 import {useAuth} from "../context/AuthProvider.jsx";
@@ -178,19 +177,10 @@ const NavBar = ({sidebarOpen = false, onToggleSidebar, showSidebarToggle = false
                 out: the breadcrumb and the search need the bar. */}
             <div data-testid="brand" className="hidden shrink-0 items-center gap-2 min-[1200px]:flex">
                 <Link to="/" className="font-semibold tracking-tight text-ink">OpenSVC</Link>
-                {/* The tag opens the cluster over the view on display, as a node or an
-                    object opens: the panel of the cluster object, its configuration
-                    and the cluster actions. */}
-                <Link
-                    to={{
-                        pathname: location.pathname,
-                        search: `?${applyPanelUpdate(new URLSearchParams(location.search ?? ""), {peek: "object:cluster"})}`,
-                    }}
-                    aria-label={t("nav.openCluster")}
-                    className="flex rounded-(--radius-control) hover:brightness-95"
-                >
-                    <ProductTag/>
-                </Link>
+                {/* The tag says which frontend this is, not the collector's: a label, not a
+                    button, for "Cluster" to be the overview of the menu alone. The cluster
+                    object opens from the overview, as "Configuration and actions". */}
+                <ProductTag/>
             </div>
 
             {breadcrumb.length > 0 && location.pathname !== '/login' && (

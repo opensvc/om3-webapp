@@ -1,8 +1,8 @@
 import React from 'react';
-import {render, screen, waitFor, within} from '@testing-library/react';
+import {fireEvent, render, screen, waitFor, within} from '@testing-library/react';
 import '@testing-library/jest-dom';
 import {vi, describe, test, expect, beforeEach, afterEach} from 'vitest';
-import {MemoryRouter} from 'react-router-dom';
+import {MemoryRouter, useLocation} from 'react-router-dom';
 import ClusterView from '../ClusterView';
 import {useMenuState} from '../../hooks/useSidebarAlerts';
 import {resetPgUsage} from '../../hooks/usePgUsage';
@@ -86,7 +86,7 @@ describe('ClusterView', () => {
         render(<ClusterView/>, {wrapper: MemoryRouter});
         const cards = screen.getByRole('group', {name: 'Summary of the cluster'});
         expect([...cards.querySelectorAll('[data-card]')].map((c) => c.getAttribute('data-card')))
-            .toEqual(['links', 'nodes', 'opensvc', 'arbitrators', 'objects', 'namespaces', 'networks', 'pools', 'stores', 'resources']);
+            .toEqual(['config', 'links', 'nodes', 'opensvc', 'arbitrators', 'objects', 'namespaces', 'networks', 'pools', 'stores', 'resources']);
         expect(within(card('pools')).getByRole('link', {name: 'Open Pools'})).toHaveAttribute('href', '/pools');
         expect(within(card('links')).getByRole('link', {name: 'Open Links'})).toHaveAttribute('href', '/heartbeats');
         expect(card('objects')).toHaveTextContent(/Objects\s*7/);
@@ -145,6 +145,19 @@ describe('ClusterView', () => {
         pgTold = false;
         render(<ClusterView/>, {wrapper: MemoryRouter});
         await waitFor(() => expect(card('opensvc')).toHaveTextContent('The usage of the whole nodes is not shown to your grants.'));
+    });
+
+    test('the cluster configuration, a card as the others, first: the cluster object opened over the overview; frozen, said', () => {
+        function Search() {
+            return <output data-testid="search">{decodeURIComponent(useLocation().search)}</output>;
+        }
+        render(<MemoryRouter initialEntries={['/cluster']}><ClusterView/><Search/></MemoryRouter>);
+        // No button acting on the page: its card, named for what it opens.
+        expect(screen.queryByRole('button', {name: /configuration/i})).toBeNull();
+        expect(within(card('config')).getByRole('heading')).toHaveTextContent('Cluster configuration');
+        fireEvent.click(within(card('config')).getByRole('link', {name: 'Open Cluster configuration'}));
+        expect(screen.getByTestId('search')).toHaveTextContent('peek=object:cluster');
+        expect(card('config')).not.toHaveTextContent(/frozen/);
     });
 
     test('the links, the ring of the heartbeats page; the nodes, a ring of the dropped, overloaded and optimal, the frozen said', async () => {

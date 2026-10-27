@@ -160,12 +160,12 @@ describe('NavBar', () => {
         expect(screen.getByRole('link', {name: /view user information/i})).toBeInTheDocument();
     });
 
-    test('the Cluster tag opens the cluster object over the view, its filters kept, its row panel closed', () => {
-        mockUseLocation.mockReturnValue({pathname: '/objects', search: '?globalState=down&sel=svc%2Fweb&tab=logs'});
+    test('the Cluster tag a label of this frontend, not a link: Cluster in the menu alone opens the overview', () => {
+        mockUseLocation.mockReturnValue({pathname: '/objects', search: '?globalState=down'});
         renderNavBar();
-        const tag = screen.getByRole('link', {name: 'Open the cluster'});
-        expect(tag).toHaveAttribute('href', '/objects?globalState=down&peek=object%3Acluster');
-        expect(tag).toHaveTextContent('Cluster');
+        const brand = screen.getByTestId('brand');
+        expect(brand).toHaveTextContent('OpenSVCCluster');
+        expect(within(brand).getAllByRole('link').map((l) => l.textContent)).toEqual(['OpenSVC']);
         // The product name still leads home.
         expect(screen.getByRole('link', {name: 'OpenSVC'})).toHaveAttribute('href', '/');
     });

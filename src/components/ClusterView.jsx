@@ -275,6 +275,8 @@ function Fullest({items, kind}) {
  * The overview of the cluster, the default view: a card for each entry of the menu,
  * what its page holds summed up, in a masonry, as wide as the window lets it:
  *
+ * - the configuration of the cluster, the cluster object: its panel opened over the
+ *   overview, its keywords, its locks and the actions on the whole cluster; frozen, said;
  * - the links, the ring of the heartbeats page, each heartbeat its links beating;
  * - the nodes, a ring of those dropped, overloaded, optimal; those frozen said;
  * - what opensvc uses, its cpu and memory over the nodes, then node by node;
@@ -355,6 +357,12 @@ export default function ClusterView() {
         <div className="@container p-4">
             <h1 className="sr-only">{t("clusterView.title")}</h1>
             <div aria-label={t("clusterView.cards")} role="group" className="gap-3 @3xl:columns-2 @6xl:columns-3">
+                {/* The cluster itself, a card as the others: its object's panel over the overview. */}
+                <Card id="config" icon="cluster" title={t("clusterView.config.title")} to={{pathname: "/cluster", search: "?peek=object:cluster"}}>
+                    <p className="text-data text-ink-muted">{t("clusterView.config.holds")}</p>
+                    {objects?.cluster?.frozen === "frozen" && <p className="text-data text-state-warn">{t("clusterView.config.frozen")}</p>}
+                </Card>
+
                 <Card id="links" icon="heartbeat" title={t("nav.routes.heartbeats")} to="/heartbeats" count={links.length}>
                     {ready ? <Overall links={links}/> : <p className="text-ink-muted">{t("clusterView.reading")}</p>}
                     {heartbeats.length > 0 && (

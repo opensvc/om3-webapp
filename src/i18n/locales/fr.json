@@ -1212,7 +1212,6 @@
     "count_other": "{{count}} namespaces"
   },
   "nav": {
-    "openCluster": "Ouvrir le cluster",
     "routes": {
       "heartbeats": "Liens",
       "networks": "Réseaux",
@@ -2981,6 +2980,11 @@
     "cards": "Résumé du cluster",
     "open": "Ouvrir {{page}}",
     "filtered": "Ouvrir la page filtrée sur {{state}}",
+    "config": {
+      "title": "Configuration du cluster",
+      "holds": "Les mots-clés du cluster, ses verrous, et les actions sur le cluster entier.",
+      "frozen": "Le cluster est gelé : rien ne démarre ni ne bascule de lui-même."
+    },
     "nodes": {
       "frozen_one": "{{count}} gelé",
       "frozen_other": "{{count}} gelés",

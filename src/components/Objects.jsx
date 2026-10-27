@@ -170,23 +170,44 @@ function sortValue(column, name, status, instances) {
 }
 
 /**
- * The order of two objects of a namespace by `column`, `direction` "asc" or "desc":
- * the path, a property, the status or an instance's on a node, the worst first
- * ascending. An object without a value last, either way; then by path.
+ * The order of two objects by the value of `column` alone, `direction` "asc" or
+ * "desc": a property, the status or an instance's on a node, the worst first
+ * ascending. An object without a value last, either way; the same value, 0.
  */
-export function compareObjects(a, b, column, direction, status, instances) {
-    if (column !== "object") {
-        const va = sortValue(column, a, status, instances);
-        const vb = sortValue(column, b, status, instances);
-        if (va === undefined || vb === undefined) {
-            if (va !== vb) return va === undefined ? 1 : -1;
-        } else {
-            const order = typeof va === "number" && typeof vb === "number" ? va - vb : String(va).localeCompare(String(vb));
-            if (order !== 0) return direction === "asc" ? order : -order;
-        }
-        return a.localeCompare(b);
+function compareValues(a, b, column, direction, status, instances) {
+    const va = sortValue(column, a, status, instances);
+    const vb = sortValue(column, b, status, instances);
+    if (va === undefined || vb === undefined) return va === vb ? 0 : va === undefined ? 1 : -1;
+    const order = typeof va === "number" && typeof vb === "number" ? va - vb : String(va).localeCompare(String(vb));
+    return direction === "asc" ? order : -order;
+}
+
+/**
+ * The objects namespace by namespace, in the order of `column`: by the object, the
+ * namespaces by name, either way, the objects of each by path; by another column,
+ * the objects of each namespace by it, then by path, and each namespace by the
+ * object of it that column puts first, the worst status first ascending say, one
+ * without a value last; then by name. The root namespace's short paths ("cluster",
+ * "svc/x") kept together under it.
+ */
+export function orderObjects(names, column, direction, status, instances) {
+    const byNamespace = new Map();
+    for (const name of [...names].sort((a, b) => a.localeCompare(b))) {
+        const ns = extractNamespace(name);
+        if (!byNamespace.has(ns)) byNamespace.set(ns, []);
+        byNamespace.get(ns).push(name);
     }
-    return direction === "asc" ? a.localeCompare(b) : b.localeCompare(a);
+    if (column !== "object") {
+        // Sorted by path already: the order of the column, a path breaking a tie (a stable sort).
+        for (const members of byNamespace.values()) members.sort((a, b) => compareValues(a, b, column, direction, status, instances));
+    }
+    const namespaces = [...byNamespace.keys()].sort((x, y) => {
+        if (column === "object") return direction === "asc" ? x.localeCompare(y) : y.localeCompare(x);
+        // Its objects sorted, the first of each namespace the one the column puts first.
+        return compareValues(byNamespace.get(x)[0], byNamespace.get(y)[0], column, direction, status, instances)
+            || x.localeCompare(y);
+    });
+    return namespaces.flatMap((ns) => byNamespace.get(ns));
 }
 
 const stopPropagation = (e) => e.stopPropagation();
@@ -625,8 +646,8 @@ const Objects = () => {
     }, [listObjectNames, hasGlobalState, deferredSelectedGlobalStates, deferredSelectedNamespaces,
         deferredSelectedKinds, hasKindFilter, deferredSearchQuery, objects]);
 
-    // Sorted by a column, its title clicked, as the nodes are: by path first. A column
-    // gone, the window narrowed or another tab, by path again.
+    // Sorted by a column, its title clicked, as the nodes are: the namespaces by name
+    // first. A column gone, the window narrowed or another tab, by name again.
     const [sort, setSort] = useState({column: "object", direction: "asc"});
     const sortColumns = useMemo(() => ["object", ...(namesOnly ? [] : [
         ...(isMobile ? NARROW_PROPERTY_COLUMNS : PROPERTY_COLUMNS).map((c) => c.key),
@@ -639,13 +660,12 @@ const Objects = () => {
         ? {column, direction: prev.direction === "asc" ? "desc" : "asc"}
         : {column, direction: "asc"})), []);
 
-    // Namespace by namespace, in their order: a line opens each namespace
-    // (NamespaceRow); in each, by the column sorted on. The root namespace's short
-    // paths ("cluster", "svc/x") are kept together under it.
-    const sortedObjectNames = useMemo(() => [...filteredObjectNames].sort((a, b) =>
-        extractNamespace(a).localeCompare(extractNamespace(b))
-        || compareObjects(a, b, sortColumn, sortDirection, objects, objectInstanceStatus)
-    ), [filteredObjectNames, sortColumn, sortDirection, objects, objectInstanceStatus]);
+    // Namespace by namespace, a line opening each (NamespaceRow): the namespaces in
+    // the order of the column sorted on, the objects of each by path (orderObjects).
+    const sortedObjectNames = useMemo(
+        () => orderObjects(filteredObjectNames, sortColumn, sortDirection, objects, objectInstanceStatus),
+        [filteredObjectNames, sortColumn, sortDirection, objects, objectInstanceStatus],
+    );
 
     // The objects of each namespace the filters keep: what its line selects.
     const namespaceObjects = useMemo(() => {
@@ -1021,8 +1041,8 @@ const Objects = () => {
                                     aria-label={t("objects.selectAll")}
                                 />
                             </HeaderCell>
-                            {/* Each title sorts the objects of every namespace by its column; the keys, read
-                                for the rows shown only, do not. */}
+                            {/* Each title sorts the namespaces by its column, their objects kept by path;
+                                the keys, read for the rows shown only, do not. */}
                             <SortHeaderCell
                                 label={t("objects.columns.object")}
                                 active={sortColumn === "object"}

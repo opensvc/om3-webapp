@@ -1,4 +1,4 @@
-import React, {useId, useState} from "react";
+import React, {useId, useRef, useState} from "react";
 import {useTranslation} from "react-i18next";
 import {URL_CLUSTER} from "../config/apiPath.js";
 import {authHeaders, getResponseErrorMessage} from "../services/api.jsx";
@@ -25,9 +25,20 @@ const SLOT_MARK = {up: "up", stale: "warn", missing: "down"};
 
 async function readJson(url) {
     const response = await fetch(url, {headers: authHeaders(), cache: "no-cache"});
-    if (!response.ok) throw new Error((await getResponseErrorMessage(response)) || `HTTP ${response.status}`);
+    if (!response.ok) {
+        const error = new Error((await getResponseErrorMessage(response)) || `HTTP ${response.status}`);
+        error.status = response.status;
+        throw error;
+    }
     return response.json();
 }
+
+/**
+ * A read the daemon refused the user (401, 403): the configuration needs the root or
+ * join grant, the relays the heartbeat or root one. Not a failure to say: the box is
+ * not the user's to see.
+ */
+export const isRefused = (error) => error?.status === 401 || error?.status === 403;
 
 /**
  * What the relays say, read again and again: the heartbeats of type relay of the
@@ -47,6 +58,8 @@ async function readRelays() {
             const body = await readJson(`${URL_RELAY_STATUS}?${new URLSearchParams({remote: "true", relay: hb.relay})}`);
             return {...hb, view: relayView(body?.items ?? [], nodes, hb.timeoutMs, now, clusterId)};
         } catch (err) {
+            // The user refused, not the relay unreached: the box is not theirs.
+            if (isRefused(err)) throw err;
             return {...hb, view: {error: err.message, rows: []}};
         }
     }));
@@ -93,24 +106,36 @@ function SlotTable({label, rows, timeoutMs}) {
  * of the cluster writing to it, its last write within the timeout of the heartbeat,
  * older, or none. Then, when the node answering the api is a relay itself, the
  * slots it holds for the clusters writing to it. Read again every while; nothing
- * when the cluster has no relay heartbeat and relays for none.
+ * when the cluster has no relay heartbeat and relays for none, nor for a user the
+ * daemon refuses the reads, never asked again then.
  */
 export function HeartbeatRelays() {
     const {t, i18n} = useTranslation();
     const titleId = useId();
     const [state, setState] = useState({data: null, error: null, loading: true});
     const [reads, setReads] = useState(0);
+    // Refused once, never asked again while the page shows: the grants of a user stay.
+    const [refused, setRefused] = useState(false);
+    const refusedRef = useRef(false);
 
     usePagePoll(async (live) => {
+        if (refusedRef.current) return;
         setState((s) => ({...s, loading: true}));
         try {
             const data = await readRelays();
             if (live()) setState({data, error: null, loading: false});
         } catch (err) {
-            if (live()) setState((s) => ({...s, error: err.message, loading: false}));
+            if (!live()) return;
+            if (isRefused(err)) {
+                refusedRef.current = true;
+                setRefused(true);
+                return;
+            }
+            setState((s) => ({...s, error: err.message, loading: false}));
         }
     }, RELAY_POLL_MS, [reads]);
 
+    if (refused) return null;
     const {data, error, loading} = state;
     if (data && data.relays.length === 0 && data.served.length === 0 && !error) return null;
     if (!data && !error) return null;

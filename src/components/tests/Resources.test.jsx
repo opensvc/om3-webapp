@@ -2,7 +2,7 @@ import React from 'react';
 import {act, fireEvent, render, screen, waitFor, within} from '@testing-library/react';
 import {MemoryRouter, useLocation} from 'react-router-dom';
 import {vi} from 'vitest';
-import Resources, {toLine} from '../Resources';
+import Resources, {resourceColumns, resourceLayout, toLine} from '../Resources';
 import useEventStore from '../../hooks/useEventStore.js';
 
 const {mockRetain, mockRelease} = vi.hoisted(() => ({mockRetain: vi.fn(), mockRelease: vi.fn()}));
@@ -226,5 +226,43 @@ describe('Resources', () => {
     test('a resource of an encapsulated node: shown on that node, opened on its host', () => {
         const line = toLine(item('ns1/svc/web', 'n1', 'app#1', 'up', {encap: 'c1'}));
         expect([line.node, line.hostNode]).toEqual(['c1', 'n1']);
+    });
+
+    describe('scaled down to its room', () => {
+        const headers = () => within(table()).getAllByRole('columnheader').slice(1).map((h) => h.textContent.replace(/[▲▼]/g, '').trim());
+
+        test('the whole table, then a step at a time: the flags, the label, the type a badge by the resource, the node a badge by the object', () => {
+            const keys = (step) => resourceColumns(resourceLayout(step)).map((c) => c.key);
+            expect(keys(0)).toEqual(['object', 'node', 'rid', 'type', 'status', 'flags', 'label']);
+            expect(keys(1)).toEqual(['object', 'node', 'rid', 'type', 'status', 'label']);
+            expect(keys(2)).toEqual(['object', 'node', 'rid', 'type', 'status']);
+            expect(keys(3)).toEqual(['object', 'node', 'rid', 'status']);
+            expect(keys(4)).toEqual(['object', 'rid', 'status']);
+        });
+
+        test('while the table overflows its frame, down to the last step: the type a badge by the resource, the node by the object', async () => {
+            const scroll = vi.spyOn(HTMLElement.prototype, 'scrollWidth', 'get').mockReturnValue(2000);
+            const client = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(1000);
+            try {
+                renderView();
+                await waitFor(() => expect(rows()).toHaveLength(4));
+                expect(headers()).toEqual(['Object', 'Resource', 'Status']);
+                expect(rows()[0]).toEqual(['ns1/svc/webn1', 'container#1container.docker', 'upup']);
+                expect(within(table()).getAllByTitle('Type')[0]).toHaveTextContent('container.docker');
+                // The node, by the object, still opens the instance.
+                fireEvent.click(within(within(table()).getAllByRole('row')[3]).getByRole('button', {name: 'n2'}));
+                expect(screen.getByTestId('search')).toHaveTextContent('peek=instance:ns1/svc/web@n2');
+            } finally {
+                scroll.mockRestore();
+                client.mockRestore();
+            }
+        });
+
+        test('room enough, the whole table', async () => {
+            renderView();
+            await waitFor(() => expect(rows()).toHaveLength(4));
+            expect(headers()).toEqual(['Object', 'Node', 'Resource', 'Type', 'Status', 'Flags', 'Label']);
+            expect(within(table()).queryByTitle('Type')).toBeNull();
+        });
     });
 });

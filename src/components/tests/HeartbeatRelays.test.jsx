@@ -1,7 +1,7 @@
 import React from 'react';
-import {fireEvent, render, screen, waitFor, within} from '@testing-library/react';
+import {act, fireEvent, render, screen, waitFor, within} from '@testing-library/react';
 import {vi} from 'vitest';
-import {HeartbeatRelays} from '../HeartbeatRelays';
+import {HeartbeatRelays, RELAY_POLL_MS} from '../HeartbeatRelays';
 import {resetClusterStatus} from '../../hooks/clusterStatusOnce';
 
 const json = (body, status = 200) => new Response(JSON.stringify(body), {status, headers: {'Content-Type': 'application/json'}});
@@ -88,8 +88,38 @@ describe('HeartbeatRelays', () => {
         await waitFor(() => expect(container).toBeEmptyDOMElement());
     });
 
+    test.each([
+        ['the configuration, root or join', 'config'],
+        ['the relays, heartbeat or root', 'remote'],
+    ])('a user the daemon refuses %s: nothing said, never asked again', async (_, which) => {
+        vi.useFakeTimers({shouldAdvanceTime: true});
+        try {
+            answers[which] = () => json({title: 'Forbidden', detail: 'need one of [root join] grant', status: 403}, 403);
+            const {container} = render(<HeartbeatRelays/>);
+            const reads = () => global.fetch.mock.calls.filter(([u]) => String(u).startsWith('/api/relay/status') || String(u).startsWith('/api/cluster/config')).length;
+            await waitFor(() => expect(reads()).toBeGreaterThan(0));
+            const asked = reads();
+            await act(async () => {
+                await vi.advanceTimersByTimeAsync(3 * RELAY_POLL_MS);
+            });
+            expect(container).toBeEmptyDOMElement();
+            expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+            expect(reads()).toBe(asked);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    test('a relay refusing the cluster its credentials still said: the relay answered, not the user refused', async () => {
+        answers.remote = () => json({kind: 'RelayStatusList', items: [
+            {relay: 'relay3.opensvc.com:3333', cluster_id: 'c1', username: 'dev3', status: '403 Forbidden'},
+        ]});
+        render(<HeartbeatRelays/>);
+        expect(await screen.findByText('The relay could not be asked: 403 Forbidden')).toBeInTheDocument();
+    });
+
     test('the configuration not read said; refreshed on demand', async () => {
-        answers.config = () => json({detail: 'forbidden'}, 403);
+        answers.config = () => json({detail: 'boom'}, 500);
         render(<HeartbeatRelays/>);
         expect(await screen.findByRole('alert')).toHaveTextContent('Could not read the relays');
         answers.config = () => json(CONFIG);

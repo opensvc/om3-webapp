@@ -1,4 +1,4 @@
-import React, {useEffect, useMemo, useRef, useState} from "react";
+import React, {useEffect, useLayoutEffect, useMemo, useRef, useState} from "react";
 import {useTranslation} from "react-i18next";
 import {URL_RESOURCES} from "../config/apiPath.js";
 import useEventStore from "../hooks/useEventStore.js";
@@ -26,6 +26,7 @@ import {useMediaQuery} from "../ui/lib/media";
 import {FilterRail} from "./FilterRail";
 import {InstanceLink} from "./RecordLinks";
 import {FilterField, matches} from "./NodePanel";
+import {BADGE} from "./ObjectCells";
 
 /*
  * The resources of the cluster, every object on every node, as `om <selector>
@@ -36,6 +37,9 @@ import {FilterField, matches} from "./NodePanel";
  * beside the table, each value counted. Read again as the instances report.
  * Selected, every one the filters keep or some, the resources are acted on together:
  * an action every one of them takes, posted once per instance.
+ * The table scaled down to its room a step at a time, the least missed first: the
+ * flags dropped; the label dropped; the type a badge by the resource; the node a
+ * badge by the object.
  */
 
 /** A burst of instance reports reads the list once. */
@@ -44,14 +48,26 @@ const EVENTS = ["InstanceStatusUpdated"];
 /** The value of a select whose filter keeps several values, from the facets of a wider window. */
 const MANY = "\u0000many";
 
-const COLUMNS = [
+/** The steps of the scaling down: past the last one, the table scrolls sideways. */
+export const RESOURCE_LAYOUT_STEPS = 4;
+
+/** What the table shows at a step of its scaling down, 0 the whole of it. */
+export const resourceLayout = (step) => ({
+    flags: step < 1,
+    label: step < 2,
+    typeColumn: step < 3,
+    nodeColumn: step < 4,
+});
+
+/** The columns of a layout, after the checkbox, each the key it sorts by and its title. */
+export const resourceColumns = (layout) => [
     {key: "object", labelKey: "resources.columns.object"},
-    {key: "node", labelKey: "common.node"},
+    ...(layout.nodeColumn ? [{key: "node", labelKey: "common.node"}] : []),
     {key: "rid", labelKey: "resources.columns.resource"},
-    {key: "type", labelKey: "common.type"},
+    ...(layout.typeColumn ? [{key: "type", labelKey: "common.type"}] : []),
     {key: "status", labelKey: "common.status"},
-    {key: "flags", labelKey: "resources.columns.flags"},
-    {key: "label", labelKey: "resources.columns.label"},
+    ...(layout.flags ? [{key: "flags", labelKey: "resources.columns.flags"}] : []),
+    ...(layout.label ? [{key: "label", labelKey: "resources.columns.label"}] : []),
 ];
 
 /** The flags of a resource on a node, in words, as the status board marks them. */
@@ -219,6 +235,32 @@ const Resources = () => {
         };
     });
 
+    // Scaled down to its room a step at a time, while it overflows its frame
+    // (`resourceLayout`); the page resized, the whole table tried again. The page
+    // watched once drawn, after the spinner of the first read.
+    const drawnPage = items !== null || error !== "";
+    const page = useRef(null);
+    const frame = useRef(null);
+    const [step, setStep] = useState(0);
+    useLayoutEffect(() => {
+        const element = frame.current;
+        if (element && step < RESOURCE_LAYOUT_STEPS && element.scrollWidth > element.clientWidth + 1) setStep((n) => n + 1);
+    });
+    useEffect(() => {
+        const element = page.current;
+        if (!element || typeof ResizeObserver !== "function") return undefined;
+        let width = element.clientWidth;
+        const observer = new ResizeObserver(() => {
+            if (element.clientWidth === width) return;
+            width = element.clientWidth;
+            setStep(0);
+        });
+        observer.observe(element);
+        return () => observer.disconnect();
+    }, [drawnPage]);
+    const layout = resourceLayout(step);
+    const columns = resourceColumns(layout);
+
     const sortBy = (column) => {
         if (sortColumn === column) setSortDirection((d) => (d === "asc" ? "desc" : "asc"));
         else {
@@ -281,7 +323,7 @@ const Resources = () => {
     }
 
     return (
-        <div className={`flex h-full gap-6 p-4 ${LIST_PAGE_FIT}`}>
+        <div ref={page} className={`flex h-full gap-6 p-4 ${LIST_PAGE_FIT}`}>
             <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
                 {/* Wide, the tools at the head of the rail and the filters in it: their rows to the table. */}
                 {!hasRail && (
@@ -301,7 +343,7 @@ const Resources = () => {
                         {t("resources.loadError", {message: error})}
                     </Alert>
                 )}
-                <Table sticky aria-label={t("resources.caption")} className="min-h-0 flex-1">
+                <Table ref={frame} sticky aria-label={t("resources.caption")} className="min-h-0 flex-1">
                     <thead>
                         <HeaderRow>
                             <HeaderCell className="w-8">
@@ -311,7 +353,7 @@ const Resources = () => {
                                     aria-label={t("resources.selection.all")}
                                 />
                             </HeaderCell>
-                            {COLUMNS.map(({key, labelKey}) => (
+                            {columns.map(({key, labelKey}) => (
                                 <SortHeaderCell
                                     key={key}
                                     label={t(labelKey)}
@@ -332,12 +374,22 @@ const Resources = () => {
                                         aria-label={t("resources.selection.one", {rid: l.rid, path: l.object, node: l.node})}
                                     />
                                 </Cell>
-                                <Cell className="whitespace-nowrap"><CrossLink kind="object" id={l.object}>{l.object}</CrossLink></Cell>
-                                <Cell className="whitespace-nowrap"><InstanceLink path={l.object} node={l.hostNode} label={l.node}/></Cell>
                                 <Cell className="whitespace-nowrap">
-                                    <CrossLink kind="resource" id={resourceId(l.object, l.rid, l.hostNode)}>{l.rid}</CrossLink>
+                                    <span className="inline-flex items-center gap-1.5">
+                                        <CrossLink kind="object" id={l.object}>{l.object}</CrossLink>
+                                        {/* No room for its column, the node a badge by the object, opening the instance (resourceLayout). */}
+                                        {!layout.nodeColumn && <InstanceLink path={l.object} node={l.hostNode} label={l.node}/>}
+                                    </span>
                                 </Cell>
-                                <Cell className="text-ink-muted">{l.type}</Cell>
+                                {layout.nodeColumn && <Cell className="whitespace-nowrap"><InstanceLink path={l.object} node={l.hostNode} label={l.node}/></Cell>}
+                                <Cell className="whitespace-nowrap">
+                                    <span className="inline-flex items-center gap-1.5">
+                                        <CrossLink kind="resource" id={resourceId(l.object, l.rid, l.hostNode)}>{l.rid}</CrossLink>
+                                        {/* No room for its column, the type a badge by the resource (resourceLayout). */}
+                                        {!layout.typeColumn && l.type && <span className={BADGE} title={t("common.type")}>{l.type}</span>}
+                                    </span>
+                                </Cell>
+                                {layout.typeColumn && <Cell className="text-ink-muted">{l.type}</Cell>}
                                 <Cell className="whitespace-nowrap">
                                     <span className="inline-flex items-center gap-1.5">
                                         <StatusMark state={toObjectState(l.status)} label={l.status || t("instance.unknown")}/>
@@ -345,18 +397,19 @@ const Resources = () => {
                                         {l.notProvisioned && <span className="text-state-warn">{t("resources.notProvisioned")}</span>}
                                     </span>
                                 </Cell>
-                                <Cell className="text-ink-muted">
+                                {/* On one line, and the label no narrower than a few words: not fitting, dropped (resourceLayout). */}
+                                {layout.flags && <Cell className="whitespace-nowrap text-ink-muted">
                                     {[
                                         ...l.flags.map((f) => t(`resources.flags.${f}`)),
                                         ...(l.restarts === undefined ? [] : [t("resources.restarts", {count: l.restarts})]),
                                     ].join(", ") || "-"}
-                                </Cell>
-                                <Cell className="break-all">{l.label}</Cell>
+                                </Cell>}
+                                {layout.label && <Cell className="min-w-40 break-all">{l.label}</Cell>}
                             </Row>
                         ))}
-                        <MoreRows rows={drawn} colSpan={COLUMNS.length + 1}/>
+                        <MoreRows rows={drawn} colSpan={columns.length + 1}/>
                         {shown.length === 0 && (
-                            <EmptyRow colSpan={COLUMNS.length + 1}>{lines.length === 0 ? t("resources.empty") : t("resources.noMatch")}</EmptyRow>
+                            <EmptyRow colSpan={columns.length + 1}>{lines.length === 0 ? t("resources.empty") : t("resources.noMatch")}</EmptyRow>
                         )}
                     </tbody>
                 </Table>

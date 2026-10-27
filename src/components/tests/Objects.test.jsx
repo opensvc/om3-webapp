@@ -4,7 +4,7 @@ import {render, screen, fireEvent, waitFor, within, cleanup, act} from '@testing
 import {MemoryRouter, useRouterLocation} from 'react-router-dom';
 import {vi} from 'vitest';
 import {axe} from 'vitest-axe';
-import Objects, {PROPERTY_COLUMNS} from '../Objects';
+import Objects, {PROPERTY_COLUMNS, compareObjects} from '../Objects';
 import i18n from '../../i18n';
 
 // ── Hoisted mock variables ─────────────────────────────────────────────
@@ -1662,18 +1662,42 @@ describe('Objects Component', () => {
     });
 
     describe('order', () => {
-        test('always in the order of the paths, namespace by namespace: the headers sort nothing', async () => {
+        test('by path, namespace by namespace; a title clicked, the objects of each namespace by its column, again the other way', async () => {
             setup({}, '', {isWideScreen: true, isMobile: false});
             await waitForLoad();
+            const table = () => screen.getByRole('table', {name: 'Objects'});
+            const header = (name) => within(table()).getByRole('button', {name: new RegExp(`^${name}`)}).closest('th');
             expect(objectNamesInOrder()).toEqual([
                 'root/svc/test3',
                 'test-ns/svc/test1', 'test-ns/svc/test2', 'test-ns/svc/test4',
                 'test-ns/svc/unprovisioned', 'test-ns/svc/unprovisioned-bool',
             ]);
-            for (const header of within(screen.getByRole('table', {name: 'Objects'})).getAllByRole('columnheader')) {
-                expect(within(header).queryByRole('button')).not.toBeInTheDocument();
-                expect(header).not.toHaveAttribute('aria-sort');
-            }
+            expect(header('Object')).toHaveAttribute('aria-sort', 'ascending');
+            // The status: the worst first, the namespaces kept in their order.
+            fireEvent.click(within(header('Status')).getByRole('button'));
+            expect(header('Status')).toHaveAttribute('aria-sort', 'ascending');
+            expect(header('Object')).toHaveAttribute('aria-sort', 'none');
+            expect(objectNamesInOrder()).toEqual([
+                'root/svc/test3',
+                'test-ns/svc/test2', 'test-ns/svc/test1', 'test-ns/svc/test4',
+                'test-ns/svc/unprovisioned', 'test-ns/svc/unprovisioned-bool',
+            ]);
+            fireEvent.click(within(header('Status')).getByRole('button'));
+            expect(header('Status')).toHaveAttribute('aria-sort', 'descending');
+            expect(objectNamesInOrder()).toEqual([
+                'root/svc/test3',
+                'test-ns/svc/test4', 'test-ns/svc/unprovisioned', 'test-ns/svc/unprovisioned-bool',
+                'test-ns/svc/test1', 'test-ns/svc/test2',
+            ]);
+            // An instance on a node: one there none, last.
+            fireEvent.click(within(header('node1')).getByRole('button'));
+            expect(objectNamesInOrder()).toEqual([
+                'root/svc/test3',
+                'test-ns/svc/test2', 'test-ns/svc/test1', 'test-ns/svc/unprovisioned',
+                'test-ns/svc/unprovisioned-bool', 'test-ns/svc/test4',
+            ]);
+            // The orchestrate, its term said in the button, no focus of its own.
+            expect(within(header('Orchestrate')).getByRole('button').querySelector('[tabindex]')).toBeNull();
         });
 
         test('the line of a namespace stands for its configuration: no line of its own, the line of the namespace opens it', async () => {
@@ -2174,5 +2198,28 @@ describe('Objects Component', () => {
             rules: {'aria-prohibited-attr': {enabled: false}, label: {enabled: false}},
         });
         expect(results.violations).toHaveLength(0);
+    });
+});
+
+describe('compareObjects', () => {
+    const status = {'a/svc/x': {avail: 'up', orchestrate: 'ha'}, 'a/svc/y': {avail: 'down'}, 'a/svc/z': {avail: 'warn', orchestrate: 'no'}};
+    const instances = {'a/svc/x': {n1: {avail: 'down'}}, 'a/svc/y': {n1: {avail: 'up'}}};
+    const order = (column, direction) => Object.keys(status).sort((a, b) => compareObjects(a, b, column, direction, status, instances));
+
+    test('by path, either way', () => {
+        expect(order('object', 'asc')).toEqual(['a/svc/x', 'a/svc/y', 'a/svc/z']);
+        expect(order('object', 'desc')).toEqual(['a/svc/z', 'a/svc/y', 'a/svc/x']);
+    });
+
+    test('by status, the worst first ascending', () => {
+        expect(order('status', 'asc')).toEqual(['a/svc/y', 'a/svc/z', 'a/svc/x']);
+        expect(order('status', 'desc')).toEqual(['a/svc/x', 'a/svc/z', 'a/svc/y']);
+    });
+
+    test('an object without a value last either way: no orchestrate, no instance on the node', () => {
+        expect(order('orchestrate', 'asc')).toEqual(['a/svc/x', 'a/svc/z', 'a/svc/y']);
+        expect(order('orchestrate', 'desc')).toEqual(['a/svc/z', 'a/svc/x', 'a/svc/y']);
+        expect(order('node:n1', 'asc')).toEqual(['a/svc/x', 'a/svc/y', 'a/svc/z']);
+        expect(order('node:n1', 'desc')).toEqual(['a/svc/y', 'a/svc/x', 'a/svc/z']);
     });
 });

@@ -2980,6 +2980,7 @@
     "title": "Cluster",
     "cards": "Summary of the cluster",
     "open": "Open {{page}}",
+    "filtered": "Open the page filtered on {{state}}",
     "nodes": {
       "frozen_one": "{{count}} frozen",
       "frozen_other": "{{count}} frozen",
@@ -2994,6 +2995,7 @@
       "down": "down",
       "na": "n/a",
       "kinds": "By kind",
+      "ofKind": "Open the objects of kind {{kind}}",
       "operational": "services and volumes up"
     },
     "namespaces": {

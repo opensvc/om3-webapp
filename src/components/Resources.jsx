@@ -1,5 +1,6 @@
 import React, {useEffect, useLayoutEffect, useMemo, useRef, useState} from "react";
 import {useTranslation} from "react-i18next";
+import {useSearchParams} from "react-router-dom";
 import {URL_RESOURCES} from "../config/apiPath.js";
 import useEventStore from "../hooks/useEventStore.js";
 import {retainEventReception} from "../eventSourceManager";
@@ -34,7 +35,9 @@ import {BADGE} from "./ObjectCells";
  * object, its node and its resource each a badge opening its record, the resource
  * on that instance alone. Filtered by words, by status, by node and by driver
  * group, several values of each kept at once; on a wide screen, the filters as facets
- * beside the table, each value counted. Read again as the instances report.
+ * beside the table, each value counted, in the address too (status, node, group,
+ * comma-separated), for a link to open the list filtered. Read again as the
+ * instances report.
  * Selected, every one the filters keep or some, the resources are acted on together:
  * an action every one of them takes, posted once per instance.
  * The table scaled down to its room a step at a time, the least missed first: the
@@ -118,10 +121,23 @@ const Resources = () => {
     const [loading, setLoading] = useState(false);
     const [read, setRead] = useState(0);
     const [filter, setFilter] = useState("");
-    // The values kept of each filter, none keeping every line.
-    const [status, setStatus] = useState([]);
-    const [node, setNode] = useState([]);
-    const [group, setGroup] = useState([]);
+    // The values kept of each filter, none keeping every line: from the address first.
+    const [params, setParams] = useSearchParams();
+    const fromAddress = (key) => (params.get(key) ?? "").split(",").filter(Boolean);
+    const [status, setStatus] = useState(() => fromAddress("status"));
+    const [node, setNode] = useState(() => fromAddress("node"));
+    const [group, setGroup] = useState(() => fromAddress("group"));
+    // Then written back as they change, the other parameters kept: a panel open, say.
+    useEffect(() => {
+        setParams((prev) => {
+            const next = new URLSearchParams(prev);
+            for (const [key, values] of [["status", status], ["node", node], ["group", group]]) {
+                if (values.length > 0) next.set(key, values.join(","));
+                else next.delete(key);
+            }
+            return next.toString() === prev.toString() ? prev : next;
+        }, {replace: true});
+    }, [status, node, group, setParams]);
     const hasRail = useMediaQuery(LIST_RAIL_QUERY);
     const [sortColumn, setSortColumn] = useState("object");
     const [sortDirection, setSortDirection] = useState("asc");

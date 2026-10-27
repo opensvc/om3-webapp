@@ -228,6 +228,15 @@ describe('Resources', () => {
         expect([line.node, line.hostNode]).toEqual(['c1', 'n1']);
     });
 
+    test('filtered from the address, as the cluster overview links it; the filters written back to it', async () => {
+        render(<MemoryRouter initialEntries={['/resources?status=up,warn&node=n1']}><Resources/><Search/></MemoryRouter>);
+        await waitFor(() => expect(rows()).toHaveLength(2));
+        expect(rows().map((r) => `${r[1]} ${r[2]}`)).toEqual(['n1 container#1', 'n1 fs#1']);
+        fireEvent.change(screen.getByRole('combobox', {name: 'Node'}), {target: {value: ''}});
+        await waitFor(() => expect(screen.getByTestId('search')).toHaveTextContent(/^\?status=up,warn$/));
+        expect(rows()).toHaveLength(3);
+    });
+
     describe('scaled down to its room', () => {
         const headers = () => within(table()).getAllByRole('columnheader').slice(1).map((h) => h.textContent.replace(/[▲▼]/g, '').trim());
 

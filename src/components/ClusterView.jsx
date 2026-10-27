@@ -57,6 +57,14 @@ const ARBITRATOR_STATES = [
 /** The tint of a heartbeat in the list of the links card: none of its links beating, some, all. */
 const HB_INK = {down: "text-state-down", warn: "text-state-warn", up: ""};
 
+/** A count or a name of the overview as a badge, opening its page filtered on it. */
+const FILTER_BADGE = "inline-flex items-center gap-1 rounded-full border border-line bg-surface px-1.5 text-data hover:border-line-strong hover:bg-surface-sunken focus-visible:outline-2 focus-visible:outline-accent has-[a:focus-visible]:outline-2 has-[a:focus-visible]:outline-accent";
+
+/** The address of the objects of all the lists filtered by `params`: a kind, a namespace, a global state. */
+const objectsUrl = (params) => `/objects?${new URLSearchParams({list: "any", ...params})}`;
+/** The services and the volumes by their global state, as the objects page filters it: n/a so written. */
+const availUrl = (state) => objectsUrl({kind: ACTORS.join(","), globalState: state === "na" ? "n/a" : state});
+
 /** The state of a node: dropped without a status, a node of the cluster configuration not heard from; else overloaded or optimal. */
 const nodeState = (status) => (status === undefined ? "dropped" : status.is_overloaded ? "overloaded" : "optimal");
 
@@ -64,9 +72,10 @@ const nodeState = (status) => (status === undefined ? "dropped" : status.is_over
  * Things by their state at a glance: a ring, its arcs the `states` ([state, arc, dot],
  * the words of `words`.<state>), and in it how many are in the `shown` one, the `good`
  * one unless said, out of all, `label` under, and a word for it, optimal when all are in
- * the `good` one; their counts under it.
+ * the `good` one; their counts under it, each a badge opening its page filtered on its
+ * state when `link` gives it an address and it counts some.
  */
-function CountsRing({name, states, counts, good, shown = good, label, words}) {
+function CountsRing({name, states, counts, good, shown = good, label, words, link}) {
     const {t} = useTranslation();
     const total = states.reduce((sum, [key]) => sum + counts[key], 0);
     const state = counts[good] === total ? "up" : counts[good] === 0 ? "down" : "warn";
@@ -78,13 +87,31 @@ function CountsRing({name, states, counts, good, shown = good, label, words}) {
                 <span className={`font-semibold ${RING_INK[state]}`}>{t(`heartbeats.mesh.overall.${state}`)}</span>
             </StateRing>
             <dl data-ring-legend="" className="flex flex-wrap justify-center gap-x-3 text-data">
-                {states.map(([key, , dot]) => (
-                    <div key={key} className="inline-flex items-center gap-1">
-                        <span aria-hidden="true" className={`size-2 rounded-full ${dot}`}/>
-                        <dt className="text-ink-muted">{t(`${words}.${key}`)}</dt>
-                        <dd className="tabular-nums">{counts[key]}</dd>
-                    </div>
-                ))}
+                {states.map(([key, , dot]) => {
+                    const to = counts[key] > 0 ? link?.(key) : undefined;
+                    const word = t(`${words}.${key}`);
+                    return (
+                        // Linked, the whole item a badge: its link over its word and its count.
+                        <div key={key} className={to ? `relative ${FILTER_BADGE}` : "inline-flex items-center gap-1"}>
+                            <span aria-hidden="true" className={`size-2 rounded-full ${dot}`}/>
+                            <dt className="text-ink-muted">{word}</dt>
+                            <dd className="tabular-nums">
+                                {to ? (
+                                    <Link
+                                        to={to}
+                                        title={t("clusterView.filtered", {state: word})}
+                                        aria-label={`${t("clusterView.filtered", {state: word})}: ${counts[key]}`}
+                                        // Static, unlike the card's other links (Card): stretched over the whole badge, not the count alone.
+                                        style={{position: "static"}}
+                                        className="outline-none after:absolute after:inset-0 after:rounded-full"
+                                    >
+                                        {counts[key]}
+                                    </Link>
+                                ) : counts[key]}
+                            </dd>
+                        </div>
+                    );
+                })}
             </dl>
         </div>
     );
@@ -333,15 +360,16 @@ export default function ClusterView() {
                     {heartbeats.length > 0 && (
                         <ul aria-label={t("clusterView.links.heartbeats")} className="flex flex-wrap justify-center gap-x-3 gap-y-1">
                             {heartbeats.map(({hb, state, beating, total}) => (
-                                <li
-                                    key={hb}
-                                    data-hb={hb}
-                                    data-state={state}
-                                    title={t("clusterView.links.beating", {beating, total})}
-                                    className={`inline-flex items-baseline gap-1 ${HB_INK[state]}`}
-                                >
-                                    <span className="font-medium">{hb}</span>
-                                    {state !== "up" && <span className="sr-only">{t(`heartbeats.mesh.overall.${state}`)}</span>}
+                                <li key={hb} data-hb={hb} data-state={state}>
+                                    {/* Its streams on the heartbeats page. */}
+                                    <Link
+                                        to={`/heartbeats?${new URLSearchParams({view: "data", id: hb})}`}
+                                        title={t("clusterView.links.beating", {beating, total})}
+                                        className={`${FILTER_BADGE} font-medium ${HB_INK[state]}`}
+                                    >
+                                        {hb}
+                                        {state !== "up" && <span className="sr-only">{t(`heartbeats.mesh.overall.${state}`)}</span>}
+                                    </Link>
                                 </li>
                             ))}
                         </ul>
@@ -405,13 +433,24 @@ export default function ClusterView() {
 
                 <Card id="objects" icon="service" title={t("nav.sections.objects")} to="/objects" count={paths.length}>
                     {ready ? (
-                        <CountsRing name="objects" states={AVAIL_STATES} counts={avail} good="up" label={t("clusterView.objects.operational")} words="clusterView.objects"/>
+                        <CountsRing name="objects" states={AVAIL_STATES} counts={avail} good="up" label={t("clusterView.objects.operational")} words="clusterView.objects" link={availUrl}/>
                     ) : <p className="text-ink-muted">{t("clusterView.reading")}</p>}
                     <dl aria-label={t("clusterView.objects.kinds")} className="flex flex-wrap justify-center gap-x-3 text-data">
                         {kinds.map(([kind, n]) => (
-                            <div key={kind} className="flex gap-1">
+                            <div key={kind} className={`relative ${FILTER_BADGE}`}>
                                 <dt className="text-ink-muted">{kind}</dt>
-                                <dd className="tabular-nums">{n}</dd>
+                                <dd className="tabular-nums">
+                                    <Link
+                                        to={objectsUrl({kind})}
+                                        title={t("clusterView.objects.ofKind", {kind})}
+                                        aria-label={`${t("clusterView.objects.ofKind", {kind})}: ${n}`}
+                                        // Static, unlike the card's other links (Card): stretched over the whole badge, not the count alone.
+                                        style={{position: "static"}}
+                                        className="outline-none after:absolute after:inset-0 after:rounded-full"
+                                    >
+                                        {n}
+                                    </Link>
+                                </dd>
                             </div>
                         ))}
                     </dl>
@@ -422,7 +461,9 @@ export default function ClusterView() {
                         {busiest.map(([ns, n]) => (
                             <li key={ns} className="flex items-center justify-between gap-2">
                                 <CrossLink kind="namespace" id={ns}>{ns}</CrossLink>
-                                <span className="text-data text-ink-muted tabular-nums">{t("clusterView.namespaces.objects", {count: n})}</span>
+                                <Link to={objectsUrl({namespace: ns})} className={`${FILTER_BADGE} text-ink-muted tabular-nums`}>
+                                    {t("clusterView.namespaces.objects", {count: n})}
+                                </Link>
                             </li>
                         ))}
                     </ul>
@@ -462,7 +503,17 @@ export default function ClusterView() {
                 <Card id="resources" icon="app" title={t("nav.routes.resources")} to="/resources" count={resources.items?.length}>
                     {resources.error && <p className="text-data text-state-warn">{t("clusterView.resources.unread", {message: resources.error})}</p>}
                     {resources.items === undefined && !resources.error ? <p className="text-ink-muted">{t("clusterView.reading")}</p> : (
-                        <CountsRing name="resources" states={RESOURCE_STATES} counts={resourceCounts} good="other" shown="warn" label={t("clusterView.resources.operational")} words="clusterView.resources"/>
+                        <CountsRing
+                            name="resources"
+                            states={RESOURCE_STATES}
+                            counts={resourceCounts}
+                            good="other"
+                            shown="warn"
+                            label={t("clusterView.resources.operational")}
+                            words="clusterView.resources"
+                            // Those in warn on the resources page; the others, of any other state, no filter says.
+                            link={(state) => (state === "warn" ? "/resources?status=warn" : undefined)}
+                        />
                     )}
                 </Card>
             </div>

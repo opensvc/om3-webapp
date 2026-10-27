@@ -178,12 +178,15 @@ describe('ClusterView', () => {
         const items = within(list).getAllByRole('listitem');
         expect(items.map((li) => [li.getAttribute('data-hb'), li.getAttribute('data-state')]))
             .toEqual([['hb#1', 'warn'], ['hb#2', 'down'], ['hb#10', 'up']]);
-        expect(items[0]).toHaveClass('text-state-warn');
-        expect(items[0]).toHaveTextContent(/^hb#1degraded$/);
-        expect(items[0]).toHaveAttribute('title', '1 of 2 links beating');
-        expect(items[1]).toHaveClass('text-state-down');
-        expect(items[1]).toHaveTextContent(/^hb#2critical$/);
-        expect(items[2]).not.toHaveClass('text-state-warn', 'text-state-down');
+        // Each a badge opening its streams on the heartbeats page.
+        const badge = (i) => within(items[i]).getByRole('link');
+        expect(badge(0)).toHaveClass('text-state-warn');
+        expect(badge(0)).toHaveTextContent(/^hb#1degraded$/);
+        expect(badge(0)).toHaveAttribute('title', '1 of 2 links beating');
+        expect(badge(0)).toHaveAttribute('href', '/heartbeats?view=data&id=hb%231');
+        expect(badge(1)).toHaveClass('text-state-down');
+        expect(badge(1)).toHaveTextContent(/^hb#2critical$/);
+        expect(badge(2)).not.toHaveClass('text-state-warn', 'text-state-down');
         expect(items[2]).toHaveTextContent(/^hb#10$/);
     });
 
@@ -234,6 +237,11 @@ describe('ClusterView', () => {
         expect(within(card('objects')).queryByRole('link', {name: 'ns1/svc/db'})).toBeNull();
         expect(within(card('objects')).queryByRole('button', {name: 'ns1/svc/db'})).toBeNull();
         expect(card('objects')).toHaveTextContent(/cfg1/);
+        // Each count a badge opening the objects filtered on it: the services and volumes by state, the objects by kind.
+        const href = (name) => within(card('objects')).getByRole('link', {name}).getAttribute('href');
+        expect(href('Open the page filtered on down: 1')).toBe('/objects?list=any&kind=svc%2Cvol&globalState=down');
+        expect(href('Open the page filtered on n/a: 1')).toBe('/objects?list=any&kind=svc%2Cvol&globalState=n%2Fa');
+        expect(href('Open the objects of kind cfg: 1')).toBe('/objects?list=any&kind=cfg');
     });
 
     test('the namespaces, the busiest; the pools and networks, the fullest, the full ones counted', () => {
@@ -241,6 +249,8 @@ describe('ClusterView', () => {
         // ns1 its three, root its bare service and its configuration; the cluster object of none.
         const busiest = within(card('namespaces')).getByRole('list', {name: 'The busiest'});
         expect(busiest).toHaveTextContent(/^ns13 objectsroot2 objectsns21 object$/);
+        // The count of a namespace, its objects on the objects page.
+        expect(within(busiest).getByRole('link', {name: '3 objects'})).toHaveAttribute('href', '/objects?list=any&namespace=ns1');
         expect(card('pools')).toHaveTextContent('1 full');
         const fullest = within(card('pools')).getByRole('list', {name: 'The fullest'});
         expect(within(fullest).getAllByRole('listitem').map((li) => li.textContent.slice(0, 7))).toEqual(['tank100', 'default']);
@@ -258,6 +268,9 @@ describe('ClusterView', () => {
         const ring = card('resources').querySelector('[data-ring=resources]');
         expect([...ring.querySelectorAll('[data-arc]')].map((a) => a.getAttribute('data-arc'))).toEqual(['warn', 'other']);
         expect(ring.querySelector('[data-ring-legend]')).toHaveTextContent(/^warn1other4$/);
+        // Those in warn on the resources page filtered so; the others, which no filter says, no badge.
+        expect(within(ring).getByRole('link', {name: 'Open the page filtered on warn: 1'})).toHaveAttribute('href', '/resources?status=warn');
+        expect(within(ring).getAllByRole('link')).toHaveLength(1);
         unmount();
 
         resourcesFail = true;

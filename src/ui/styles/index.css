@@ -5,6 +5,15 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* A border throbbing, from the line to the accent and back: something in progress (animate-throb). */
+@theme {
+  --animate-throb: throb 1.6s ease-in-out infinite;
+  @keyframes throb {
+    0%, 100% { border-color: var(--line); }
+    50% { border-color: var(--accent); }
+  }
+}
+
 /* Exposes the tokens as Tailwind utilities: bg-surface, text-ink, border-line, text-state-down... */
 @theme inline {
   --color-surface: var(--surface);

@@ -80,6 +80,7 @@ export function MenuButton({
   icon,
   compact = false,
   trigger,
+  toolbar = false,
   align = "start",
   columns,
   filterable = false,
@@ -112,6 +113,8 @@ export function MenuButton({
    * itself and opening the actions on what it shows; `label` names it.
    */
   trigger?: ReactNode;
+  /** With `trigger`, as high as the buttons of a toolbar (28px), in their row; else as a cell of a table (24px). */
+  toolbar?: boolean;
   align?: "start" | "end";
   /**
    * The sections of the entries (each starting at an entry with a `heading`) in a
@@ -348,7 +351,9 @@ export function MenuButton({
               }`
             : trigger !== undefined
             ? // Drawn as the other menu triggers, lighter: a border and a chevron say it opens.
-              "inline-flex h-6 cursor-pointer items-center gap-1 rounded-(--radius-control) border border-line pr-0.5 pl-1 hover:border-line-strong hover:bg-surface-sunken disabled:cursor-default disabled:opacity-60 aria-expanded:border-line-strong aria-expanded:bg-surface-sunken"
+              `inline-flex cursor-pointer items-center gap-1 rounded-(--radius-control) border border-line hover:border-line-strong hover:bg-surface-sunken disabled:cursor-default disabled:opacity-60 aria-expanded:border-line-strong aria-expanded:bg-surface-sunken ${
+                toolbar ? "h-7 pr-1.5 pl-2" : "h-6 pr-0.5 pl-1"
+              }`
             : compact
             ? "flex h-5 w-5 items-center justify-center rounded-(--radius-control) border border-line text-ink-muted hover:bg-surface-sunken hover:text-ink disabled:opacity-60 aria-expanded:bg-surface-sunken aria-expanded:text-ink"
             : iconOnly && solid

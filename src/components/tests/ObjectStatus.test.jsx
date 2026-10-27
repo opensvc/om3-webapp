@@ -394,6 +394,11 @@ describe('ObjectStatus', () => {
             fireEvent.click(screen.getByRole('button', {name: 'Actions'}));
 
             const badge = screen.getByRole('button', {name: 'Orchestration in progress: stopped'});
+            // As high as the Actions button beside it.
+            expect(badge).toHaveClass('h-7');
+            // Its border throbbing, no dot.
+            expect(badge.parentElement).toHaveClass('motion-safe:[&>button]:animate-throb');
+            expect(badge.querySelector('.rounded-full')).toBeNull();
             fireEvent.click(badge);
             pick('Logs');
             expect(onLogs).toHaveBeenCalledWith('o-42');
@@ -421,6 +426,11 @@ describe('ObjectStatus', () => {
             fireEvent.click(screen.getByRole('button', {name: 'Actions'}));
 
             const badge = screen.getByRole('button', {name: 'Orchestration in progress: stopped'});
+            // As high as the Actions button beside it.
+            expect(badge).toHaveClass('h-7');
+            // Its border throbbing, no dot.
+            expect(badge.parentElement).toHaveClass('motion-safe:[&>button]:animate-throb');
+            expect(badge.querySelector('.rounded-full')).toBeNull();
             fireEvent.click(badge);
             pick('Logs');
             expect(onLogs).toHaveBeenCalledWith('o-42');

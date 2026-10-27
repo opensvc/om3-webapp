@@ -46,15 +46,14 @@ export function OrchestrationBadge({globalExpect, orchestrationId, onLogs, onAbo
         },
     ];
     return (
+        // Beside the actions of the object or the node, as high as their button; its
+        // border throbbing while the orchestration runs, still for whom motion bothers.
         <MenuButton
             label={t("orchestration.label", {expect: globalExpect})}
+            toolbar
             align="end"
-            trigger={
-                <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
-                    <span aria-hidden="true" className="h-2 w-2 animate-pulse rounded-full bg-accent"/>
-                    {globalExpect}
-                </span>
-            }
+            className="motion-safe:[&>button]:animate-throb"
+            trigger={<span className="whitespace-nowrap">{globalExpect}</span>}
             items={items}
         />
     );

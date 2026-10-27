@@ -417,8 +417,9 @@ const App = () => {
     const mainStyle = {
         flex: 1,
         minWidth: 0,
+        // No -webkit-overflow-scrolling: touch, the default since iOS 13: Safari clips
+        // the fixed panels opened in the page to the scroller, under the top bar.
         overflowY: 'auto',
-        WebkitOverflowScrolling: 'touch',
         width: '100%',
     };
 

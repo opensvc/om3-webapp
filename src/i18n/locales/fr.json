@@ -1913,7 +1913,10 @@
     "language": "Langue",
     "logout": "Se déconnecter",
     "versionNotChecked": "Non vérifiée.",
-    "versionOptIn": "Autoriser la vérification"
+    "versionOptIn": "Autoriser la vérification",
+    "apiAccess": "Accès à l'API",
+    "apiAccessHint": "Pour un script ou un essai rapide avec curl, un jeton à part, de courte durée et des rôles que vous choisissez, plutôt que celui de votre session.",
+    "createToken": "Créer un jeton d’API"
   },
   "panel": {
     "resize": "Redimensionner le panneau",
@@ -2605,7 +2608,16 @@
     "reveal": "Afficher le jeton",
     "hide": "Masquer le jeton",
     "copy": "Copier le jeton",
-    "joinNext": "Collez-le dans la boîte Enrôler du cluster, puis enrôlez."
+    "joinNext": "Collez-le dans la boîte Enrôler du cluster, puis enrôlez.",
+    "allRolesHint": "Aucun choisi : le jeton porte tous vos droits.",
+    "someRolesHint": "Le jeton ne porte que les rôles choisis, parmi les vôtres.",
+    "scope": "Namespace",
+    "scopeHint": "Les rôles d'un namespace restreints à celui-ci.",
+    "scopeAll": "tous les vôtres",
+    "tryIt": "L'essayer",
+    "copyTry": "Copier les commandes",
+    "tryItHint": "read -s garde le jeton hors de l'écran et de l'historique du shell. Un certificat que votre système ne reconnaît pas : ajoutez -k à curl, sur un cluster de test seulement.",
+    "apiDurationHint": "Comme 10m, 1h ; 24h au plus. Aussi court que l'essai le demande : le jeton vaut le vôtre jusqu'à son expiration."
   },
   "nodeHealth": {
     "minimum": "Minimum libre",

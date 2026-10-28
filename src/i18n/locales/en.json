@@ -1913,7 +1913,10 @@
     "language": "Language",
     "logout": "Logout",
     "versionNotChecked": "Not checked.",
-    "versionOptIn": "Allow the check"
+    "versionOptIn": "Allow the check",
+    "apiAccess": "API access",
+    "apiAccessHint": "For a script or a quick test with curl, a token of its own, short-lived and of the roles you pick, rather than the one of your session.",
+    "createToken": "Create an API token"
   },
   "panel": {
     "resize": "Resize the panel",
@@ -2605,7 +2608,16 @@
     "reveal": "Reveal the token",
     "hide": "Hide the token",
     "copy": "Copy the token",
-    "joinNext": "Paste it into the Enroll dialog of the cluster, then enroll."
+    "joinNext": "Paste it into the Enroll dialog of the cluster, then enroll.",
+    "allRolesHint": "None picked: the token carries all your grants.",
+    "someRolesHint": "The token carries only the roles picked, those you hold.",
+    "scope": "Namespace",
+    "scopeHint": "The roles of a namespace narrowed to this one.",
+    "scopeAll": "all of yours",
+    "tryIt": "Try it",
+    "copyTry": "Copy the commands",
+    "tryItHint": "read -s keeps the token off the screen and out of the history of the shell. A certificate your system does not trust: add -k to curl, on a test cluster alone.",
+    "apiDurationHint": "As 10m, 1h; 24h at most. As short as the test needs: the token is yours until it expires."
   },
   "nodeHealth": {
     "minimum": "Minimum free",

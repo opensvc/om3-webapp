@@ -5,7 +5,7 @@ import {Button} from '../ui/components/Button';
 import {Select} from '../ui/components/Field';
 import {Alert} from '../ui/components/Alert';
 import {Spinner} from '../ui/components/Spinner';
-import {GlobeIcon, LockIcon, MoonIcon, ServerIcon, SignOutIcon, SunIcon, UserIcon} from '../ui/icons';
+import {GlobeIcon, KeyIcon, LockIcon, MoonIcon, ServerIcon, SignOutIcon, SunIcon, UserIcon} from '../ui/icons';
 import {useOidc} from "../context/OidcAuthContext.tsx";
 import {useAuth, useAuthDispatch, Logout} from "../context/AuthProvider.jsx";
 import {Link, useNavigate} from "react-router-dom";
@@ -168,6 +168,18 @@ const WhoAmI = () => {
                     <dl className="rounded-(--radius-control) bg-surface-sunken p-2">
                         <Value label={t('user.rawPermissions')}>{userInfo?.raw_grant || t('common.none')}</Value>
                     </dl>
+                </section>
+
+                {/* A token of its own for a script or a quick test, never the one of the session. */}
+                <section aria-labelledby="whoami-api" className={PANEL}>
+                    <h2 id="whoami-api" className="mb-2 flex items-center gap-2 font-semibold">
+                        <KeyIcon className="text-accent"/>
+                        {t('user.apiAccess')}
+                    </h2>
+                    <p className="mb-2 text-ink-muted">{t('user.apiAccessHint')}</p>
+                    <Link to="/token" className="inline-flex h-8 items-center rounded-(--radius-control) border border-line px-3 font-medium hover:bg-surface-sunken">
+                        {t('user.createToken')}
+                    </Link>
                 </section>
 
                 <section aria-labelledby="whoami-server" className={PANEL}>

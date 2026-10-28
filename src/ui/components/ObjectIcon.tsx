@@ -21,7 +21,7 @@ import {
   TagsIcon,
   UserIcon,
   UsersIcon,
-  ClusterIcon,
+  HoneycombIcon,
   FileIcon,
   FolderIcon,
   LockIcon,
@@ -78,7 +78,7 @@ const KINDS: Record<ObjectKind, { Icon: typeof ServerIcon; className: string }> 
   dashboard: { Icon: AlertTriangleIcon, className: "text-icon-dashboard" },
   node: { Icon: ServerIcon, className: "text-icon-node" },
   // The tint of the nodes it groups, as the cluster column family.
-  cluster: { Icon: ClusterIcon, className: "text-icon-node" },
+  cluster: { Icon: HoneycombIcon, className: "text-icon-node" },
   service: { Icon: StackIcon, className: "text-icon-service" },
   // Service tint: an instance is a service seen from a node.
   instance: { Icon: InstanceIcon, className: "text-icon-service" },

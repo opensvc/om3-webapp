@@ -15,6 +15,10 @@ import {
     missingValues,
     nextSectionName,
     offeredKeywords,
+    offeredTypes,
+    catalogDrivers,
+    provisions,
+    usableDrivers,
     NEEDS_GROUPS,
     poolTypes,
     popularKeywords,
@@ -68,7 +72,22 @@ const driverKeywords = (keywordsUrl, driver) => readJson(`${keywordsUrl}?driver=
  * api: unread, none, a driver typed.
  */
 const readCapabilities = () => readJson(`${URL_NODE}/localhost/capabilities`).then((d) => (d?.items ?? []).map((i) => i?.data?.name ?? ""));
-const readDrivers = (kind) => readCapabilities().then((names) => kindDrivers(kind, names));
+
+/** The catalog of the drivers of the node of the api: its drivers, and the words of their features with what each means. */
+const readCatalog = () => readJson(`${URL_NODE}/localhost/drivers`).then((d) => ({
+    drivers: (d?.items ?? []).map((i) => i?.data).filter(Boolean),
+    features: Object.fromEntries((d?.features ?? []).map((f) => [f.name, f.doc ?? ""])),
+}));
+
+/**
+ * The drivers an object of `kind` can take on the node of the api, with what each
+ * does, and what those features mean: from its catalog; from its capabilities, told
+ * less, from a daemon without one.
+ */
+const readDrivers = (kind) => readCatalog().then(
+    ({drivers, features}) => ({drivers: catalogDrivers(kind, drivers), features}),
+    () => readCapabilities().then((names) => ({drivers: kindDrivers(kind, names), features: {}})),
+);
 
 /**
  * The networks an address may be drawn from, each its type, its range and its free
@@ -355,22 +374,30 @@ function KeywordPicker({keywords, onAdd}) {
  * the node of the api has (its capabilities); unread, the driver typed (`fs.flag`),
  * checked by reading its keywords.
  */
-function AddResource({kind, keywordsUrl, onAdd, onCancel}) {
+function AddResource({kind, keywordsUrl, onAdd, onCancel, hideRoot = false}) {
     const {t} = useTranslation();
     const [drivers, setDrivers] = useState(null);
+    // What each feature of a driver means, told on hover.
+    const [featureDocs, setFeatureDocs] = useState({});
     const [group, setGroup] = useState("");
     const [typed, setTyped] = useState("");
     const [error, setError] = useState(null);
     const [checking, setChecking] = useState(false);
     useEffect(() => {
         let live = true;
-        readDrivers(kind).then((items) => live && setDrivers(items), () => live && setDrivers([]));
+        readDrivers(kind).then(({drivers: items, features}) => {
+            if (!live) return;
+            setDrivers(items);
+            setFeatureDocs(features);
+        }, () => live && setDrivers([]));
         return () => {
             live = false;
         };
     }, [kind]);
-    const groups = [...new Set((drivers ?? []).map((d) => d.group))].sort();
-    const types = (drivers ?? []).filter((d) => d.group === group);
+    // Those a design without root could never complete left out, and a group left with none.
+    const usable = drivers === null ? null : usableDrivers(drivers, hideRoot);
+    const groups = [...new Set((usable ?? []).map((d) => d.group))].sort();
+    const types = (usable ?? []).filter((d) => d.group === group);
     const add = async (driver) => {
         setChecking(true);
         setError(null);
@@ -406,17 +433,54 @@ function AddResource({kind, keywordsUrl, onAdd, onCancel}) {
                         ))}
                     </div>
                     {group && (
-                        <ul aria-label={t("objectDesigner.types")} className="grid max-h-64 grid-cols-[repeat(auto-fill,minmax(9rem,1fr))] gap-1.5 overflow-auto p-0.5">
-                            {types.map((d) => (
-                                <li key={d.name}>
+                        <ul aria-label={t("objectDesigner.types")} className="grid max-h-80 grid-cols-[repeat(auto-fill,minmax(14rem,1fr))] gap-1.5 overflow-auto p-0.5">
+                            {offeredTypes(types).map(({driver, alternatives}) => (
+                                // A card each, the size of the others: what the driver is, what it does; a virtual
+                                // driver the ones it picks among inside it, second choices.
+                                <li key={driver.name} className="flex flex-col rounded-(--radius-control) border border-line hover:border-line-strong">
                                     <button
                                         type="button"
                                         disabled={checking}
-                                        onClick={() => add(d.name)}
-                                        className="w-full rounded-(--radius-control) border border-line px-2 py-1 text-left hover:border-accent hover:bg-accent-soft"
+                                        onClick={() => add(driver.name)}
+                                        className="flex flex-1 flex-col items-start gap-0.5 rounded-(--radius-control) px-2 py-1 text-left hover:bg-accent-soft"
                                     >
-                                        <span className="font-mono">{d.type}</span>
+                                        <span className="font-mono">
+                                            {driver.type}
+                                            {/* The grant it needs: to use it, or only to provision it. */}
+                                            {driver.grant && <span className="ml-1.5 font-sans text-data text-state-warn">{driver.grant}</span>}
+                                            {!driver.grant && driver.provisionGrant && (
+                                                <span className="ml-1.5 font-sans text-data text-state-warn">{t("objectDesigner.provisionGrant", {grant: driver.provisionGrant})}</span>
+                                            )}
+                                        </span>
+                                        {driver.doc && <span className="text-data text-ink-muted">{driver.doc}</span>}
+                                        {!driver.doc && alternatives.length > 0 && <span className="text-data text-ink-muted">{t("objectDesigner.virtualType")}</span>}
+                                        {(driver.features ?? []).length > 0 && (
+                                            <span className="flex flex-wrap gap-1 pt-0.5" data-features="">
+                                                {driver.features.map((f) => (
+                                                    <span key={f} title={featureDocs[f] || undefined} className="rounded-(--radius-control) border border-line px-1 text-data text-ink-muted">
+                                                        {f}
+                                                    </span>
+                                                ))}
+                                            </span>
+                                        )}
                                     </button>
+                                    {alternatives.length > 0 && (
+                                        <span className="flex flex-wrap items-baseline gap-x-2 border-t border-line px-2 py-0.5 text-data text-ink-muted">
+                                            {t("objectDesigner.orExactly")}
+                                            {alternatives.map((alt) => (
+                                                <button
+                                                    key={alt.name}
+                                                    type="button"
+                                                    disabled={checking}
+                                                    title={alt.doc || undefined}
+                                                    onClick={() => add(alt.name)}
+                                                    className="font-mono text-accent underline-offset-2 hover:underline"
+                                                >
+                                                    {alt.type}
+                                                </button>
+                                            ))}
+                                        </span>
+                                    )}
                                 </li>
                             ))}
                         </ul>
@@ -488,6 +552,16 @@ export function ObjectDesigner({kind, namespace = "", sections, onChange, keywor
             live = false;
         };
     }, [needs]);
+    // The drivers of the node, to tell which resources provision anything: none told while
+    // read, none known from a daemon without them (a resource then taken to provision).
+    const [catalog, setCatalog] = useState(null);
+    useEffect(() => {
+        let live = true;
+        readDrivers(kind).then(({drivers}) => live && setCatalog(drivers), () => live && setCatalog([]));
+        return () => {
+            live = false;
+        };
+    }, [kind]);
     // The pools a volume may be drawn from, read once there is a volume.
     const [poolPicks, setPoolPicks] = useState([]);
     useEffect(() => {
@@ -649,7 +723,7 @@ export function ObjectDesigner({kind, namespace = "", sections, onChange, keywor
                 {adding ? (
                     <section aria-labelledby={`${ids}-adding`} className="min-w-0 space-y-2">
                         <h3 id={`${ids}-adding`} className="sr-only">{t("objectDesigner.addResource")}</h3>
-                        <AddResource kind={kind} keywordsUrl={keywordsUrl} onAdd={addResource} onCancel={() => setAdding(false)}/>
+                        <AddResource kind={kind} keywordsUrl={keywordsUrl} onAdd={addResource} onCancel={() => setAdding(false)} hideRoot={hideRoot}/>
                     </section>
                 ) : (
                     <section aria-labelledby={`${ids}-section`} className="min-w-0 space-y-2">
@@ -659,7 +733,7 @@ export function ObjectDesigner({kind, namespace = "", sections, onChange, keywor
                         </h3>
                         {free && <p className="text-data text-ink-muted">{t("objectDesigner.envHint")}</p>}
                         {/* A resource om provisions, its provisioning keywords required; or left to the user, on confirmation. */}
-                        {section.group && (
+                        {catalog !== null && provisions(catalog, section) && (
                             <Checkbox
                                 label={t("objectDesigner.unmanaged")}
                                 checked={isUnmanaged(section)}

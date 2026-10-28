@@ -5,6 +5,12 @@ import {
   designText,
   parseDesign,
   poolTypes,
+  offeredTypes,
+  catalogDrivers,
+  provisions,
+  type CatalogDriver,
+  type DesignDriver,
+  usableDrivers,
   isUnmanaged,
   withUnmanaged,
   kindDrivers,
@@ -196,6 +202,61 @@ describe("object design", () => {
     expect(isUnmanaged(withUnmanaged(keywords, mine, false))).toBe(false);
     const volume: DesignSection = { name: "volume#1", group: "volume", type: "", entries: [] };
     expect(requiredKeywords(keywords, volume).map((k) => k.option)).toEqual(["size"]);
+  });
+
+  const CATALOG: CatalogDriver[] = [
+    { name: "container.docker", group: "container", type: "docker", features: ["start", "stop"], available: true },
+    { name: "container.kvm", group: "container", type: "kvm", available: false },
+    { name: "container.lxc", group: "container", type: "lxc", available: true },
+    { name: "container.oci", group: "container", type: "oci", selects: ["container.docker", "container.podman"], available: true },
+    { name: "container.podman", group: "container", type: "podman", available: true },
+    { name: "disk.lvm", group: "disk", type: "lvm", aliasOf: "disk.vg", available: true },
+    { name: "disk.vg", group: "disk", type: "vg", features: ["provision", "start", "stop"], available: true },
+    { name: "fs.nfs", group: "fs", type: "nfs", features: ["start", "stop"], available: true },
+    { name: "pool.vg", group: "pool", type: "vg", available: true },
+    { name: "volume", group: "volume", type: "", features: ["provision", "start"], available: true },
+  ];
+
+  test("the drivers of the catalog: of the groups of the kind, the node's, no deprecated alias", () => {
+    expect(catalogDrivers("svc", CATALOG).map((d) => d.name)).toEqual([
+      "container.docker", "container.lxc", "container.oci", "container.podman", "disk.vg", "fs.nfs", "volume",
+    ]);
+    expect(catalogDrivers("vol", CATALOG).map((d) => d.name)).toEqual(["disk.vg", "fs.nfs", "volume"]);
+  });
+
+  test("a virtual driver first, the drivers it picks among its second choices; alone without it", () => {
+    const containers = catalogDrivers("svc", CATALOG).filter((d) => d.group === "container");
+    expect(offeredTypes(containers).map((o) => [o.driver.type, o.alternatives.map((a) => a.type)])).toEqual([
+      ["oci", ["docker", "podman"]],
+      ["lxc", []],
+    ]);
+    // Podman not on the node: oci its second choice docker.
+    expect(offeredTypes(containers.filter((d) => d.type !== "podman")).map((o) => o.alternatives.map((a) => a.type))).toEqual([["docker"], []]);
+    // No oci: each a choice of its own.
+    expect(offeredTypes(containers.filter((d) => d.type !== "oci")).map((o) => o.driver.type)).toEqual(["docker", "lxc", "podman"]);
+  });
+
+  test("the drivers only root may use hidden from a design without root; those only root may provision kept", () => {
+    const drivers: DesignDriver[] = [
+      { name: "disk.lv", group: "disk", type: "lv", grant: "root" },
+      { name: "fs.flag", group: "fs", type: "flag", grant: "" },
+      { name: "disk.x", group: "disk", type: "x", grant: "", provisionGrant: "root" },
+      { name: "app.forking", group: "app", type: "forking" },
+    ];
+    expect(usableDrivers(drivers, true).map((d) => d.name)).toEqual(["fs.flag", "disk.x", "app.forking"]);
+    expect(usableDrivers(drivers, false)).toHaveLength(4);
+  });
+
+  test("whether a resource provisions: as its driver's features say; yes when unknown", () => {
+    const drivers = catalogDrivers("svc", CATALOG);
+    const section = (group: string, type: string): DesignSection => ({ name: `${group}#1`, group, type, entries: [] });
+    expect(provisions(drivers, section("disk", "vg"))).toBe(true);
+    expect(provisions(drivers, section("fs", "nfs"))).toBe(false);
+    expect(provisions(drivers, section("volume", ""))).toBe(true);
+    // Not in the catalog, or no catalog: told nothing, so yes.
+    expect(provisions(drivers, section("app", "forking"))).toBe(true);
+    expect(provisions(null, section("fs", "nfs"))).toBe(true);
+    expect(provisions(drivers, { name: "DEFAULT", entries: [] })).toBe(false);
   });
 
   test("the required entries left without a value", () => {

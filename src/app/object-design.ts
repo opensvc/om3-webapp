@@ -150,11 +150,35 @@ export function designChanges(before: DesignSection[], after: DesignSection[]): 
   return changes;
 }
 
-/** A driver of a resource: its group and type, `fs.flag` its name. */
+/**
+ * A driver of a resource: its group and type, `fs.flag` its name. From the catalog of
+ * a node (`/drivers`): what it is in a line, what it does (`features`, words of the
+ * catalog's vocabulary), and for a virtual one the drivers it picks among on a node.
+ */
 export interface DesignDriver {
   group: string;
   type: string;
   name: string;
+  doc?: string;
+  features?: string[];
+  selects?: string[];
+  /** The grant needed to use it at all ("root"), or only to provision it; "" when any user may. */
+  grant?: string;
+  provisionGrant?: string;
+}
+
+/** A driver as the catalog of a node tells it (`GET /api/node/name/{node}/drivers`). */
+export interface CatalogDriver {
+  name: string;
+  group: string;
+  type: string;
+  doc?: string;
+  features?: string[];
+  selects?: string[];
+  aliasOf?: string;
+  available?: boolean;
+  grant?: string;
+  provisionGrant?: string;
 }
 
 /**
@@ -187,6 +211,20 @@ export function kindDrivers(kind: string, capabilities: string[]): DesignDriver[
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
+/**
+ * The drivers an object of `kind` may take, from the catalog of a node: those of the
+ * groups of its kind the node has, a deprecated alias left out, in the order of their
+ * names; a namespace configuration its claims.
+ */
+export function catalogDrivers(kind: string, catalog: CatalogDriver[]): DesignDriver[] {
+  const groups = KIND_GROUPS[kind] ?? [];
+  if (groups.includes("claim")) return CLAIM_DRIVERS;
+  return catalog
+    .filter((d) => groups.includes(d.group) && !d.aliasOf && d.available !== false)
+    .map(({ name, group, type, doc, features, selects, grant, provisionGrant }) => ({ name, group, type, doc, features, selects, grant, provisionGrant }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
 /** Whether an object of `kind` takes resources: a user none. */
 export const takesResources = (kind: string) => (KIND_GROUPS[kind] ?? []).length > 0;
 
@@ -207,6 +245,41 @@ export function poolTypes(capabilities: string[]): string[] {
     .filter((words) => words.length === 4 && words[0] === "drivers" && words[1] === "resource" && NEEDS_GROUPS.includes(words[2]))
     .map((words) => words[3])
     .sort();
+}
+
+/**
+ * The drivers of a group in the order offered: each a choice, a virtual one first (it
+ * picks among others on the node, `selects`: container.oci, docker else podman), the
+ * drivers it stands for as its second choices (`alternatives`) rather than choices of
+ * their own.
+ */
+export function offeredTypes(drivers: DesignDriver[]): { driver: DesignDriver; alternatives: DesignDriver[] }[] {
+  const virtual = (d: DesignDriver) => (d.selects ?? []).length > 0;
+  const standing = new Set(drivers.filter(virtual).flatMap((d) => d.selects ?? []));
+  const offered = drivers
+    .filter((d) => !standing.has(d.name))
+    .map((driver) => ({ driver, alternatives: (driver.selects ?? []).flatMap((name) => drivers.filter((d) => d.name === name)) }));
+  return [...offered.filter((o) => virtual(o.driver)), ...offered.filter((o) => !virtual(o.driver))];
+}
+
+/**
+ * The drivers a design may offer: with `hideRoot` (a user not root, or root not
+ * asking for what only root may set), not those only root may use (`grant`), which it
+ * could never complete; those only root may provision offered still, usable with their
+ * provision left to the user.
+ */
+export function usableDrivers(drivers: DesignDriver[], hideRoot: boolean): DesignDriver[] {
+  return hideRoot ? drivers.filter((d) => d.grant !== "root") : drivers;
+}
+
+/**
+ * Whether a resource's driver provisions anything: not when the catalog says it does
+ * not (fs.nfs, mounted only); yes when unknown.
+ */
+export function provisions(drivers: DesignDriver[] | null, section: DesignSection): boolean {
+  if (!section.group || drivers === null) return !!section.group;
+  const driver = drivers.find((d) => d.name === (section.type ? `${section.group}.${section.type}` : section.group));
+  return driver?.features === undefined || driver.features.includes("provision");
 }
 
 /** A driver as written: "fs.flag", its group and type; the group alone without a dot. */

@@ -3199,7 +3199,10 @@
     "picks": "Les valeurs de {{keyword}}",
     "free": "{{size}} libres",
     "freeAddresses_one": "{{free}} adresse libre",
-    "freeAddresses_other": "{{free}} adresses libres"
+    "freeAddresses_other": "{{free}} adresses libres",
+    "virtualType": "le moteur du nœud",
+    "orExactly": "ou :",
+    "provisionGrant": "{{grant}}, ou provisionnement non géré"
   },
   "driverSupport": {
     "lacking_one": "Non utilisable sur {{nodes}} : son pilote n'est pas parmi les capacités du nœud.",

@@ -415,6 +415,66 @@ describe('CreateObjectDialog', () => {
             expect(await screen.findByRole('heading', {name: /\[fs#1\]/})).toBeInTheDocument();
         });
 
+        test('the drivers of the catalog: what each is and does; a virtual one first, the ones it picks among inside it', async () => {
+            answers['GET /api/node/name/localhost/drivers'] = {status: 200, text: JSON.stringify({
+                items: [
+                    {data: {name: 'container.docker', group: 'container', type: 'docker', doc: 'Runs a container with docker.', features: ['start', 'stop'], available: true}},
+                    {data: {name: 'container.oci', group: 'container', type: 'oci', doc: 'Runs an OCI container with the runtime the node has.', features: ['start', 'stop'], selects: ['container.docker', 'container.podman'], available: true}},
+                    {data: {name: 'container.podman', group: 'container', type: 'podman', features: ['start', 'stop'], available: true}},
+                    {data: {name: 'container.lxc', group: 'container', type: 'lxc', features: ['provision', 'start', 'stop'], available: true}},
+                    {data: {name: 'fs.nfs', group: 'fs', type: 'nfs', doc: 'Mounts a network filesystem.', features: ['start', 'stop'], available: true}},
+                    {data: {name: 'disk.lvm', group: 'disk', type: 'lvm', aliasOf: 'disk.vg', available: true}},
+                ],
+                features: [{name: 'start', doc: 'The start brings the resource up.'}],
+            })};
+            KW('container.podman', [{section: 'container', option: 'type', required: true}]);
+            KW('fs.nfs', [{section: 'fs', option: 'type', required: true}]);
+            await design();
+            fireEvent.click(screen.getByRole('button', {name: 'Add a resource'}));
+            const groups = await screen.findByRole('group', {name: 'Driver groups'});
+            // A deprecated alias not offered: no disk group of it alone.
+            expect(within(groups).getAllByRole('button').map((b) => b.dataset.group)).toEqual(['container', 'fs']);
+            fireEvent.click(card('[data-group=container]'));
+            const types = screen.getByRole('list', {name: 'Types'});
+            expect(within(types).getAllByRole('listitem').map((li) => li.textContent)).toEqual([
+                'ociRuns an OCI container with the runtime the node has.startstopor:dockerpodman',
+                'lxcprovisionstartstop',
+            ]);
+            // A feature told on hover.
+            expect(within(types).getAllByText('start')[0]).toHaveAttribute('title', 'The start brings the resource up.');
+            fireEvent.click(within(types).getByRole('button', {name: 'podman'}));
+            expect(await screen.findByRole('heading', {name: /\[container#1\] container\.podman/})).toBeInTheDocument();
+            // Podman provisions nothing: no box to take its provision on.
+            expect(screen.queryByRole('checkbox', {name: 'Unmanaged provisioning'})).toBeNull();
+            fireEvent.click(screen.getByRole('button', {name: 'Add a resource'}));
+            fireEvent.click(await screen.findByRole('button', {name: /^fs/}));
+            fireEvent.click(within(screen.getByRole('list', {name: 'Types'})).getByRole('button', {name: /^nfs/}));
+            await screen.findByRole('heading', {name: /\[fs#1\]/});
+            expect(screen.queryByRole('checkbox', {name: 'Unmanaged provisioning'})).toBeNull();
+        });
+
+        test('the drivers only root may use: hidden from a design without root, a group left empty too; tagged when root shows them', async () => {
+            answers['GET /api/node/name/localhost/drivers'] = {status: 200, text: JSON.stringify({items: [
+                {data: {name: 'disk.lv', group: 'disk', type: 'lv', grant: 'root', available: true}},
+                {data: {name: 'fs.ext4', group: 'fs', type: 'ext4', grant: 'root', available: true}},
+                {data: {name: 'fs.flag', group: 'fs', type: 'flag', grant: '', available: true}},
+                {data: {name: 'fs.x', group: 'fs', type: 'x', grant: '', provisionGrant: 'root', available: true}},
+            ]})};
+            KW('DEFAULT', [{section: 'DEFAULT', option: 'nodes', grant: ''}]);
+            await design();
+            fireEvent.click(screen.getByRole('button', {name: 'Add a resource'}));
+            const groups = await screen.findByRole('group', {name: 'Driver groups'});
+            // Root not asking for root's: as a user without root, no disk group, no ext4.
+            expect(within(groups).getAllByRole('button').map((b) => b.dataset.group)).toEqual(['fs']);
+            fireEvent.click(card('[data-group=fs]'));
+            expect(within(screen.getByRole('list', {name: 'Types'})).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['flag', 'xroot, or unmanaged provisioning']);
+            // Asked for: all of them, those of root tagged.
+            fireEvent.click(screen.getByRole('checkbox', {name: 'Show the keywords only root may set'}));
+            expect(within(await screen.findByRole('group', {name: 'Driver groups'})).getAllByRole('button').map((b) => b.dataset.group)).toEqual(['disk', 'fs']);
+            fireEvent.click(card('[data-group=fs]'));
+            expect(within(screen.getByRole('list', {name: 'Types'})).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['ext4root', 'flag', 'xroot, or unmanaged provisioning']);
+        });
+
         test('a volume: added without a type, its size required, the type of pool it needs offered as a keyword', async () => {
             answers['GET /api/node/name/localhost/capabilities'] = {status: 200, text: JSON.stringify({items: [
                 {data: {name: 'drivers.resource.volume'}}, {data: {name: 'drivers.resource.volume.shm'}}, {data: {name: 'drivers.resource.volume.loop'}},
@@ -436,7 +496,7 @@ describe('CreateObjectDialog', () => {
             type('Value of size', '1g');
             fireEvent.click(screen.getByRole('button', {name: 'More'}));
             fireEvent.click(within(screen.getByRole('list', {name: 'Keywords to add'})).getByRole('button', {name: 'Add type'}));
-            const kind = screen.getByRole('combobox', {name: 'Value of type'});
+            const kind = await screen.findByRole('combobox', {name: 'Value of type'});
             await waitFor(() => expect([...document.getElementById(kind.getAttribute('list')).options].map((o) => o.value)).toEqual(['loop', 'shm']));
             fireEvent.change(kind, {target: {value: 'shm'}});
             fireEvent.click(screen.getByRole('button', {name: 'Show the file'}));

@@ -3199,7 +3199,10 @@
     "picks": "The values of {{keyword}}",
     "free": "{{size}} free",
     "freeAddresses_one": "{{free}} address free",
-    "freeAddresses_other": "{{free}} addresses free"
+    "freeAddresses_other": "{{free}} addresses free",
+    "virtualType": "the engine the node has",
+    "orExactly": "or:",
+    "provisionGrant": "{{grant}}, or unmanaged provisioning"
   },
   "driverSupport": {
     "lacking_one": "Not usable on {{nodes}}: its driver is not among the capabilities of the node.",

@@ -26,6 +26,10 @@ export interface DesignKeyword {
   grantDoc?: string;
   /** Among the keywords of a minimal configuration of its driver. */
   minimal?: boolean;
+  /** Read by the provision of its resource: what om creates on the system. */
+  provisioning?: boolean;
+  /** Needed by the provision, which fails without it (a size to create a volume of). */
+  provisioningRequired?: boolean;
 }
 
 export interface DesignEntry {
@@ -193,9 +197,6 @@ export const takesResources = (kind: string) => (KIND_GROUPS[kind] ?? []).length
  */
 export const NEEDS_GROUPS = ["volume"];
 
-/** The keywords a resource of a group must set, om requiring them or not: the size of a volume. */
-const NEEDED: Record<string, string[]> = { volume: ["size"] };
-
 /**
  * The types of pool a volume may ask for, from the capabilities of a node
  * (`drivers.resource.volume.<type>`).
@@ -237,8 +238,33 @@ export function sectionKeywords(keywords: DesignKeyword[], section: DesignSectio
 
 /** The keywords a section must set, the type of a resource aside (the design writes it). */
 export function requiredKeywords(keywords: DesignKeyword[], section: DesignSection): DesignKeyword[] {
-  const needed = NEEDED[section.group ?? ""] ?? [];
-  return sectionKeywords(keywords, section).filter((k) => (k.required || needed.includes(k.option)) && k.option !== "type");
+  // A resource om provisions: what its provision fails without (the size of a volume, of a lv), required.
+  const provisioned = !!section.group && !isUnmanaged(section);
+  return sectionKeywords(keywords, section).filter(
+    (k) => (k.required || (provisioned && k.provisioningRequired)) && k.option !== "type" && k.option !== "provision",
+  );
+}
+
+/**
+ * Whether the provision of a resource is left to the user (`provision = false`): om
+ * skips its provision and unprovision, the user creates and removes what it manages.
+ */
+export function isUnmanaged(section: DesignSection): boolean {
+  return !!section.group && section.entries.some((e) => e.key === "provision" && /^(false|no|0|off)$/i.test(e.value.trim()));
+}
+
+/**
+ * A resource whose provision is left to the user, or to om again: `provision = false`
+ * set, the provisioning keywords left without a value dropped; or `provision` unset.
+ */
+export function withUnmanaged(keywords: DesignKeyword[], section: DesignSection, unmanaged: boolean): DesignSection {
+  const entries = section.entries.filter((e) => e.key !== "provision");
+  if (!unmanaged) return { ...section, entries };
+  const provisioning = new Set(sectionKeywords(keywords, section).filter((k) => k.provisioning).map((k) => k.option));
+  return {
+    ...section,
+    entries: [...entries.filter((e) => !(provisioning.has(e.key) && e.value.trim() === "")), { key: "provision", value: "false" }],
+  };
 }
 
 /**
@@ -250,6 +276,8 @@ export function offeredKeywords(keywords: DesignKeyword[], section: DesignSectio
   const set = new Set(section.entries.map((e) => e.key));
   return sectionKeywords(keywords, section)
     .filter((k) => (k.option !== "type" || NEEDS_GROUPS.includes(section.group ?? "")) && !set.has(k.option) && !k.deprecated)
+    // The provision of a resource: by its own box, not as a keyword.
+    .filter((k) => !(section.group && k.option === "provision"))
     .filter((k) => !hideRoot || !(k.grant === "root" && k.grantAlways !== false))
     .sort((a, b) => a.option.localeCompare(b.option));
 }
@@ -297,13 +325,16 @@ const POPULAR_RESOURCE = ["tags", "subset", "standby", "optional", "monitor"];
 
 /**
  * The keywords of a section offered at once, at most `max`: those most set of its
- * group, those om calls minimal, then those every resource takes; of the keywords
+ * group, those its provision reads, those om calls minimal, then those every
+ * resource takes; of the keywords
  * offered (`offeredKeywords`) alone.
  */
 export function popularKeywords(keywords: DesignKeyword[], section: DesignSection, hideRoot = false, max = 6): DesignKeyword[] {
   const offered = offeredKeywords(keywords, section, hideRoot);
   const names = [
     ...(POPULAR[section.group ?? section.name] ?? []),
+    // What its provision reads, at hand for a resource om provisions.
+    ...(section.group && !isUnmanaged(section) ? offered.filter((k) => k.provisioning).map((k) => k.option) : []),
     ...offered.filter((k) => k.minimal).map((k) => k.option),
     ...(section.group ? POPULAR_RESOURCE : []),
   ];

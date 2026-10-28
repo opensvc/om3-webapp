@@ -5,6 +5,8 @@ import {
   designText,
   parseDesign,
   poolTypes,
+  isUnmanaged,
+  withUnmanaged,
   kindDrivers,
   takesResources,
   missingValues,
@@ -152,13 +154,13 @@ describe("object design", () => {
     expect(popularKeywords(KEYWORDS, designStart()[0]).map((k) => k.option)).toEqual(["nodes", "orchestrate"]);
   });
 
-  test("a volume: a driver alone, its type a need offered like any keyword, its size required", () => {
+  test("a volume: a driver alone, its type a need offered like any keyword, its size required by its provisioning flag", () => {
     const capabilities = ["drivers.resource.volume", "drivers.resource.volume.shm", "drivers.resource.volume.loop", "drivers.resource.fs.flag"];
     expect(kindDrivers("vol", capabilities).map((d) => [d.name, d.type])).toEqual([["fs.flag", "flag"], ["volume", ""]]);
     expect(poolTypes(capabilities)).toEqual(["loop", "shm"]);
     const keywords: DesignKeyword[] = [
       { section: "volume", option: "type", types: [""] },
-      { section: "volume", option: "size", types: [""] },
+      { section: "volume", option: "size", types: [""], provisioning: true, provisioningRequired: true },
       { section: "volume", option: "shared", types: [""] },
     ];
     const volume: DesignSection = { name: "volume#1", group: "volume", type: "", entries: [] };
@@ -167,6 +169,33 @@ describe("object design", () => {
     const read = parseDesign("[volume#1]\ntype = shm\nsize = 1g\n");
     expect(read.find((x) => x.name === "volume#1")).toEqual({ name: "volume#1", group: "volume", type: "", entries: [{ key: "type", value: "shm" }, { key: "size", value: "1g" }] });
     expect(designText(read)).toBe("[volume#1]\ntype = shm\nsize = 1g\n");
+  });
+
+  test("the keywords a provision fails without required, unless the provision is left to the user; the other provisioning ones offered first", () => {
+    const keywords: DesignKeyword[] = [
+      { section: "disk", option: "type", required: true },
+      { section: "disk", option: "name", required: true },
+      { section: "disk", option: "size", provisioning: true, provisioningRequired: true },
+      { section: "disk", option: "create_options", provisioning: true },
+      { section: "disk", option: "provision" },
+      { section: "disk", option: "tags" },
+      { section: "volume", option: "pool", provisioning: true, types: [""] },
+      { section: "volume", option: "size", provisioning: true, provisioningRequired: true, types: [""] },
+    ];
+    const lv: DesignSection = { name: "disk#1", group: "disk", type: "lv", entries: [{ key: "size", value: "1g" }] };
+    expect(requiredKeywords(keywords, lv).map((k) => k.option)).toEqual(["name", "size"]);
+    expect(popularKeywords(keywords, lv).map((k) => k.option)).toEqual(["name", "create_options", "tags"]);
+    // The provision a box of its own, not a keyword offered.
+    expect(offeredKeywords(keywords, lv).map((k) => k.option)).toEqual(["create_options", "name", "tags"]);
+    const seeded = withRequired(keywords, lv);
+    const mine = withUnmanaged(keywords, seeded, true);
+    expect(isUnmanaged(mine)).toBe(true);
+    // The empty provisioning keywords dropped, those set kept; the required ones still.
+    expect(mine.entries).toEqual([{ key: "size", value: "1g" }, { key: "name", value: "" }, { key: "provision", value: "false" }]);
+    expect(requiredKeywords(keywords, mine).map((k) => k.option)).toEqual(["name"]);
+    expect(isUnmanaged(withUnmanaged(keywords, mine, false))).toBe(false);
+    const volume: DesignSection = { name: "volume#1", group: "volume", type: "", entries: [] };
+    expect(requiredKeywords(keywords, volume).map((k) => k.option)).toEqual(["size"]);
   });
 
   test("the required entries left without a value", () => {

@@ -3125,7 +3125,10 @@
     "orders": {
       "cpu": "CPU",
       "memory": "Mémoire",
-      "name": "Nom"
+      "name": "Nom",
+      "tasks": "Tâches",
+      "read": "Lecture",
+      "write": "Écriture"
     },
     "caption": "Les cgroups d'opensvc",
     "group": "Groupe de contrôle",
@@ -3188,7 +3191,11 @@
       "task": "Une commande lancée à la demande ou planifiée, sans rester active.",
       "volume": "Un stockage tiré d'un pool selon ses besoins, sa taille d'abord ; le pool est choisi pour y répondre.",
       "claim": "La part d'un pool ou d'un réseau que le namespace peut prendre."
-    }
+    },
+    "unmanaged": "Provisionnement non géré",
+    "unmanagedTitle": "Provisionnement non géré de {{section}}",
+    "unmanagedText": "om ignorera {{section}} au provisionnement et au déprovisionnement de l'objet (provision = false). Vous êtes responsable de créer les ressources système qu'il gère, ses périphériques, systèmes de fichiers ou adresses, avant son démarrage, et de les supprimer quand elles ne servent plus. Ses mots-clés de provisionnement ne sont plus requis.",
+    "unmanagedConfirm": "Je les gère"
   },
   "driverSupport": {
     "lacking_one": "Non utilisable sur {{nodes}} : son pilote n'est pas parmi les capacités du nœud.",

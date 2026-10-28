@@ -60,6 +60,8 @@ describe('ClusterUsage', () => {
         view();
         const headers = within(table()).getAllByRole('columnheader').map((h) => h.textContent);
         expect(headers).toEqual(['Control group', 'CPU', 'Memory']);
+        // Nor an order by them.
+        expect(within(screen.getByRole('group', {name: 'Order'})).getAllByRole('button').map((b) => b.textContent)).toEqual(['CPU', 'Memory', 'Name']);
     });
 
     test('the tasks and the io told: their columns, the rates waiting for a second reading', () => {
@@ -72,6 +74,10 @@ describe('ClusterUsage', () => {
         expect(lines()[0]).toEqual(['opensvc.slice', '3 cpu', '8 GiB', '50', '3 KiB/s', '…']);
         // An object telling none: a dash.
         expect(lines()[2].slice(3)).toEqual(['-', '-', '-']);
+        // Ordered by them too.
+        expect(within(screen.getByRole('group', {name: 'Order'})).getAllByRole('button').map((b) => b.textContent)).toEqual(['CPU', 'Memory', 'Tasks', 'Read', 'Write', 'Name']);
+        fireEvent.click(screen.getByRole('button', {name: 'Tasks'}));
+        expect(screen.getByRole('button', {name: 'Tasks'})).toHaveAttribute('aria-pressed', 'true');
     });
 
     test('the whole of the nodes not shown to the grants: said', () => {

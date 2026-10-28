@@ -18,7 +18,10 @@ import {
     requiredKeywords,
     sectionKeywords,
     withRequired,
+    isUnmanaged,
+    withUnmanaged,
 } from "../app/object-design";
+import {Dialog} from "../ui/components/Dialog";
 import {Button, IconButton} from "../ui/components/Button";
 import {Checkbox, Input, Select} from "../ui/components/Field";
 import {Spinner} from "../ui/components/Spinner";
@@ -365,6 +368,8 @@ export function ObjectDesigner({kind, namespace = "", sections, onChange, keywor
     const [help, setHelp] = useState(null);
     // Never the keywords only root may set whatever the value, to another user; to root, when it asks.
     const [ownShowRoot, setOwnShowRoot] = useState(false);
+    // The resource whose provision the user is asked to take on, until confirmed.
+    const [confirming, setConfirming] = useState(null);
     const showRoot = onShowRoot ? shownRoot : ownShowRoot;
     const hideRoot = !(isRoot && showRoot);
     const [preview, setPreview] = useState(false);
@@ -528,9 +533,19 @@ export function ObjectDesigner({kind, namespace = "", sections, onChange, keywor
                             {section.type && <span>{` ${section.group}.${section.type}`}</span>}
                         </h3>
                         {free && <p className="text-data text-ink-muted">{t("objectDesigner.envHint")}</p>}
+                        {/* A resource om provisions, its provisioning keywords required; or left to the user, on confirmation. */}
+                        {section.group && (
+                            <Checkbox
+                                label={t("objectDesigner.unmanaged")}
+                                checked={isUnmanaged(section)}
+                                onChange={(e) => (e.target.checked ? setConfirming(section.name) : update(withUnmanaged(known, section, false)))}
+                            />
+                        )}
                         {section.entries.length === 0 && !free && <p className="text-data text-ink-muted">{t("objectDesigner.noEntry")}</p>}
                         <ul aria-label={t("objectDesigner.entries", {section: section.name})} className="space-y-1">
                             {section.entries.map((entry, i) => {
+                                // The provision of a resource: its box above.
+                                if (section.group && entry.key === "provision") return null;
                                 const keyword = free ? undefined : keywordOf(entry.key);
                                 const isRequired = required.has(entry.key);
                                 const empty = isRequired && entry.value.trim() === "";
@@ -615,6 +630,27 @@ export function ObjectDesigner({kind, namespace = "", sections, onChange, keywor
             {missing.length > 0 && (
                 <p className="text-data text-state-warn">{t("objectDesigner.missing", {keys: missing.map((m) => `${m.section}.${m.key}`).join(", ")})}</p>
             )}
+            <Dialog
+                open={confirming !== null}
+                onClose={() => setConfirming(null)}
+                title={t("objectDesigner.unmanagedTitle", {section: confirming ?? ""})}
+                footer={
+                    <>
+                        <Button onClick={() => setConfirming(null)}>{t("common.cancel")}</Button>
+                        <Button
+                            variant="create"
+                            onClick={() => {
+                                onChange(sections.map((s) => (s.name === confirming ? withUnmanaged(keywords[driverOf(s)] ?? [], s, true) : s)));
+                                setConfirming(null);
+                            }}
+                        >
+                            {t("objectDesigner.unmanagedConfirm")}
+                        </Button>
+                    </>
+                }
+            >
+                <p>{t("objectDesigner.unmanagedText", {section: confirming ?? ""})}</p>
+            </Dialog>
             {/* The file it makes, on demand; or edited as a text from then on. */}
             <div>
                 <span className="flex flex-wrap gap-2">

@@ -331,7 +331,7 @@ describe('CreateObjectDialog', () => {
             await screen.findByRole('heading', {name: /\[ip#1\]/});
             type('Value of netns', 'container#1');
             fireEvent.click(screen.getByRole('button', {name: 'Add network'}));
-            const network = screen.getByRole('combobox', {name: 'Value of network'});
+            const network = await screen.findByRole('combobox', {name: 'Value of network'});
             return () => [...(document.getElementById(network.getAttribute('list'))?.options ?? [])].map((o) => [o.value, o.label]);
         };
 
@@ -413,7 +413,7 @@ describe('CreateObjectDialog', () => {
             ]})};
             KW('volume', [
                 {section: 'volume', option: 'type', types: ['']},
-                {section: 'volume', option: 'size', types: ['']},
+                {section: 'volume', option: 'size', types: [''], provisioning: true, provisioningRequired: true},
                 {section: 'volume', option: 'shared', types: ['']},
             ]);
             await design();
@@ -433,6 +433,50 @@ describe('CreateObjectDialog', () => {
             fireEvent.change(kind, {target: {value: 'shm'}});
             fireEvent.click(screen.getByRole('button', {name: 'Show the file'}));
             expect(card('[data-preview]')).toHaveTextContent('[volume#1] size = 1g type = shm');
+        });
+
+        test('the keywords a provision fails without required, unless the user takes the provision on, warned first; the other provisioning ones at hand', async () => {
+            KW('disk.lv', [
+                {section: 'disk', option: 'type', required: true},
+                {section: 'disk', option: 'name', types: ['lv'], required: true},
+                {section: 'disk', option: 'size', types: ['lv'], provisioning: true, provisioningRequired: true},
+                {section: 'disk', option: 'create_options', types: ['lv'], provisioning: true},
+                {section: 'disk', option: 'vg', types: ['lv'], provisioning: true, provisioningRequired: true},
+                {section: 'disk', option: 'provision', types: []},
+            ]);
+            await design();
+            fireEvent.click(screen.getByRole('button', {name: 'Add a resource'}));
+            fireEvent.change(await screen.findByLabelText('Driver, as group.type'), {target: {value: 'disk.lv'}});
+            fireEvent.click(within(card('[data-add-resource]')).getByRole('button', {name: 'Add a resource'}));
+            await screen.findByRole('heading', {name: /\[disk#1\]/});
+            // Seeded, not to remove.
+            for (const name of ['name', 'size', 'vg']) expect(screen.getByRole('textbox', {name: `Value of ${name}`})).toBeInTheDocument();
+            expect(screen.queryByRole('textbox', {name: 'Value of create_options'})).toBeNull();
+            expect(screen.queryByRole('button', {name: 'Remove size'})).toBeNull();
+            type('Value of name', 'data');
+            type('Value of size', '1g');
+            expect(screen.getByText('Required without a value: disk#1.vg.')).toBeInTheDocument();
+            // Taken on: asked first; cancelled, nothing changes.
+            fireEvent.click(screen.getByRole('checkbox', {name: 'Unmanaged provisioning'}));
+            const warning = screen.getByRole('dialog', {name: 'Unmanaged provisioning of disk#1'});
+            expect(warning).toHaveTextContent('You are responsible for creating the system resources');
+            fireEvent.click(within(warning).getByRole('button', {name: 'Cancel'}));
+            expect(screen.getByRole('checkbox', {name: 'Unmanaged provisioning'})).not.toBeChecked();
+            fireEvent.click(screen.getByRole('checkbox', {name: 'Unmanaged provisioning'}));
+            fireEvent.click(within(screen.getByRole('dialog', {name: 'Unmanaged provisioning of disk#1'})).getByRole('button', {name: 'I manage them'}));
+            expect(screen.getByRole('checkbox', {name: 'Unmanaged provisioning'})).toBeChecked();
+            // The empty one dropped, the one set kept; no row for the provision itself.
+            expect(screen.queryByRole('textbox', {name: 'Value of vg'})).toBeNull();
+            expect(screen.getByRole('textbox', {name: 'Value of size'})).toHaveValue('1g');
+            expect(screen.queryByRole('textbox', {name: 'Value of provision'})).toBeNull();
+            expect(screen.queryByText(/Required without a value/)).toBeNull();
+            fireEvent.click(screen.getByRole('button', {name: 'Show the file'}));
+            expect(card('[data-preview]')).toHaveTextContent('[disk#1] type = lv name = data size = 1g provision = false');
+            // Given back to om: required again; the optional one at hand once they are set.
+            fireEvent.click(screen.getByRole('checkbox', {name: 'Unmanaged provisioning'}));
+            await screen.findByRole('textbox', {name: 'Value of vg'});
+            type('Value of vg', 'datavg');
+            expect(card('[data-popular=create_options]')).toBeInTheDocument();
         });
 
         test('a driver the daemon does not know: said, nothing added', async () => {

@@ -3125,7 +3125,10 @@
     "orders": {
       "cpu": "CPU",
       "memory": "Memory",
-      "name": "Name"
+      "name": "Name",
+      "tasks": "Tasks",
+      "read": "Read",
+      "write": "Write"
     },
     "caption": "The cgroups of opensvc",
     "group": "Control group",
@@ -3188,7 +3191,11 @@
       "task": "A command run on demand or on a schedule, not kept running.",
       "volume": "Storage drawn from a pool by what it needs, its size first; the pool is picked to match.",
       "claim": "The share of a pool or a network the namespace may take."
-    }
+    },
+    "unmanaged": "Unmanaged provisioning",
+    "unmanagedTitle": "Unmanaged provisioning of {{section}}",
+    "unmanagedText": "om will skip {{section}} when the object is provisioned and unprovisioned (provision = false). You are responsible for creating the system resources it manages, its devices, filesystems or addresses, before it starts, and for removing them when they are no longer needed. Its provisioning keywords are no longer required.",
+    "unmanagedConfirm": "I manage them"
   },
   "driverSupport": {
     "lacking_one": "Not usable on {{nodes}}: its driver is not among the capabilities of the node.",

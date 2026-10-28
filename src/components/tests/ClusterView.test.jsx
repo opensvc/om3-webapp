@@ -119,8 +119,15 @@ describe('ClusterView', () => {
         expect(global.fetch).not.toHaveBeenCalledWith('/api/node/name/n3/metrics/pg', expect.anything());
         await waitFor(() => expect(card('opensvc').querySelector('[data-opensvc-total]')).toHaveTextContent(/^CPU…Memory3(\.0)? GiB$/));
         expect(card('opensvc')).toHaveTextContent('over 2 of 2 nodes');
-        const byNode = within(card('opensvc')).getByRole('list', {name: 'By node'});
-        expect(byNode.querySelector('[data-node=n1]')).toHaveTextContent(/^n1…1(\.0)? GiB$/);
+        // Node by node, a heatmap: a cell the darker the more of the busiest node's; its figure on hover.
+        const byNode = within(card('opensvc')).getByRole('table', {name: 'By node'});
+        const cell = (node, metric) => byNode.querySelector(`[data-node=${node}] [data-metric=${metric}]`);
+        expect(cell('n1', 'memory')).toHaveAttribute('data-level', '0.50');
+        expect(cell('n2', 'memory')).toHaveAttribute('data-level', '1.00');
+        expect(cell('n1', 'memory')).toHaveAttribute('title', expect.stringMatching(/^n1 · Memory: 1(\.0)? GiB, 50 % of the busiest node$/));
+        // The cpu waiting for a second reading: no shade, said so.
+        expect(cell('n1', 'cpu')).not.toHaveAttribute('data-level');
+        expect(cell('n1', 'cpu')).toHaveAttribute('title', 'n1 · CPU: waiting for a second reading');
         // Its tree: the usage tab of the panel of the cluster.
         expect(within(card('opensvc')).getByRole('link', {name: 'Open OpenSVC usage'})).toHaveAttribute('href', '/?peek=object:cluster&peektab=usage');
     });

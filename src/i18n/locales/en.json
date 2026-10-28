@@ -3094,7 +3094,16 @@
       "failed": "Not read: {{nodes}}",
       "cpuShare_one": "{{share}} of the {{used}} the hosts use, on {{count}} CPU",
       "cpuShare_other": "{{share}} of the {{used}} the hosts use, on {{count}} CPUs",
-      "memoryShare": "{{share}} of the {{used}} the hosts use, of {{total}}"
+      "memoryShare": "{{share}} of the {{used}} the hosts use, of {{total}}",
+      "metrics": {
+        "cpu": "CPU",
+        "memory": "Mem",
+        "tasks": "Tasks",
+        "read": "Read",
+        "write": "Write"
+      },
+      "cell": "{{node}} · {{metric}}: {{value}}, {{share}} % of the busiest node",
+      "cellPending": "{{node}} · {{metric}}: waiting for a second reading"
     }
   },
   "snapshots": {

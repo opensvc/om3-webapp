@@ -3094,7 +3094,16 @@
       "failed": "Non lus : {{nodes}}",
       "cpuShare_one": "{{share}} des {{used}} utilisés par les hôtes, sur {{count}} CPU",
       "cpuShare_other": "{{share}} des {{used}} utilisés par les hôtes, sur {{count}} CPU",
-      "memoryShare": "{{share}} des {{used}} utilisés par les hôtes, sur {{total}}"
+      "memoryShare": "{{share}} des {{used}} utilisés par les hôtes, sur {{total}}",
+      "metrics": {
+        "cpu": "CPU",
+        "memory": "Mém",
+        "tasks": "Tâches",
+        "read": "Lect.",
+        "write": "Écr."
+      },
+      "cell": "{{node}} · {{metric}} : {{value}}, {{share}} % du nœud le plus chargé",
+      "cellPending": "{{node}} · {{metric}} : en attente d’une seconde lecture"
     }
   },
   "snapshots": {

@@ -109,6 +109,66 @@ function CountsRing({name, states, counts, good, shown = good, label, words, lin
  * nodes, then node by node. The cpu from a second reading of a node on; the whole of
  * a node shown to whom the whole node may be, said to the others.
  */
+/** The shade of a cell of the heatmap of the least used but not idle: still told apart from none. */
+const HEAT_FLOOR = 0.08;
+
+/**
+ * Where the figures of the card come from, at a glance: a node a row, a figure a
+ * column, a cell the darker the more the node takes of it against the busiest one,
+ * in one tint. A column even, the load spread over the nodes; a cell standing out, a
+ * node spiking. The figure of a cell told on hover, its share of the busiest with it;
+ * one not read yet (a rate before its second reading), dotted.
+ */
+function UsageHeatmap({nodes, totals, metrics, format}) {
+    const {t, i18n} = useTranslation();
+    // The node column as wide as the longest name in its badge; the metric columns
+    // sharing the rest evenly, their titles hyphenated rather than widening one.
+    const nameWidth = `calc(${Math.max(...nodes.map((n) => n.length), 4)}ch + 1.25rem)`;
+    const max = Object.fromEntries(metrics.map((key) => [key, Math.max(0, ...nodes.map((node) => totals[node][key] ?? 0))]));
+    return (
+        <table aria-label={t("clusterView.opensvc.byNode")} data-heatmap="" lang={i18n.language} className="w-full table-fixed border-separate border-spacing-0.5 text-data">
+            <colgroup>
+                <col style={{width: nameWidth}}/>
+                {metrics.map((key) => <col key={key}/>)}
+            </colgroup>
+            <thead>
+                <tr>
+                    <th scope="col" className="sr-only">{t("common.node")}</th>
+                    {metrics.map((key) => (
+                        <th key={key} scope="col" className="px-0.5 text-center align-bottom leading-tight font-normal break-words text-ink-muted hyphens-auto">{t(`clusterView.opensvc.metrics.${key}`)}</th>
+                    ))}
+                </tr>
+            </thead>
+            <tbody>
+                {nodes.map((node) => (
+                    <tr key={node} data-node={node}>
+                        <th scope="row" className="truncate pr-2 text-left font-normal"><CrossLink kind="node" id={node}>{node}</CrossLink></th>
+                        {metrics.map((key) => {
+                            const value = totals[node][key];
+                            const known = typeof value === "number";
+                            const level = known && max[key] > 0 ? Math.max(value > 0 ? HEAT_FLOOR : 0, value / max[key]) : 0;
+                            const label = known
+                                ? t("clusterView.opensvc.cell", {node, metric: t(`clusterUsage.${key}`), value: format(key, value), share: Math.round(100 * (max[key] > 0 ? value / max[key] : 0))})
+                                : t("clusterView.opensvc.cellPending", {node, metric: t(`clusterUsage.${key}`)});
+                            return (
+                                <td key={key} data-metric={key} data-level={known ? level.toFixed(2) : undefined} title={label} aria-label={label} className="p-0">
+                                    <span
+                                        aria-hidden="true"
+                                        className={`relative block h-5 overflow-hidden rounded-[3px] ${known ? "bg-surface-sunken" : "border border-dashed border-line"}`}
+                                    >
+                                        {/* Always there, from none: a new reading fades to its shade, the first one too. */}
+                                        <span className="absolute inset-0 bg-accent transition-opacity duration-700 ease-out motion-reduce:transition-none" style={{opacity: level}}/>
+                                    </span>
+                                </td>
+                            );
+                        })}
+                    </tr>
+                ))}
+            </tbody>
+        </table>
+    );
+}
+
 function OpensvcUsage({nodes}) {
     const {t, i18n} = useTranslation();
     const {usage, totals, hosts, errors} = usePgReadings(nodes);
@@ -167,15 +227,9 @@ function OpensvcUsage({nodes}) {
                 </dl>
             )}
             <p className="text-data text-ink-muted">{t("clusterView.opensvc.over", {count: told.length, total: nodes.length})}</p>
-            <ul aria-label={t("clusterView.opensvc.byNode")} className="space-y-0.5 text-data">
-                {told.map((node) => (
-                    <li key={node} data-node={node} className="flex items-center gap-2">
-                        <CrossLink kind="node" id={node}>{node}</CrossLink>
-                        <span className="ml-auto tabular-nums">{cpu(totals[node].cpu)}</span>
-                        <span className="w-20 text-right tabular-nums">{memory(totals[node].memory)}</span>
-                    </li>
-                ))}
-            </ul>
+            <UsageHeatmap nodes={told} totals={totals} metrics={["cpu", "memory", ...figures]} format={(key, value) => (
+                key === "cpu" ? cpu(value) : key === "memory" ? memory(value) : ioFigure(key, value, i18n.language)
+            )}/>
             {failed.length > 0 && (
                 <p className="text-data text-state-warn">{t("clusterView.opensvc.failed", {nodes: failed.join(", ")})}</p>
             )}

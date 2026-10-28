@@ -32,6 +32,7 @@ import {Checkbox} from "../ui/components/Field";
 import {BoltIcon, CloseIcon} from "../ui/icons";
 import {INSTANCE_ACTIONS, RESOURCE_ACTIONS, actionLabel} from "../constants/actions";
 import {actionDescription, explainedMenu} from "../app/action-menu";
+import {Term} from "../app/Term";
 
 const ZERO_TIME = "0001-01-01T00:00:00Z";
 const EMPTY = {};
@@ -212,23 +213,23 @@ export function InstanceStatus({path, node}) {
             {header.actions !== null ? createPortal(instanceMenu, header.actions) : <div className="flex justify-end">{instanceMenu}</div>}
             <div className="flex items-start justify-between gap-2">
                 <dl className="grid w-max grid-cols-[auto_auto] items-center gap-x-3 gap-y-1">
-                    <Fact label={t("instance.panel.object")}><CrossLink kind="object" id={path}>{path}</CrossLink></Fact>
-                    <Fact label={t("instance.panel.node")}><CrossLink kind="node" id={node}>{node}</CrossLink></Fact>
-                    <Fact label={t("instance.panel.avail")}><StatusWord status={status.avail}/></Fact>
-                    <Fact label={t("instance.panel.overall")}>{status.overall || "-"}</Fact>
-                    <Fact label={t("instance.panel.provisioned")}>
+                    <Fact label={<Term term="object">{t("instance.panel.object")}</Term>}><CrossLink kind="object" id={path}>{path}</CrossLink></Fact>
+                    <Fact label={<Term term="node">{t("instance.panel.node")}</Term>}><CrossLink kind="node" id={node}>{node}</CrossLink></Fact>
+                    <Fact label={<Term term="avail">{t("instance.panel.avail")}</Term>}><StatusWord status={status.avail}/></Fact>
+                    <Fact label={<Term term="overall">{t("instance.panel.overall")}</Term>}>{status.overall || "-"}</Fact>
+                    <Fact label={<Term term="provisioned">{t("instance.panel.provisioned")}</Term>}>
                         <span className="inline-flex items-center gap-1.5">
                             {String(status.provisioned ?? "-")}
                             {notProvisioned && <NotProvisionedMark/>}
                         </span>
                     </Fact>
-                    <Fact label={t("instance.panel.frozen")}>
+                    <Fact label={<Term term="frozen">{t("instance.panel.frozen")}</Term>}>
                         <span className="inline-flex items-center gap-1.5">
                             {frozen ? t("instance.panel.yes") : t("instance.panel.no")}
                             <FrozenMark frozen={frozen}/>
                         </span>
                     </Fact>
-                    <Fact label={t("instance.panel.monitor")}>{monitor.state || "-"}</Fact>
+                    <Fact label={<Term term="monitor">{t("instance.panel.monitor")}</Term>}>{monitor.state || "-"}</Fact>
                     {datastores.length > 0 && (
                         <Fact label={t("instance.panel.datastores")}><DatastoreLinks paths={datastores}/></Fact>
                     )}
@@ -314,7 +315,7 @@ export function ResourceStatus({path, rid, node: onNode}) {
         <div className="space-y-4" data-testid="resource-status">
             <div className="flex items-start justify-between gap-2">
                 <dl className="grid w-max grid-cols-[auto_auto] items-center gap-x-3 gap-y-1">
-                    <Fact label={t("instance.panel.object")}><CrossLink kind="object" id={path}>{path}</CrossLink></Fact>
+                    <Fact label={<Term term="object">{t("instance.panel.object")}</Term>}><CrossLink kind="object" id={path}>{path}</CrossLink></Fact>
                     {onNode !== undefined && (
                         <Fact label={t("resource.panel.instance")}><InstanceLink path={path} node={onNode}/></Fact>
                     )}

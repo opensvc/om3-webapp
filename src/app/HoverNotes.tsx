@@ -2,6 +2,7 @@ import { useId, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { cn } from "../ui/cn";
+import { usePlaceCard } from "../ui/components/card-place";
 import { AlertTriangleIcon, InfoIcon } from "../ui/icons";
 import type { Level, RowNote } from "./statusboard";
 
@@ -11,10 +12,6 @@ const LEVELS: Record<Level, { ink: string; Icon: typeof InfoIcon }> = {
   info: { ink: "text-ink-muted", Icon: InfoIcon },
 };
 
-/** Room kept between the card and the edges of the window. */
-const MARGIN = 8;
-/** Width of the card, as `max-w-sm`. */
-const WIDTH = 384;
 
 /**
  * The notes about what it wraps, a cell or a row of the status board, shown in a
@@ -45,7 +42,9 @@ export function HoverNotes({
   const { t } = useTranslation();
   const id = useId();
   const anchor = useRef<HTMLSpanElement>(null);
-  const [place, setPlace] = useState<{ top: number; left: number } | null>(null);
+  const [place, setPlace] = useState<{ top: number; left: number; right: number } | null>(null);
+  const card = useRef<HTMLDivElement>(null);
+  usePlaceCard(card, place);
   // A click opens the actions: the card leaves them the room until the pointer goes.
   const clicked = useRef(false);
 
@@ -55,8 +54,8 @@ export function HoverNotes({
     if (clicked.current) return;
     const rect = anchor.current?.getBoundingClientRect();
     if (rect === undefined) return;
-    const left = Math.max(MARGIN, Math.min(rect.left, window.innerWidth - WIDTH - MARGIN));
-    setPlace({ top: rect.bottom + 4, left });
+    // Under it, its left edge on the element's until drawn: placed by its width then (usePlaceCard).
+    setPlace({ top: rect.bottom + 4, left: rect.left, right: rect.right });
   };
   const hide = () => setPlace(null);
 
@@ -86,7 +85,8 @@ export function HoverNotes({
           <div
             id={id}
             role="tooltip"
-            style={place}
+            ref={card}
+            style={{ top: place.top, left: place.left }}
             className="pointer-events-none fixed z-[1250] w-max max-w-sm space-y-1.5 rounded-(--radius-panel) border border-line bg-surface-raised p-2 text-data shadow-lg"
           >
             {details.length > 0 && (

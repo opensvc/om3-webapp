@@ -11,9 +11,6 @@ import NetworkDetails from "./NetworkDetails";
 import {NetworkConfig, NetworkOverview} from "./NetworkPanel";
 import {PoolConfig, PoolOverview, PoolVolumes} from "./PoolPanel";
 import {StoreConfig, StoreOverview, StoreSnapshots} from "./StorePanel";
-
-/** The kinds of the objects acting on their nodes, those a store backs up: services and volumes. */
-const ACTOR_KINDS = ["svc", "vol"];
 import {storeSource} from "../app/store-config";
 import {NamespaceConfig, NamespaceUsage} from "./NamespacePanel";
 import {NamespaceClaims} from "./NamespaceClaims";
@@ -115,10 +112,13 @@ export function ObjectDetailPanel({path, tab, onTabChange, onClose}) {
             // Its size and its caps: a service's and a volume's.
             ...(CAPACITY_KINDS.includes(kind) ? [{key: "capacity", label: t("panel.tabs.capacity")}] : []),
             {key: "schedules", label: t("panel.tabs.schedules")},
-            // An actor, a service or a volume: the snapshots its sync.store resources took, in every store.
-            ...(ACTOR_KINDS.includes(kind) ? [{key: "snapshots", label: t("panel.tabs.snapshots")}] : []),
-            // A sync resource keeping snapshots on one of its instances: restored from them.
-            ...(snapshots ? [{key: "restore", label: t("panel.tabs.restore")}] : []),
+            // A sync resource keeping snapshots on one of its instances: the snapshots its
+            // sync.store resources took, in every store, and restored from them. None
+            // configured, no snapshot to show: neither tab.
+            ...(snapshots ? [
+                {key: "snapshots", label: t("panel.tabs.snapshots")},
+                {key: "restore", label: t("panel.tabs.restore")},
+            ] : []),
             // The cluster object, the cluster: its locks, as om cluster lock list shows them.
             ...(kind === "ccfg" ? [{key: "locks", label: t("panel.tabs.locks")}] : []),
             {key: "config", label: t("panel.tabs.config")},

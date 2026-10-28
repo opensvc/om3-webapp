@@ -47,6 +47,25 @@ describe('PoolWizard', () => {
         ]);
     });
 
+    test('a type a node cannot run, said by it from the capabilities of each node, not held back', async () => {
+        const caps = {n1: ['drivers.pool.directory', 'drivers.pool.vg'], n2: ['drivers.pool.directory']};
+        global.fetch.mockImplementation(async (url) => {
+            const node = /\/api\/node\/name\/(\w+)\/capabilities$/.exec(String(url))?.[1];
+            if (node) return new Response(JSON.stringify({items: caps[node].map((name) => ({kind: 'CapabilityItem', data: {name}}))}), {status: 200});
+            if (String(url).endsWith('/config/keywords')) return new Response(JSON.stringify({items: KEYWORDS}), {status: 200});
+            return new Response('{}', {status: 200});
+        });
+        render(<PoolWizard pools={[]} nodes={['n1', 'n2']} onClose={() => {}} onSaved={() => {}}/>);
+        const vg = await screen.findByRole('radio', {name: 'vg'});
+        await waitFor(() => expect(vg).toHaveAccessibleDescription('Not usable on n2: its driver is not among the capabilities of the node.'));
+        expect(screen.getByRole('radio', {name: 'drbd'})).toHaveAccessibleDescription('Usable on no node of the cluster: its driver is not among their capabilities.');
+        expect(screen.getByRole('radio', {name: 'directory'})).not.toHaveAttribute('aria-describedby');
+        // Said, not held back: the daemon refuses it on the nodes lacking it.
+        fireEvent.change(screen.getByRole('textbox', {name: 'Name'}), {target: {value: 'rep'}});
+        fireEvent.click(screen.getByRole('radio', {name: 'drbd'}));
+        expect(screen.getByRole('button', {name: 'Next'})).toBeEnabled();
+    });
+
     test('a drbd pool: the address of each node asked apart', async () => {
         render(<PoolWizard pools={[]} nodes={['n1', 'n2']} onClose={() => {}} onSaved={() => {}}/>);
         fireEvent.change(await screen.findByRole('textbox', {name: 'Name'}), {target: {value: 'rep'}});

@@ -27,6 +27,8 @@ import {PeekPanel} from "./PeekPanel";
 import {PanelReopenKey} from "../app/PanelReopenKey";
 import {ActionTray} from "../app/ActionTray";
 import {ShortcutsHelp} from "../app/ShortcutsHelp";
+import {PageIntro} from "./PageIntro";
+import {InstantTitles} from "../app/InstantTitles";
 import {useShortcut} from "../ui/lib/shortcuts";
 
 import {decodeToken as decodeTokenFromLogin} from "./Login.jsx";
@@ -43,6 +45,7 @@ const ClusterView = lazy(() => import("./ClusterView"));
 const Resources = lazy(() => import("./Resources"));
 const Network = lazy(() => import("./Network"));
 const WhoAmI = lazy(() => import("./WhoAmI"));
+const Glossary = lazy(() => import("./Glossary"));
 const TokenPage = lazy(() => import("./TokenPage"));
 
 /*
@@ -414,8 +417,9 @@ const App = () => {
     const mainStyle = {
         flex: 1,
         minWidth: 0,
+        // No -webkit-overflow-scrolling: touch, the default since iOS 13: Safari clips
+        // the fixed panels opened in the page to the scroller, under the top bar.
         overflowY: 'auto',
-        WebkitOverflowScrolling: 'touch',
         width: '100%',
     };
 
@@ -424,6 +428,8 @@ const App = () => {
             <OidcProvider>
                 <OidcInitializer authInfo={authInfo}>
                     <div id="app-root-container" style={appContainerStyle}>
+                        {/* The tooltips of every page, shown at once rather than after the browser's delay. */}
+                        <InstantTitles/>
                         <NavBar
                             sidebarOpen={sidebarOpen}
                             onToggleSidebar={toggleSidebar}
@@ -434,6 +440,8 @@ const App = () => {
                             {/* Short of room, the menu folds once an entry is chosen. */}
                             {showSidebar && <Sidebar open={sidebarOpen} alerts={sidebarAlerts} onNavigate={compactMenu ? foldSidebar : undefined}/>}
                             <main id="app-scroll-container" ref={mainRef} style={mainStyle}>
+                                {/* What the page is about, for someone new to OpenSVC. */}
+                                <PageIntro/>
                                 <Suspense fallback={<Loading/>}>
                                     <Routes>
                                         <Route path="/" element={<Navigate to="/cluster" replace/>}/>
@@ -452,6 +460,7 @@ const App = () => {
                                         <Route path="/objects/:objectName" element={<ObjectRedirect/>}/>
                                         <Route path="/nodes/:node/objects/:objectName" element={<InstanceRedirect/>}/>
                                         <Route path="/whoami" element={<ProtectedRoute><WhoAmI/></ProtectedRoute>}/>
+                                        <Route path="/glossary" element={<ProtectedRoute><Glossary/></ProtectedRoute>}/>
                                         <Route path="/token" element={<TokenPage/>}/>
                                         <Route path="/silent-renew" element={<SilentRenew/>}/>
                                         <Route path="/auth-callback" element={<OidcCallback/>}/>

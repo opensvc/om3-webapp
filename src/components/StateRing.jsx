@@ -39,7 +39,8 @@ export function StateRing({parts, total = parts.reduce((sum, [, count]) => sum +
                     />
                 ))}
             </svg>
-            <div className="absolute inset-0 flex flex-col items-center justify-center text-center">{children}</div>
+            {/* Its figures and words inside the ring, a long label on two lines, not under its arcs. */}
+            <div className="absolute inset-0 flex flex-col items-center justify-center px-6 text-center leading-tight text-balance">{children}</div>
         </div>
     );
 }

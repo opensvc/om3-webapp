@@ -477,15 +477,71 @@ describe('NodeDetailPanel', () => {
 
         openTab('Drivers');
         expect(screen.getByTestId('location')).toHaveTextContent('peektab=drivers');
-        const drivers = await within(panel()).findByRole('list', {name: 'Drivers'});
-        expect(within(drivers).getAllByRole('listitem').map((li) => li.textContent)).toContain('app.forking');
-        // The capabilities name the drivers by their full name: the filter tells them apart.
-        fireEvent.change(within(panel()).getByRole('searchbox', {name: 'Filter the drivers and capabilities'}), {target: {value: 'drivers.array'}});
-        expect(within(drivers).getByText('None')).toBeInTheDocument();
-        expect(within(panel()).getByRole('list', {name: 'Capabilities'})).toHaveTextContent('drivers.array.hds');
+        let drivers = await within(panel()).findByRole('table', {name: 'Drivers'});
+        const row = (id) => within(drivers).getAllByRole('row').find((r) => r.cells[0]?.textContent === id);
+        // Usable when the node holds its capability, a resource driver's under drivers.resource.
+        expect(row('container.kvm')).toHaveTextContent('container.kvmUsablehvm partitions');
+        expect(row('container.podman')).toHaveTextContent('Not usable: no capability');
+        expect(row('pool.directory')).toHaveTextContent('Usable');
+        expect(row('pool.rados')).toHaveTextContent('Not usable');
+        // Each view on a chip at the head of the tab, its count on it: the drivers first.
+        const section = (name) => within(within(panel()).getByRole('tablist', {name: 'What the node can run'})).getByRole('tab', {name: new RegExp(`^${name}`)});
+        expect(section('Drivers')).toHaveAttribute('aria-selected', 'true');
+        expect(section('Drivers')).toHaveTextContent('Drivers10');
+        expect(within(panel()).queryByRole('list', {name: 'Node tools'})).toBeNull();
+        fireEvent.click(section('Node tools'));
+        expect(screen.getByTestId('location')).toHaveTextContent('peektab=drivers&view=tools');
+        expect(within(panel()).getByRole('list', {name: 'Node tools'})).toHaveTextContent('scsi.sg_persistsystemd');
+        expect(within(panel()).queryByRole('table', {name: 'Drivers'})).toBeNull();
+        fireEvent.click(section('Drivers'));
+        // Drawn again, back on its view.
+        drivers = within(panel()).getByRole('table', {name: 'Drivers'});
+        // Which drivers, a select apart from the chips of the views: those the node cannot run alone.
+        const which = within(panel()).getByRole('combobox', {name: 'Which drivers'});
+        expect([...which.options].map((o) => o.textContent)).toEqual(['All (10)', 'Usable here (7)', 'Not usable here (3)']);
+        expect(within(panel()).queryByRole('tab', {name: /usable/i})).toBeNull();
+        fireEvent.change(which, {target: {value: 'unusable'}});
+        expect(within(drivers).getAllByRole('row').slice(1).map((r) => r.cells[0].textContent))
+            .toEqual(['container.podman', 'fs.bind', 'pool.rados']);
+        fireEvent.change(which, {target: {value: 'all'}});
+        // The filter reads the capability of a driver too, and its features.
+        fireEvent.change(within(panel()).getByRole('searchbox', {name: 'Filter the drivers and capabilities'}), {target: {value: 'hvm'}});
+        expect(within(drivers).getAllByRole('row').slice(1).map((r) => r.cells[0].textContent)).toEqual(['container.kvm']);
+        fireEvent.change(within(panel()).getByRole('searchbox', {name: 'Filter the drivers and capabilities'}), {target: {value: 'drivers.pool'}});
+        // The filter reads every view: its counts on their chips.
+        expect(section('Drivers')).toHaveTextContent('Drivers2');
+        expect(section('Node tools')).toHaveTextContent('Node tools0');
+        fireEvent.click(section('Capabilities'));
+        expect(within(panel()).getByRole('list', {name: 'Capabilities'})).toHaveTextContent('drivers.pool.directory');
 
         openTab('Logs');
         expect(within(panel()).getByTestId('logs')).toHaveTextContent('node logs of dev3n1');
+    });
+
+    test('the capabilities scanned again on demand, read again once the scan is done', async () => {
+        api['action/scan/capabilities'] = {exec_id: 'e1', session_id: 's1'};
+        const post = global.fetch.getMockImplementation();
+        global.fetch.mockImplementation(async (url, options = {}) => {
+            if (options.method !== 'POST' || !url.endsWith('/action/scan/capabilities')) return post(url, options);
+            requests.push({method: 'POST', url, body: options.body});
+            return new Response(JSON.stringify(api['action/scan/capabilities']), {status: 200, headers: {'Content-Type': 'application/json'}});
+        });
+        renderPanel('?peek=node:dev3n1&peektab=drivers');
+        await within(panel()).findByRole('table', {name: 'Drivers'});
+        const reads = () => requests.filter((r) => r.method === 'GET' && r.url.endsWith('/capabilities')).length;
+        expect(reads()).toBe(1);
+        fireEvent.click(within(panel()).getByRole('button', {name: 'Rescan'}));
+        // Running: the button says so, held back; followed in the actions tray.
+        expect(await within(panel()).findByRole('button', {name: /Scanning/})).toBeDisabled();
+        expect(requests).toContainEqual(expect.objectContaining({method: 'POST', url: '/api/node/name/dev3n1/action/scan/capabilities'}));
+        await waitFor(() => expect(useActionTracker.getState().tracked.some((e) => e.followedId === 'e1')).toBe(true));
+        expect(reads()).toBe(1);
+        // Done: the capabilities read again.
+        act(() => useActionTracker.setState((state) => ({
+            tracked: state.tracked.map((e) => (e.followedId === 'e1' ? {...e, state: 'succeeded', endedAt: Date.now()} : e)),
+        })));
+        await waitFor(() => expect(reads()).toBe(2));
+        expect(within(panel()).getByRole('button', {name: 'Rescan'})).toBeEnabled();
     });
 
     test('its events, read for the node alone, in a tab', async () => {

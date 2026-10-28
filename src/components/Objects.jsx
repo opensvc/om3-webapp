@@ -13,7 +13,7 @@ import CreateObjectDialog from "./CreateObjectDialog";
 import {useObjectData} from "../hooks/useObjectData";
 import {useNodeData} from "../hooks/useNodeData";
 import {useClusterNodeOrder} from "../hooks/useClusterNodeOrder";
-import {Table, HeaderRow, HeaderCell, Row, Cell, EmptyRow, toggleCheckbox, LIST_RAIL_QUERY} from "../ui/components/Table";
+import {Table, HeaderRow, HeaderCell, SortHeaderCell, Row, Cell, EmptyRow, toggleCheckbox, LIST_RAIL_QUERY} from "../ui/components/Table";
 import {NotProvisionedMark as PMark, StoppedMark, RpoBreachedMark} from "../ui/components/StateMarks";
 import {StatusMark} from "../ui/components/StatusMark";
 import {isQuietDown} from "../ui/components/status";
@@ -32,6 +32,7 @@ import {MoreRows, useRowsOnDemand} from "../ui/components/RowsOnDemand";
 import {ALL_LIST, OBJECT_LISTS, OBJECTS_TABS, listOfKind} from "../utils/objectLists";
 import {BoltIcon, ChevronDownIcon, FilterIcon, GearIcon, PlusIcon, SearchIcon} from "../ui/icons";
 import {menuColumns, menuFilter} from "../app/action-menu";
+import {Term} from "../app/Term";
 
 // The breakpoints of the MUI theme the view used: below md (900px) the filters fold
 // behind a button, from lg (1200px) the node columns are shown.
@@ -140,8 +141,8 @@ const NodeStatus = React.memo(({objectName, node}) => {
  * to place (cfg, sec, usr) have no orchestrate nor topology.
  */
 export const PROPERTY_COLUMNS = [
-    {key: "orchestrate", labelKey: "objects.columns.orchestrate", value: (status) => status?.orchestrate},
-    {key: "topology", labelKey: "objects.columns.topology", value: (status) => status?.topology},
+    {key: "orchestrate", labelKey: "objects.columns.orchestrate", term: "orchestrate", value: (status) => status?.orchestrate},
+    {key: "topology", labelKey: "objects.columns.topology", term: "topology", value: (status) => status?.topology},
 ];
 
 /**
@@ -151,6 +152,63 @@ export const PROPERTY_COLUMNS = [
 const NARROW_PROPERTY_COLUMNS = [
     {key: "up", labelKey: "objects.columns.up", value: (status) => status?.up_instances_count},
 ];
+
+/** The availabilities in the order a sort puts them, those worth a look first; another, or none, last. */
+const AVAIL_RANK = {down: 0, warn: 1, up: 2, "n/a": 3};
+const availRank = (avail) => AVAIL_RANK[avail] ?? 4;
+
+/** The value of an object a column sorts by, undefined when it has none: an instance's by `node:<name>`. */
+function sortValue(column, name, status, instances) {
+    if (column.startsWith("node:")) {
+        const instance = instances?.[name]?.[column.slice(5)];
+        return instance === undefined ? undefined : availRank(instance.avail);
+    }
+    if (column === "status") return status?.[name] === undefined ? undefined : availRank(status[name].avail);
+    const property = [...PROPERTY_COLUMNS, ...NARROW_PROPERTY_COLUMNS].find((c) => c.key === column);
+    const value = property?.value(status?.[name]);
+    return value === "" || value === null ? undefined : value;
+}
+
+/**
+ * The order of two objects by the value of `column` alone, `direction` "asc" or
+ * "desc": a property, the status or an instance's on a node, the worst first
+ * ascending. An object without a value last, either way; the same value, 0.
+ */
+function compareValues(a, b, column, direction, status, instances) {
+    const va = sortValue(column, a, status, instances);
+    const vb = sortValue(column, b, status, instances);
+    if (va === undefined || vb === undefined) return va === vb ? 0 : va === undefined ? 1 : -1;
+    const order = typeof va === "number" && typeof vb === "number" ? va - vb : String(va).localeCompare(String(vb));
+    return direction === "asc" ? order : -order;
+}
+
+/**
+ * The objects namespace by namespace, in the order of `column`: by the object, the
+ * namespaces by name, either way, the objects of each by path; by another column,
+ * the objects of each namespace by it, then by path, and each namespace by the
+ * object of it that column puts first, the worst status first ascending say, one
+ * without a value last; then by name. The root namespace's short paths ("cluster",
+ * "svc/x") kept together under it.
+ */
+export function orderObjects(names, column, direction, status, instances) {
+    const byNamespace = new Map();
+    for (const name of [...names].sort((a, b) => a.localeCompare(b))) {
+        const ns = extractNamespace(name);
+        if (!byNamespace.has(ns)) byNamespace.set(ns, []);
+        byNamespace.get(ns).push(name);
+    }
+    if (column !== "object") {
+        // Sorted by path already: the order of the column, a path breaking a tie (a stable sort).
+        for (const members of byNamespace.values()) members.sort((a, b) => compareValues(a, b, column, direction, status, instances));
+    }
+    const namespaces = [...byNamespace.keys()].sort((x, y) => {
+        if (column === "object") return direction === "asc" ? x.localeCompare(y) : y.localeCompare(x);
+        // Its objects sorted, the first of each namespace the one the column puts first.
+        return compareValues(byNamespace.get(x)[0], byNamespace.get(y)[0], column, direction, status, instances)
+            || x.localeCompare(y);
+    });
+    return namespaces.flatMap((ns) => byNamespace.get(ns));
+}
 
 const stopPropagation = (e) => e.stopPropagation();
 
@@ -588,12 +646,26 @@ const Objects = () => {
     }, [listObjectNames, hasGlobalState, deferredSelectedGlobalStates, deferredSelectedNamespaces,
         deferredSelectedKinds, hasKindFilter, deferredSearchQuery, objects]);
 
-    // Always in the order of their paths, namespace by namespace: a line opens each
-    // namespace (NamespaceRow). The root namespace's short paths ("cluster",
-    // "svc/x") are kept together under it, in the order of the namespaces.
-    const sortedObjectNames = useMemo(() => [...filteredObjectNames].sort((a, b) =>
-        extractNamespace(a).localeCompare(extractNamespace(b)) || a.localeCompare(b)
-    ), [filteredObjectNames]);
+    // Sorted by a column, its title clicked, as the nodes are: the namespaces by name
+    // first. A column gone, the window narrowed or another tab, by name again.
+    const [sort, setSort] = useState({column: "object", direction: "asc"});
+    const sortColumns = useMemo(() => ["object", ...(namesOnly ? [] : [
+        ...(isMobile ? NARROW_PROPERTY_COLUMNS : PROPERTY_COLUMNS).map((c) => c.key),
+        "status",
+        ...(isWideScreen ? allNodes.map((node) => `node:${node}`) : []),
+    ])], [namesOnly, isMobile, isWideScreen, allNodes]);
+    const sortColumn = sortColumns.includes(sort.column) ? sort.column : "object";
+    const sortDirection = sortColumn === sort.column ? sort.direction : "asc";
+    const sortBy = useCallback((column) => setSort((prev) => (prev.column === column
+        ? {column, direction: prev.direction === "asc" ? "desc" : "asc"}
+        : {column, direction: "asc"})), []);
+
+    // Namespace by namespace, a line opening each (NamespaceRow): the namespaces in
+    // the order of the column sorted on, the objects of each by path (orderObjects).
+    const sortedObjectNames = useMemo(
+        () => orderObjects(filteredObjectNames, sortColumn, sortDirection, objects, objectInstanceStatus),
+        [filteredObjectNames, sortColumn, sortDirection, objects, objectInstanceStatus],
+    );
 
     // The objects of each namespace the filters keep: what its line selects.
     const namespaceObjects = useMemo(() => {
@@ -614,7 +686,7 @@ const Objects = () => {
 
     // The rows drawn as the end of the table nears; the list or a filter changed, the first ones again.
     const drawn = useRowsOnDemand(rowObjectNames.length, [list, deferredSearchQuery, deferredSelectedNamespaces,
-        deferredSelectedKinds, deferredSelectedGlobalStates]);
+        deferredSelectedKinds, deferredSelectedGlobalStates, sortColumn, sortDirection]);
     const {rows: drawnOf} = drawn;
     const visibleObjectNames = useMemo(() => drawnOf(rowObjectNames), [drawnOf, rowObjectNames]);
 
@@ -969,20 +1041,47 @@ const Objects = () => {
                                     aria-label={t("objects.selectAll")}
                                 />
                             </HeaderCell>
-                            {/* Fixed titles: the list is always in the order of the paths. */}
-                            <HeaderCell>{t("objects.columns.object")}</HeaderCell>
+                            {/* Each title sorts the namespaces by its column, their objects kept by path;
+                                the keys, read for the rows shown only, do not. */}
+                            <SortHeaderCell
+                                label={t("objects.columns.object")}
+                                active={sortColumn === "object"}
+                                direction={sortDirection}
+                                onSort={() => sortBy("object")}
+                            />
                             {namesOnly && (
                                 <>
                                     <HeaderCell className="text-right">{t("objects.columns.keys")}</HeaderCell>
                                     <HeaderCell className="text-right" title={t("objects.columns.keysSizeHint")}>{t("objects.columns.keysSize")}</HeaderCell>
                                 </>
                             )}
-                            {!namesOnly && propertyColumns.map(({key, labelKey}) => (
-                                <HeaderCell key={key}>{t(labelKey)}</HeaderCell>
+                            {!namesOnly && propertyColumns.map(({key, labelKey, term}) => (
+                                <SortHeaderCell
+                                    key={key}
+                                    // In the button of the sort, the term said on hover: no focus of its own there.
+                                    label={term ? <Term term={term} focusable={false}>{t(labelKey)}</Term> : t(labelKey)}
+                                    active={sortColumn === key}
+                                    direction={sortDirection}
+                                    onSort={() => sortBy(key)}
+                                />
                             ))}
-                            {!namesOnly && <HeaderCell>{t("common.status")}</HeaderCell>}
+                            {!namesOnly && (
+                                <SortHeaderCell
+                                    label={t("common.status")}
+                                    active={sortColumn === "status"}
+                                    direction={sortDirection}
+                                    onSort={() => sortBy("status")}
+                                />
+                            )}
                             {!namesOnly && isWideScreen && allNodes.map((node, i) => (
-                                <HeaderCell key={node} className={i === 0 ? "border-l border-line" : undefined}>{node}</HeaderCell>
+                                <SortHeaderCell
+                                    key={node}
+                                    className={i === 0 ? "border-l border-line" : undefined}
+                                    label={node}
+                                    active={sortColumn === `node:${node}`}
+                                    direction={sortDirection}
+                                    onSort={() => sortBy(`node:${node}`)}
+                                />
                             ))}
                         </HeaderRow>
                     </thead>

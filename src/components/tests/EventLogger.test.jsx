@@ -1610,6 +1610,33 @@ describe('EventLog', () => {
             useEventLogStore.mockReset();
         });
 
+        test('the list of the types under its button, its right edge on the button\'s when it would pass the window', async () => {
+            const store = mockStore({connected: true, eventLogs: [makeLog({id: '1', eventType: 'ObjectStatusUpdated', timestamp: at(1), data: {path: 'ns1/svc/a', node: 'n1'}})]});
+            useEventLogStore.mockImplementation((selector) => (typeof selector === 'function' ? selector(store) : store));
+            render(<EventLog eventTypes={OBJECT_EVENT_TYPES} objectName="ns1/svc/a" label="Events"/>);
+            // A window of its own width, whatever the tests before left.
+            Object.defineProperty(window, 'innerWidth', {value: 1024, configurable: true, writable: true});
+            const menu = screen.getByRole('group', {name: 'Filter by type'});
+            const details = menu.closest('details');
+            const rect = (left, width) => ({left, right: left + width, width, top: 0, bottom: 20, height: 20, x: left, y: 0});
+            const open = (buttonLeft) => {
+                vi.spyOn(details, 'getBoundingClientRect').mockReturnValue(rect(buttonLeft, 90));
+                vi.spyOn(menu, 'getBoundingClientRect').mockReturnValue(rect(buttonLeft, 224));
+                details.open = true;
+                fireEvent(details, new Event('toggle'));
+            };
+            // Room at the right of the button: under it, from its left edge.
+            open(200);
+            expect(menu).toHaveClass('left-0');
+            details.open = false;
+            fireEvent(details, new Event('toggle'));
+            // The button near the right edge of the window, in a panel: from its right edge.
+            open(window.innerWidth - 120);
+            await waitFor(() => expect(menu).toHaveClass('right-0'));
+            expect(menu).not.toHaveClass('left-0');
+            useEventLogStore.mockReset();
+        });
+
         test('opened at the end, as the logs: the events read while it loads followed once shown', async () => {
             useEventLogStore.mockReturnValue(mockStore({eventLogs: [event('2', 2, 'ns1/svc/b'), event('1', 1, 'ns1/svc/a')]}));
             render(<EventLog eventTypes={OBJECT_EVENT_TYPES} label="Events"/>);

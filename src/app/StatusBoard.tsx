@@ -11,6 +11,15 @@ import { statusBadge } from "../ui/components/status";
 import { Cell, HeaderCell, HeaderRow, Row, Table } from "../ui/components/Table";
 import type { Board, BoardRow, Level, Span, Text, Tone } from "./statusboard";
 import { HoverNotes } from "./HoverNotes";
+import { Term } from "./Term";
+
+/** The rows of the board named by a word of the glossary, its key by the kind of row. */
+const ROW_TERMS: Partial<Record<string, string>> = {
+  monitor: "monitor",
+  expect: "expect",
+  provisioned: "provisioned",
+  orchestration: "orchestration",
+};
 
 /** The inks of the webapp for om's colors. */
 const TONES: Record<Tone, string> = {
@@ -147,6 +156,75 @@ function Flag({ span }: { span: Span }) {
       <span aria-hidden="true">{span.text}</span>
       <span className="sr-only">{flagMeaning(span, t)}</span>
     </span>
+  );
+}
+
+/** The statuses of the legend: as the board draws them, a grey down apart. */
+const LEGEND_STATES: { key: string; span: Span }[] = [
+  { key: "up", span: { text: "O", status: "up" } },
+  { key: "warn", span: { text: "!", status: "warn" } },
+  { key: "down", span: { text: "X", status: "down" } },
+  { key: "downQuiet", span: { text: "X", status: "down", tone: "secondary" } },
+  { key: "na", span: { text: "/", status: "n/a" } },
+  { key: "undef", span: { text: "?", status: "undef" } },
+];
+
+/** The instance marks of the legend, in the order the board puts them. */
+const LEGEND_MARKS: { key: string; span: Span }[] = [
+  { key: "overallWarn", span: { text: "!", mark: "!", tone: "warning" } },
+  { key: "running", span: { text: "R", mark: "R" } },
+  { key: "rpoBreached", span: { text: "L", mark: "L", tone: "error" } },
+  { key: "drp", span: { text: "#", mark: "#" } },
+  { key: "leader", span: { text: "^", mark: "^" } },
+  { key: "leaderNonOptimal", span: { text: "^", mark: "^", tone: "error" } },
+  { key: "frozen", span: { text: "*", mark: "*" } },
+  { key: "stopped", span: { text: "=", mark: "=" } },
+  { key: "notProvisioned", span: { text: "P", mark: "P", tone: "error" } },
+];
+
+/** The resource flags of the legend, the restarts left by example. */
+const LEGEND_FLAGS: { key: string; span: Span }[] = [
+  { key: "R", span: { text: "R", flag: true } },
+  { key: "M", span: { text: "M", flag: true } },
+  { key: "D", span: { text: "D", flag: true } },
+  { key: "O", span: { text: "O", flag: true } },
+  { key: "E", span: { text: "E", flag: true } },
+  { key: "S", span: { text: "S", flag: true } },
+  { key: "P", span: { text: "P", flag: true, tone: "error" } },
+  { key: "X", span: { text: "X", flag: true } },
+  { key: "restarts", span: { text: "3", flag: true } },
+  { key: "noRestart", span: { text: "0", flag: true } },
+  { key: "manyRestarts", span: { text: "+", flag: true } },
+];
+
+/**
+ * What every symbol of the status board means, drawn as the board draws it: the
+ * statuses, the marks of an instance, the flags of a resource. On the board on
+ * demand, and on the Glossary page.
+ */
+export function SymbolLegend() {
+  const { t } = useTranslation();
+  const group = (key: string, items: { key: string; span: Span }[], Piece: (props: { span: Span }) => ReactNode) => (
+    <section aria-labelledby={`legend-${key}`} className="space-y-1">
+      <h3 id={`legend-${key}`} className="font-medium">{t(`legend.groups.${key}`)}</h3>
+      <dl className="grid grid-cols-[2.5rem_1fr] items-baseline gap-x-2 gap-y-1">
+        {items.map((item) => (
+          <Fragment key={item.key}>
+            <dt className="flex justify-center" data-legend={`${key}-${item.key}`}>
+              <Piece span={item.span} />
+            </dt>
+            <dd>{t(`legend.${key}.${item.key}`)}</dd>
+          </Fragment>
+        ))}
+      </dl>
+    </section>
+  );
+  return (
+    <div className="grid gap-4 text-data md:grid-cols-3">
+      {group("states", LEGEND_STATES, Status)}
+      {group("marks", LEGEND_MARKS, Mark)}
+      {group("flags", LEGEND_FLAGS, Flag)}
+    </div>
   );
 }
 
@@ -392,13 +470,13 @@ export function StatusBoard({
         <dl className="grid w-max grid-cols-[auto_auto] items-center gap-x-3 gap-y-1">
           {avail !== undefined && (
             <>
-              <dt className="text-ink-muted">{t("statusBoard.avail")}</dt>
+              <dt className="text-ink-muted"><Term term="avail">{t("statusBoard.avail")}</Term></dt>
               <dd><SummaryStatus status={avail.status} /></dd>
             </>
           )}
           {overall !== undefined && (
             <>
-              <dt className="text-ink-muted">{t("statusBoard.overall")}</dt>
+              <dt className="text-ink-muted"><Term term="overall">{t("statusBoard.overall")}</Term></dt>
               <dd><SummaryStatus status={overall.status} /></dd>
             </>
           )}
@@ -433,6 +511,14 @@ export function StatusBoard({
           </ul>
         )}
       </div>
+
+      {/* What the symbols below mean, on demand: someone new to OpenSVC reads them here. */}
+      <details className="rounded-(--radius-panel) border border-line bg-surface-raised px-3 py-2" data-legend-toggle="">
+        <summary className="cursor-pointer text-ink-muted hover:text-ink">{t("legend.toggle")}</summary>
+        <div className="mt-2">
+          <SymbolLegend />
+        </div>
+      </details>
 
       {toolbar}
 
@@ -497,6 +583,9 @@ export function StatusBoard({
                   : r.kind === "instance"
                     ? t("statusBoard.rows.state")
                     : t(`statusBoard.rows.${r.kind}`);
+            // A row named by a word of OpenSVC: its definition on demand.
+            const rowTerm = ROW_TERMS[r.kind];
+            const shownName = rowTerm ? <Term term={rowTerm}>{name}</Term> : name;
             const pickRow = selection !== undefined && r.kind === "resource";
             const nodesOfRow = pickRow ? rowNodes(board, r) : [];
             const rowState = rowSelectState(r);
@@ -529,7 +618,7 @@ export function StatusBoard({
                     )}
                     <HoverNotes notes={r.rowNotes} showNodes fill>
                       <span className="flex w-full items-center gap-1">
-                        {r.kind === "resource" && linkResource ? linkResource(r.name) : name}
+                        {r.kind === "resource" && linkResource ? linkResource(r.name) : shownName}
                       </span>
                     </HoverNotes>
                   </span>

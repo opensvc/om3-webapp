@@ -676,6 +676,36 @@
       "saving": "Écriture…",
       "saveFailed": "Le heartbeat n'a pas pu être écrit : {{message}}",
       "trayLabel": "Configurer"
+    },
+    "relays": {
+      "title": "Relais",
+      "refresh": "Rafraîchir",
+      "reading": "Lecture des relais",
+      "readError": "Impossible de lire les relais : {{message}}",
+      "of": "{{section}} · délai {{seconds}} s",
+      "unreached": "Le relais n'a pas pu être interrogé : {{message}}",
+      "slotsOf": "Les nœuds qui écrivent sur {{relay}}",
+      "noSlot": "Aucun nœud n'écrit sur ce relais.",
+      "staleHint": "Sa dernière écriture est plus ancienne que le délai du heartbeat, {{seconds}} s.",
+      "served": "Ce nœud relaie pour",
+      "overall": {
+        "up": "chaque nœud écrit",
+        "warn": "un nœud n'écrit pas",
+        "down": "ne relaie pas"
+      },
+      "state": {
+        "up": "écrit",
+        "stale": "en retard",
+        "missing": "n'a jamais écrit"
+      },
+      "columns": {
+        "state": "État",
+        "addr": "Adresse",
+        "written": "Dernière écriture",
+        "cluster": "Cluster"
+      },
+      "size_one": "Son message : {{count}} octet",
+      "size_other": "Son message : {{count}} octets"
     }
   },
   "instance": {
@@ -1182,7 +1212,6 @@
     "count_other": "{{count}} namespaces"
   },
   "nav": {
-    "openCluster": "Ouvrir le cluster",
     "routes": {
       "heartbeats": "Liens",
       "networks": "Réseaux",
@@ -1192,7 +1221,8 @@
       "namespaces": "Namespaces",
       "pools": "Pools",
       "resources": "Ressources",
-      "stores": "Magasins"
+      "stores": "Magasins",
+      "glossary": "Glossaire"
     },
     "main": "Principal",
     "loading": "Chargement...",
@@ -1219,12 +1249,14 @@
         "whoami": "utilisateur",
         "resources": "ressources",
         "stores": "magasins",
-        "cluster": "cluster"
+        "cluster": "cluster",
+        "glossary": "glossaire"
       }
     },
     "sections": {
       "cluster": "Cluster",
-      "objects": "Objets"
+      "objects": "Objets",
+      "help": "Aide"
     }
   },
   "networks": {
@@ -1471,7 +1503,29 @@
     "drivers": {
       "filter": "Filtrer les pilotes et capacités",
       "drivers": "Pilotes",
-      "capabilities": "Capacités"
+      "capabilities": "Capacités",
+      "intro": "Un pilote est utilisable sur le nœud quand le nœud détient sa capacité : une configuration utilisant un pilote que le nœud ne détient pas y est refusée.",
+      "usableCount": "{{usable}} utilisables sur {{total}}",
+      "views": {
+        "label": "Quels pilotes",
+        "all": "Tous",
+        "usable": "Utilisables ici",
+        "unusable": "Non utilisables ici"
+      },
+      "columns": {
+        "driver": "Pilote",
+        "usable": "Sur ce nœud",
+        "features": "Fonctions"
+      },
+      "usable": "Utilisable",
+      "unusable": "Non utilisable : aucune capacité",
+      "tools": "Outils du nœud",
+      "sections": "Ce que le nœud peut exécuter",
+      "toolsIntro": "Les commandes trouvées sur le nœud dont les pilotes dépendent, telles que le dernier scan les a vues.",
+      "capabilitiesIntro": "Toutes les capacités que le nœud liste : les pilotes qu'il peut exécuter et les outils dont il dispose, telles que le dernier scan les a vues.",
+      "rescan": "Rescanner",
+      "scanning": "Scan en cours…",
+      "rescanHint": "Scanner à nouveau ce que le nœud peut exécuter, comme om node capabilities scan"
     },
     "columns": {
       "property": "Propriété",
@@ -2693,6 +2747,10 @@
     "empty": "Aucune ressource signalée.",
     "noMatch": "Aucune ressource ne correspond.",
     "notProvisioned": "non provisionnée",
+    "passive": "passif",
+    "passiveHint": "Son objet tourne sur un autre nœud : celui-ci attend, comme prévu. Pas de problème.",
+    "problemsOnly": "Problèmes seulement",
+    "problemsOnlyHint": "Garder les ressources arrêtées, hors nœud passif, et celles en avertissement",
     "restarts_one": "{{count}} redémarrage restant",
     "restarts_other": "{{count}} redémarrages restants",
     "columns": {
@@ -2925,6 +2983,12 @@
     "title": "Cluster",
     "cards": "Résumé du cluster",
     "open": "Ouvrir {{page}}",
+    "filtered": "Ouvrir la page filtrée sur {{state}}",
+    "config": {
+      "title": "Configuration du cluster",
+      "holds": "Les mots-clés du cluster, ses verrous, et les actions sur le cluster entier.",
+      "frozen": "Le cluster est gelé : rien ne démarre ni ne bascule de lui-même."
+    },
     "nodes": {
       "frozen_one": "{{count}} gelé",
       "frozen_other": "{{count}} gelés",
@@ -2939,6 +3003,7 @@
       "down": "down",
       "na": "n/a",
       "kinds": "Par type",
+      "ofKind": "Ouvrir les objets de type {{kind}}",
       "operational": "services et volumes up"
     },
     "namespaces": {
@@ -3123,6 +3188,299 @@
       "task": "Une commande lancée à la demande ou planifiée, sans rester active.",
       "volume": "Un stockage tiré d'un pool selon ses besoins, sa taille d'abord ; le pool est choisi pour y répondre.",
       "claim": "La part d'un pool ou d'un réseau que le namespace peut prendre."
+    }
+  },
+  "driverSupport": {
+    "lacking_one": "Non utilisable sur {{nodes}} : son pilote n'est pas parmi les capacités du nœud.",
+    "lacking_other": "Non utilisable sur {{nodes}} : son pilote n'est pas parmi les capacités de ces nœuds.",
+    "nowhere": "Utilisable sur aucun nœud du cluster : son pilote n'est pas parmi leurs capacités."
+  },
+  "pageIntro": {
+    "label": "À propos de cette page",
+    "hide": "Masquer cette introduction",
+    "glossary": "Ce que veulent dire les mots",
+    "pages": {
+      "cluster": "Voici votre cluster d'un coup d'œil. Un cluster est un groupe de serveurs (nœuds) qui se surveillent entre eux et maintiennent vos applications en marche : si un nœud tombe, ses applications redémarrent sur un autre. Chaque carte ci-dessous résume une page du menu ; cliquez dessus pour l'ouvrir.",
+      "heartbeats": "Les nœuds s'envoient de petits messages, appelés heartbeats, pour montrer qu'ils sont vivants. Chaque nœud envoie (tx) et reçoit (rx), par plusieurs chemins au cas où l'un casse. Si un nœud se tait sur tous les chemins, les autres le considèrent en panne et peuvent redémarrer ses applications.",
+      "nodes": "Voici les serveurs de votre cluster. Chacun exécute l'agent OpenSVC. Leur charge et leur mémoire libre aident à décider où tournent les applications. Un nœud gelé est laissé tranquille : le cluster n'y démarre ni n'y déplace rien automatiquement.",
+      "namespaces": "Les namespaces regroupent les objets, comme des dossiers. Le nom complet d'un objet est namespace/type/nom, par exemple prod/svc/web. Vous pouvez donner des accès par namespace, et limiter le stockage, le CPU, la mémoire et les adresses IP qu'il peut utiliser.",
+      "networks": "Voici les réseaux que le cluster utilise pour donner automatiquement des adresses IP aux conteneurs et aux services.",
+      "pools": "Les pools de stockage sont là où les volumes prennent leur espace disque : un répertoire, un groupe de volumes LVM, un pool ZFS ou une baie de stockage, par exemple.",
+      "stores": "Les magasins de sauvegarde gardent des copies (instantanés) des données et de la configuration de vos services, pour les restaurer plus tard, même sur un autre nœud.",
+      "resources": "Cette page liste chaque ressource de chaque service et volume, sur chaque nœud : systèmes de fichiers, adresses IP, disques, conteneurs, applications. Problèmes seulement garde ce qui est arrêté ou en avertissement, sans les nœuds passifs d'un service en bascule, arrêtés comme prévu.",
+      "objects-services": "Les services (svc) sont les applications que le cluster maintient en marche. Chacun est fait de ressources, comme une adresse IP, un système de fichiers et un conteneur. Un service a une instance sur chaque nœud où il a le droit de tourner.",
+      "objects-volumes": "Les volumes (vol) sont du stockage qu'un service demande. Le cluster crée chaque volume dans un pool de stockage quand le service est provisionné.",
+      "objects-configs": "Les configurations (cfg) contiennent des réglages et des fichiers qui ne sont pas secrets. Les services les utilisent comme fichiers ou variables d'environnement. La configuration du cluster lui-même est listée ici aussi.",
+      "objects-secrets": "Les secrets (sec) sont comme les configurations, mais stockés chiffrés. Utilisez-les pour les mots de passe, certificats et clés privées.",
+      "objects-users": "Les utilisateurs (usr) sont des comptes qui peuvent se connecter à cette webapp et à l'API, chacun avec ses propres droits (grants).",
+      "objects-any": "Tous les objets du cluster, de tous les types : services, volumes, configurations, secrets et utilisateurs."
+    }
+  },
+  "glossary": {
+    "title": "Glossaire",
+    "intro": "Les mots d'OpenSVC utilisés dans cette webapp, dits simplement. Un libellé souligné en pointillés donne sa définition au survol ou au focus.",
+    "search": "Chercher dans le glossaire",
+    "noMatch": "Aucun terme ne correspond.",
+    "more": "Plus dans le Glossaire du menu.",
+    "showIntros_one": "Afficher à nouveau l'introduction de page masquée",
+    "showIntros_other": "Afficher à nouveau les {{count}} introductions de page masquées",
+    "groups": {
+      "concepts": "De quoi est fait un cluster",
+      "kinds": "Types d'objets",
+      "states": "États et indicateurs",
+      "policies": "Comment les objets sont exécutés",
+      "actions": "Actions"
+    },
+    "terms": {
+      "cluster": {
+        "term": "Cluster",
+        "definition": "Un groupe de serveurs (nœuds) qui partagent une configuration et se surveillent entre eux. Si un nœud tombe, les applications qu'il faisait tourner peuvent redémarrer sur un autre."
+      },
+      "node": {
+        "term": "Nœud",
+        "definition": "Un serveur du cluster. Il exécute l'agent OpenSVC, et les applications (instances) que le cluster y place."
+      },
+      "object": {
+        "term": "Objet",
+        "definition": "Tout ce que le cluster gère : un service, un volume, une configuration, un secret ou un utilisateur. Son nom complet est namespace/type/nom, par exemple prod/svc/web."
+      },
+      "instance": {
+        "term": "Instance",
+        "definition": "Une copie d'un objet sur un nœud. Un service permis sur deux nœuds a deux instances ; en général une seule tourne. Chaque instance a son propre état."
+      },
+      "resource": {
+        "term": "Ressource",
+        "definition": "Une brique d'un objet : une adresse IP, un système de fichiers, un disque, un conteneur, une application, une sauvegarde… Son nom dit son type et son numéro, par exemple fs#1 est le premier système de fichiers."
+      },
+      "namespace": {
+        "term": "Namespace",
+        "definition": "Un dossier d'objets. Les droits et les limites se règlent par namespace. Celui par défaut est root ; system contient les objets du cluster lui-même."
+      },
+      "kinds": {
+        "term": "Type",
+        "definition": "Le type d'un objet : svc (service), vol (volume), cfg (configuration), sec (secret), usr (utilisateur), nscfg (réglages de namespace) ou ccfg (réglages du cluster)."
+      },
+      "heartbeat": {
+        "term": "Heartbeat",
+        "definition": "Un flux de petits messages « je suis vivant » entre les nœuds. Chaque nœud envoie (tx) et reçoit (rx). Si un nœud reste silencieux plus longtemps que le délai, les autres le considèrent en panne."
+      },
+      "relay": {
+        "term": "Relais",
+        "definition": "Un heartbeat qui passe par un troisième serveur servant de boîte aux lettres. Utile quand les nœuds ne se joignent pas directement, ou comme chemin de secours."
+      },
+      "network": {
+        "term": "Réseau",
+        "definition": "Un réseau dans lequel le cluster donne automatiquement des adresses IP aux services et conteneurs qui en demandent."
+      },
+      "pool": {
+        "term": "Pool",
+        "definition": "Un endroit où les volumes prennent leur espace disque : un répertoire, un groupe de volumes LVM, ZFS, DRBD ou une baie de stockage."
+      },
+      "store": {
+        "term": "Magasin",
+        "definition": "Un endroit où sont gardées les sauvegardes. Chaque nœud l'atteint : une sauvegarde prise sur un nœud se restaure sur un autre."
+      },
+      "snapshot": {
+        "term": "Instantané",
+        "definition": "Une sauvegarde : une copie des données et de la configuration d'un service à un instant donné, avec le nœud qui l'a prise. Le magasin en garde un nombre limité."
+      },
+      "label": {
+        "term": "Label",
+        "definition": "Une étiquette sur un nœud, comme az=fr2. Les services peuvent s'en servir pour choisir sur quels nœuds tourner."
+      },
+      "kindSvc": {
+        "term": "svc · Service",
+        "definition": "Un service : une application que le cluster maintient en marche, faite de ressources comme une adresse IP, des systèmes de fichiers et des conteneurs."
+      },
+      "kindVol": {
+        "term": "vol · Volume",
+        "definition": "Un volume : du stockage pour un service, créé dans un pool de stockage et rattaché au service qui l'a demandé."
+      },
+      "kindCfg": {
+        "term": "cfg · Configuration",
+        "definition": "Une configuration : des réglages et fichiers non secrets, donnés aux services en fichiers ou en variables d'environnement."
+      },
+      "kindSec": {
+        "term": "sec · Secret",
+        "definition": "Un secret : comme une configuration, mais stocké chiffré. Pour les mots de passe, certificats et clés."
+      },
+      "kindUsr": {
+        "term": "usr · Utilisateur",
+        "definition": "Un utilisateur : un compte pour l'API et cette webapp, avec ses droits. Inutile pour ceux qui se connectent par OpenID."
+      },
+      "kindNscfg": {
+        "term": "nscfg · Configuration de namespace",
+        "definition": "Les réglages d'un namespace : par exemple le maximum de stockage, CPU, mémoire et adresses IP que ses objets peuvent utiliser."
+      },
+      "kindCcfg": {
+        "term": "ccfg · Configuration du cluster",
+        "definition": "Les réglages du cluster lui-même, partagés par tous les nœuds. Il n'y en a qu'un."
+      },
+      "avail": {
+        "term": "Avail",
+        "definition": "Est-ce que ça tourne ? Seules les ressources nécessaires comptent. up : tourne. down : ne tourne pas. warn : tourne en partie, ou à trop d'endroits. stdby up : seules les ressources standby tournent. n/a : rien à faire tourner."
+      },
+      "overall": {
+        "term": "Overall",
+        "definition": "Le bilan complet : comme Avail, mais chaque ressource et chaque avertissement compte. Overall peut être warn alors qu'Avail est up : ça marche, mais quelque chose demande un coup d'œil."
+      },
+      "provisioned": {
+        "term": "Provisionné",
+        "definition": "Si les éléments système nécessaires (systèmes de fichiers, disques, volumes) ont été créés sur le nœud. mixed veut dire seulement une partie."
+      },
+      "frozen": {
+        "term": "Gelé",
+        "definition": "Le cluster le laisse tranquille : aucun démarrage, arrêt ou déplacement automatique. Vous pouvez toujours lancer des actions vous-même."
+      },
+      "monitor": {
+        "term": "Moniteur",
+        "definition": "Ce que le cluster en fait en ce moment. idle : rien ; starting, stopping ou provisioning : une action est en cours ; une valeur comme start failed signale qu'une action a échoué."
+      },
+      "expect": {
+        "term": "Attendu",
+        "definition": "L'état vers lequel le cluster travaille. Avec un > devant, il a été demandé pour tout le cluster (par exemple >started) ; sans, c'est ce nœud qui garde l'instance en marche."
+      },
+      "globalExpect": {
+        "term": "Attendu global",
+        "definition": "Le but d'une action sur tout le cluster demandée par quelqu'un, comme started, stopped ou placed. Chaque instance y travaille jusqu'à l'atteindre."
+      },
+      "localExpect": {
+        "term": "Attendu local",
+        "definition": "Ce que ce nœud maintient pour l'instance. started veut dire que le nœud la redémarre si elle tombe."
+      },
+      "orchestration": {
+        "term": "Orchestration",
+        "definition": "Une action en cours sur tout le cluster, comme démarrer un service sur son nœud préféré. Toutes les instances concernées partagent son id jusqu'à la fin."
+      },
+      "standby": {
+        "term": "Standby",
+        "definition": "Une ressource gardée en marche même sur les nœuds où le service ne tourne pas, pour être prête à prendre le relais (par exemple, recevoir des données répliquées)."
+      },
+      "encap": {
+        "term": "Encap",
+        "definition": "Une ressource gérée depuis l'intérieur d'un conteneur, par un agent qui y tourne, au lieu du nœud."
+      },
+      "optional": {
+        "term": "Optionnelle",
+        "definition": "Une ressource dont l'échec n'est pas grave : les actions continuent et le service est toujours compté up. Ses problèmes apparaissent dans Overall."
+      },
+      "monitored": {
+        "term": "Surveillée",
+        "definition": "Une ressource que le cluster surveille de près. Si elle tombe et ne peut être redémarrée, le cluster réagit : il bascule le service sur un autre nœud, ou redémarre le nœud."
+      },
+      "leader": {
+        "term": "Leader",
+        "definition": "Le nœud qui parle pour le cluster : le premier vivant de la liste des nœuds. Il s'occupe des tâches du cluster. Il n'a rien à voir avec l'endroit où tournent les services."
+      },
+      "score": {
+        "term": "Score",
+        "definition": "La capacité libre d'un nœud, d'après sa charge et sa mémoire libre. Plus c'est haut, plus il est libre. Les services peuvent être placés sur le nœud au plus haut score."
+      },
+      "overloaded": {
+        "term": "Surchargé",
+        "definition": "La mémoire ou le swap libre du nœud est sous le minimum fixé dans sa configuration."
+      },
+      "topology": {
+        "term": "Topologie",
+        "definition": "Combien de copies d'un service peuvent tourner en même temps. failover : une seule, sur un nœud. flex : plusieurs à la fois, entre un minimum et un maximum."
+      },
+      "orchestrate": {
+        "term": "Orchestration auto",
+        "definition": "Combien le cluster agit de lui-même. no : ne démarre ni ne déplace jamais le service. start : le démarre une fois après le démarrage d'un nœud. ha : haute disponibilité, le redémarre sur un autre nœud quand le sien tombe."
+      },
+      "placement": {
+        "term": "Placement",
+        "definition": "Comment le cluster choisit le nœud où tourne un service : le premier listé (nodes order), le moins chargé, le meilleur score, réparti sur les nœuds, etc."
+      },
+      "flex": {
+        "term": "Flex",
+        "definition": "Pour un service flex : le nombre minimum et maximum de copies qui peuvent tourner, et le nombre visé par le cluster."
+      },
+      "actionProvision": {
+        "term": "Provisionner",
+        "definition": "Créer ce dont le service a besoin sur ses nœuds : ses systèmes de fichiers, disques et volumes."
+      },
+      "actionUnprovision": {
+        "term": "Déprovisionner",
+        "definition": "Supprimer ce que le provisionnement a créé : les systèmes de fichiers sont effacés et les disques libérés. Les données sont perdues ; la configuration est gardée."
+      },
+      "actionFreeze": {
+        "term": "Geler",
+        "definition": "Dire au cluster de laisser quelque chose tranquille : aucun démarrage, arrêt ou déplacement automatique. Marche sur un service, un nœud ou tout le cluster."
+      },
+      "actionUnfreeze": {
+        "term": "Dégeler",
+        "definition": "Annuler un gel : le cluster agit de nouveau automatiquement."
+      },
+      "actionSwitch": {
+        "term": "Basculer",
+        "definition": "Déplacer un service en marche sur un autre nœud : il s'arrête ici et démarre sur le nœud préféré suivant, ou sur celui que vous choisissez."
+      },
+      "actionTakeover": {
+        "term": "Reprendre",
+        "definition": "Amener un service en marche sur ce nœud : il s'arrête là où il tourne et démarre ici."
+      },
+      "actionGiveback": {
+        "term": "Rendre",
+        "definition": "Ramener les services sur leurs nœuds préférés, par exemple une fois une panne réparée."
+      },
+      "actionDrain": {
+        "term": "Vider",
+        "definition": "Vider un nœud avant une maintenance : le geler, puis arrêter tout ce qui y tourne. Les services en haute disponibilité (ha) peuvent alors démarrer sur d'autres nœuds."
+      },
+      "actionPurge": {
+        "term": "Purger",
+        "definition": "Supprimer complètement le service : ses données et ressources système, puis sa configuration sur chaque nœud. C'est irréversible."
+      },
+      "actionAbort": {
+        "term": "Interrompre",
+        "definition": "Annuler l'action en cours sur tout le cluster."
+      },
+      "actionClear": {
+        "term": "Effacer",
+        "definition": "Remettre à zéro un état d'échec (comme start failed) pour que le cluster agisse à nouveau."
+      }
+    }
+  },
+  "legend": {
+    "title": "Symboles",
+    "toggle": "Ce que veulent dire les symboles",
+    "groups": {
+      "states": "État",
+      "marks": "Marques sur une instance",
+      "flags": "Indicateurs sur une ressource"
+    },
+    "states": {
+      "up": "Up : fonctionne normalement.",
+      "warn": "Avertissement : fonctionne, mais quelque chose demande votre attention.",
+      "down": "Down : ne fonctionne pas, alors qu'il le devrait.",
+      "downQuiet": "Down, comme prévu. Par exemple, le nœud de secours d'un service failover.",
+      "na": "Non applicable : il n'y a rien à faire tourner ici.",
+      "undef": "Inconnu : le nœud ne l'a pas encore signalé."
+    },
+    "marks": {
+      "overallWarn": "Certaines de ses ressources ont un avertissement.",
+      "running": "Une tâche ou une synchronisation tourne en ce moment.",
+      "rpoBreached": "Sa dernière sauvegarde ou réplication est plus ancienne que permis (RPO dépassé).",
+      "drp": "Nœud de reprise après sinistre : utilisé seulement si le site principal est perdu.",
+      "leader": "Nœud préféré : là où le service tourne quand tout va bien.",
+      "leaderNonOptimal": "Nœud préféré, mais le service ne tourne pas là où le placement le veut. Un « rendre » (giveback) l'y ramène.",
+      "frozen": "Gelé : le cluster ne le démarrera, ne l'arrêtera ni ne le déplacera automatiquement.",
+      "stopped": "Arrêté volontairement par un opérateur : le cluster ne le redémarrera pas.",
+      "notProvisioned": "Non provisionné : ses systèmes de fichiers, disques ou volumes ne sont pas créés sur ce nœud."
+    },
+    "flags": {
+      "R": "R, en cours : une tâche ou une synchronisation de cette ressource tourne en ce moment.",
+      "M": "M, surveillée : si elle tombe, le cluster réagit (bascule le service, ou redémarre le nœud).",
+      "D": "D, désactivée : toutes les actions l'ignorent.",
+      "O": "O, optionnelle : si elle tombe, le service est toujours compté up.",
+      "E": "E, encapsulée : gérée depuis l'intérieur d'un conteneur.",
+      "S": "S, standby : gardée en marche même sur les nœuds où le service ne tourne pas.",
+      "P": "P, non provisionnée sur ce nœud.",
+      "X": "X, arrêtée volontairement par un opérateur.",
+      "restarts": "Un nombre : combien de redémarrages automatiques restent avant que le cluster abandonne.",
+      "noRestart": "0 : plus aucun redémarrage automatique.",
+      "manyRestarts": "+ : plus de 10 redémarrages automatiques restants."
     }
   }
 }

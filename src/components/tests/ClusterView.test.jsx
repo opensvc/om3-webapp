@@ -1,8 +1,8 @@
 import React from 'react';
-import {render, screen, waitFor, within} from '@testing-library/react';
+import {fireEvent, render, screen, waitFor, within} from '@testing-library/react';
 import '@testing-library/jest-dom';
 import {vi, describe, test, expect, beforeEach, afterEach} from 'vitest';
-import {MemoryRouter} from 'react-router-dom';
+import {MemoryRouter, useLocation} from 'react-router-dom';
 import ClusterView from '../ClusterView';
 import {useMenuState} from '../../hooks/useSidebarAlerts';
 import {resetPgUsage} from '../../hooks/usePgUsage';
@@ -86,7 +86,7 @@ describe('ClusterView', () => {
         render(<ClusterView/>, {wrapper: MemoryRouter});
         const cards = screen.getByRole('group', {name: 'Summary of the cluster'});
         expect([...cards.querySelectorAll('[data-card]')].map((c) => c.getAttribute('data-card')))
-            .toEqual(['links', 'nodes', 'opensvc', 'arbitrators', 'objects', 'namespaces', 'networks', 'pools', 'stores', 'resources']);
+            .toEqual(['config', 'links', 'nodes', 'opensvc', 'arbitrators', 'objects', 'namespaces', 'networks', 'pools', 'stores', 'resources']);
         expect(within(card('pools')).getByRole('link', {name: 'Open Pools'})).toHaveAttribute('href', '/pools');
         expect(within(card('links')).getByRole('link', {name: 'Open Links'})).toHaveAttribute('href', '/heartbeats');
         expect(card('objects')).toHaveTextContent(/Objects\s*7/);
@@ -147,6 +147,19 @@ describe('ClusterView', () => {
         await waitFor(() => expect(card('opensvc')).toHaveTextContent('The usage of the whole nodes is not shown to your grants.'));
     });
 
+    test('the cluster configuration, a card as the others, first: the cluster object opened over the overview; frozen, said', () => {
+        function Search() {
+            return <output data-testid="search">{decodeURIComponent(useLocation().search)}</output>;
+        }
+        render(<MemoryRouter initialEntries={['/cluster']}><ClusterView/><Search/></MemoryRouter>);
+        // No button acting on the page: its card, named for what it opens.
+        expect(screen.queryByRole('button', {name: /configuration/i})).toBeNull();
+        expect(within(card('config')).getByRole('heading')).toHaveTextContent('Cluster configuration');
+        fireEvent.click(within(card('config')).getByRole('link', {name: 'Open Cluster configuration'}));
+        expect(screen.getByTestId('search')).toHaveTextContent('peek=object:cluster');
+        expect(card('config')).not.toHaveTextContent(/frozen/);
+    });
+
     test('the links, the ring of the heartbeats page; the nodes, a ring of the dropped, overloaded and optimal, the frozen said', async () => {
         render(<ClusterView/>, {wrapper: MemoryRouter});
         expect(card('links').querySelector('[data-overall]')).toHaveAttribute('data-overall', 'warn');
@@ -178,12 +191,15 @@ describe('ClusterView', () => {
         const items = within(list).getAllByRole('listitem');
         expect(items.map((li) => [li.getAttribute('data-hb'), li.getAttribute('data-state')]))
             .toEqual([['hb#1', 'warn'], ['hb#2', 'down'], ['hb#10', 'up']]);
-        expect(items[0]).toHaveClass('text-state-warn');
-        expect(items[0]).toHaveTextContent(/^hb#1degraded$/);
-        expect(items[0]).toHaveAttribute('title', '1 of 2 links beating');
-        expect(items[1]).toHaveClass('text-state-down');
-        expect(items[1]).toHaveTextContent(/^hb#2critical$/);
-        expect(items[2]).not.toHaveClass('text-state-warn', 'text-state-down');
+        // Each a badge opening its streams on the heartbeats page.
+        const badge = (i) => within(items[i]).getByRole('link');
+        expect(badge(0)).toHaveClass('text-state-warn');
+        expect(badge(0)).toHaveTextContent(/^hb#1degraded$/);
+        expect(badge(0)).toHaveAttribute('title', '1 of 2 links beating');
+        expect(badge(0)).toHaveAttribute('href', '/heartbeats?view=data&id=hb%231');
+        expect(badge(1)).toHaveClass('text-state-down');
+        expect(badge(1)).toHaveTextContent(/^hb#2critical$/);
+        expect(badge(2)).not.toHaveClass('text-state-warn', 'text-state-down');
         expect(items[2]).toHaveTextContent(/^hb#10$/);
     });
 
@@ -234,6 +250,15 @@ describe('ClusterView', () => {
         expect(within(card('objects')).queryByRole('link', {name: 'ns1/svc/db'})).toBeNull();
         expect(within(card('objects')).queryByRole('button', {name: 'ns1/svc/db'})).toBeNull();
         expect(card('objects')).toHaveTextContent(/cfg1/);
+        // A tile of each kind, those that run first, the configurations after.
+        const kinds = [...card('objects').querySelectorAll('[data-kind]')].map((k) => k.dataset.kind);
+        expect(kinds.indexOf('svc')).toBe(0);
+        expect(kinds.indexOf('cfg')).toBeGreaterThan(kinds.indexOf('svc'));
+        // Each count a badge opening the objects filtered on it: the services and volumes by state, the objects by kind.
+        const href = (name) => within(card('objects')).getByRole('link', {name}).getAttribute('href');
+        expect(href('Open the page filtered on down: 1')).toBe('/objects?list=any&kind=svc%2Cvol&globalState=down');
+        expect(href('Open the page filtered on n/a: 1')).toBe('/objects?list=any&kind=svc%2Cvol&globalState=n%2Fa');
+        expect(href('Open the objects of kind cfg: 1')).toBe('/objects?list=any&kind=cfg');
     });
 
     test('the namespaces, the busiest; the pools and networks, the fullest, the full ones counted', () => {
@@ -241,6 +266,8 @@ describe('ClusterView', () => {
         // ns1 its three, root its bare service and its configuration; the cluster object of none.
         const busiest = within(card('namespaces')).getByRole('list', {name: 'The busiest'});
         expect(busiest).toHaveTextContent(/^ns13 objectsroot2 objectsns21 object$/);
+        // The count of a namespace, its objects on the objects page.
+        expect(within(busiest).getByRole('link', {name: '3 objects'})).toHaveAttribute('href', '/objects?list=any&namespace=ns1');
         expect(card('pools')).toHaveTextContent('1 full');
         const fullest = within(card('pools')).getByRole('list', {name: 'The fullest'});
         expect(within(fullest).getAllByRole('listitem').map((li) => li.textContent.slice(0, 7))).toEqual(['tank100', 'default']);
@@ -252,9 +279,15 @@ describe('ClusterView', () => {
         await waitFor(() => expect(card('stores')).toHaveTextContent('17 snapshots · 1 not reached'));
         expect(within(card('stores')).getByRole('button', {name: 'tar2'})).toBeInTheDocument();
         await waitFor(() => expect(card('resources').querySelector('[data-ring=resources]')).toHaveTextContent('1/5resources in warndegraded'));
+        // The services and volumes alone, as the Resources page reads them: a data object breaks the read.
+        expect(global.fetch.mock.calls.map(([u]) => String(u)).filter((u) => u.startsWith('/api/resource'))[0])
+            .toBe('/api/resource?path=*%2Fsvc%2F*%2C*%2Fvol%2F*');
         const ring = card('resources').querySelector('[data-ring=resources]');
         expect([...ring.querySelectorAll('[data-arc]')].map((a) => a.getAttribute('data-arc'))).toEqual(['warn', 'other']);
         expect(ring.querySelector('[data-ring-legend]')).toHaveTextContent(/^warn1other4$/);
+        // Those in warn on the resources page filtered so; the others, which no filter says, no badge.
+        expect(within(ring).getByRole('link', {name: 'Open the page filtered on warn: 1'})).toHaveAttribute('href', '/resources?status=warn');
+        expect(within(ring).getAllByRole('link')).toHaveLength(1);
         unmount();
 
         resourcesFail = true;

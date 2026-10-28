@@ -2,8 +2,9 @@ import React from 'react';
 import {act, fireEvent, render, screen, waitFor, within} from '@testing-library/react';
 import {MemoryRouter, useLocation} from 'react-router-dom';
 import {vi} from 'vitest';
-import Resources, {toLine} from '../Resources';
+import Resources, {resourceColumns, resourceLayout, toLine} from '../Resources';
 import useEventStore from '../../hooks/useEventStore.js';
+import {useMenuState} from '../../hooks/useSidebarAlerts';
 
 const {mockRetain, mockRelease} = vi.hoisted(() => ({mockRetain: vi.fn(), mockRelease: vi.fn()}));
 vi.mock('../../eventSourceManager', () => ({
@@ -58,6 +59,7 @@ describe('Resources', () => {
             return new Response(JSON.stringify(answer.body), {status: answer.status});
         });
         useEventStore.setState({objectInstanceStatus: {}});
+        useMenuState.setState({objects: {}});
     });
 
     afterEach(() => {
@@ -72,7 +74,8 @@ describe('Resources', () => {
     test('a line per resource of each instance, every object read, sorted by object, node and resource', async () => {
         renderView();
         await waitFor(() => expect(rows()).toHaveLength(4));
-        expect(global.fetch.mock.calls[0][0]).toBe('/api/resource?path=*');
+        // Every service and volume: a selection reaching a data object breaks the read.
+        expect(global.fetch.mock.calls[0][0]).toBe('/api/resource?path=*%2Fsvc%2F*%2C*%2Fvol%2F*');
         expect(global.fetch.mock.calls[0][1].headers).toEqual({Authorization: 'Bearer tok'});
         expect(rows()).toEqual([
             ['ns1/svc/web', 'n1', 'container#1', 'container.docker', 'upup', 'monitored, 2 restarts left', ''],
@@ -225,5 +228,70 @@ describe('Resources', () => {
     test('a resource of an encapsulated node: shown on that node, opened on its host', () => {
         const line = toLine(item('ns1/svc/web', 'n1', 'app#1', 'up', {encap: 'c1'}));
         expect([line.node, line.hostNode]).toEqual(['c1', 'n1']);
+    });
+
+    test('down on the passive node of an object up elsewhere: gray, said passive; Problems only keeps the others down and those in warn', async () => {
+        // web up on n1, its instance on n2 down, as a failover service waits there.
+        // The objects as the menu has them; the instances not reported yet: the object up is enough.
+        useMenuState.setState({objects: {'ns1/svc/web': {avail: 'up'}, 'system/svc/dns': {avail: 'warn'}}});
+        renderView();
+        await waitFor(() => expect(rows()).toHaveLength(4));
+        const passive = within(table()).getAllByRole('row').find((r) => r.textContent.includes('n2') && r.textContent.includes('fs#1'));
+        expect(passive).toHaveTextContent('down· passive');
+        expect(passive.querySelector('[data-muted]')).not.toBeNull();
+        // Down on n1, its object up: still a problem, not gray.
+        fireEvent.click(screen.getByRole('checkbox', {name: 'Problems only'}));
+        expect(rows().map((r) => `${r[0]} ${r[1]} ${r[2]}`)).toEqual(['system/svc/dns n2 ip#0']);
+        await waitFor(() => expect(screen.getByTestId('search')).toHaveTextContent('problems=1'));
+        // The instance on n2 reporting up, its object's active one: its resource down a problem again.
+        act(() => useEventStore.setState({objectInstanceStatus: {'ns1/svc/web': {n2: {avail: 'up'}}}}));
+        await waitFor(() => expect(rows().map((r) => `${r[1]} ${r[2]}`)).toEqual(['n2 fs#1', 'n2 ip#0']));
+    });
+
+    test('filtered from the address, as the cluster overview links it; the filters written back to it', async () => {
+        render(<MemoryRouter initialEntries={['/resources?status=up,warn&node=n1']}><Resources/><Search/></MemoryRouter>);
+        await waitFor(() => expect(rows()).toHaveLength(2));
+        expect(rows().map((r) => `${r[1]} ${r[2]}`)).toEqual(['n1 container#1', 'n1 fs#1']);
+        fireEvent.change(screen.getByRole('combobox', {name: 'Node'}), {target: {value: ''}});
+        await waitFor(() => expect(screen.getByTestId('search')).toHaveTextContent(/^\?status=up,warn$/));
+        expect(rows()).toHaveLength(3);
+    });
+
+    describe('scaled down to its room', () => {
+        const headers = () => within(table()).getAllByRole('columnheader').slice(1).map((h) => h.textContent.replace(/[▲▼]/g, '').trim());
+
+        test('the whole table, then a step at a time: the flags, the label, the type a badge by the resource, the node a badge by the object', () => {
+            const keys = (step) => resourceColumns(resourceLayout(step)).map((c) => c.key);
+            expect(keys(0)).toEqual(['object', 'node', 'rid', 'type', 'status', 'flags', 'label']);
+            expect(keys(1)).toEqual(['object', 'node', 'rid', 'type', 'status', 'label']);
+            expect(keys(2)).toEqual(['object', 'node', 'rid', 'type', 'status']);
+            expect(keys(3)).toEqual(['object', 'node', 'rid', 'status']);
+            expect(keys(4)).toEqual(['object', 'rid', 'status']);
+        });
+
+        test('while the table overflows its frame, down to the last step: the type a badge by the resource, the node by the object', async () => {
+            const scroll = vi.spyOn(HTMLElement.prototype, 'scrollWidth', 'get').mockReturnValue(2000);
+            const client = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(1000);
+            try {
+                renderView();
+                await waitFor(() => expect(rows()).toHaveLength(4));
+                expect(headers()).toEqual(['Object', 'Resource', 'Status']);
+                expect(rows()[0]).toEqual(['ns1/svc/webn1', 'container#1container.docker', 'upup']);
+                expect(within(table()).getAllByTitle('Type')[0]).toHaveTextContent('container.docker');
+                // The node, by the object, still opens the instance.
+                fireEvent.click(within(within(table()).getAllByRole('row')[3]).getByRole('button', {name: 'n2'}));
+                expect(screen.getByTestId('search')).toHaveTextContent('peek=instance:ns1/svc/web@n2');
+            } finally {
+                scroll.mockRestore();
+                client.mockRestore();
+            }
+        });
+
+        test('room enough, the whole table', async () => {
+            renderView();
+            await waitFor(() => expect(rows()).toHaveLength(4));
+            expect(headers()).toEqual(['Object', 'Node', 'Resource', 'Type', 'Status', 'Flags', 'Label']);
+            expect(within(table()).queryByTitle('Type')).toBeNull();
+        });
     });
 });

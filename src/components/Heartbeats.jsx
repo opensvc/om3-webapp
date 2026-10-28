@@ -25,6 +25,7 @@ import {useIsRoot} from "../hooks/useGrants";
 import {AgeTime} from "./AgeTime";
 import {HeartbeatMesh} from "./HeartbeatMesh";
 import {HeartbeatSummary} from "./HeartbeatSummary";
+import {HeartbeatRelays} from "./HeartbeatRelays";
 import {HeartbeatConfigDialog, HeartbeatWizard} from "./HeartbeatConfig";
 import {meshLinks} from "../app/heartbeat-mesh";
 import {heartbeatsOf} from "../app/heartbeat-summary";
@@ -582,7 +583,7 @@ const Heartbeats = () => {
                 idPrefix={tabsId}
             />
 
-            {/* The mesh, its details, the heartbeats, the routines: a box each, in columns as many
+            {/* The mesh, its details, the heartbeats, the routines, the relays: a box each, in columns as many
                 as the window holds, each box in one piece, the columns as high as can be. */}
             {view === "overview" && (
                 <div
@@ -598,6 +599,7 @@ const Heartbeats = () => {
                         onOpenHeartbeat={setConfigOf}
                         onNewHeartbeat={isRoot ? () => setWizard({name: null}) : undefined}
                     />
+                    <HeartbeatRelays/>
                 </div>
             )}
 

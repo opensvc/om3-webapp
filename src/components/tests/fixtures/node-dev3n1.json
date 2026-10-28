@@ -428,7 +428,7 @@
    },
    {
     "data": {
-     "name": "array.freenas"
+     "name": "array.hds"
     },
     "kind": "DriverItem",
     "meta": {
@@ -437,7 +437,61 @@
    },
    {
     "data": {
-     "name": "array.hds"
+     "name": "container.kvm"
+    },
+    "kind": "DriverItem",
+    "meta": {
+     "node": "dev3n1"
+    }
+   },
+   {
+    "data": {
+     "name": "container.podman"
+    },
+    "kind": "DriverItem",
+    "meta": {
+     "node": "dev3n1"
+    }
+   },
+   {
+    "data": {
+     "name": "fs.bind"
+    },
+    "kind": "DriverItem",
+    "meta": {
+     "node": "dev3n1"
+    }
+   },
+   {
+    "data": {
+     "name": "fs.ext4"
+    },
+    "kind": "DriverItem",
+    "meta": {
+     "node": "dev3n1"
+    }
+   },
+   {
+    "data": {
+     "name": "pool.directory"
+    },
+    "kind": "DriverItem",
+    "meta": {
+     "node": "dev3n1"
+    }
+   },
+   {
+    "data": {
+     "name": "pool.rados"
+    },
+    "kind": "DriverItem",
+    "meta": {
+     "node": "dev3n1"
+    }
+   },
+   {
+    "data": {
+     "name": "volume"
     },
     "kind": "DriverItem",
     "meta": {
@@ -451,15 +505,6 @@
   "items": [
    {
     "data": {
-     "name": "drivers.array.freenas"
-    },
-    "kind": "CapabilityItem",
-    "meta": {
-     "node": "dev3n1"
-    }
-   },
-   {
-    "data": {
      "name": "drivers.array.hds"
     },
     "kind": "CapabilityItem",
@@ -469,7 +514,88 @@
    },
    {
     "data": {
-     "name": "drivers.array.hoc"
+     "name": "drivers.pool.directory"
+    },
+    "kind": "CapabilityItem",
+    "meta": {
+     "node": "dev3n1"
+    }
+   },
+   {
+    "data": {
+     "name": "drivers.resource.app.forking"
+    },
+    "kind": "CapabilityItem",
+    "meta": {
+     "node": "dev3n1"
+    }
+   },
+   {
+    "data": {
+     "name": "drivers.resource.app.simple"
+    },
+    "kind": "CapabilityItem",
+    "meta": {
+     "node": "dev3n1"
+    }
+   },
+   {
+    "data": {
+     "name": "drivers.resource.container.kvm"
+    },
+    "kind": "CapabilityItem",
+    "meta": {
+     "node": "dev3n1"
+    }
+   },
+   {
+    "data": {
+     "name": "drivers.resource.container.kvm.hvm"
+    },
+    "kind": "CapabilityItem",
+    "meta": {
+     "node": "dev3n1"
+    }
+   },
+   {
+    "data": {
+     "name": "drivers.resource.container.kvm.partitions"
+    },
+    "kind": "CapabilityItem",
+    "meta": {
+     "node": "dev3n1"
+    }
+   },
+   {
+    "data": {
+     "name": "drivers.resource.fs.ext4"
+    },
+    "kind": "CapabilityItem",
+    "meta": {
+     "node": "dev3n1"
+    }
+   },
+   {
+    "data": {
+     "name": "drivers.resource.volume"
+    },
+    "kind": "CapabilityItem",
+    "meta": {
+     "node": "dev3n1"
+    }
+   },
+   {
+    "data": {
+     "name": "node.x.scsi.sg_persist"
+    },
+    "kind": "CapabilityItem",
+    "meta": {
+     "node": "dev3n1"
+    }
+   },
+   {
+    "data": {
+     "name": "node.x.systemd"
     },
     "kind": "CapabilityItem",
     "meta": {

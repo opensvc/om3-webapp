@@ -14,7 +14,7 @@ import useEventStore from "../hooks/useEventStore.js";
 import {parseObjectPath} from "../utils/objectUtils.jsx";
 import {postAction, refusalReason} from "./objectActions";
 import {trackRefused, trackWrite} from "../app/action-tracker";
-import {PROBLEM_TITLE_HELD, forceLifts, readProblem, useConfigWait, withWriteParams} from "../app/config-write";
+import {PROBLEM_TITLE_HELD, forceLifts, readProblem, withWriteParams} from "../app/config-write";
 import {useGrants} from "../hooks/useGrants";
 import {ForceRefusal} from "./ConfigWriteControls";
 import {ObjectDesigner} from "./ObjectDesigner";
@@ -268,8 +268,6 @@ const CreateObjectDialog = ({open, onClose, defaultKind = "svc", defaultNamespac
     useEffect(() => {
         if (error === null) setLifts(null);
     }, [error]);
-    // The creation waits for the configuration to reach the nodes (om --wait), as kept.
-    const [wait] = useConfigWait();
     const grants = useGrants();
     const isRoot = Object.prototype.hasOwnProperty.call(grants, "root");
     // The namespaces the user may create in: every one known for root, else those it administers.
@@ -395,7 +393,7 @@ const CreateObjectDialog = ({open, onClose, defaultKind = "svc", defaultNamespac
         const {namespace: ns, kind: k, name: n} = parseObjectPath(path);
         const creation = {action: "create", label: t("actionTray.writes.objectCreate"), subject: path, path};
         try {
-            const response = await fetch(withWriteParams(`${URL_OBJECT}/${ns}/${k}/${n}/config/file`, {wait, force}), {
+            const response = await fetch(withWriteParams(`${URL_OBJECT}/${ns}/${k}/${n}/config/file`, {force}), {
                 method: "POST",
                 headers: {
                     Authorization: `Bearer ${localStorage.getItem("authToken") || ""}`,

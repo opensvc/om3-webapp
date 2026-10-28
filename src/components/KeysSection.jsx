@@ -21,8 +21,7 @@ import {hasPemCertificate} from "../utils/x509";
 import CertificateDetails from "./CertificateDetails";
 import {SecCertificate} from "./SecCertificate";
 import {Trans, useTranslation} from "react-i18next";
-import {readProblem, useConfigWait, withWriteParams} from "../app/config-write";
-import {WaitChoice} from "./ConfigWriteControls";
+import {readProblem, withWriteParams} from "../app/config-write";
 
 const getAuthToken = () => {
     const token = localStorage.getItem("authToken");
@@ -404,7 +403,6 @@ const KeysSection = ({decodedObjectName, openSnackbar, refreshKey}) => {
     const [updateContentLoading, setUpdateContentLoading] = useState(false);
     // The key renamed (om <path> key rename): its name, the one typed, and why the daemon refused it.
     const [rename, setRename] = useState(null);
-    const [wait, setWait] = useConfigWait();
     const titleId = useId();
 
     const fetchKeys = useCallback(async () => {
@@ -597,7 +595,7 @@ const KeysSection = ({decodedObjectName, openSnackbar, refreshKey}) => {
         setActionLoading(true);
         setRename((r) => ({...r, error: null}));
         try {
-            const response = await fetch(withWriteParams(`${buildObjectUrl(decodedObjectName)}/data`, {wait}), {
+            const response = await fetch(withWriteParams(`${buildObjectUrl(decodedObjectName)}/data`), {
                 method: "PATCH",
                 headers: {Authorization: `Bearer ${token}`, "Content-Type": "application/json"},
                 body: JSON.stringify([{action: "rename", name: from, to}]),
@@ -957,9 +955,6 @@ const KeysSection = ({decodedObjectName, openSnackbar, refreshKey}) => {
                         title={t("keys.rename.title", {key: rename.from})}
                         footer={
                             <>
-                                <div className="mr-auto self-center">
-                                    <WaitChoice compact wait={wait} onChange={setWait} disabled={actionLoading}/>
-                                </div>
                                 <Button onClick={() => setRename(null)} disabled={actionLoading}>{t("common.cancel")}</Button>
                                 <Button
                                     onClick={handleRenameKey}

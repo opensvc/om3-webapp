@@ -218,9 +218,6 @@
     }
   },
   "configWrite": {
-    "wait": {
-      "hint": "Wait until every live node of the object has the configuration (up to {{duration}}). A node that is down gets it when it comes back."
-    },
     "force": {
       "button": "Write anyway (--force)",
       "rootOnly": "Only root can write it anyway, with --force."

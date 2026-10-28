@@ -93,18 +93,19 @@ describe('the wait of a configuration write', () => {
         expect(writes()[0]).toMatchObject({method: 'PUT', url: `${OBJ}/config/file?wait=30s`});
     });
 
-    test('left out when unchecked, which this browser keeps', async () => {
+    test('always: no choice to leave it out, one this browser kept from before ignored', async () => {
         const user = userEvent.setup();
+        localStorage.setItem('om3.config.wait', 'false');
         renderConfig();
         await screen.findByRole('group', {name: 'Configuration file'});
         await act(() => user.click(screen.getByRole('button', {name: 'Edit configuration file'})));
-        const waitChoice = await screen.findByRole('checkbox', {name: '--wait'});
-        await act(() => user.click(waitChoice));
+        await screen.findByRole('textbox', {name: 'Configuration file'});
+        expect(screen.queryByRole('checkbox', {name: '--wait'})).toBeNull();
         fireEvent.change(screen.getByRole('textbox', {name: 'Configuration file'}), {target: {value: `${STORED}#\n`}});
         await act(() => user.click(screen.getByRole('button', {name: 'Save'})));
         await waitFor(() => expect(writes()).toHaveLength(1));
-        expect(writes()[0].url).toBe(`${OBJ}/config/file`);
-        expect(localStorage.getItem('om3.config.wait')).toBe('false');
+        expect(writes()[0].url).toBe(`${OBJ}/config/file?wait=30s`);
+        localStorage.removeItem('om3.config.wait');
     });
 
     test('expired: written all the same, the nodes not reached said in the actions tray', async () => {

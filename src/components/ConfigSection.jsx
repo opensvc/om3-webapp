@@ -13,9 +13,9 @@ import {ConfigText} from "./ConfigText";
 import {CopyButton} from "../ui/components/CopyButton";
 import {extractSection, replaceSection} from "../utils/configSections";
 import {trackRefused, trackWrite} from "../app/action-tracker";
-import {PROBLEM_TITLE_HELD, forceLifts, readProblem, useConfigWait, withWriteParams} from "../app/config-write";
+import {PROBLEM_TITLE_HELD, forceLifts, readProblem, withWriteParams} from "../app/config-write";
 import {useIsRoot} from "../hooks/useGrants";
-import {ForceRefusal, WaitChoice} from "./ConfigWriteControls";
+import {ForceRefusal} from "./ConfigWriteControls";
 import ConfigEvalDialog from "./ConfigEvalDialog";
 import useEventStore from "../hooks/useEventStore.js";
 import {newId, withId} from "../app/object-create";
@@ -186,8 +186,8 @@ const FilePicker = ({id, file, onChange, disabled, emptyText}) => {
     );
 };
 
-// `wait`, the write waits for the configuration to reach the nodes; `refused`, why
-// the daemon refused the file, written anyway on demand when force lifts it.
+// `refused`, why the daemon refused the file, written anyway on demand when force
+// lifts it. The write waits for the configuration to reach the nodes (withWriteParams).
 const UpdateConfigDialog = ({
                                 open,
                                 onClose,
@@ -195,8 +195,6 @@ const UpdateConfigDialog = ({
                                 setNewConfigFile,
                                 actionLoading,
                                 handleUpdateConfig,
-                                wait,
-                                setWait,
                                 refused,
                                 isRoot,
                             }) => {
@@ -228,7 +226,6 @@ const UpdateConfigDialog = ({
                 disabled={actionLoading}
                 emptyText={t("config.filePicker.noFile")}
             />
-            <WaitChoice wait={wait} onChange={setWait} disabled={actionLoading}/>
             <ForceRefusal
                 messages={refused?.messages}
                 lifts={refused?.lifts}
@@ -393,8 +390,6 @@ const ConfigSection = ({
     const [editConflict, setEditConflict] = useState(false);
     // Who may write the edit refused anyway (forceLifts), null when force changes nothing of it.
     const [editLifts, setEditLifts] = useState(null);
-    // The writes wait for the configuration to reach the nodes (om --wait), unless said otherwise.
-    const [wait, setWait] = useConfigWait();
     const isRoot = useIsRoot();
     const editDirty = edit !== null && edit.text !== edit.base;
 
@@ -448,7 +443,7 @@ const ConfigSection = ({
                 setEditError(t("config.feedback.conflict"));
                 return;
             }
-            const response = await fetch(withWriteParams(`${URL_OBJECT}/${namespace}/${kind}/${name}/config/file`, {wait, force}), {
+            const response = await fetch(withWriteParams(`${URL_OBJECT}/${namespace}/${kind}/${name}/config/file`, {force}), {
                 // None yet: created with the file, an id of its own.
                 method: absent ? "POST" : "PUT",
                 headers: {
@@ -532,7 +527,7 @@ const ConfigSection = ({
         const write = {action: "config", label: t(absent ? "actionTray.writes.configCreate" : "actionTray.writes.configFile"), subject: decodedObjectName, path: decodedObjectName};
         let done = true;
         try {
-            const response = await fetch(withWriteParams(`${URL_OBJECT}/${namespace}/${kind}/${name}/config/file`, {wait, force}), {
+            const response = await fetch(withWriteParams(`${URL_OBJECT}/${namespace}/${kind}/${name}/config/file`, {force}), {
                 method: absent ? "POST" : "PUT",
                 headers: {
                     Authorization: `Bearer ${token}`,
@@ -602,7 +597,7 @@ const ConfigSection = ({
         setParamsRefused(null);
         setActionLoading(true);
         try {
-            const response = await fetch(withWriteParams(`${base}/${absent ? "config/file" : "config"}?${query}`, {wait, force}), absent
+            const response = await fetch(withWriteParams(`${base}/${absent ? "config/file" : "config"}?${query}`, {force}), absent
                 ? {method: "POST", headers: {Authorization: `Bearer ${token}`, "Content-Type": "application/octet-stream"}, body: withId("", newId())}
                 : {method: "PATCH", headers: {Authorization: `Bearer ${token}`}});
             const problem = response.ok || response.status === 408 ? null : await readProblem(response);
@@ -757,7 +752,6 @@ const ConfigSection = ({
                 );
     const footer = (edit ? (
                     <>
-                        <div className="mr-auto self-center"><WaitChoice compact wait={wait} onChange={setWait} disabled={actionLoading}/></div>
                         <Button onClick={cancelEdit} disabled={actionLoading}>{t("common.cancel")}</Button>
                         <Button
                             onClick={() => saveEdit()}
@@ -793,8 +787,6 @@ const ConfigSection = ({
                 }}
                 actionLoading={actionLoading}
                 handleUpdateConfig={handleUpdateConfig}
-                wait={wait}
-                setWait={setWait}
                 refused={uploadRefused}
                 isRoot={isRoot}
             />

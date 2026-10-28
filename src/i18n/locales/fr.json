@@ -218,9 +218,6 @@
     }
   },
   "configWrite": {
-    "wait": {
-      "hint": "Attendre que chaque nœud actif de l'objet ait la configuration (jusqu'à {{duration}}). Un nœud arrêté la reçoit à son retour."
-    },
     "force": {
       "button": "Écrire quand même (--force)",
       "rootOnly": "Seul root peut l'écrire quand même, avec --force."

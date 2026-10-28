@@ -37,9 +37,9 @@ describe("what force lifts of a refusal", () => {
 
 describe("the parameters of a write", () => {
   test("appended to the ones of the address", () => {
-    expect(withWriteParams("/c/config/file", { wait: true })).toBe("/c/config/file?wait=30s");
-    expect(withWriteParams("/c/config?set=a%3Db", { wait: true, force: true })).toBe("/c/config?set=a%3Db&wait=30s&force=true");
-    expect(withWriteParams("/c/config/file", { wait: false })).toBe("/c/config/file");
+    // The wait always: no write answered before the configuration reaches the nodes.
+    expect(withWriteParams("/c/config/file")).toBe("/c/config/file?wait=30s");
+    expect(withWriteParams("/c/config?set=a%3Db", { force: true })).toBe("/c/config?set=a%3Db&wait=30s&force=true");
   });
 });
 

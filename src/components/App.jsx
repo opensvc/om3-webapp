@@ -46,6 +46,7 @@ const Resources = lazy(() => import("./Resources"));
 const Network = lazy(() => import("./Network"));
 const WhoAmI = lazy(() => import("./WhoAmI"));
 const Glossary = lazy(() => import("./Glossary"));
+const About = lazy(() => import("./About"));
 const TokenPage = lazy(() => import("./TokenPage"));
 
 /*
@@ -461,6 +462,8 @@ const App = () => {
                                         <Route path="/nodes/:node/objects/:objectName" element={<InstanceRedirect/>}/>
                                         <Route path="/whoami" element={<ProtectedRoute><WhoAmI/></ProtectedRoute>}/>
                                         <Route path="/glossary" element={<ProtectedRoute><Glossary/></ProtectedRoute>}/>
+                                        {/* The legal information read by all, signed in or not. */}
+                                        <Route path="/about" element={<About/>}/>
                                         <Route path="/token" element={<TokenPage/>}/>
                                         <Route path="/silent-renew" element={<SilentRenew/>}/>
                                         <Route path="/auth-callback" element={<OidcCallback/>}/>

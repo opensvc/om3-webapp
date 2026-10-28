@@ -1227,7 +1227,8 @@
       "pools": "Pools",
       "resources": "Ressources",
       "stores": "Magasins",
-      "glossary": "Glossaire"
+      "glossary": "Glossaire",
+      "about": "À propos"
     },
     "main": "Principal",
     "loading": "Chargement...",
@@ -1255,7 +1256,8 @@
         "resources": "ressources",
         "stores": "magasins",
         "cluster": "cluster",
-        "glossary": "glossaire"
+        "glossary": "glossaire",
+        "about": "À propos"
       }
     },
     "sections": {
@@ -1909,7 +1911,9 @@
     "lightMode": "Thème clair",
     "darkMode": "Thème sombre",
     "language": "Langue",
-    "logout": "Se déconnecter"
+    "logout": "Se déconnecter",
+    "versionNotChecked": "Non vérifiée.",
+    "versionOptIn": "Autoriser la vérification"
   },
   "panel": {
     "resize": "Redimensionner le panneau",
@@ -3516,6 +3520,42 @@
       "restarts": "Un nombre : combien de redémarrages automatiques restent avant que le cluster abandonne.",
       "noRestart": "0 : plus aucun redémarrage automatique.",
       "manyRestarts": "+ : plus de 10 redémarrages automatiques restants."
+    }
+  },
+  "about": {
+    "tagline": "La webapp d'un cluster OpenSVC : observer et piloter ses nœuds, ses objets et leurs ressources.",
+    "agent": "Agent",
+    "publisher": {
+      "title": "Éditeur",
+      "contact": "Contact",
+      "support": "Support"
+    },
+    "licenses": {
+      "title": "Licences et sources",
+      "under": "sous licence {{license}}",
+      "bundled": "Cette webapp intègre les logiciels suivants, chacun sous sa propre licence :"
+    },
+    "privacy": {
+      "title": "Données personnelles (RGPD)",
+      "none": "Cette webapp ne collecte rien pour OpenSVC SAS : ni mesure d'audience, ni pistage, ni publicité. Elle ne parle qu'à l'API de ce cluster.",
+      "controller": "Le cluster est exploité par votre organisation, responsable des données qu'il enregistre, comme les connexions et les actions effectuées.",
+      "browser": "Votre navigateur conserve sur cet appareil, dans son stockage local : vos jetons de connexion, supprimés à la déconnexion ; un résumé du cluster en cache ; vos préférences d'affichage. Effacer les données du site dans votre navigateur les supprime toutes.",
+      "github": "Seulement si vous l'acceptez, votre page utilisateur demande à GitHub, au plus une fois par heure, la dernière version de cette webapp : cette requête parvient à GitHub avec votre adresse. Désactivé par défaut.",
+      "oidc": "Connecté par un fournisseur OpenID, sa propre politique s'applique à ce qu'il traite.",
+      "rights": "Pour vos droits sur les données qu'enregistre le cluster, adressez-vous à son exploitant ; pour ce logiciel, écrivez à <mail/>.",
+      "releaseCheck": "Vérifier sur GitHub la dernière version de cette webapp"
+    },
+    "cookies": {
+      "title": "Cookies",
+      "text": "Cette webapp ne dépose aucun cookie. Ce qu'elle garde dans le stockage local de votre navigateur sert seulement à vous garder connecté et à retenir les préférences que vous choisissez."
+    },
+    "accessibility": {
+      "title": "Accessibilité",
+      "text": "Cette webapp vise le niveau AA des WCAG 2.1 (EN 301 549) : usage au clavier et avec un lecteur d'écran, thèmes clair et sombre. Signalez un obstacle à <mail/>."
+    },
+    "security": {
+      "title": "Sécurité",
+      "text": "Signalez une vulnérabilité en toute confidentialité à <mail/>."
     }
   }
 }

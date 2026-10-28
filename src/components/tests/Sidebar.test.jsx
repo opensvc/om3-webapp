@@ -38,10 +38,10 @@ describe('Sidebar', () => {
         mockPills.current = {};
     });
 
-    test('three sections: the cluster, its links, nodes, namespaces, networks, pools, stores and resources; the objects, their title all of them, then by kind; the help, its glossary', () => {
+    test('three sections: the cluster, its links, nodes, namespaces, networks, pools, stores and resources; the objects, their title all of them, then by kind; the help, its glossary and its about', () => {
         renderSidebar();
         expect(screen.getAllByRole('heading').map((h) => h.textContent)).toEqual(['Cluster', 'Objects', 'Help']);
-        expect(linkNames(section('Help'))).toEqual(['Glossary']);
+        expect(linkNames(section('Help'))).toEqual(['Glossary', 'About']);
         // A title of no page of its own: a heading, no link.
         expect(within(screen.getByRole('heading', {name: 'Help'})).queryByRole('link')).not.toBeInTheDocument();
         expect(linkNames(section('Cluster'))).toEqual(CLUSTER);
@@ -62,6 +62,7 @@ describe('Sidebar', () => {
             Objects: '/objects?list=any', Services: '/objects', Volumes: '/objects?list=volumes',
             Configurations: '/objects?list=configs', Secrets: '/objects?list=secrets', Users: '/objects?list=users',
             Glossary: '/glossary',
+            About: '/about',
         });
         // The same for every entry, from the catalog.
         for (const {entries} of NAV_SECTIONS) {

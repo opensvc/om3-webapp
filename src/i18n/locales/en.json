@@ -1227,7 +1227,8 @@
       "pools": "Pools",
       "resources": "Resources",
       "stores": "Stores",
-      "glossary": "Glossary"
+      "glossary": "Glossary",
+      "about": "About"
     },
     "main": "Main",
     "loading": "Loading...",
@@ -1255,7 +1256,8 @@
         "resources": "resources",
         "stores": "stores",
         "cluster": "cluster",
-        "glossary": "glossary"
+        "glossary": "glossary",
+        "about": "About"
       }
     },
     "sections": {
@@ -1909,7 +1911,9 @@
     "lightMode": "Light Mode",
     "darkMode": "Dark Mode",
     "language": "Language",
-    "logout": "Logout"
+    "logout": "Logout",
+    "versionNotChecked": "Not checked.",
+    "versionOptIn": "Allow the check"
   },
   "panel": {
     "resize": "Resize the panel",
@@ -3516,6 +3520,42 @@
       "restarts": "A number: how many automatic restarts are left before the cluster gives up.",
       "noRestart": "0: no automatic restart left.",
       "manyRestarts": "+: more than 10 automatic restarts left."
+    }
+  },
+  "about": {
+    "tagline": "The webapp of an OpenSVC cluster: watch and drive its nodes, its objects and their resources.",
+    "agent": "Agent",
+    "publisher": {
+      "title": "Publisher",
+      "contact": "Contact",
+      "support": "Support"
+    },
+    "licenses": {
+      "title": "Licenses and sources",
+      "under": "under the {{license}} license",
+      "bundled": "This webapp bundles the following software, each under its own license:"
+    },
+    "privacy": {
+      "title": "Personal data (GDPR)",
+      "none": "This webapp collects nothing for OpenSVC SAS: no analytics, no tracking, no advertising. It talks to the API of this cluster alone.",
+      "controller": "The cluster is run by your organization, the controller of the data it records, such as who signed in and the actions done.",
+      "browser": "Your browser keeps on this device, in its local storage: your sign-in tokens, removed when you sign out; a cached summary of the cluster; your display preferences. Clearing the site data of your browser removes them all.",
+      "github": "On your say-so only, your user page asks GitHub, at most once an hour, for the latest release of this webapp: that request reaches GitHub with your address. Off by default.",
+      "oidc": "Signed in through an OpenID provider, its own policy applies to what it handles.",
+      "rights": "For your rights over the data the cluster records, ask its operator; for this software, write to <mail/>.",
+      "releaseCheck": "Check GitHub for the latest release of this webapp"
+    },
+    "cookies": {
+      "title": "Cookies",
+      "text": "This webapp sets no cookie. What it keeps in the local storage of your browser serves only to keep you signed in and to remember the preferences you choose."
+    },
+    "accessibility": {
+      "title": "Accessibility",
+      "text": "This webapp aims at the WCAG 2.1 level AA (EN 301 549): use with a keyboard and a screen reader, light and dark themes. Report a barrier to <mail/>."
+    },
+    "security": {
+      "title": "Security",
+      "text": "Report a vulnerability in confidence to <mail/>."
     }
   }
 }

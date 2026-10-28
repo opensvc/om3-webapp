@@ -8,12 +8,13 @@ import {Spinner} from '../ui/components/Spinner';
 import {GlobeIcon, LockIcon, MoonIcon, ServerIcon, SignOutIcon, SunIcon, UserIcon} from '../ui/icons';
 import {useOidc} from "../context/OidcAuthContext.tsx";
 import {useAuth, useAuthDispatch, Logout} from "../context/AuthProvider.jsx";
-import {useNavigate} from "react-router-dom";
+import {Link, useNavigate} from "react-router-dom";
 import logger from '../utils/logger.js';
 import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus";
 import {useDarkMode} from "../context/DarkModeContext";
 import {clearObjectCache} from "../hooks/useEventStore.js";
 import {LANGUAGES, LANGUAGE_NAMES, isLanguage, setLanguage} from "../i18n";
+import {useReleaseCheck} from "../app/release-check";
 
 /** A labelled value of a panel: the label muted above, the value in monospace. */
 const Value = ({label, children}) => (
@@ -40,8 +41,13 @@ const WhoAmI = () => {
     const {isDarkMode, toggleDarkMode} = useDarkMode();
     const {t, i18n} = useTranslation();
 
-    // Fetch version from GitHub
+    // The latest release, from GitHub: asked only when the user opted in, from the About page.
+    const releaseCheck = useReleaseCheck();
     useEffect(() => {
+        if (!releaseCheck) {
+            setAppVersion(undefined);
+            return;
+        }
         const fetchVersion = async () => {
             const cached = localStorage.getItem('appVersion');
             const cacheTime = localStorage.getItem('appVersionTime');
@@ -70,7 +76,7 @@ const WhoAmI = () => {
         };
 
         void fetchVersion();
-    }, []);
+    }, [releaseCheck]);
 
     // Fetch daemon status
     useEffect(() => {
@@ -174,9 +180,11 @@ const WhoAmI = () => {
                         <div>
                             <dt className="text-data text-ink-muted">{t('user.webappVersion')}</dt>
                             <dd className="font-mono">
-                                {appVersion === null
-                                    ? t('user.versionLoading')
-                                    : appVersion === '' ? t('user.versionUnknown') : `v${appVersion}`}
+                                {appVersion === undefined
+                                    ? <span className="font-sans text-ink-muted">{t('user.versionNotChecked')} <Link to="/about" className="text-accent underline-offset-2 hover:underline">{t('user.versionOptIn')}</Link></span>
+                                    : appVersion === null
+                                        ? t('user.versionLoading')
+                                        : appVersion === '' ? t('user.versionUnknown') : `v${appVersion}`}
                             </dd>
                             <dd className="text-data text-ink-muted">{t('user.productName')}</dd>
                         </div>

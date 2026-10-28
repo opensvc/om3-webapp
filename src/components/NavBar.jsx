@@ -18,7 +18,7 @@ const HEADER_BUTTON =
     "flex h-7 w-7 shrink-0 items-center justify-center rounded-(--radius-control) border border-line text-ink-muted hover:bg-surface-sunken hover:text-ink";
 
 /** First path segments named after a view: their breadcrumb is translated, the others are names. */
-const SEGMENTS = new Set(["cluster", "glossary", "heartbeats", "kinds", "namespaces", "network", "nodes", "objects", "pools", "resources", "stores", "whoami"]);
+const SEGMENTS = new Set(["about", "cluster", "glossary", "heartbeats", "kinds", "namespaces", "network", "nodes", "objects", "pools", "resources", "stores", "whoami"]);
 
 /** Breadcrumb item of a path segment; `key` is the catalog key of its label, translated at render. */
 const crumb = (part, index, path) => ({
@@ -172,11 +172,10 @@ const NavBar = ({sidebarOpen = false, onToggleSidebar, showSidebarToggle = false
                 </button>
             )}
 
-            {/* The product name, back to the home view, tagged not to be taken for
-                the collector. Short of room, as the menu folds (COMPACT_QUERY), left
-                out: the breadcrumb and the search need the bar. */}
+            {/* The tag of this frontend, not to be taken for the collector; the product
+                name in the About page of the menu. Short of room, as the menu folds
+                (COMPACT_QUERY), left out: the breadcrumb and the search need the bar. */}
             <div data-testid="brand" className="hidden shrink-0 items-center gap-2 min-[1200px]:flex">
-                <Link to="/" className="font-semibold tracking-tight text-ink">OpenSVC</Link>
                 {/* The tag says which frontend this is, not the collector's: a label, not a
                     button, for "Cluster" to be the overview of the menu alone. The cluster
                     object opens from the overview, as "Configuration and actions". */}

@@ -135,11 +135,12 @@ describe('NavBar', () => {
         vi.useRealTimers?.();
     });
 
-    test('the product name and its cluster tag left out of the bar short of room, below 1200px as the menu folds', () => {
+    test('the cluster tag left out of the bar short of room, below 1200px as the menu folds; the product name in the About page, not the bar', () => {
         renderNavBar();
         const brand = screen.getByTestId('brand');
         expect(brand).toHaveClass('hidden', 'min-[1200px]:flex');
-        expect(brand).toHaveTextContent('OpenSVC');
+        expect(brand).toHaveTextContent(/^Cluster$/);
+        expect(screen.queryByText('OpenSVC')).toBeNull();
     });
 
     test('folded, the menu button carries the alert of its entries; open, none', () => {
@@ -164,10 +165,8 @@ describe('NavBar', () => {
         mockUseLocation.mockReturnValue({pathname: '/objects', search: '?globalState=down'});
         renderNavBar();
         const brand = screen.getByTestId('brand');
-        expect(brand).toHaveTextContent('OpenSVCCluster');
-        expect(within(brand).getAllByRole('link').map((l) => l.textContent)).toEqual(['OpenSVC']);
-        // The product name still leads home.
-        expect(screen.getByRole('link', {name: 'OpenSVC'})).toHaveAttribute('href', '/');
+        expect(brand).toHaveTextContent(/^Cluster$/);
+        expect(within(brand).queryAllByRole('link')).toEqual([]);
     });
 
     test('does not show breadcrumbs on /login', () => {
@@ -308,14 +307,6 @@ describe('NavBar', () => {
         setupMocks({clusterName: 'dev3'});
         renderNavBar();
         await waitFor(() => expect(document.title).toBe('dev3 · OpenSVC Cluster'));
-    });
-
-    test('links the OpenSVC name to the home view, tagged Cluster, without the logo', () => {
-        renderNavBar();
-        const link = screen.getByRole('link', {name: 'OpenSVC'});
-        expect(link).toHaveAttribute('href', '/');
-        expect(link.querySelector('img')).toBeNull();
-        expect(link.nextElementSibling).toHaveTextContent('Cluster');
     });
 
     // ---------- sidebar toggle ----------

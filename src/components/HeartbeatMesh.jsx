@@ -48,7 +48,8 @@ export function Overall({links, hint}) {
     const beating = links.filter((l) => l.state === "up").length;
     const stopped = links.filter((l) => l.streamState !== undefined && l.streamState !== "running").length;
     const state = beating === total ? "up" : beating === 0 ? "down" : "warn";
-    const parts = [["up", beating], ["down", total - beating - stopped], ["stopped", stopped]].map(([part, count]) => [part, count, ARC[part]]);
+    const parts = [["up", beating], ["down", total - beating - stopped], ["stopped", stopped]]
+        .map(([part, count]) => [part, count, ARC[part], {word: t(`heartbeats.mesh.arcs.${part}`)}]);
     return (
         <div data-overall={state} className="flex flex-col items-center gap-2 py-1">
             <StateRing parts={parts} total={total}>

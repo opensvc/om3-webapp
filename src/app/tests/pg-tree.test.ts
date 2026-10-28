@@ -100,6 +100,25 @@ describe("sortUsageTree", () => {
     expect(order(sortUsageTree(tree, "memory").children[1])).toEqual(["dev/svc/a", "dev/svc/b"]);
   });
 
+  test("by tasks, bytes read or written a second: the most first, a figure not told after, the rest last", () => {
+    const leaf = (name: string, usage: UsageTreeNode["usage"]): UsageTreeNode => ({ key: name, kind: "slice", name, usage, children: [] });
+    const io: UsageTreeNode = {
+      key: "host",
+      kind: "host",
+      name: "",
+      usage: { cpu: 1 },
+      children: [
+        { key: "rest", kind: "rest", name: "", usage: { cpu: 0, tasks: 900, read: 9e9, write: 9e9 }, children: [] },
+        leaf("a", { cpu: 0, tasks: 5, read: 100, write: null }),
+        leaf("b", { cpu: 0, tasks: 50, read: 10, write: 300 }),
+        leaf("c", { cpu: 0 }),
+      ],
+    };
+    expect(order(sortUsageTree(io, "tasks"))).toEqual(["b", "a", "c", "rest"]);
+    expect(order(sortUsageTree(io, "read"))).toEqual(["a", "b", "c", "rest"]);
+    expect(order(sortUsageTree(io, "write"))).toEqual(["b", "a", "c", "rest"]);
+  });
+
   test("by name", () => {
     expect(order(sortUsageTree(tree, "name"))).toEqual(["dev", "kvm", "web", "other"]);
   });

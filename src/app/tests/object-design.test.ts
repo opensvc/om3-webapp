@@ -5,6 +5,16 @@ import {
   designText,
   parseDesign,
   poolTypes,
+  offeredTypes,
+  catalogDrivers,
+  provisions,
+  type CatalogDriver,
+  type DesignDriver,
+  usableDrivers,
+  isResource,
+  rootOnlyKind,
+  isUnmanaged,
+  withUnmanaged,
   kindDrivers,
   takesResources,
   missingValues,
@@ -152,13 +162,13 @@ describe("object design", () => {
     expect(popularKeywords(KEYWORDS, designStart()[0]).map((k) => k.option)).toEqual(["nodes", "orchestrate"]);
   });
 
-  test("a volume: a driver alone, its type a need offered like any keyword, its size required", () => {
+  test("a volume: a driver alone, its type a need offered like any keyword, its size required by its provisioning flag", () => {
     const capabilities = ["drivers.resource.volume", "drivers.resource.volume.shm", "drivers.resource.volume.loop", "drivers.resource.fs.flag"];
     expect(kindDrivers("vol", capabilities).map((d) => [d.name, d.type])).toEqual([["fs.flag", "flag"], ["volume", ""]]);
     expect(poolTypes(capabilities)).toEqual(["loop", "shm"]);
     const keywords: DesignKeyword[] = [
       { section: "volume", option: "type", types: [""] },
-      { section: "volume", option: "size", types: [""] },
+      { section: "volume", option: "size", types: [""], provisioning: true, provisioningRequired: true },
       { section: "volume", option: "shared", types: [""] },
     ];
     const volume: DesignSection = { name: "volume#1", group: "volume", type: "", entries: [] };
@@ -167,6 +177,95 @@ describe("object design", () => {
     const read = parseDesign("[volume#1]\ntype = shm\nsize = 1g\n");
     expect(read.find((x) => x.name === "volume#1")).toEqual({ name: "volume#1", group: "volume", type: "", entries: [{ key: "type", value: "shm" }, { key: "size", value: "1g" }] });
     expect(designText(read)).toBe("[volume#1]\ntype = shm\nsize = 1g\n");
+  });
+
+  test("the keywords a provision fails without required, unless the provision is left to the user; the other provisioning ones offered first", () => {
+    const keywords: DesignKeyword[] = [
+      { section: "disk", option: "type", required: true },
+      { section: "disk", option: "name", required: true },
+      { section: "disk", option: "size", provisioning: true, provisioningRequired: true },
+      { section: "disk", option: "create_options", provisioning: true },
+      { section: "disk", option: "provision" },
+      { section: "disk", option: "tags" },
+      { section: "volume", option: "pool", provisioning: true, types: [""] },
+      { section: "volume", option: "size", provisioning: true, provisioningRequired: true, types: [""] },
+    ];
+    const lv: DesignSection = { name: "disk#1", group: "disk", type: "lv", entries: [{ key: "size", value: "1g" }] };
+    expect(requiredKeywords(keywords, lv).map((k) => k.option)).toEqual(["name", "size"]);
+    expect(popularKeywords(keywords, lv).map((k) => k.option)).toEqual(["name", "create_options", "tags"]);
+    // The provision a box of its own, not a keyword offered.
+    expect(offeredKeywords(keywords, lv).map((k) => k.option)).toEqual(["create_options", "name", "tags"]);
+    const seeded = withRequired(keywords, lv);
+    const mine = withUnmanaged(keywords, seeded, true);
+    expect(isUnmanaged(mine)).toBe(true);
+    // The empty provisioning keywords dropped, those set kept; the required ones still.
+    expect(mine.entries).toEqual([{ key: "size", value: "1g" }, { key: "name", value: "" }, { key: "provision", value: "false" }]);
+    expect(requiredKeywords(keywords, mine).map((k) => k.option)).toEqual(["name"]);
+    expect(isUnmanaged(withUnmanaged(keywords, mine, false))).toBe(false);
+    const volume: DesignSection = { name: "volume#1", group: "volume", type: "", entries: [] };
+    expect(requiredKeywords(keywords, volume).map((k) => k.option)).toEqual(["size"]);
+  });
+
+  const CATALOG: CatalogDriver[] = [
+    { name: "container.docker", group: "container", type: "docker", features: ["start", "stop"], available: true },
+    { name: "container.kvm", group: "container", type: "kvm", available: false },
+    { name: "container.lxc", group: "container", type: "lxc", available: true },
+    { name: "container.oci", group: "container", type: "oci", selects: ["container.docker", "container.podman"], available: true },
+    { name: "container.podman", group: "container", type: "podman", available: true },
+    { name: "disk.lvm", group: "disk", type: "lvm", aliasOf: "disk.vg", available: true },
+    { name: "disk.vg", group: "disk", type: "vg", features: ["provision", "start", "stop"], available: true },
+    { name: "fs.nfs", group: "fs", type: "nfs", features: ["start", "stop"], available: true },
+    { name: "pool.vg", group: "pool", type: "vg", available: true },
+    { name: "volume", group: "volume", type: "", features: ["provision", "start"], available: true },
+  ];
+
+  test("the drivers of the catalog: of the groups of the kind, the node's, no deprecated alias", () => {
+    expect(catalogDrivers("svc", CATALOG).map((d) => d.name)).toEqual([
+      "container.docker", "container.lxc", "container.oci", "container.podman", "disk.vg", "fs.nfs", "volume",
+    ]);
+    expect(catalogDrivers("vol", CATALOG).map((d) => d.name)).toEqual(["disk.vg", "fs.nfs", "volume"]);
+  });
+
+  test("a virtual driver first, the drivers it picks among its second choices; alone without it", () => {
+    const containers = catalogDrivers("svc", CATALOG).filter((d) => d.group === "container");
+    expect(offeredTypes(containers).map((o) => [o.driver.type, o.alternatives.map((a) => a.type)])).toEqual([
+      ["oci", ["docker", "podman"]],
+      ["lxc", []],
+    ]);
+    // Podman not on the node: oci its second choice docker.
+    expect(offeredTypes(containers.filter((d) => d.type !== "podman")).map((o) => o.alternatives.map((a) => a.type))).toEqual([["docker"], []]);
+    // No oci: each a choice of its own.
+    expect(offeredTypes(containers.filter((d) => d.type !== "oci")).map((o) => o.driver.type)).toEqual(["docker", "lxc", "podman"]);
+  });
+
+  test("the drivers only root may use hidden from a design without root; those only root may provision kept", () => {
+    const drivers: DesignDriver[] = [
+      { name: "disk.lv", group: "disk", type: "lv", grant: "root" },
+      { name: "fs.flag", group: "fs", type: "flag", grant: "" },
+      { name: "disk.x", group: "disk", type: "x", grant: "", provisionGrant: "root" },
+      { name: "app.forking", group: "app", type: "forking" },
+    ];
+    expect(usableDrivers(drivers, true).map((d) => d.name)).toEqual(["fs.flag", "disk.x", "app.forking"]);
+    expect(usableDrivers(drivers, false)).toHaveLength(4);
+  });
+
+  test("whether a resource provisions: as its driver's features say; yes when unknown", () => {
+    const drivers = catalogDrivers("svc", CATALOG);
+    const section = (group: string, type: string): DesignSection => ({ name: `${group}#1`, group, type, entries: [] });
+    expect(provisions(drivers, section("disk", "vg"))).toBe(true);
+    expect(provisions(drivers, section("fs", "nfs"))).toBe(false);
+    expect(provisions(drivers, section("volume", ""))).toBe(true);
+    // Not in the catalog, or no catalog: told nothing, so yes.
+    expect(provisions(drivers, section("app", "forking"))).toBe(true);
+    expect(provisions(null, section("fs", "nfs"))).toBe(true);
+    expect(provisions(drivers, { name: "DEFAULT", entries: [] })).toBe(false);
+  });
+
+  test("a resource of its kind's groups, not a heartbeat nor the node of the cluster's; the cluster configuration root's alone", () => {
+    expect(isResource("svc", { group: "fs" })).toBe(true);
+    expect(isResource("ccfg", { group: "hb" })).toBe(false);
+    expect(isResource("svc", {})).toBe(false);
+    expect([rootOnlyKind("ccfg"), rootOnlyKind("svc")]).toEqual([true, false]);
   });
 
   test("the required entries left without a value", () => {

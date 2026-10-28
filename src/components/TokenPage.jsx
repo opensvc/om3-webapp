@@ -4,14 +4,29 @@ import {useTranslation} from "react-i18next";
 import {Alert} from "../ui/components/Alert";
 import {Button, IconButton} from "../ui/components/Button";
 import {CopyButton} from "../ui/components/CopyButton";
-import {Field, Input, Textarea} from "../ui/components/Field";
+import {Checkbox, Field, Input, Select, Textarea} from "../ui/components/Field";
 import {Spinner} from "../ui/components/Spinner";
 import {EyeIcon, EyeOffIcon, KeyIcon} from "../ui/icons";
-import {URL_TOKEN} from "../config/apiPath.js";
+import {URL_AUTH_WHOAMI, URL_TOKEN} from "../config/apiPath.js";
 import {getResponseErrorMessage} from "../services/api.jsx";
+import {useGrants} from "../hooks/useGrants";
 
 /** The lifetime of a token by default: a join one must outlive the drain of the node. */
 const DEFAULT_DURATION = {join: "1h"};
+
+/** The lifetimes offered at once, an API token short-lived; any other typed, 24h at most. */
+const DURATIONS = ["10m", "1h", "8h"];
+
+/** The roles om3 grants (api Role), in the order offered; those of a namespace narrowed by a scope. */
+const ROLES = ["root", "admin", "operator", "guest", "prioritizer", "squatter", "blacklistadmin", "heartbeat", "join", "leave"];
+const NAMESPACED = ["admin", "operator", "guest"];
+
+/**
+ * How to try a token without it landing in the history of the shell: read, unseen,
+ * into a variable, then sent with a request telling who it is.
+ */
+const tryIt = (url) => `read -rs TOKEN    # paste the token, then Enter
+curl -H "Authorization: Bearer $TOKEN" ${url}`;
 
 /** Ignored by the password managers but for the credentials themselves. */
 const NOT_A_LOGIN = {
@@ -34,6 +49,11 @@ const NOT_A_LOGIN = {
  * token: the one of a password session of this webapp is used when there is one;
  * otherwise, the username and password of a user of this node are asked, sent to
  * this node alone. A session opened with OpenID cannot create one.
+ *
+ * Without a role named, an API token, for a script or a quick test: its lifetime
+ * short, its roles any of the user's (none picked, all of them), those of a namespace
+ * narrowed to one; created, shown once, with a request to try it, the token kept out
+ * of the history of the shell.
  */
 export default function TokenPage() {
     const {t} = useTranslation();
@@ -53,6 +73,13 @@ export default function TokenPage() {
     const [error, setError] = useState(null);
     const [token, setToken] = useState(null);
     const [shown, setShown] = useState(false);
+    // An API token: the roles picked among the user's, none all of them; a namespace to narrow them to.
+    const grants = useGrants();
+    const held = ROLES.filter((r) => Object.prototype.hasOwnProperty.call(grants, r));
+    const [roles, setRoles] = useState([]);
+    const [scope, setScope] = useState("");
+    const namespaces = [...new Set(roles.filter((r) => NAMESPACED.includes(r)).flatMap((r) => (Array.isArray(grants[r]) ? grants[r] : [])))].sort();
+    const toggleRole = (r) => setRoles((list) => (list.includes(r) ? list.filter((x) => x !== r) : [...list, r]));
 
     const useCredentials = refresh === "";
     const ready = !creating && duration.trim() !== "" && (!useCredentials || (username !== "" && password !== ""));
@@ -67,6 +94,8 @@ export default function TokenPage() {
         try {
             const query = new URLSearchParams({access_duration: duration.trim(), refresh: "false"});
             if (role) query.set("role", role);
+            for (const r of role ? [] : roles) query.append("role", r);
+            if (!role && scope && namespaces.includes(scope)) query.set("scope", scope);
             const response = await fetch(`${URL_TOKEN}?${query}`, {
                 method: "POST",
                 headers: {
@@ -97,13 +126,45 @@ export default function TokenPage() {
 
             <form onSubmit={create} noValidate className="space-y-3 rounded-(--radius-panel) border border-line bg-surface-raised p-3">
                 <div className="flex flex-wrap gap-3">
-                    <Field label={t("tokenPage.role")}>
-                        {(control) => <Input {...control} {...NOT_A_LOGIN} value={role || t("tokenPage.allRoles")} readOnly className="w-40"/>}
-                    </Field>
-                    <Field label={t("tokenPage.duration")} hint={t("tokenPage.durationHint")}>
+                    {role ? (
+                        <Field label={t("tokenPage.role")}>
+                            {(control) => <Input {...control} {...NOT_A_LOGIN} value={role} readOnly className="w-40"/>}
+                        </Field>
+                    ) : held.length > 0 ? (
+                        // The roles of the token, among the user's; none picked, all of them.
+                        <fieldset className="space-y-1">
+                            <legend className="font-medium">{t("tokenPage.role")}</legend>
+                            <div className="flex flex-wrap gap-x-3">
+                                {held.map((r) => (
+                                    <Checkbox key={r} label={r} checked={roles.includes(r)} onChange={() => toggleRole(r)}/>
+                                ))}
+                            </div>
+                            <p className="text-data text-ink-muted">{roles.length === 0 ? t("tokenPage.allRolesHint") : t("tokenPage.someRolesHint")}</p>
+                        </fieldset>
+                    ) : (
+                        <Field label={t("tokenPage.role")}>
+                            {(control) => <Input {...control} {...NOT_A_LOGIN} value={t("tokenPage.allRoles")} readOnly className="w-40"/>}
+                        </Field>
+                    )}
+                    {!role && namespaces.length > 0 && (
+                        <Field label={t("tokenPage.scope")} hint={t("tokenPage.scopeHint")}>
+                            {(control) => (
+                                <Select {...control} value={scope} onChange={(e) => setScope(e.target.value)} className="h-8 w-44">
+                                    <option value="">{t("tokenPage.scopeAll")}</option>
+                                    {namespaces.map((ns) => <option key={ns} value={ns}>{ns}</option>)}
+                                </Select>
+                            )}
+                        </Field>
+                    )}
+                    <Field label={t("tokenPage.duration")} hint={t(role ? "tokenPage.durationHint" : "tokenPage.apiDurationHint")}>
                         {(control) => (
-                            <Input {...control} {...NOT_A_LOGIN} name="token-duration" value={duration}
-                                   onChange={(e) => setDuration(e.target.value)} className="w-32"/>
+                            <span className="flex items-center gap-1.5">
+                                <Input {...control} {...NOT_A_LOGIN} name="token-duration" value={duration}
+                                       onChange={(e) => setDuration(e.target.value)} className="w-24"/>
+                                {!role && DURATIONS.map((d) => (
+                                    <Button key={d} size="sm" aria-pressed={duration === d} onClick={() => setDuration(d)}>{d}</Button>
+                                ))}
+                            </span>
                         )}
                     </Field>
                 </div>
@@ -161,6 +222,19 @@ export default function TokenPage() {
                         className="font-mono text-data break-all"
                     />
                     {role === "join" && <p className="text-ink-muted">{t("tokenPage.joinNext")}</p>}
+                    {/* An API token: a request to try it, the token read unseen, out of the history of the shell. */}
+                    {!role && (
+                        <div data-try="" className="space-y-1">
+                            <div className="flex items-center gap-2">
+                                <h3 className="font-medium">{t("tokenPage.tryIt")}</h3>
+                                <span className="ml-auto"><CopyButton text={tryIt(`${window.location.origin}${URL_AUTH_WHOAMI}`)} label={t("tokenPage.copyTry")}/></span>
+                            </div>
+                            <pre className="overflow-x-auto rounded-(--radius-control) border border-line bg-surface-sunken p-2 font-mono text-data">
+                                {tryIt(`${window.location.origin}${URL_AUTH_WHOAMI}`)}
+                            </pre>
+                            <p className="text-data text-ink-muted">{t("tokenPage.tryItHint")}</p>
+                        </div>
+                    )}
                 </section>
             )}
         </div>

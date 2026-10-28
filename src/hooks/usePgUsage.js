@@ -1,15 +1,24 @@
 import {useEffect, useMemo, useSyncExternalStore} from "react";
 import useEventStore from "./useEventStore.js";
 import {URL_NODE} from "../config/apiPath.js";
-import {detailsUsage, hostUsage, namespaceSlicesUsage, nodeUsage, opensvcUsage, readPgScopes, topSlicesUsage} from "../app/pg-usage";
+import {detailsUsage, hostUsage, namespaceSlicesUsage, nodeUsage, opensvcUsage, readPgScopes, sameReading, topSlicesUsage} from "../app/pg-usage";
 import logger from "../utils/logger.js";
 
 /**
- * How often each node is read. The daemon keeps a reading of its cgroups for up to
- * 15 seconds: read more often, it answers the same, and the cpu used between two
- * readings would be nothing. A little over, each reading is a fresh one.
+ * How often each node is read. The daemon reads its cgroups at each scrape, scrapes
+ * less than a second apart sharing one reading, and tells when it read them: the
+ * rates are counted between those times, whoever asked for the readings.
  */
-export const PG_POLL_MS = 16000;
+export const PG_POLL_MS = 12000;
+
+/**
+ * A node newly read, or an object newly asked for on it, is read again this soon
+ * after: its rates, which take two readings, shown without waiting for the poll.
+ */
+export const PG_FIRST_RATE_MS = 2000;
+
+/** A reading the same as the one before, in the window of another scrape: read again after it. */
+export const PG_SAME_RETRY_MS = 1100;
 
 /*
  * One reader for every view: the nodes asked for, each by how many views, are read
@@ -46,6 +55,11 @@ async function readNode(node) {
         });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const current = {at: Date.now(), ...readPgScopes(await response.text())};
+        // The one before again: no time between them to count a rate over; read after the window.
+        if (sameReading(readings[node], current) && (wantedPaths.get(node)?.size ?? 0) === 0) {
+            later(node, PG_SAME_RETRY_MS);
+            return;
+        }
         const usage = nodeUsage(readings[node], current);
         const total = opensvcUsage(readings[node], current);
         const nsSlices = namespaceSlicesUsage(readings[node], current);
@@ -74,6 +88,24 @@ async function readNode(node) {
     }
 }
 
+/** The reads planned soon, by node: one at most each. */
+const soon = new Map();
+
+/** A node read again in `ms`, still asked for then. */
+function later(node, ms) {
+    if (soon.has(node)) return;
+    soon.set(node, setTimeout(() => {
+        soon.delete(node);
+        if (wanted.has(node)) void readNode(node);
+    }, ms));
+}
+
+/** A node read now, and again shortly after: its rates told within seconds. */
+function readTwice(node) {
+    void readNode(node);
+    later(node, PG_FIRST_RATE_MS);
+}
+
 function readAll() {
     for (const node of wanted.keys()) void readNode(node);
 }
@@ -89,7 +121,7 @@ function wantPaths(nodes, paths) {
             byPath.set(path, count + 1);
             if (count === 0) added = true;
         }
-        if (added && (wanted.get(node) ?? 0) > 0) void readNode(node);
+        if (added && (wanted.get(node) ?? 0) > 0) readTwice(node);
     }
 }
 
@@ -110,7 +142,7 @@ function want(nodes) {
     for (const node of nodes) {
         const count = wanted.get(node) ?? 0;
         wanted.set(node, count + 1);
-        if (count === 0) void readNode(node);
+        if (count === 0) readTwice(node);
     }
     if (timer === null && wanted.size > 0) timer = setInterval(readAll, PG_POLL_MS);
 }
@@ -141,6 +173,8 @@ function release(nodes) {
 export function resetPgUsage() {
     wanted.clear();
     wantedPaths.clear();
+    for (const pending of soon.values()) clearTimeout(pending);
+    soon.clear();
     for (const node of Object.keys(readings)) delete readings[node];
     if (timer !== null) clearInterval(timer);
     timer = null;

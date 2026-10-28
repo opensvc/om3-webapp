@@ -1,7 +1,9 @@
 import React, {useEffect, useMemo, useState} from "react";
 import {Link} from "react-router-dom";
 import {useTranslation} from "react-i18next";
-import {URL_RESOURCES, URL_STORE} from "../config/apiPath.js";
+import {URL_CLUSTER_STATUS, URL_RESOURCES, URL_STORE} from "../config/apiPath.js";
+import {clusterFacts} from "../app/cluster-facts";
+import {CopyButton} from "../ui/components/CopyButton";
 import {groupState, meshLinks} from "../app/heartbeat-mesh";
 import {CrossLink} from "../app/CrossLink";
 import {storeSource} from "../app/store-config";
@@ -11,7 +13,7 @@ import {usePgReadings} from "../hooks/usePgUsage";
 import {IO_FIGURES, sumUsage} from "../app/pg-usage";
 import {ioFigure} from "./ClusterUsage";
 import {formatCpu} from "../app/namespace-usage";
-import {formatBytes} from "../ui/lib/format";
+import {formatBytes, formatDuration} from "../ui/lib/format";
 import {ObjectIcon, om3ObjectKind} from "../ui/components/ObjectIcon";
 import {UsageBar} from "../ui/components/UsageBar";
 import {FrozenMark} from "../ui/components/FrozenMark";
@@ -75,8 +77,8 @@ const nodeState = (status) => (status === undefined ? "dropped" : status.is_over
  * Things by their state at a glance: a ring, its arcs the `states` ([state, arc, dot],
  * the words of `words`.<state>), and in it how many are in the `shown` one, the `good`
  * one unless said, out of all, `label` under, and a word for it, optimal when all are in
- * the `good` one; their counts under it, each a badge opening its page filtered on its
- * state when `link` gives it an address and it counts some.
+ * the `good` one; beside each arc that counts some, its word and count, a link opening
+ * its page filtered on its state when `link` gives it an address.
  */
 function CountsRing({name, states, counts, good, shown = good, label, words, link}) {
     const {t} = useTranslation();
@@ -84,38 +86,19 @@ function CountsRing({name, states, counts, good, shown = good, label, words, lin
     const state = counts[good] === total ? "up" : counts[good] === 0 ? "down" : "warn";
     return (
         <div data-ring={name} data-state={state} className="flex flex-col items-center gap-2 py-1">
-            <StateRing parts={states.map(([key, stroke]) => [key, counts[key], stroke])} total={total}>
+            <StateRing
+                total={total}
+                parts={states.map(([key, stroke]) => {
+                    const word = t(`${words}.${key}`);
+                    const to = counts[key] > 0 ? link?.(key) : undefined;
+                    // Its word and count beside its arc, a link opening its page filtered on it when it has one.
+                    return [key, counts[key], stroke, {word, to, title: to ? `${t("clusterView.filtered", {state: word})}: ${counts[key]}` : undefined}];
+                })}
+            >
                 <span className="text-2xl font-semibold tabular-nums">{counts[shown]}/{total}</span>
                 <span className="text-ink-muted">{label}</span>
                 <span className={`font-semibold ${RING_INK[state]}`}>{t(`heartbeats.mesh.overall.${state}`)}</span>
             </StateRing>
-            <dl data-ring-legend="" className="flex flex-wrap justify-center gap-x-3 text-data">
-                {states.map(([key, , dot]) => {
-                    const to = counts[key] > 0 ? link?.(key) : undefined;
-                    const word = t(`${words}.${key}`);
-                    return (
-                        // Linked, the whole item a badge: its link over its word and its count.
-                        <div key={key} className={to ? `relative ${FILTER_BADGE}` : "inline-flex items-center gap-1"}>
-                            <span aria-hidden="true" className={`size-2 rounded-full ${dot}`}/>
-                            <dt className="text-ink-muted">{word}</dt>
-                            <dd className="tabular-nums">
-                                {to ? (
-                                    <Link
-                                        to={to}
-                                        title={t("clusterView.filtered", {state: word})}
-                                        aria-label={`${t("clusterView.filtered", {state: word})}: ${counts[key]}`}
-                                        // Static, unlike the card's other links (Card): stretched over the whole badge, not the count alone.
-                                        style={{position: "static"}}
-                                        className="outline-none after:absolute after:inset-0 after:rounded-full"
-                                    >
-                                        {counts[key]}
-                                    </Link>
-                                ) : counts[key]}
-                            </dd>
-                        </div>
-                    );
-                })}
-            </dl>
         </div>
     );
 }
@@ -126,6 +109,66 @@ function CountsRing({name, states, counts, good, shown = good, label, words, lin
  * nodes, then node by node. The cpu from a second reading of a node on; the whole of
  * a node shown to whom the whole node may be, said to the others.
  */
+/** The shade of a cell of the heatmap of the least used but not idle: still told apart from none. */
+const HEAT_FLOOR = 0.08;
+
+/**
+ * Where the figures of the card come from, at a glance: a node a row, a figure a
+ * column, a cell the darker the more the node takes of it against the busiest one,
+ * in one tint. A column even, the load spread over the nodes; a cell standing out, a
+ * node spiking. The figure of a cell told on hover, its share of the busiest with it;
+ * one not read yet (a rate before its second reading), dotted.
+ */
+function UsageHeatmap({nodes, totals, metrics, format}) {
+    const {t, i18n} = useTranslation();
+    // The node column as wide as the longest name in its badge; the metric columns
+    // sharing the rest evenly, their titles hyphenated rather than widening one.
+    const nameWidth = `calc(${Math.max(...nodes.map((n) => n.length), 4)}ch + 1.25rem)`;
+    const max = Object.fromEntries(metrics.map((key) => [key, Math.max(0, ...nodes.map((node) => totals[node][key] ?? 0))]));
+    return (
+        <table aria-label={t("clusterView.opensvc.byNode")} data-heatmap="" lang={i18n.language} className="w-full table-fixed border-separate border-spacing-0.5 text-data">
+            <colgroup>
+                <col style={{width: nameWidth}}/>
+                {metrics.map((key) => <col key={key}/>)}
+            </colgroup>
+            <thead>
+                <tr>
+                    <th scope="col" className="sr-only">{t("common.node")}</th>
+                    {metrics.map((key) => (
+                        <th key={key} scope="col" className="px-0.5 text-center align-bottom leading-tight font-normal break-words text-ink-muted hyphens-auto">{t(`clusterView.opensvc.metrics.${key}`)}</th>
+                    ))}
+                </tr>
+            </thead>
+            <tbody>
+                {nodes.map((node) => (
+                    <tr key={node} data-node={node}>
+                        <th scope="row" className="truncate pr-2 text-left font-normal"><CrossLink kind="node" id={node}>{node}</CrossLink></th>
+                        {metrics.map((key) => {
+                            const value = totals[node][key];
+                            const known = typeof value === "number";
+                            const level = known && max[key] > 0 ? Math.max(value > 0 ? HEAT_FLOOR : 0, value / max[key]) : 0;
+                            const label = known
+                                ? t("clusterView.opensvc.cell", {node, metric: t(`clusterUsage.${key}`), value: format(key, value), share: Math.round(100 * (max[key] > 0 ? value / max[key] : 0))})
+                                : t("clusterView.opensvc.cellPending", {node, metric: t(`clusterUsage.${key}`)});
+                            return (
+                                <td key={key} data-metric={key} data-level={known ? level.toFixed(2) : undefined} title={label} aria-label={label} className="p-0">
+                                    <span
+                                        aria-hidden="true"
+                                        className={`relative block h-5 overflow-hidden rounded-[3px] ${known ? "bg-surface-sunken" : "border border-dashed border-line"}`}
+                                    >
+                                        {/* Always there, from none: a new reading fades to its shade, the first one too. */}
+                                        <span className="absolute inset-0 bg-accent transition-opacity duration-700 ease-out motion-reduce:transition-none" style={{opacity: level}}/>
+                                    </span>
+                                </td>
+                            );
+                        })}
+                    </tr>
+                ))}
+            </tbody>
+        </table>
+    );
+}
+
 function OpensvcUsage({nodes}) {
     const {t, i18n} = useTranslation();
     const {usage, totals, hosts, errors} = usePgReadings(nodes);
@@ -184,15 +227,9 @@ function OpensvcUsage({nodes}) {
                 </dl>
             )}
             <p className="text-data text-ink-muted">{t("clusterView.opensvc.over", {count: told.length, total: nodes.length})}</p>
-            <ul aria-label={t("clusterView.opensvc.byNode")} className="space-y-0.5 text-data">
-                {told.map((node) => (
-                    <li key={node} data-node={node} className="flex items-center gap-2">
-                        <CrossLink kind="node" id={node}>{node}</CrossLink>
-                        <span className="ml-auto tabular-nums">{cpu(totals[node].cpu)}</span>
-                        <span className="w-20 text-right tabular-nums">{memory(totals[node].memory)}</span>
-                    </li>
-                ))}
-            </ul>
+            <UsageHeatmap nodes={told} totals={totals} metrics={["cpu", "memory", ...figures]} format={(key, value) => (
+                key === "cpu" ? cpu(value) : key === "memory" ? memory(value) : ioFigure(key, value, i18n.language)
+            )}/>
             {failed.length > 0 && (
                 <p className="text-data text-state-warn">{t("clusterView.opensvc.failed", {nodes: failed.join(", ")})}</p>
             )}
@@ -217,6 +254,100 @@ function usePolled(url) {
         };
     }, [url]);
     return state;
+}
+
+/** A rotation of the certificate authority this recent, told on the card of the cluster. */
+const RECENT_CA_DAYS = 90;
+
+/**
+ * What the cluster status tells of the cluster as a whole (`clusterFacts`), its
+ * objects selected away (the status of the nodes alone, some 40 KB): read again at
+ * the pace of the overview; none until read, nor on an error.
+ */
+function useClusterFacts() {
+    const [facts, setFacts] = useState(null);
+    useEffect(() => {
+        let live = true;
+        const load = () => read(`${URL_CLUSTER_STATUS}?selector=cluster`).then(
+            (status) => live && setFacts(clusterFacts(status)),
+            () => {},
+        );
+        void load();
+        const timer = setInterval(load, OVERVIEW_REFRESH_MS);
+        return () => {
+            live = false;
+            clearInterval(timer);
+        };
+    }, []);
+    return facts;
+}
+
+/**
+ * The cluster in a few lines: the collector it feeds, the agents of its nodes, how
+ * long its daemons and machines have run, its environment and id, a recent rotation
+ * of its certificate authority.
+ */
+function ClusterFactsLines({facts}) {
+    const {t, i18n} = useTranslation();
+    const since = (iso) => formatDuration((Date.now() - Date.parse(iso)) / 1000, i18n.language);
+    const {collector, versions} = facts;
+    const rotated = facts.ca?.rotatedOn && (Date.now() - Date.parse(facts.ca.rotatedOn)) / 86400000 <= RECENT_CA_DAYS;
+    const unlinked = collector.warnings.filter((n) => n !== collector.speaker);
+    // The words over the link of the card, selectable; the room around them the link.
+    return (
+        <dl className="pointer-events-none space-y-1 text-data [&_dd]:pointer-events-auto [&_dd]:relative [&_dd]:inline [&_dd]:select-text [&_dt]:pointer-events-auto [&_dt]:relative [&_dt]:mr-1.5 [&_dt]:inline [&_dt]:select-text [&_dt]:text-ink-muted">
+            <div data-fact="collector">
+                <dt>{t("clusterView.config.collector")}</dt>
+                <dd>
+                    {collector.state === "none" ? t("clusterView.config.noCollector")
+                        : collector.speaker ? t("clusterView.config.fedBy", {url: collector.url ?? "?", node: collector.speaker})
+                            : t("clusterView.config.noSpeaker", {url: collector.url ?? "?"})}
+                </dd>
+                {collector.state === "failing" && collector.speaker && <dd className="ml-1.5 text-state-warn">{t("clusterView.config.collectorErrors")}</dd>}
+                {unlinked.length > 0 && <dd className="ml-1.5 text-state-warn">{t("clusterView.config.unlinked", {nodes: unlinked.join(", ")})}</dd>}
+            </div>
+            {versions.length > 0 && (
+                <div data-fact="agent">
+                    <dt>{t("clusterView.config.agent")}</dt>
+                    <dd className="font-mono">
+                        {versions.length === 1 ? versions[0].version : versions.map((v) => `${v.version} (${v.nodes.join(", ")})`).join(" · ")}
+                    </dd>
+                    {!facts.compat && <dd className="ml-1.5 text-state-warn">{t("clusterView.config.incompatible")}</dd>}
+                </div>
+            )}
+            {facts.daemonStart && (
+                <div data-fact="daemons">
+                    <dt>{t("clusterView.config.daemons")}</dt>
+                    <dd>{t("clusterView.config.upFor", {duration: since(facts.daemonStart)})}</dd>
+                </div>
+            )}
+            {facts.boots && (
+                <div data-fact="nodes">
+                    <dt>{t("clusterView.config.nodes")}</dt>
+                    <dd>{t("clusterView.config.upFor", {duration: facts.boots[0] === facts.boots[1] ? since(facts.boots[0]) : `${since(facts.boots[1])} – ${since(facts.boots[0])}`})}</dd>
+                </div>
+            )}
+            {facts.envs.length > 0 && (
+                <div data-fact="identity">
+                    <dt>{t("clusterView.config.identity")}</dt>
+                    <dd>{facts.envs.join(", ")}</dd>
+                </div>
+            )}
+            {facts.id && (
+                <div data-fact="id" className="whitespace-nowrap">
+                    <dt>{t("clusterView.config.id")}</dt>
+                    <dd className="font-mono">{facts.id}</dd>
+                    <dd className="ml-1 inline-block align-middle"><CopyButton text={facts.id} label={t("clusterView.config.copyId")}/></dd>
+                </div>
+            )}
+            {rotated && (
+                <div data-fact="ca">
+                    <dt>{t("clusterView.config.ca")}</dt>
+                    <dd>{t("clusterView.config.caRotated", {day: facts.ca.rotatedOn, count: facts.ca.formers})}</dd>
+                </div>
+            )}
+        </dl>
+    );
 }
 
 /**
@@ -298,6 +429,7 @@ export default function ClusterView() {
     const {t, i18n} = useTranslation();
     const {objects, nodeStatus, heartbeatStatus, pools, networks, ready} = useMenuState();
     const stores = usePolled(URL_STORE);
+    const clusterInfo = useClusterFacts();
     const resources = usePolled(URL_RESOURCES);
 
     const links = useMemo(() => meshLinks(heartbeatStatus ?? {}), [heartbeatStatus]);
@@ -363,8 +495,8 @@ export default function ClusterView() {
             <div aria-label={t("clusterView.cards")} role="group" className="gap-3 @3xl:columns-2 @6xl:columns-3">
                 {/* The cluster itself, a card as the others: its object's panel over the overview. */}
                 <Card id="config" icon="cluster" title={t("clusterView.config.title")} to={{pathname: "/cluster", search: "?peek=object:cluster"}}>
-                    <p className="text-data text-ink-muted">{t("clusterView.config.holds")}</p>
-                    {objects?.cluster?.frozen === "frozen" && <p className="text-data text-state-warn">{t("clusterView.config.frozen")}</p>}
+                    {clusterInfo && <ClusterFactsLines facts={clusterInfo}/>}
+                    {objects?.cluster?.frozen === "frozen" && <p className="pointer-events-none text-data text-state-warn"><span className="pointer-events-auto relative select-text">{t("clusterView.config.frozen")}</span></p>}
                 </Card>
 
                 <Card id="links" icon="heartbeat" title={t("nav.routes.heartbeats")} to="/heartbeats" count={links.length}>

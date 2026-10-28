@@ -321,16 +321,19 @@ export function TrashIcon(props: IconProps) {
   );
 }
 
-/* --- Column families, taken from the classes of the historical collector. --- */
-
-/** Cluster (fa-circle-notch). */
-export function ClusterIcon(props: IconProps) {
+/**
+ * Clusters: three cells packed together, members of one whole, as oc3 draws them. The
+ * open ring they had read as a loading spinner in a menu.
+ */
+export function HoneycombIcon(props: IconProps) {
   return (
     <Svg {...props}>
-      <path d="M12 3a9 9 0 1 1-8.3 5.5 1.2 1.2 0 1 1 2.2.9A6.6 6.6 0 1 0 12 5.4a1.2 1.2 0 0 1 0-2.4Z" />
+      <path d="M12 3.5l3.98 2.3v4.6L12 12.7l-3.98-2.3V5.8ZM7.52 11.3l3.98 2.3v4.6l-3.98 2.3-3.98-2.3v-4.6ZM16.48 11.3l3.98 2.3v4.6l-3.98 2.3-3.98-2.3v-4.6Z" />
     </Svg>
   );
 }
+
+/* --- Column families, taken from the classes of the historical collector. --- */
 
 /** Environment (fa-clone). */
 export function EnvIcon(props: IconProps) {

@@ -1,7 +1,11 @@
 import React, {useEffect, useId, useMemo, useRef, useState} from "react";
 import {useTranslation} from "react-i18next";
 import {getResponseErrorMessage} from "../services/api.jsx";
-import {URL_NETWORK, URL_NODE, URL_OBJECT} from "../config/apiPath.js";
+import {URL_NETWORK, URL_NODE, URL_OBJECT, URL_POOL} from "../config/apiPath.js";
+import {formatBytes} from "../ui/lib/format";
+
+/** Free addresses past this many say nothing (an ipv6 /64): not told. */
+const FREE_ADDRESSES_TOLD = 2 ** 32;
 import {parseClaims} from "../app/namespace-usage";
 import {
     FREE_SECTIONS,
@@ -11,6 +15,12 @@ import {
     missingValues,
     nextSectionName,
     offeredKeywords,
+    offeredTypes,
+    catalogDrivers,
+    provisions,
+    usableDrivers,
+    isResource,
+    rootOnlyKind,
     NEEDS_GROUPS,
     poolTypes,
     popularKeywords,
@@ -18,7 +28,10 @@ import {
     requiredKeywords,
     sectionKeywords,
     withRequired,
+    isUnmanaged,
+    withUnmanaged,
 } from "../app/object-design";
+import {Dialog} from "../ui/components/Dialog";
 import {Button, IconButton} from "../ui/components/Button";
 import {Checkbox, Input, Select} from "../ui/components/Field";
 import {Spinner} from "../ui/components/Spinner";
@@ -61,21 +74,64 @@ const driverKeywords = (keywordsUrl, driver) => readJson(`${keywordsUrl}?driver=
  * api: unread, none, a driver typed.
  */
 const readCapabilities = () => readJson(`${URL_NODE}/localhost/capabilities`).then((d) => (d?.items ?? []).map((i) => i?.data?.name ?? ""));
-const readDrivers = (kind) => readCapabilities().then((names) => kindDrivers(kind, names));
+
+/** The catalog of the drivers of the node of the api: its drivers, and the words of their features with what each means. */
+const readCatalog = () => readJson(`${URL_NODE}/localhost/drivers`).then((d) => ({
+    drivers: (d?.items ?? []).map((i) => i?.data).filter(Boolean),
+    features: Object.fromEntries((d?.features ?? []).map((f) => [f.name, f.doc ?? ""])),
+}));
 
 /**
- * The networks an address may be drawn from, by name: for root, every one of the
- * cluster; for another user, those its namespace claims (`[claim#N]` of its nscfg).
- * Unread, none.
+ * The drivers an object of `kind` can take on the node of the api, with what each
+ * does, and what those features mean: from its catalog; from its capabilities, told
+ * less, from a daemon without one.
+ */
+const readDrivers = (kind) => readCatalog().then(
+    ({drivers, features}) => ({drivers: catalogDrivers(kind, drivers), features}),
+    () => readCapabilities().then((names) => ({drivers: kindDrivers(kind, names), features: {}})),
+);
+
+/**
+ * The networks an address may be drawn from, each its type, its range and its free
+ * addresses: for root, every one of the cluster; for another user, those its
+ * namespace claims (`[claim#N]` of its nscfg), described when the networks may be
+ * read. Unread, none.
  */
 const readNetworks = async (namespace, isRoot) => {
+    const networks = await readJson(URL_NETWORK).then((d) => d?.items ?? [], () => []);
     try {
-        if (isRoot) return ((await readJson(URL_NETWORK))?.items ?? []).map((n) => n.name);
-        const response = await fetch(`${URL_OBJECT}/${encodeURIComponent(namespace)}/nscfg/namespace/config/file`, {
-            headers: {Authorization: `Bearer ${localStorage.getItem("authToken") || ""}`},
+        const names = isRoot ? networks.map((n) => n.name) : await readClaimed(namespace, "network");
+        return names.map((name) => {
+            const network = networks.find((n) => n.name === name);
+            return {value: name, type: network?.type, network: network?.network, free: network?.free};
         });
-        if (!response.ok) return [];
-        return parseClaims(await response.text()).filter((c) => c.type === "network" && c.name).map((c) => c.name);
+    } catch {
+        return [];
+    }
+};
+
+/** The names of the pools or networks (`type`) a namespace claims (`[claim#N]` of its nscfg): none without one. */
+const readClaimed = async (namespace, type) => {
+    const response = await fetch(`${URL_OBJECT}/${encodeURIComponent(namespace)}/nscfg/namespace/config/file`, {
+        headers: {Authorization: `Bearer ${localStorage.getItem("authToken") || ""}`},
+    });
+    if (!response.ok) return [];
+    return parseClaims(await response.text()).filter((c) => c.type === type && c.name).map((c) => c.name);
+};
+
+/**
+ * The pools a volume may be drawn from, each its type and its free size: for root,
+ * every pool of the cluster; for another user, those its namespace claims, described
+ * when the pools may be read. Unread, none.
+ */
+const readPools = async (namespace, isRoot) => {
+    const pools = await readJson(URL_POOL).then((d) => d?.items ?? [], () => []);
+    try {
+        const names = isRoot ? pools.map((p) => p.name) : await readClaimed(namespace, "pool");
+        return names.map((name) => {
+            const pool = pools.find((p) => p.name === name);
+            return {value: name, type: pool?.type, free: pool && pool.size > 0 ? pool.free : undefined};
+        });
     } catch {
         return [];
     }
@@ -91,10 +147,15 @@ const firstLine = (text) => (text ?? "").trim().split("\n")[0];
  * A value of a keyword: a choice among its candidates, a boolean, or a text after its
  * default, `suggestions` offered under it, any other value still typed. Empty, the
  * example of a keyword without a default is taken by a click, or the right arrow.
+ * `picks`, values told with what helps choose them (`info`, and `side` at the end of
+ * the line: a pool its type and free size), listed under the text as it is clicked
+ * or typed in, filtered by it, the arrows and Enter or a click taking one.
  */
-function ValueInput({keyword, value, onChange, label, suggestions = []}) {
+function ValueInput({keyword, value, onChange, label, suggestions = [], picks = []}) {
     const {t} = useTranslation();
     const listId = useId();
+    const [picking, setPicking] = useState(false);
+    const [active, setActive] = useState(0);
     if (keyword?.candidates?.length > 0) {
         return (
             <Select aria-label={label} className="h-7 w-full" value={value} onChange={(e) => onChange(e.target.value)}>
@@ -113,6 +174,17 @@ function ValueInput({keyword, value, onChange, label, suggestions = []}) {
         );
     }
     const example = !keyword?.default && !keyword?.defaultText && value === "" ? keyword?.example ?? "" : "";
+    // The picks matching the text; all of them while it is one of them, or empty.
+    const typed = value.trim().toLowerCase();
+    const shown = typed === "" || picks.some((p) => p.value.toLowerCase() === typed)
+        ? picks
+        : picks.filter((p) => p.value.toLowerCase().includes(typed));
+    const current = Math.min(active, shown.length - 1);
+    const open = picking && shown.length > 0;
+    const take = (pick) => {
+        onChange(pick.value);
+        setPicking(false);
+    };
     return (
         <span className="relative block">
             <Input
@@ -120,15 +192,41 @@ function ValueInput({keyword, value, onChange, label, suggestions = []}) {
                 className={`h-7 w-full font-mono text-data ${example ? "pr-14" : ""}`}
                 value={value}
                 placeholder={keyword?.default || keyword?.defaultText || keyword?.example || ""}
-                onChange={(e) => onChange(e.target.value)}
+                onChange={(e) => {
+                    onChange(e.target.value);
+                    setActive(0);
+                    if (picks.length > 0) setPicking(true);
+                }}
+                onFocus={() => picks.length > 0 && setPicking(true)}
+                onClick={() => picks.length > 0 && setPicking(true)}
+                onBlur={() => setPicking(false)}
                 onKeyDown={(e) => {
                     if (example && e.key === "ArrowRight") {
                         e.preventDefault();
                         onChange(example);
+                    } else if (picks.length > 0 && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+                        e.preventDefault();
+                        if (!open) setPicking(true);
+                        else setActive((current + (e.key === "ArrowDown" ? 1 : shown.length - 1)) % shown.length);
+                    } else if (open && e.key === "Enter") {
+                        e.preventDefault();
+                        take(shown[current]);
+                    } else if (open && e.key === "Escape") {
+                        e.stopPropagation();
+                        setPicking(false);
                     }
                 }}
                 spellCheck={false}
-                list={suggestions.length > 0 ? listId : undefined}
+                autoComplete="off"
+                {...(picks.length > 0
+                    ? {
+                        role: "combobox",
+                        "aria-expanded": open,
+                        "aria-controls": listId,
+                        "aria-autocomplete": "list",
+                        "aria-activedescendant": open ? `${listId}-${current}` : undefined,
+                    }
+                    : {list: suggestions.length > 0 ? listId : undefined})}
             />
             {example && (
                 <button
@@ -141,10 +239,40 @@ function ValueInput({keyword, value, onChange, label, suggestions = []}) {
                     {t("objectDesigner.use")}
                 </button>
             )}
-            {suggestions.length > 0 && (
+            {picks.length === 0 && suggestions.length > 0 && (
                 <datalist id={listId}>
                     {suggestions.map((name) => <option key={name} value={name}/>)}
                 </datalist>
+            )}
+            {/* The values to pick, each with what helps choose it: opened by the text, filtered as typed. */}
+            {open && (
+                <ul
+                    id={listId}
+                    role="listbox"
+                    aria-label={t("objectDesigner.picks", {keyword: keyword?.option ?? ""})}
+                    className="absolute top-full right-0 left-0 z-20 mt-1 max-h-56 overflow-auto rounded-(--radius-control) border border-line bg-surface-raised p-1 shadow-lg"
+                >
+                    {shown.map((pick, n) => (
+                        <li
+                            key={pick.value}
+                            id={`${listId}-${n}`}
+                            role="option"
+                            aria-selected={n === current}
+                            data-pick={pick.value}
+                            // Taken before the text loses the focus, which closes the list.
+                            onMouseDown={(e) => {
+                                e.preventDefault();
+                                take(pick);
+                            }}
+                            onMouseEnter={() => setActive(n)}
+                            className="flex cursor-pointer items-baseline gap-2 rounded-(--radius-control) px-1.5 py-0.5 aria-selected:bg-accent-soft"
+                        >
+                            <span className="font-mono">{pick.value}</span>
+                            {(pick.info ?? []).map((info) => <span key={info} className="text-data text-ink-muted">{info}</span>)}
+                            {pick.side && <span className="ml-auto text-data text-ink-muted tabular-nums">{pick.side}</span>}
+                        </li>
+                    ))}
+                </ul>
             )}
         </span>
     );
@@ -161,8 +289,11 @@ function KeywordHelp({keyword}) {
     );
 }
 
-/** The keywords of a section to add: filtered by words, each its first line, its doc on demand. */
-function KeywordPicker({keywords, onAdd}) {
+/**
+ * The keywords of a section to add: filtered by words, each its first line, its doc on
+ * demand; the grant each needs, unless `grantsTold` is false (every one root's).
+ */
+function KeywordPicker({keywords, onAdd, grantsTold = true}) {
     const {t} = useTranslation();
     const ids = useId();
     const [words, setWords] = useState("");
@@ -218,7 +349,7 @@ function KeywordPicker({keywords, onAdd}) {
                             >
                                 <span className="font-mono">{k.option}</span>
                                 {/* The grant it needs: for any value, or for some only (a uri of the server, of an install). */}
-                                {k.grant && (
+                                {grantsTold && k.grant && (
                                     <span className="ml-1.5 text-data text-state-warn" title={k.grantDoc || undefined}>
                                         {k.grantAlways === false ? t("objectDesigner.grantSome", {grant: k.grant}) : k.grant}
                                     </span>
@@ -248,22 +379,30 @@ function KeywordPicker({keywords, onAdd}) {
  * the node of the api has (its capabilities); unread, the driver typed (`fs.flag`),
  * checked by reading its keywords.
  */
-function AddResource({kind, keywordsUrl, onAdd, onCancel}) {
+function AddResource({kind, keywordsUrl, onAdd, onCancel, hideRoot = false}) {
     const {t} = useTranslation();
     const [drivers, setDrivers] = useState(null);
+    // What each feature of a driver means, told on hover.
+    const [featureDocs, setFeatureDocs] = useState({});
     const [group, setGroup] = useState("");
     const [typed, setTyped] = useState("");
     const [error, setError] = useState(null);
     const [checking, setChecking] = useState(false);
     useEffect(() => {
         let live = true;
-        readDrivers(kind).then((items) => live && setDrivers(items), () => live && setDrivers([]));
+        readDrivers(kind).then(({drivers: items, features}) => {
+            if (!live) return;
+            setDrivers(items);
+            setFeatureDocs(features);
+        }, () => live && setDrivers([]));
         return () => {
             live = false;
         };
     }, [kind]);
-    const groups = [...new Set((drivers ?? []).map((d) => d.group))].sort();
-    const types = (drivers ?? []).filter((d) => d.group === group);
+    // Those a design without root could never complete left out, and a group left with none.
+    const usable = drivers === null ? null : usableDrivers(drivers, hideRoot);
+    const groups = [...new Set((usable ?? []).map((d) => d.group))].sort();
+    const types = (usable ?? []).filter((d) => d.group === group);
     const add = async (driver) => {
         setChecking(true);
         setError(null);
@@ -299,17 +438,54 @@ function AddResource({kind, keywordsUrl, onAdd, onCancel}) {
                         ))}
                     </div>
                     {group && (
-                        <ul aria-label={t("objectDesigner.types")} className="grid max-h-64 grid-cols-[repeat(auto-fill,minmax(9rem,1fr))] gap-1.5 overflow-auto p-0.5">
-                            {types.map((d) => (
-                                <li key={d.name}>
+                        <ul aria-label={t("objectDesigner.types")} className="grid max-h-80 grid-cols-[repeat(auto-fill,minmax(14rem,1fr))] gap-1.5 overflow-auto p-0.5">
+                            {offeredTypes(types).map(({driver, alternatives}) => (
+                                // A card each, the size of the others: what the driver is, what it does; a virtual
+                                // driver the ones it picks among inside it, second choices.
+                                <li key={driver.name} className="flex flex-col rounded-(--radius-control) border border-line hover:border-line-strong">
                                     <button
                                         type="button"
                                         disabled={checking}
-                                        onClick={() => add(d.name)}
-                                        className="w-full rounded-(--radius-control) border border-line px-2 py-1 text-left hover:border-accent hover:bg-accent-soft"
+                                        onClick={() => add(driver.name)}
+                                        className="flex flex-1 flex-col items-start gap-0.5 rounded-(--radius-control) px-2 py-1 text-left hover:bg-accent-soft"
                                     >
-                                        <span className="font-mono">{d.type}</span>
+                                        <span className="font-mono">
+                                            {driver.type}
+                                            {/* The grant it needs: to use it, or only to provision it. */}
+                                            {driver.grant && <span className="ml-1.5 font-sans text-data text-state-warn">{driver.grant}</span>}
+                                            {!driver.grant && driver.provisionGrant && (
+                                                <span className="ml-1.5 font-sans text-data text-state-warn">{t("objectDesigner.provisionGrant", {grant: driver.provisionGrant})}</span>
+                                            )}
+                                        </span>
+                                        {driver.doc && <span className="text-data text-ink-muted">{driver.doc}</span>}
+                                        {!driver.doc && alternatives.length > 0 && <span className="text-data text-ink-muted">{t("objectDesigner.virtualType")}</span>}
+                                        {(driver.features ?? []).length > 0 && (
+                                            <span className="flex flex-wrap gap-1 pt-0.5" data-features="">
+                                                {driver.features.map((f) => (
+                                                    <span key={f} title={featureDocs[f] || undefined} className="rounded-(--radius-control) border border-line px-1 text-data text-ink-muted">
+                                                        {f}
+                                                    </span>
+                                                ))}
+                                            </span>
+                                        )}
                                     </button>
+                                    {alternatives.length > 0 && (
+                                        <span className="flex flex-wrap items-baseline gap-x-2 border-t border-line px-2 py-0.5 text-data text-ink-muted">
+                                            {t("objectDesigner.orExactly")}
+                                            {alternatives.map((alt) => (
+                                                <button
+                                                    key={alt.name}
+                                                    type="button"
+                                                    disabled={checking}
+                                                    title={alt.doc || undefined}
+                                                    onClick={() => add(alt.name)}
+                                                    className="font-mono text-accent underline-offset-2 hover:underline"
+                                                >
+                                                    {alt.type}
+                                                </button>
+                                            ))}
+                                        </span>
+                                    )}
                                 </li>
                             ))}
                         </ul>
@@ -354,7 +530,7 @@ function AddResource({kind, keywordsUrl, onAdd, onCancel}) {
  * claims say the networks offered to who is not root.
  */
 export function ObjectDesigner({kind, namespace = "", sections, onChange, keywordsUrl, isRoot = false, onToText, showRoot: shownRoot, onShowRoot}) {
-    const {t} = useTranslation();
+    const {t, i18n} = useTranslation();
     const ids = useId();
     const [selected, setSelected] = useState(sections[0]?.name ?? "DEFAULT");
     // The keywords read, by driver: DEFAULT at once, a resource's when added.
@@ -365,8 +541,11 @@ export function ObjectDesigner({kind, namespace = "", sections, onChange, keywor
     const [help, setHelp] = useState(null);
     // Never the keywords only root may set whatever the value, to another user; to root, when it asks.
     const [ownShowRoot, setOwnShowRoot] = useState(false);
+    // The resource whose provision the user is asked to take on, until confirmed.
+    const [confirming, setConfirming] = useState(null);
     const showRoot = onShowRoot ? shownRoot : ownShowRoot;
-    const hideRoot = !(isRoot && showRoot);
+    // An object only root writes (the cluster configuration): its keywords, root's all, never hidden.
+    const hideRoot = !(isRoot && (showRoot || rootOnlyKind(kind)));
     const [preview, setPreview] = useState(false);
     // The types of pool a volume may need, read once there is a volume.
     const [pools, setPools] = useState([]);
@@ -379,17 +558,48 @@ export function ObjectDesigner({kind, namespace = "", sections, onChange, keywor
             live = false;
         };
     }, [needs]);
+    // The drivers of the node, to tell which resources provision anything: none told while
+    // read, none known from a daemon without them (a resource then taken to provision).
+    const [catalog, setCatalog] = useState(null);
+    useEffect(() => {
+        let live = true;
+        readDrivers(kind).then(({drivers}) => live && setCatalog(drivers), () => live && setCatalog([]));
+        return () => {
+            live = false;
+        };
+    }, [kind]);
+    // The pools a volume may be drawn from, read once there is a volume.
+    const [poolPicks, setPoolPicks] = useState([]);
+    useEffect(() => {
+        if (!needs) return undefined;
+        let live = true;
+        readPools(namespace, isRoot).then((items) => live && setPoolPicks(items));
+        return () => {
+            live = false;
+        };
+    }, [needs, namespace, isRoot]);
     // The networks of the cluster, read once a section draws its address from one.
     const [networks, setNetworks] = useState([]);
     const drawsAddress = sections.some((s) => NETWORK_DRIVERS.includes(`${s.group}.${s.type}`));
     useEffect(() => {
         if (!drawsAddress) return undefined;
         let live = true;
-        readNetworks(namespace, isRoot).then((names) => live && setNetworks(names));
+        readNetworks(namespace, isRoot).then((items) => live && setNetworks(items));
         return () => {
             live = false;
         };
     }, [drawsAddress, namespace, isRoot]);
+    // The pools and the networks to pick, with what tells them apart.
+    const poolChoices = useMemo(() => poolPicks.map((p) => ({
+        value: p.value,
+        info: p.type ? [p.type] : [],
+        side: p.free !== undefined ? t("objectDesigner.free", {size: formatBytes(p.free, i18n.language) || "0"}) : undefined,
+    })), [poolPicks, t, i18n.language]);
+    const networkChoices = useMemo(() => networks.map((n) => ({
+        value: n.value,
+        info: [n.type, n.network].filter(Boolean),
+        side: n.free !== undefined && n.free < FREE_ADDRESSES_TOLD ? t("objectDesigner.freeAddresses", {count: n.free, free: n.free.toLocaleString(i18n.language)}) : undefined,
+    })), [networks, t, i18n.language]);
 
     useEffect(() => {
         let live = true;
@@ -519,7 +729,7 @@ export function ObjectDesigner({kind, namespace = "", sections, onChange, keywor
                 {adding ? (
                     <section aria-labelledby={`${ids}-adding`} className="min-w-0 space-y-2">
                         <h3 id={`${ids}-adding`} className="sr-only">{t("objectDesigner.addResource")}</h3>
-                        <AddResource kind={kind} keywordsUrl={keywordsUrl} onAdd={addResource} onCancel={() => setAdding(false)}/>
+                        <AddResource kind={kind} keywordsUrl={keywordsUrl} onAdd={addResource} onCancel={() => setAdding(false)} hideRoot={hideRoot}/>
                     </section>
                 ) : (
                     <section aria-labelledby={`${ids}-section`} className="min-w-0 space-y-2">
@@ -528,9 +738,19 @@ export function ObjectDesigner({kind, namespace = "", sections, onChange, keywor
                             {section.type && <span>{` ${section.group}.${section.type}`}</span>}
                         </h3>
                         {free && <p className="text-data text-ink-muted">{t("objectDesigner.envHint")}</p>}
+                        {/* A resource om provisions, its provisioning keywords required; or left to the user, on confirmation. */}
+                        {catalog !== null && isResource(kind, section) && provisions(catalog, section) && (
+                            <Checkbox
+                                label={t("objectDesigner.unmanaged")}
+                                checked={isUnmanaged(section)}
+                                onChange={(e) => (e.target.checked ? setConfirming(section.name) : update(withUnmanaged(known, section, false)))}
+                            />
+                        )}
                         {section.entries.length === 0 && !free && <p className="text-data text-ink-muted">{t("objectDesigner.noEntry")}</p>}
                         <ul aria-label={t("objectDesigner.entries", {section: section.name})} className="space-y-1">
                             {section.entries.map((entry, i) => {
+                                // The provision of a resource: its box above.
+                                if (section.group && entry.key === "provision") return null;
                                 const keyword = free ? undefined : keywordOf(entry.key);
                                 const isRequired = required.has(entry.key);
                                 const empty = isRequired && entry.value.trim() === "";
@@ -560,9 +780,10 @@ export function ObjectDesigner({kind, namespace = "", sections, onChange, keywor
                                                 value={entry.value}
                                                 onChange={(value) => setEntry(i, {value})}
                                                 label={t("objectDesigner.valueOf", {keyword: entry.key || t("objectDesigner.variable")})}
-                                            suggestions={
-                                                entry.key === "network" && NETWORK_DRIVERS.includes(`${section.group}.${section.type}`) ? networks
-                                                    : entry.key === "type" && NEEDS_GROUPS.includes(section.group) ? pools
+                                            suggestions={entry.key === "type" && NEEDS_GROUPS.includes(section.group) ? pools : []}
+                                            picks={
+                                                entry.key === "pool" && NEEDS_GROUPS.includes(section.group) ? poolChoices
+                                                    : entry.key === "network" && NETWORK_DRIVERS.includes(`${section.group}.${section.type}`) ? networkChoices
                                                         : []
                                             }
                                             />
@@ -582,6 +803,8 @@ export function ObjectDesigner({kind, namespace = "", sections, onChange, keywor
                         ) : picking ? (
                             <KeywordPicker
                                 keywords={offeredKeywords(known, section, hideRoot)}
+                                // Every keyword root's, the cluster configuration's: no grant to tell them apart by.
+                                grantsTold={!rootOnlyKind(kind)}
                                 onAdd={(k) => {
                                     addEntry(k.option);
                                     setPicking(false);
@@ -615,6 +838,27 @@ export function ObjectDesigner({kind, namespace = "", sections, onChange, keywor
             {missing.length > 0 && (
                 <p className="text-data text-state-warn">{t("objectDesigner.missing", {keys: missing.map((m) => `${m.section}.${m.key}`).join(", ")})}</p>
             )}
+            <Dialog
+                open={confirming !== null}
+                onClose={() => setConfirming(null)}
+                title={t("objectDesigner.unmanagedTitle", {section: confirming ?? ""})}
+                footer={
+                    <>
+                        <Button onClick={() => setConfirming(null)}>{t("common.cancel")}</Button>
+                        <Button
+                            variant="create"
+                            onClick={() => {
+                                onChange(sections.map((s) => (s.name === confirming ? withUnmanaged(keywords[driverOf(s)] ?? [], s, true) : s)));
+                                setConfirming(null);
+                            }}
+                        >
+                            {t("objectDesigner.unmanagedConfirm")}
+                        </Button>
+                    </>
+                }
+            >
+                <p>{t("objectDesigner.unmanagedText", {section: confirming ?? ""})}</p>
+            </Dialog>
             {/* The file it makes, on demand; or edited as a text from then on. */}
             <div>
                 <span className="flex flex-wrap gap-2">

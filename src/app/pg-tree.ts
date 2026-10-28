@@ -196,14 +196,15 @@ export function objectUsageTree(
   return tree;
 }
 
-export type UsageOrder = "cpu" | "memory" | "name";
+export type UsageOrder = "cpu" | "memory" | "tasks" | "read" | "write" | "name";
 
 /**
- * The tree in an order, at every level: the most used first, by cpu or by memory,
- * or by name; the rest always last.
+ * The tree in an order, at every level: the most used first, by cpu, memory, tasks,
+ * bytes read or written a second, or by name; a figure not told last of the used;
+ * the rest always last.
  */
 export function sortUsageTree(node: UsageTreeNode, order: UsageOrder): UsageTreeNode {
-  const value = (n: UsageTreeNode) => (order === "cpu" ? (n.usage.cpu ?? -1) : (n.usage.memory ?? -1));
+  const value = (n: UsageTreeNode) => (order === "name" ? 0 : (n.usage[order] ?? -1));
   const children = [...node.children]
     .map((child) => sortUsageTree(child, order))
     .sort((a, b) => {

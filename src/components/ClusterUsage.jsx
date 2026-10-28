@@ -13,7 +13,9 @@ import {Button} from "../ui/components/Button";
 import {Select} from "../ui/components/Field";
 import {ChevronDownIcon} from "../ui/icons";
 
-const ORDERS = ["cpu", "memory", "name"];
+/** The orders offered: by cpu and memory always, by tasks and io where the readings tell them, by name. */
+const ORDERS = ["cpu", "memory", "tasks", "read", "write", "name"];
+const TOLD_ONLY = new Set(["tasks", "read", "write"]);
 
 /** The name of a cgroup of the tree, as systemd names it, and what it stands for. */
 function GroupName({node}) {
@@ -151,7 +153,7 @@ export function ClusterUsage() {
                 </label>
                 <span className="ml-auto flex items-center gap-1" role="group" aria-label={t("clusterUsage.order")}>
                     <span className="text-ink-muted">{t("clusterUsage.order")}</span>
-                    {ORDERS.map((o) => (
+                    {ORDERS.filter((o) => !TOLD_ONLY.has(o) || tree?.usage[o] !== undefined).map((o) => (
                         <Button key={o} size="sm" aria-pressed={order === o} onClick={() => setOrder(o)}>{t(`clusterUsage.orders.${o}`)}</Button>
                     ))}
                 </span>

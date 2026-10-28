@@ -100,6 +100,8 @@ describe('WhoAmI', () => {
         mockLocalStorage.getItem.mockImplementation((key) => {
             if (key === 'authToken') return 'authToken' in overrides ? overrides.authToken : mockToken;
             if (key === 'darkMode') return 'false';
+            // The release check opted in, unless a case says otherwise.
+            if (key === 'om3.releaseCheck') return 'releaseCheck' in overrides ? overrides.releaseCheck : 'on';
             if (key === 'appVersion') return 'appVersion' in overrides ? overrides.appVersion : null;
             if (key === 'appVersionTime') return 'appVersionTime' in overrides ? overrides.appVersionTime : null;
             return null;
@@ -226,6 +228,14 @@ describe('WhoAmI', () => {
                 })
             );
         });
+    });
+
+    test('the release check not opted in: GitHub not asked, the way to allow it from the About page', async () => {
+        setupMocks({releaseCheck: null});
+        renderComponent();
+        expect(await screen.findByText('Not checked.')).toBeInTheDocument();
+        expect(screen.getByRole('link', {name: 'Allow the check'})).toHaveAttribute('href', '/about');
+        expect(global.fetch.mock.calls.some(([url]) => String(url).includes('github'))).toBe(false);
     });
 
     describe('app version', () => {

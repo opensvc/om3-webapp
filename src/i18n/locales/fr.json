@@ -569,6 +569,11 @@
         "up": "optimal",
         "warn": "dégradé",
         "down": "critique"
+      },
+      "arcs": {
+        "up": "battent",
+        "down": "en échec",
+        "stopped": "arrêtés"
       }
     },
     "actions": {
@@ -1222,7 +1227,8 @@
       "pools": "Pools",
       "resources": "Ressources",
       "stores": "Magasins",
-      "glossary": "Glossaire"
+      "glossary": "Glossaire",
+      "about": "À propos"
     },
     "main": "Principal",
     "loading": "Chargement...",
@@ -1250,7 +1256,8 @@
         "resources": "ressources",
         "stores": "magasins",
         "cluster": "cluster",
-        "glossary": "glossaire"
+        "glossary": "glossaire",
+        "about": "À propos"
       }
     },
     "sections": {
@@ -1904,7 +1911,12 @@
     "lightMode": "Thème clair",
     "darkMode": "Thème sombre",
     "language": "Langue",
-    "logout": "Se déconnecter"
+    "logout": "Se déconnecter",
+    "versionNotChecked": "Non vérifiée.",
+    "versionOptIn": "Autoriser la vérification",
+    "apiAccess": "Accès à l'API",
+    "apiAccessHint": "Pour un script ou un essai rapide avec curl, un jeton à part, de courte durée et des rôles que vous choisissez, plutôt que celui de votre session.",
+    "createToken": "Créer un jeton d’API"
   },
   "panel": {
     "resize": "Redimensionner le panneau",
@@ -2596,7 +2608,16 @@
     "reveal": "Afficher le jeton",
     "hide": "Masquer le jeton",
     "copy": "Copier le jeton",
-    "joinNext": "Collez-le dans la boîte Enrôler du cluster, puis enrôlez."
+    "joinNext": "Collez-le dans la boîte Enrôler du cluster, puis enrôlez.",
+    "allRolesHint": "Aucun choisi : le jeton porte tous vos droits.",
+    "someRolesHint": "Le jeton ne porte que les rôles choisis, parmi les vôtres.",
+    "scope": "Namespace",
+    "scopeHint": "Les rôles d'un namespace restreints à celui-ci.",
+    "scopeAll": "tous les vôtres",
+    "tryIt": "L'essayer",
+    "copyTry": "Copier les commandes",
+    "tryItHint": "read -s garde le jeton hors de l'écran et de l'historique du shell. Un certificat que votre système ne reconnaît pas : ajoutez -k à curl, sur un cluster de test seulement.",
+    "apiDurationHint": "Comme 10m, 1h ; 24h au plus. Aussi court que l'essai le demande : le jeton vaut le vôtre jusqu'à son expiration."
   },
   "nodeHealth": {
     "minimum": "Minimum libre",
@@ -2985,9 +3006,25 @@
     "open": "Ouvrir {{page}}",
     "filtered": "Ouvrir la page filtrée sur {{state}}",
     "config": {
-      "title": "Configuration du cluster",
-      "holds": "Les mots-clés du cluster, ses verrous, et les actions sur le cluster entier.",
-      "frozen": "Le cluster est gelé : rien ne démarre ni ne bascule de lui-même."
+      "title": "Cluster",
+      "frozen": "Le cluster est gelé : rien ne démarre ni ne bascule de lui-même.",
+      "collector": "Collecteur",
+      "noCollector": "aucun configuré",
+      "noSpeaker": "{{url}}, alimenté par aucun nœud.",
+      "collectorErrors": "Avec des erreurs.",
+      "unlinked": "Pas de lien sur {{nodes}}.",
+      "agent": "Agent",
+      "incompatible": "versions incompatibles",
+      "identity": "Env",
+      "copyId": "Copier l'id du cluster",
+      "ca": "AC",
+      "caRotated_one": "renouvelée le {{day}}, {{count}} ancienne autorité encore reconnue",
+      "caRotated_other": "renouvelée le {{day}}, {{count}} anciennes autorités encore reconnues",
+      "fedBy": "{{url}} alimenté par {{node}}.",
+      "daemons": "Démons",
+      "nodes": "Nœuds",
+      "upFor": "actifs depuis {{duration}}",
+      "id": "Id"
     },
     "nodes": {
       "frozen_one": "{{count}} gelé",
@@ -3057,7 +3094,16 @@
       "failed": "Non lus : {{nodes}}",
       "cpuShare_one": "{{share}} des {{used}} utilisés par les hôtes, sur {{count}} CPU",
       "cpuShare_other": "{{share}} des {{used}} utilisés par les hôtes, sur {{count}} CPU",
-      "memoryShare": "{{share}} des {{used}} utilisés par les hôtes, sur {{total}}"
+      "memoryShare": "{{share}} des {{used}} utilisés par les hôtes, sur {{total}}",
+      "metrics": {
+        "cpu": "CPU",
+        "memory": "Mém",
+        "tasks": "Tâches",
+        "read": "Lect.",
+        "write": "Écr."
+      },
+      "cell": "{{node}} · {{metric}} : {{value}}, {{share}} % du nœud le plus chargé",
+      "cellPending": "{{node}} · {{metric}} : en attente d’une seconde lecture"
     }
   },
   "snapshots": {
@@ -3125,7 +3171,10 @@
     "orders": {
       "cpu": "CPU",
       "memory": "Mémoire",
-      "name": "Nom"
+      "name": "Nom",
+      "tasks": "Tâches",
+      "read": "Lecture",
+      "write": "Écriture"
     },
     "caption": "Les cgroups d'opensvc",
     "group": "Groupe de contrôle",
@@ -3188,7 +3237,18 @@
       "task": "Une commande lancée à la demande ou planifiée, sans rester active.",
       "volume": "Un stockage tiré d'un pool selon ses besoins, sa taille d'abord ; le pool est choisi pour y répondre.",
       "claim": "La part d'un pool ou d'un réseau que le namespace peut prendre."
-    }
+    },
+    "unmanaged": "Provisionnement non géré",
+    "unmanagedTitle": "Provisionnement non géré de {{section}}",
+    "unmanagedText": "om ignorera {{section}} au provisionnement et au déprovisionnement de l'objet (provision = false). Vous êtes responsable de créer les ressources système qu'il gère, ses périphériques, systèmes de fichiers ou adresses, avant son démarrage, et de les supprimer quand elles ne servent plus. Ses mots-clés de provisionnement ne sont plus requis.",
+    "unmanagedConfirm": "Je les gère",
+    "picks": "Les valeurs de {{keyword}}",
+    "free": "{{size}} libres",
+    "freeAddresses_one": "{{free}} adresse libre",
+    "freeAddresses_other": "{{free}} adresses libres",
+    "virtualType": "le moteur du nœud",
+    "orExactly": "ou :",
+    "provisionGrant": "{{grant}}, ou provisionnement non géré"
   },
   "driverSupport": {
     "lacking_one": "Non utilisable sur {{nodes}} : son pilote n'est pas parmi les capacités du nœud.",
@@ -3481,6 +3541,42 @@
       "restarts": "Un nombre : combien de redémarrages automatiques restent avant que le cluster abandonne.",
       "noRestart": "0 : plus aucun redémarrage automatique.",
       "manyRestarts": "+ : plus de 10 redémarrages automatiques restants."
+    }
+  },
+  "about": {
+    "tagline": "La webapp d'un cluster OpenSVC : observer et piloter ses nœuds, ses objets et leurs ressources.",
+    "agent": "Agent",
+    "publisher": {
+      "title": "Éditeur",
+      "contact": "Contact",
+      "support": "Support"
+    },
+    "licenses": {
+      "title": "Licences et sources",
+      "under": "sous licence {{license}}",
+      "bundled": "Cette webapp intègre les logiciels suivants, chacun sous sa propre licence :"
+    },
+    "privacy": {
+      "title": "Données personnelles (RGPD)",
+      "none": "Cette webapp ne collecte rien pour OpenSVC SAS : ni mesure d'audience, ni pistage, ni publicité. Elle ne parle qu'à l'API de ce cluster.",
+      "controller": "Le cluster est exploité par votre organisation, responsable des données qu'il enregistre, comme les connexions et les actions effectuées.",
+      "browser": "Votre navigateur conserve sur cet appareil, dans son stockage local : vos jetons de connexion, supprimés à la déconnexion ; un résumé du cluster en cache ; vos préférences d'affichage. Effacer les données du site dans votre navigateur les supprime toutes.",
+      "github": "Seulement si vous l'acceptez, votre page utilisateur demande à GitHub, au plus une fois par heure, la dernière version de cette webapp : cette requête parvient à GitHub avec votre adresse. Désactivé par défaut.",
+      "oidc": "Connecté par un fournisseur OpenID, sa propre politique s'applique à ce qu'il traite.",
+      "rights": "Pour vos droits sur les données qu'enregistre le cluster, adressez-vous à son exploitant ; pour ce logiciel, écrivez à <mail/>.",
+      "releaseCheck": "Vérifier sur GitHub la dernière version de cette webapp"
+    },
+    "cookies": {
+      "title": "Cookies",
+      "text": "Cette webapp ne dépose aucun cookie. Ce qu'elle garde dans le stockage local de votre navigateur sert seulement à vous garder connecté et à retenir les préférences que vous choisissez."
+    },
+    "accessibility": {
+      "title": "Accessibilité",
+      "text": "Cette webapp vise le niveau AA des WCAG 2.1 (EN 301 549) : usage au clavier et avec un lecteur d'écran, thèmes clair et sombre. Signalez un obstacle à <mail/>."
+    },
+    "security": {
+      "title": "Sécurité",
+      "text": "Signalez une vulnérabilité en toute confidentialité à <mail/>."
     }
   }
 }

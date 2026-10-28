@@ -4,7 +4,7 @@ import {MemoryRouter} from 'react-router-dom';
 import {vi} from 'vitest';
 import NamespaceMetrics from '../NamespaceMetrics';
 import useEventStore from '../../hooks/useEventStore';
-import {PG_POLL_MS, resetPgUsage} from '../../hooks/usePgUsage';
+import {PG_FIRST_RATE_MS, PG_POLL_MS, resetPgUsage} from '../../hooks/usePgUsage';
 import i18n from '../../i18n';
 
 vi.mock('../../utils/logger.js', () => ({
@@ -90,13 +90,15 @@ describe('NamespaceMetrics', () => {
         expect(row('prod/svc/db')).toEqual(['prod/svc/db', '1', '-', '2.0 MiB', '-']);
     });
 
-    test('the cpu from the second reading of the nodes, summed over them', async () => {
+    test('the cpu from the second reading of the nodes, read shortly after the first, summed over them', async () => {
         render(<NamespaceMetrics namespace="prod"/>);
         await screen.findByRole('row', {name: /prod\/svc\/web/});
-        // Half a cpu on n1, a quarter on n2, over the period.
-        pages.n1.push(page({web: PG_POLL_MS * 500}));
-        pages.n2.push(page({web: PG_POLL_MS * 250, db: null}));
-        await nextReading();
+        // Half a cpu on n1, a quarter on n2, over the time to the second reading.
+        pages.n1.push(page({web: PG_FIRST_RATE_MS * 500}));
+        pages.n2.push(page({web: PG_FIRST_RATE_MS * 250, db: null}));
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(PG_FIRST_RATE_MS);
+        });
         expect(Math.abs(parseFloat(row('prod/svc/web')[2]) - 75)).toBeLessThan(3);
         const totals = screen.getByRole('region', {name: 'Namespace total'});
         expect(Math.abs(parseFloat(within(totals).getByText('Namespace cpu').nextElementSibling.textContent) - 75)).toBeLessThan(3);

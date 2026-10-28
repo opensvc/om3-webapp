@@ -331,22 +331,30 @@ describe('CreateObjectDialog', () => {
             await screen.findByRole('heading', {name: /\[ip#1\]/});
             type('Value of netns', 'container#1');
             fireEvent.click(screen.getByRole('button', {name: 'Add network'}));
-            const network = screen.getByRole('combobox', {name: 'Value of network'});
-            return () => [...(document.getElementById(network.getAttribute('list'))?.options ?? [])].map((o) => [o.value, o.label]);
+            const network = await screen.findByRole('combobox', {name: 'Value of network'});
+            return () => {
+                fireEvent.click(network);
+                return within(screen.getByRole('listbox', {name: 'The values of network'})).getAllByRole('option').map((o) => o.textContent);
+            };
         };
 
         test('not root: the networks its namespace claims offered for an address drawn from one, by name', async () => {
             grants.current = {admin: ['ns1']};
-            answers['GET /api/network'] = {status: 200, text: JSON.stringify({items: [{name: 'default', type: 'bridge'}]})};
+            answers['GET /api/network'] = {status: 200, text: JSON.stringify({items: [{name: 'backend5', type: 'routed_bridge', network: '10.0.5.0/24', free: 250}]})};
             answers['GET /api/object/path/ns1/nscfg/namespace/config/file'] = {status: 200, text: '[claim#1]\ntype = network\nname = backend5\nlimit = 10\n[claim#2]\ntype = pool\nname = default\n[claim#3]\ntype = network\nname = backend3\n'};
             const offered = await netns();
-            await waitFor(() => expect(offered()).toEqual([['backend5', ''], ['backend3', '']]));
+            // Told when the networks may be read; one not there by its name alone.
+            await waitFor(() => expect(offered()).toEqual(['backend5routed_bridge10.0.5.0/24250 addresses free', 'backend3']));
         });
 
         test('an address drawn from a network: for root, the networks of the cluster offered, by name; any name still typed', async () => {
-            answers['GET /api/network'] = {status: 200, text: JSON.stringify({items: [{name: 'default', type: 'bridge'}, {name: 'backend1', type: 'routed_bridge'}]})};
+            answers['GET /api/network'] = {status: 200, text: JSON.stringify({items: [
+                {name: 'default', type: 'bridge', network: '10.22.0.0/16', free: 65533},
+                {name: 'backend1', type: 'routed_bridge', network: 'fd01::/64', free: 2 ** 64 - 1},
+            ]})};
             const offered = await netns();
-            await waitFor(() => expect(offered()).toEqual([['default', ''], ['backend1', '']]));
+            // An ipv6 /64: its free addresses not told.
+            await waitFor(() => expect(offered()).toEqual(['defaultbridge10.22.0.0/1665,533 addresses free', 'backend1routed_bridgefd01::/64']));
             // Its netns a free value: nothing offered.
             expect(screen.getByRole('textbox', {name: 'Value of netns'})).not.toHaveAttribute('list');
         });
@@ -407,13 +415,73 @@ describe('CreateObjectDialog', () => {
             expect(await screen.findByRole('heading', {name: /\[fs#1\]/})).toBeInTheDocument();
         });
 
+        test('the drivers of the catalog: what each is and does; a virtual one first, the ones it picks among inside it', async () => {
+            answers['GET /api/node/name/localhost/drivers'] = {status: 200, text: JSON.stringify({
+                items: [
+                    {data: {name: 'container.docker', group: 'container', type: 'docker', doc: 'Runs a container with docker.', features: ['start', 'stop'], available: true}},
+                    {data: {name: 'container.oci', group: 'container', type: 'oci', doc: 'Runs an OCI container with the runtime the node has.', features: ['start', 'stop'], selects: ['container.docker', 'container.podman'], available: true}},
+                    {data: {name: 'container.podman', group: 'container', type: 'podman', features: ['start', 'stop'], available: true}},
+                    {data: {name: 'container.lxc', group: 'container', type: 'lxc', features: ['provision', 'start', 'stop'], available: true}},
+                    {data: {name: 'fs.nfs', group: 'fs', type: 'nfs', doc: 'Mounts a network filesystem.', features: ['start', 'stop'], available: true}},
+                    {data: {name: 'disk.lvm', group: 'disk', type: 'lvm', aliasOf: 'disk.vg', available: true}},
+                ],
+                features: [{name: 'start', doc: 'The start brings the resource up.'}],
+            })};
+            KW('container.podman', [{section: 'container', option: 'type', required: true}]);
+            KW('fs.nfs', [{section: 'fs', option: 'type', required: true}]);
+            await design();
+            fireEvent.click(screen.getByRole('button', {name: 'Add a resource'}));
+            const groups = await screen.findByRole('group', {name: 'Driver groups'});
+            // A deprecated alias not offered: no disk group of it alone.
+            expect(within(groups).getAllByRole('button').map((b) => b.dataset.group)).toEqual(['container', 'fs']);
+            fireEvent.click(card('[data-group=container]'));
+            const types = screen.getByRole('list', {name: 'Types'});
+            expect(within(types).getAllByRole('listitem').map((li) => li.textContent)).toEqual([
+                'ociRuns an OCI container with the runtime the node has.startstopor:dockerpodman',
+                'lxcprovisionstartstop',
+            ]);
+            // A feature told on hover.
+            expect(within(types).getAllByText('start')[0]).toHaveAttribute('title', 'The start brings the resource up.');
+            fireEvent.click(within(types).getByRole('button', {name: 'podman'}));
+            expect(await screen.findByRole('heading', {name: /\[container#1\] container\.podman/})).toBeInTheDocument();
+            // Podman provisions nothing: no box to take its provision on.
+            expect(screen.queryByRole('checkbox', {name: 'Unmanaged provisioning'})).toBeNull();
+            fireEvent.click(screen.getByRole('button', {name: 'Add a resource'}));
+            fireEvent.click(await screen.findByRole('button', {name: /^fs/}));
+            fireEvent.click(within(screen.getByRole('list', {name: 'Types'})).getByRole('button', {name: /^nfs/}));
+            await screen.findByRole('heading', {name: /\[fs#1\]/});
+            expect(screen.queryByRole('checkbox', {name: 'Unmanaged provisioning'})).toBeNull();
+        });
+
+        test('the drivers only root may use: hidden from a design without root, a group left empty too; tagged when root shows them', async () => {
+            answers['GET /api/node/name/localhost/drivers'] = {status: 200, text: JSON.stringify({items: [
+                {data: {name: 'disk.lv', group: 'disk', type: 'lv', grant: 'root', available: true}},
+                {data: {name: 'fs.ext4', group: 'fs', type: 'ext4', grant: 'root', available: true}},
+                {data: {name: 'fs.flag', group: 'fs', type: 'flag', grant: '', available: true}},
+                {data: {name: 'fs.x', group: 'fs', type: 'x', grant: '', provisionGrant: 'root', available: true}},
+            ]})};
+            KW('DEFAULT', [{section: 'DEFAULT', option: 'nodes', grant: ''}]);
+            await design();
+            fireEvent.click(screen.getByRole('button', {name: 'Add a resource'}));
+            const groups = await screen.findByRole('group', {name: 'Driver groups'});
+            // Root not asking for root's: as a user without root, no disk group, no ext4.
+            expect(within(groups).getAllByRole('button').map((b) => b.dataset.group)).toEqual(['fs']);
+            fireEvent.click(card('[data-group=fs]'));
+            expect(within(screen.getByRole('list', {name: 'Types'})).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['flag', 'xroot, or unmanaged provisioning']);
+            // Asked for: all of them, those of root tagged.
+            fireEvent.click(screen.getByRole('checkbox', {name: 'Show the keywords only root may set'}));
+            expect(within(await screen.findByRole('group', {name: 'Driver groups'})).getAllByRole('button').map((b) => b.dataset.group)).toEqual(['disk', 'fs']);
+            fireEvent.click(card('[data-group=fs]'));
+            expect(within(screen.getByRole('list', {name: 'Types'})).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['ext4root', 'flag', 'xroot, or unmanaged provisioning']);
+        });
+
         test('a volume: added without a type, its size required, the type of pool it needs offered as a keyword', async () => {
             answers['GET /api/node/name/localhost/capabilities'] = {status: 200, text: JSON.stringify({items: [
                 {data: {name: 'drivers.resource.volume'}}, {data: {name: 'drivers.resource.volume.shm'}}, {data: {name: 'drivers.resource.volume.loop'}},
             ]})};
             KW('volume', [
                 {section: 'volume', option: 'type', types: ['']},
-                {section: 'volume', option: 'size', types: ['']},
+                {section: 'volume', option: 'size', types: [''], provisioning: true, provisioningRequired: true},
                 {section: 'volume', option: 'shared', types: ['']},
             ]);
             await design();
@@ -428,11 +496,116 @@ describe('CreateObjectDialog', () => {
             type('Value of size', '1g');
             fireEvent.click(screen.getByRole('button', {name: 'More'}));
             fireEvent.click(within(screen.getByRole('list', {name: 'Keywords to add'})).getByRole('button', {name: 'Add type'}));
-            const kind = screen.getByRole('combobox', {name: 'Value of type'});
+            const kind = await screen.findByRole('combobox', {name: 'Value of type'});
             await waitFor(() => expect([...document.getElementById(kind.getAttribute('list')).options].map((o) => o.value)).toEqual(['loop', 'shm']));
             fireEvent.change(kind, {target: {value: 'shm'}});
             fireEvent.click(screen.getByRole('button', {name: 'Show the file'}));
             expect(card('[data-preview]')).toHaveTextContent('[volume#1] size = 1g type = shm');
+        });
+
+        test('the keywords a provision fails without required, unless the user takes the provision on, warned first; the other provisioning ones at hand', async () => {
+            KW('disk.lv', [
+                {section: 'disk', option: 'type', required: true},
+                {section: 'disk', option: 'name', types: ['lv'], required: true},
+                {section: 'disk', option: 'size', types: ['lv'], provisioning: true, provisioningRequired: true},
+                {section: 'disk', option: 'create_options', types: ['lv'], provisioning: true},
+                {section: 'disk', option: 'vg', types: ['lv'], provisioning: true, provisioningRequired: true},
+                {section: 'disk', option: 'provision', types: []},
+            ]);
+            await design();
+            fireEvent.click(screen.getByRole('button', {name: 'Add a resource'}));
+            fireEvent.change(await screen.findByLabelText('Driver, as group.type'), {target: {value: 'disk.lv'}});
+            fireEvent.click(within(card('[data-add-resource]')).getByRole('button', {name: 'Add a resource'}));
+            await screen.findByRole('heading', {name: /\[disk#1\]/});
+            // Seeded, not to remove.
+            for (const name of ['name', 'size', 'vg']) expect(screen.getByRole('textbox', {name: `Value of ${name}`})).toBeInTheDocument();
+            expect(screen.queryByRole('textbox', {name: 'Value of create_options'})).toBeNull();
+            expect(screen.queryByRole('button', {name: 'Remove size'})).toBeNull();
+            type('Value of name', 'data');
+            type('Value of size', '1g');
+            expect(screen.getByText('Required without a value: disk#1.vg.')).toBeInTheDocument();
+            // Taken on: asked first; cancelled, nothing changes.
+            fireEvent.click(screen.getByRole('checkbox', {name: 'Unmanaged provisioning'}));
+            const warning = screen.getByRole('dialog', {name: 'Unmanaged provisioning of disk#1'});
+            expect(warning).toHaveTextContent('You are responsible for creating the system resources');
+            fireEvent.click(within(warning).getByRole('button', {name: 'Cancel'}));
+            expect(screen.getByRole('checkbox', {name: 'Unmanaged provisioning'})).not.toBeChecked();
+            fireEvent.click(screen.getByRole('checkbox', {name: 'Unmanaged provisioning'}));
+            fireEvent.click(within(screen.getByRole('dialog', {name: 'Unmanaged provisioning of disk#1'})).getByRole('button', {name: 'I manage them'}));
+            expect(screen.getByRole('checkbox', {name: 'Unmanaged provisioning'})).toBeChecked();
+            // The empty one dropped, the one set kept; no row for the provision itself.
+            expect(screen.queryByRole('textbox', {name: 'Value of vg'})).toBeNull();
+            expect(screen.getByRole('textbox', {name: 'Value of size'})).toHaveValue('1g');
+            expect(screen.queryByRole('textbox', {name: 'Value of provision'})).toBeNull();
+            expect(screen.queryByText(/Required without a value/)).toBeNull();
+            fireEvent.click(screen.getByRole('button', {name: 'Show the file'}));
+            expect(card('[data-preview]')).toHaveTextContent('[disk#1] type = lv name = data size = 1g provision = false');
+            // Given back to om: required again; the optional one at hand once they are set.
+            fireEvent.click(screen.getByRole('checkbox', {name: 'Unmanaged provisioning'}));
+            await screen.findByRole('textbox', {name: 'Value of vg'});
+            type('Value of vg', 'datavg');
+            expect(card('[data-popular=create_options]')).toBeInTheDocument();
+        });
+
+        test('the pool of a volume picked among those of the cluster for root, each its type and free size', async () => {
+            answers['GET /api/node/name/localhost/capabilities'] = {status: 200, text: JSON.stringify({items: [{data: {name: 'drivers.resource.volume'}}]})};
+            answers['GET /api/pool'] = {status: 200, text: JSON.stringify({items: [
+                {name: 'default', type: 'directory', size: 100 * 2 ** 30, free: 22 * 2 ** 30},
+                {name: 'v1', type: 'virtual', size: 0, free: 0},
+            ]})};
+            KW('volume', [
+                {section: 'volume', option: 'size', types: [''], provisioning: true, provisioningRequired: true},
+                {section: 'volume', option: 'pool', types: [''], provisioning: true},
+            ]);
+            await design();
+            fireEvent.click(screen.getByRole('button', {name: 'Add a resource'}));
+            fireEvent.click(await screen.findByRole('button', {name: /^volume/}));
+            await screen.findByRole('heading', {name: /\[volume#1\]/});
+            type('Value of size', '1g');
+            fireEvent.click(await screen.findByRole('button', {name: 'Add pool'}));
+            // Opened by the field itself, no list of the browser's beside it.
+            const pool = await screen.findByRole('combobox', {name: 'Value of pool'});
+            expect(pool).not.toHaveAttribute('list');
+            await waitFor(() => {
+                fireEvent.click(pool);
+                expect(screen.getByRole('listbox', {name: 'The values of pool'})).toBeInTheDocument();
+            });
+            const picks = () => within(screen.getByRole('listbox', {name: 'The values of pool'})).getAllByRole('option').map((o) => o.textContent);
+            // Its type and free size; a virtual pool, of no size, its type alone.
+            expect(picks()).toEqual(['defaultdirectory22 GiB free', 'v1virtual']);
+            fireEvent.mouseDown(within(screen.getByRole('listbox', {name: 'The values of pool'})).getByRole('option', {name: /^default/}));
+            expect(pool).toHaveValue('default');
+            expect(screen.queryByRole('listbox', {name: 'The values of pool'})).toBeNull();
+            // Typed: filtered; the arrows and Enter take one.
+            fireEvent.change(pool, {target: {value: 'v'}});
+            expect(picks()).toEqual(['v1virtual']);
+            fireEvent.keyDown(pool, {key: 'Enter'});
+            expect(pool).toHaveValue('v1');
+        });
+
+        test('not root: the pools its namespace claims picked, told when the pools may be read', async () => {
+            grants.current = {admin: ['ns1']};
+            answers['GET /api/node/name/localhost/capabilities'] = {status: 200, text: JSON.stringify({items: [{data: {name: 'drivers.resource.volume'}}]})};
+            answers['GET /api/pool'] = {status: 200, text: JSON.stringify({items: [
+                {name: 'default', type: 'directory', size: 100 * 2 ** 30, free: 22 * 2 ** 30},
+                {name: 'fast', type: 'zpool', size: 10 * 2 ** 30, free: 5 * 2 ** 30},
+            ]})};
+            answers['GET /api/object/path/ns1/nscfg/namespace/config/file'] = {status: 200, text: '[claim#1]\ntype = pool\nname = fast\nlimit = 2g\n'};
+            KW('volume', [
+                {section: 'volume', option: 'size', types: [''], provisioning: true, provisioningRequired: true},
+                {section: 'volume', option: 'pool', types: [''], provisioning: true},
+            ]);
+            await design();
+            fireEvent.click(screen.getByRole('button', {name: 'Add a resource'}));
+            fireEvent.click(await screen.findByRole('button', {name: /^volume/}));
+            await screen.findByRole('heading', {name: /\[volume#1\]/});
+            type('Value of size', '1g');
+            fireEvent.click(await screen.findByRole('button', {name: 'Add pool'}));
+            const pool = await screen.findByRole('combobox', {name: 'Value of pool'});
+            await waitFor(() => {
+                fireEvent.click(pool);
+                expect(within(screen.getByRole('listbox', {name: 'The values of pool'})).getAllByRole('option').map((o) => o.textContent)).toEqual(['fastzpool5 GiB free']);
+            });
         });
 
         test('a driver the daemon does not know: said, nothing added', async () => {

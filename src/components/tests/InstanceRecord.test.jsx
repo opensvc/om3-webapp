@@ -4,7 +4,7 @@ import {MemoryRouter, useLocation} from 'react-router-dom';
 import {vi} from 'vitest';
 import {InstanceDetailPanel, InstanceStatus, InstanceUsage, ObjectUsage, ResourceDetailPanel, ResourceStatus} from '../InstanceRecord';
 import useEventStore from '../../hooks/useEventStore';
-import {PG_POLL_MS, resetPgUsage} from '../../hooks/usePgUsage';
+import {PG_FIRST_RATE_MS, PG_POLL_MS, resetPgUsage} from '../../hooks/usePgUsage';
 
 // The logs stream is tested on its own: here, the nodes, the instance and the matches it reads.
 vi.mock('../LogsViewer', () => ({
@@ -138,9 +138,12 @@ describe('ObjectUsage', () => {
         expect(tile('Memory')).toHaveTextContent('3.0 MiB');
         expect(tile('Limit')).toHaveTextContent('unlimited');
         // Half a cpu on n1, a quarter on n2.
-        pages.n1.push(page(PG_POLL_MS * 500, MiB, 64 * MiB));
-        pages.n2.push(page(PG_POLL_MS * 250, 2 * MiB));
-        await nextReading();
+        pages.n1.push(page(PG_FIRST_RATE_MS * 500, MiB, 64 * MiB));
+        pages.n2.push(page(PG_FIRST_RATE_MS * 250, 2 * MiB));
+        // Read again shortly after the first: the rates within seconds.
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(PG_FIRST_RATE_MS);
+        });
         expect(Math.abs(parseFloat(tile('CPU').textContent) - 75)).toBeLessThan(3);
     });
 

@@ -5,15 +5,16 @@ import {Button} from '../ui/components/Button';
 import {Select} from '../ui/components/Field';
 import {Alert} from '../ui/components/Alert';
 import {Spinner} from '../ui/components/Spinner';
-import {GlobeIcon, LockIcon, MoonIcon, ServerIcon, SignOutIcon, SunIcon, UserIcon} from '../ui/icons';
+import {GlobeIcon, KeyIcon, LockIcon, MoonIcon, ServerIcon, SignOutIcon, SunIcon, UserIcon} from '../ui/icons';
 import {useOidc} from "../context/OidcAuthContext.tsx";
 import {useAuth, useAuthDispatch, Logout} from "../context/AuthProvider.jsx";
-import {useNavigate} from "react-router-dom";
+import {Link, useNavigate} from "react-router-dom";
 import logger from '../utils/logger.js';
 import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus";
 import {useDarkMode} from "../context/DarkModeContext";
 import {clearObjectCache} from "../hooks/useEventStore.js";
 import {LANGUAGES, LANGUAGE_NAMES, isLanguage, setLanguage} from "../i18n";
+import {useReleaseCheck} from "../app/release-check";
 
 /** A labelled value of a panel: the label muted above, the value in monospace. */
 const Value = ({label, children}) => (
@@ -40,8 +41,13 @@ const WhoAmI = () => {
     const {isDarkMode, toggleDarkMode} = useDarkMode();
     const {t, i18n} = useTranslation();
 
-    // Fetch version from GitHub
+    // The latest release, from GitHub: asked only when the user opted in, from the About page.
+    const releaseCheck = useReleaseCheck();
     useEffect(() => {
+        if (!releaseCheck) {
+            setAppVersion(undefined);
+            return;
+        }
         const fetchVersion = async () => {
             const cached = localStorage.getItem('appVersion');
             const cacheTime = localStorage.getItem('appVersionTime');
@@ -70,7 +76,7 @@ const WhoAmI = () => {
         };
 
         void fetchVersion();
-    }, []);
+    }, [releaseCheck]);
 
     // Fetch daemon status
     useEffect(() => {
@@ -164,6 +170,18 @@ const WhoAmI = () => {
                     </dl>
                 </section>
 
+                {/* A token of its own for a script or a quick test, never the one of the session. */}
+                <section aria-labelledby="whoami-api" className={PANEL}>
+                    <h2 id="whoami-api" className="mb-2 flex items-center gap-2 font-semibold">
+                        <KeyIcon className="text-accent"/>
+                        {t('user.apiAccess')}
+                    </h2>
+                    <p className="mb-2 text-ink-muted">{t('user.apiAccessHint')}</p>
+                    <Link to="/token" className="inline-flex h-8 items-center rounded-(--radius-control) border border-line px-3 font-medium hover:bg-surface-sunken">
+                        {t('user.createToken')}
+                    </Link>
+                </section>
+
                 <section aria-labelledby="whoami-server" className={PANEL}>
                     <h2 id="whoami-server" className="mb-2 flex items-center gap-2 font-semibold">
                         <ServerIcon className="text-accent"/>
@@ -174,9 +192,11 @@ const WhoAmI = () => {
                         <div>
                             <dt className="text-data text-ink-muted">{t('user.webappVersion')}</dt>
                             <dd className="font-mono">
-                                {appVersion === null
-                                    ? t('user.versionLoading')
-                                    : appVersion === '' ? t('user.versionUnknown') : `v${appVersion}`}
+                                {appVersion === undefined
+                                    ? <span className="font-sans text-ink-muted">{t('user.versionNotChecked')} <Link to="/about" className="text-accent underline-offset-2 hover:underline">{t('user.versionOptIn')}</Link></span>
+                                    : appVersion === null
+                                        ? t('user.versionLoading')
+                                        : appVersion === '' ? t('user.versionUnknown') : `v${appVersion}`}
                             </dd>
                             <dd className="text-data text-ink-muted">{t('user.productName')}</dd>
                         </div>

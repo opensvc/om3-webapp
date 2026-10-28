@@ -228,6 +228,12 @@ export function catalogDrivers(kind: string, catalog: CatalogDriver[]): DesignDr
 /** Whether an object of `kind` takes resources: a user none. */
 export const takesResources = (kind: string) => (KIND_GROUPS[kind] ?? []).length > 0;
 
+/** Whether a section of an object of `kind` is one of its resources: not the heartbeats nor the node of the cluster's. */
+export const isResource = (kind: string, section: { group?: string }) => !!section.group && (KIND_GROUPS[kind] ?? []).includes(section.group);
+
+/** Whether only root writes the objects of `kind`, every keyword of theirs root's: the cluster configuration. */
+export const rootOnlyKind = (kind: string) => kind === "ccfg";
+
 /**
  * The groups whose resources choose no type: a volume says what it needs (its size,
  * shared, access, a type of pool even, as a keyword like any) and the pool lookup

@@ -19,6 +19,8 @@ import {
     catalogDrivers,
     provisions,
     usableDrivers,
+    isResource,
+    rootOnlyKind,
     NEEDS_GROUPS,
     poolTypes,
     popularKeywords,
@@ -287,8 +289,11 @@ function KeywordHelp({keyword}) {
     );
 }
 
-/** The keywords of a section to add: filtered by words, each its first line, its doc on demand. */
-function KeywordPicker({keywords, onAdd}) {
+/**
+ * The keywords of a section to add: filtered by words, each its first line, its doc on
+ * demand; the grant each needs, unless `grantsTold` is false (every one root's).
+ */
+function KeywordPicker({keywords, onAdd, grantsTold = true}) {
     const {t} = useTranslation();
     const ids = useId();
     const [words, setWords] = useState("");
@@ -344,7 +349,7 @@ function KeywordPicker({keywords, onAdd}) {
                             >
                                 <span className="font-mono">{k.option}</span>
                                 {/* The grant it needs: for any value, or for some only (a uri of the server, of an install). */}
-                                {k.grant && (
+                                {grantsTold && k.grant && (
                                     <span className="ml-1.5 text-data text-state-warn" title={k.grantDoc || undefined}>
                                         {k.grantAlways === false ? t("objectDesigner.grantSome", {grant: k.grant}) : k.grant}
                                     </span>
@@ -539,7 +544,8 @@ export function ObjectDesigner({kind, namespace = "", sections, onChange, keywor
     // The resource whose provision the user is asked to take on, until confirmed.
     const [confirming, setConfirming] = useState(null);
     const showRoot = onShowRoot ? shownRoot : ownShowRoot;
-    const hideRoot = !(isRoot && showRoot);
+    // An object only root writes (the cluster configuration): its keywords, root's all, never hidden.
+    const hideRoot = !(isRoot && (showRoot || rootOnlyKind(kind)));
     const [preview, setPreview] = useState(false);
     // The types of pool a volume may need, read once there is a volume.
     const [pools, setPools] = useState([]);
@@ -733,7 +739,7 @@ export function ObjectDesigner({kind, namespace = "", sections, onChange, keywor
                         </h3>
                         {free && <p className="text-data text-ink-muted">{t("objectDesigner.envHint")}</p>}
                         {/* A resource om provisions, its provisioning keywords required; or left to the user, on confirmation. */}
-                        {catalog !== null && provisions(catalog, section) && (
+                        {catalog !== null && isResource(kind, section) && provisions(catalog, section) && (
                             <Checkbox
                                 label={t("objectDesigner.unmanaged")}
                                 checked={isUnmanaged(section)}
@@ -797,6 +803,8 @@ export function ObjectDesigner({kind, namespace = "", sections, onChange, keywor
                         ) : picking ? (
                             <KeywordPicker
                                 keywords={offeredKeywords(known, section, hideRoot)}
+                                // Every keyword root's, the cluster configuration's: no grant to tell them apart by.
+                                grantsTold={!rootOnlyKind(kind)}
                                 onAdd={(k) => {
                                     addEntry(k.option);
                                     setPicking(false);

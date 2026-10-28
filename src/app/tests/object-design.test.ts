@@ -11,6 +11,8 @@ import {
   type CatalogDriver,
   type DesignDriver,
   usableDrivers,
+  isResource,
+  rootOnlyKind,
   isUnmanaged,
   withUnmanaged,
   kindDrivers,
@@ -257,6 +259,13 @@ describe("object design", () => {
     expect(provisions(drivers, section("app", "forking"))).toBe(true);
     expect(provisions(null, section("fs", "nfs"))).toBe(true);
     expect(provisions(drivers, { name: "DEFAULT", entries: [] })).toBe(false);
+  });
+
+  test("a resource of its kind's groups, not a heartbeat nor the node of the cluster's; the cluster configuration root's alone", () => {
+    expect(isResource("svc", { group: "fs" })).toBe(true);
+    expect(isResource("ccfg", { group: "hb" })).toBe(false);
+    expect(isResource("svc", {})).toBe(false);
+    expect([rootOnlyKind("ccfg"), rootOnlyKind("svc")]).toEqual([true, false]);
   });
 
   test("the required entries left without a value", () => {

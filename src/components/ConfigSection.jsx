@@ -19,7 +19,7 @@ import {ForceRefusal, WaitChoice} from "./ConfigWriteControls";
 import ConfigEvalDialog from "./ConfigEvalDialog";
 import useEventStore from "../hooks/useEventStore.js";
 import {newId, withId} from "../app/object-create";
-import {designChanges, designStart, parseDesign} from "../app/object-design";
+import {designChanges, designStart, parseDesign, rootOnlyKind} from "../app/object-design";
 import {ObjectDesigner} from "./ObjectDesigner";
 
 /**
@@ -280,7 +280,8 @@ const DesignConfigDialog = ({
             footer={
                 <>
                     <div className="mr-auto self-center">
-                        {isRoot && <Checkbox label={t("objectDesigner.showRoot")} checked={showRoot} onChange={(e) => setShowRoot(e.target.checked)}/>}
+                        {/* No choice where every keyword is root's: the cluster configuration. */}
+                        {isRoot && !rootOnlyKind(kind) && <Checkbox label={t("objectDesigner.showRoot")} checked={showRoot} onChange={(e) => setShowRoot(e.target.checked)}/>}
                     </div>
                     <Button onClick={onClose} disabled={actionLoading}>{t("common.cancel")}</Button>
                     <Button

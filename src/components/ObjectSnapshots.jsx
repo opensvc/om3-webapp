@@ -76,8 +76,9 @@ export function ObjectSnapshots({path}) {
         apiFetch(instanceUrl(path, node, "sync/snapshots"), {headers: authHeaders(), cache: "no-cache"})
             .then((body) => {
                 if (!live) return;
+                // Each item holds its snapshot in its data, the node asked in its meta.
                 // The latest first: the one a restore is most often asked from.
-                const snapshots = [...(body?.items ?? [])].sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+                const snapshots = (body?.items ?? []).map((item) => item?.data ?? {}).sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
                 setState({snapshots, error: "", unsupported: false, loading: false});
             })
             .catch((err) => {

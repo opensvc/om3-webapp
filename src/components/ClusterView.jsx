@@ -531,7 +531,7 @@ export default function ClusterView() {
                         <CountsRing name="nodes" states={NODE_STATES} counts={nodeCounts} good="optimal" label={t("clusterView.nodes.operational")} words="clusterView.nodes"/>
                     ) : <p className="text-ink-muted">{t("clusterView.reading")}</p>}
                     {frozen > 0 && <p className="text-center text-data text-ink-muted">{t("clusterView.nodes.frozen", {count: frozen})}</p>}
-                    <ul aria-label={t("nav.routes.nodes")} className="flex flex-wrap justify-center gap-1.5">
+                    <ul aria-label={t("nav.routes.nodes")} className="flex flex-wrap justify-center gap-x-3 gap-y-1">
                         {nodes.map(([node, s]) => {
                             const state = nodeState(s);
                             return (

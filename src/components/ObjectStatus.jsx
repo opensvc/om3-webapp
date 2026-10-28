@@ -394,7 +394,7 @@ const ObjectStatus = ({path, onOrchestrationLogs, linkNode, linkResource, openCe
 
     // The policies of the object over its status board, its actions at the right of the title of its panel.
     const policies = board.facts.length > 0 ? (
-        <span className="flex flex-wrap gap-1" aria-label={t("statusBoard.policies")}>
+        <span className="flex flex-wrap gap-x-1" aria-label={t("statusBoard.policies")}>
             {board.facts.map((f) => <PolicyTag key={f.name} name={f.name} value={f.value}/>)}
         </span>
     ) : null;

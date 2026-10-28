@@ -14,6 +14,7 @@ import {PlusIcon} from "../ui/icons";
 import {StoreDetailPanel} from "./RecordPanels";
 import {StoreWizard} from "./StoreWizard";
 import {read, readNodes} from "./SectionConfig";
+import {BADGE} from "./ObjectCells";
 
 /** A store written or deleted: the list read again until it says so, the daemons applying the configuration. */
 const SETTLE_TRIES = 10;
@@ -63,7 +64,8 @@ function StoreCard({store, selected, onOpen}) {
             <span className="flex min-w-0 items-center gap-2">
                 <ObjectIcon kind="store" className="h-4 w-4"/>
                 <span className="min-w-0 flex-1 truncate font-semibold">{source.name}</span>
-                <span className="shrink-0 rounded-full border border-line px-1.5 text-data text-ink-muted">{store.type}</span>
+                {/* A fact of the store, a tag: no pill, a pill being a count filtering a page. */}
+                <span className={BADGE}>{store.type}</span>
             </span>
             <span title={store.url} className="-mt-2 truncate font-mono text-data text-ink-muted">{store.url}</span>
             {!stats ? (

@@ -9,7 +9,7 @@ import {getResponseErrorMessage} from "../services/api.jsx";
 import {Table, HeaderRow, HeaderCell, SortHeaderCell, Row, Cell, EmptyRow, LIST_PAGE_FIT, LIST_RAIL_QUERY} from "../ui/components/Table";
 import {Alert} from "../ui/components/Alert";
 import {Button} from "../ui/components/Button";
-import {Checkbox, Select} from "../ui/components/Field";
+import {Checkbox} from "../ui/components/Field";
 import {MenuButton} from "../ui/components/MenuButton";
 import {Spinner} from "../ui/components/Spinner";
 import {StatusMark} from "../ui/components/StatusMark";
@@ -23,11 +23,10 @@ import {syncVariant} from "./objectActions";
 import {actionIcon, useActionRunner} from "./InstanceActions";
 import {CrossLink} from "../app/CrossLink";
 import {resourceId} from "../app/peek";
-import {facetCounts, toggled} from "../app/facets";
+import {facetCounts, matches, toggled} from "../app/facets";
 import {useMediaQuery} from "../ui/lib/media";
-import {FilterRail} from "./FilterRail";
+import {FilterRail, FilterToolbar} from "./FilterRail";
 import {InstanceLink} from "./RecordLinks";
-import {FilterField, matches} from "./NodePanel";
 import {BADGE} from "./ObjectCells";
 import {rangeSelect, withShift} from "../app/range-select";
 
@@ -37,10 +36,10 @@ import {rangeSelect, withShift} from "../app/range-select";
  * resource ls` lists them (GET /resource): a line per resource of an instance, its
  * object, its node and its resource each a badge opening its record, the resource
  * on that instance alone. Filtered by words, by status, by node and by driver
- * group, several values of each kept at once; on a wide screen, the filters as facets
- * beside the table, each value counted, in the address too (status, node, group,
- * comma-separated), for a link to open the list filtered. Read again as the
- * instances report.
+ * group, several values of each kept at once, each value counted: on a wide screen,
+ * facets beside the table, narrower, popovers over it, as on the other lists
+ * (FilterRail); in the address too (status, node, group, comma-separated), for a link
+ * to open the list filtered. Read again as the instances report.
  * Selected, every one the filters keep or some, the resources are acted on together:
  * an action every one of them takes, posted once per instance.
  * A resource down on a passive node, its object up on another, no issue: its mark
@@ -54,8 +53,6 @@ import {rangeSelect, withShift} from "../app/range-select";
 /** A burst of instance reports reads the list once. */
 const REREAD_DELAY_MS = 2000;
 const EVENTS = ["InstanceStatusUpdated"];
-/** The value of a select whose filter keeps several values, from the facets of a wider window. */
-const MANY = "\u0000many";
 
 /** The steps of the scaling down: past the last one, the table scrolls sideways. */
 export const RESOURCE_LAYOUT_STEPS = 4;
@@ -225,15 +222,15 @@ const Resources = () => {
                 && matches(filter, l.object, l.rid, l.type, l.label, l.node))
             .sort((a, b) => (sortDirection === "asc" ? sort(a, b) : -sort(a, b)));
     }, [lines, status, node, group, problemsOnly, filter, sortColumn, sortDirection]);
-    // Beside the table, each value of the filters counted under the others.
-    const counts = useMemo(() => (hasRail ? facetCounts(lines, {
+    // Each value of the filters counted under the others, in the rail or the popovers.
+    const counts = useMemo(() => facetCounts(lines, {
         match: (l) => (!problemsOnly || isProblem(l)) && matches(filter, l.object, l.rid, l.type, l.label, l.node),
         facets: {
             status: {selected: status, valuesOf: (l) => (l.status ? [l.status] : [])},
             node: {selected: node, valuesOf: (l) => [l.node]},
             group: {selected: group, valuesOf: (l) => (l.group ? [l.group] : [])},
         },
-    }) : null), [hasRail, lines, filter, problemsOnly, status, node, group]);
+    }), [lines, filter, problemsOnly, status, node, group]);
     // The rows drawn as the end of the table nears; a filter or the sort changed, the first ones again.
     const drawn = useRowsOnDemand(shown.length, [status, node, group, problemsOnly, filter, sortColumn, sortDirection]);
 
@@ -315,29 +312,20 @@ const Resources = () => {
         }
     };
 
-    // A filter as a select: all, one value; several kept from the facets of a wider window, said.
-    const choice = (label, selected, set, options) => (
-        <label className="flex items-center gap-1 text-ink-muted">
-            {label}
-            <Select
-                className="h-7"
-                value={selected.length === 0 ? "" : selected.length === 1 ? selected[0] : MANY}
-                onChange={(e) => set(e.target.value === "" ? [] : [e.target.value])}
-            >
-                <option value="">{t("resources.all")}</option>
-                {selected.length > 1 && <option value={MANY} disabled>{t("resources.chosen", {count: selected.length})}</option>}
-                {options.map((o) => <option key={o} value={o}>{o}</option>)}
-            </Select>
-        </label>
-    );
     const facet = (key, label, selected, set, options, mark) => ({
         label,
         options: options.map((value) => ({value, text: value, mark: mark?.(value)})),
         selected,
-        counts: counts?.[key] ?? {},
+        counts: counts[key] ?? {},
         onToggle: (value) => set((prev) => toggled(prev, value)),
         onClear: () => set([]),
     });
+    const facets = [
+        facet("status", t("common.status"), status, setStatus, statuses,
+            (value) => <StatusMark state={toObjectState(value)} label={value}/>),
+        facet("node", t("common.node"), node, setNode, nodes),
+        facet("group", t("resources.group"), group, setGroup, groups),
+    ];
     const refresh = (
         <Button
             size="sm"
@@ -381,18 +369,20 @@ const Resources = () => {
             <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
                 {/* Wide, the tools at the head of the rail and the filters in it: their rows to the table. */}
                 {!hasRail && (
-                    <div className="flex flex-wrap items-center gap-3">
-                        {choice(t("common.status"), status, setStatus, statuses)}
-                        {choice(t("common.node"), node, setNode, nodes)}
-                        {choice(t("resources.group"), group, setGroup, groups)}
-                        {problems}
-                        {count}
-                        {/* The words filter, at the right end, as on the other lists. */}
-                        <FilterField label={t("resources.filter")} value={filter} onChange={setFilter}/>
+                    <div className="flex shrink-0 flex-wrap items-center gap-3">
+                        <FilterToolbar
+                            facets={facets}
+                            search={filter}
+                            onSearch={(e) => setFilter(e.target.value)}
+                            searchLabel={t("resources.filter")}
+                        >
+                            {problems}
+                        </FilterToolbar>
                         {refresh}
                         <span className="ml-auto flex items-center gap-3">{actions}</span>
                     </div>
                 )}
+                {!hasRail && count}
                 {error && (
                     <Alert action={<Button size="sm" onClick={() => setRead((n) => n + 1)}>{t("common.retry")}</Button>}>
                         {t("resources.loadError", {message: error})}
@@ -483,12 +473,7 @@ const Resources = () => {
                     search={filter}
                     onSearch={(e) => setFilter(e.target.value)}
                     searchLabel={t("resources.filter")}
-                    facets={[
-                        facet("status", t("common.status"), status, setStatus, statuses,
-                            (value) => <StatusMark state={toObjectState(value)} label={value}/>),
-                        facet("node", t("common.node"), node, setNode, nodes),
-                        facet("group", t("resources.group"), group, setGroup, groups),
-                    ]}
+                    facets={facets}
                 />
             )}
             {dialogs}

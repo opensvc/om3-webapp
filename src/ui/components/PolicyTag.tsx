@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import type { FactName } from "../../app/statusboard";
 
 /**
- * A policy of an object as a tag: its value alone, no icon. The policy is named in
+ * A policy of an object as muted text: its value alone, no icon nor pill. The policy is named in
  * the tooltip and for screen readers, "ha" or "nodes order" alone not saying what
  * they are about.
  */
@@ -14,7 +14,8 @@ export function PolicyTag({ name, value, children }: { name: FactName; value: st
     <span
       title={`${label}: ${value}`}
       data-policy={name}
-      className="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-line bg-surface px-2 text-data text-ink-muted"
+      // Muted text, no pill (a pill is a count filtering a page): after the first, a dot apart, drawn, not read.
+      className="inline-flex items-center gap-1 whitespace-nowrap text-data text-ink-muted not-first:before:mr-0.5 not-first:before:content-['·']"
     >
       <span className="sr-only">{label}: </span>
       {value}

@@ -5,10 +5,10 @@ import type { PeekKind } from "./peek";
 
 /**
  * Value of a cell that names a record from another view: the object of an address,
- * the node of an instance… as the oc3 badges do. In the body of a panel, the
- * convention for what can be drilled down into: the nodes, the objects, their
- * instances and their resources, each a badge opening its own panel. A badge of
- * its name alone, no icon.
+ * the node of an instance… In the body of a panel, the convention for what can be
+ * drilled down into: the nodes, the objects, their instances and their resources,
+ * each a link opening its own panel. A name as text, no icon nor badge: a pill is a
+ * count filtering a page, a name is read as the text around it, underlined hovered.
  *
  * A click shows its record over the view, without leaving it (`peek` in the URL, see
  * `PeekPanel`). The click stops at the badge: the row under it, whose own panel a
@@ -52,7 +52,8 @@ export function CrossLink({
         event.stopPropagation();
         open();
       }}
-      className="inline-flex max-w-full items-center gap-1 rounded-full border border-line bg-surface px-1.5 text-data hover:border-line-strong hover:bg-surface-sunken"
+      data-cross-link=""
+      className="inline-flex max-w-full cursor-pointer items-center rounded-sm text-left text-ink decoration-accent underline-offset-2 hover:text-accent hover:underline focus-visible:outline-2 focus-visible:outline-(--focus-ring)"
     >
       <span className="truncate">{children}</span>
     </button>

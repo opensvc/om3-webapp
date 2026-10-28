@@ -44,6 +44,7 @@ import {useGrants} from "../hooks/useGrants";
 import {propertyKeyword, useOrgEdit} from "./NodeOrgEdit";
 import {NodeLabels} from "./NodeLabels";
 import {RawDataButton} from "./JsonCode";
+import {matches} from "../app/facets";
 
 /*
  * The record panel of a cluster node, as oc3 gives its nodes one: its state and
@@ -187,10 +188,8 @@ export function FilterField({label, value, onChange}) {
     );
 }
 
-export const matches = (filter, ...values) => {
-    const q = filter.trim().toLowerCase();
-    return q === "" || values.some((v) => String(v ?? "").toLowerCase().includes(q));
-};
+// The words searched, as on the lists (app/facets): here too for the panels using it.
+export {matches};
 
 /**
  * The actions on the node, in the title bar of its panel as oc3 places them: the

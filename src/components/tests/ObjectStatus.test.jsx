@@ -125,10 +125,13 @@ describe('ObjectStatus', () => {
         // Out of a panel, the policies and the actions stand over the summary.
         const policies = screen.getByLabelText('Policies');
         expect(policies).toHaveTextContent('Topology: flexOrchestrate: haPlacement: nodes order');
-        // Each policy a tag of its value alone, no icon, named in its tooltip.
+        // Each policy its value alone, no icon, named in its tooltip.
         expect([...policies.querySelectorAll('[data-policy]')].map((tag) => [tag.dataset.policy, tag.title]))
             .toEqual([['topology', 'Topology: flex'], ['orchestrate', 'Orchestrate: ha'], ['placement', 'Placement: nodes order']]);
         expect(policies.querySelectorAll('[data-policy] svg')).toHaveLength(0);
+        // Muted text, a dot apart, no pill.
+        expect(policies.querySelector('[data-policy]')).toHaveClass('text-ink-muted');
+        expect(policies.querySelector('[data-policy]')).not.toHaveClass('rounded-full');
         expect(screen.getByRole('button', {name: 'Actions'})).toBeInTheDocument();
     });
 

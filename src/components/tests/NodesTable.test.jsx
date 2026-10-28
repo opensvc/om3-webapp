@@ -135,6 +135,9 @@ vi.mock('../../utils/logger', () => ({
     default: mockLogger,
 }));
 
+/** The checkboxes of the table, not those of the filters over it. */
+const tableCheckboxes = async () => within(await screen.findByRole('table')).getAllByRole('checkbox');
+
 describe('NodesTable', () => {
     const createDefaultStore = () => ({
         nodeStatus: {
@@ -244,6 +247,71 @@ describe('NodesTable', () => {
         }
     });
 
+    test('filtered as the other lists: by name, and by state, frozen, env, version and labels, each value counted; in the address', async () => {
+        global.fetch = vi.fn(async () => ({
+            ok: true,
+            json: async () => ({
+                'node-1': {env: 'PRD', labels: {zone: 'b'}},
+                'node-2': {env: 'DEV', labels: {}},
+                'node-3': {env: 'PRD', labels: {zone: 'a'}},
+            }),
+        }));
+        renderWithRouter(<NodesTable/>);
+        await screen.findByText('node-1');
+        const names = () => screen.getAllByRole('row').slice(1).map((row) => within(row).getAllByRole('cell')[1].textContent);
+        const group = (name) => screen.getByRole('group', {name});
+        const count = (filter, value) => within(group(filter)).getByRole('checkbox', {name: value}).closest('span.flex').textContent;
+        // node-3 reports no monitor: its state unknown.
+        expect(count('State', 'Unknown')).toMatch(/1$/);
+        await waitFor(() => expect(count('Env', 'PRD')).toMatch(/2$/));
+        fireEvent.click(within(group('Env')).getByRole('checkbox', {name: 'PRD'}));
+        expect(names()).toEqual(['node-1', 'node-3']);
+        await waitFor(() => expect(window.location.search).toBe('?env=PRD'));
+        // The other filters counted under the env kept; a label, its key=value.
+        expect(count('Label', 'zone=a')).toMatch(/1$/);
+        expect(count('Version', 'v2.0')).toMatch(/0$/);
+        // Select all: the nodes the filters keep.
+        fireEvent.click(screen.getByRole('checkbox', {name: 'Select all nodes'}));
+        expect(screen.getByText('2 selected')).toBeInTheDocument();
+        // The name searched; a node it hides leaves the selection.
+        fireEvent.change(screen.getByRole('searchbox', {name: 'Name'}), {target: {value: '3'}});
+        expect(names()).toEqual(['node-3']);
+        expect(screen.getByText('1 selected')).toBeInTheDocument();
+        fireEvent.change(screen.getByRole('searchbox', {name: 'Name'}), {target: {value: 'none'}});
+        expect(screen.getByText('No node matches.')).toBeInTheDocument();
+    });
+
+    test('filtered from the address', async () => {
+        window.history.replaceState({}, '', '/nodes?state=busy');
+        renderWithRouter(<NodesTable/>);
+        await screen.findByText('node-2');
+        expect(screen.getAllByRole('row').slice(1).map((row) => within(row).getAllByRole('cell')[1].textContent)).toEqual(['node-2']);
+    });
+
+    test('a range ticked with Shift, the nodes shown alone: none the filters hide', async () => {
+        window.history.replaceState({}, '', '/nodes?state=idle,unknown');
+        renderWithRouter(<NodesTable/>);
+        const checkboxes = await tableCheckboxes();
+        fireEvent.click(checkboxes[1]);
+        fireEvent.click(checkboxes[2], {shiftKey: true});
+        expect(screen.getByText('2 selected')).toBeInTheDocument();
+    });
+
+    test('wide, the filters beside the table as facets, the tools at their head', async () => {
+        const matchMedia = window.matchMedia;
+        window.matchMedia = (query) => ({matches: query.includes('1536px'), addEventListener() {}, removeEventListener() {}});
+        try {
+            renderWithRouter(<NodesTable/>);
+            await screen.findByText('node-1');
+            const rail = screen.getByRole('complementary', {name: 'Filters'});
+            expect(within(rail).getByRole('region', {name: 'State'})).toBeInTheDocument();
+            expect(within(rail.querySelector('[data-rail-head]')).getByText('Select nodes to act on them, or open one')).toBeInTheDocument();
+            expect(document.querySelector('[data-filter-toolbar]')).toBeNull();
+        } finally {
+            window.matchMedia = matchMedia;
+        }
+    });
+
     test('the env and the labels of each node read once, a column each, sorted by them', async () => {
         global.fetch = vi.fn(async () => ({
             ok: true,
@@ -272,7 +340,7 @@ describe('NodesTable', () => {
 
     test('the actions show with a selection, and go with it', async () => {
         renderWithRouter(<NodesTable/>);
-        const checkboxes = await screen.findAllByRole('checkbox');
+        const checkboxes = await tableCheckboxes();
         const actions = () => screen.queryByRole('button', {name: 'Actions'});
 
         expect(actions()).not.toBeInTheDocument();
@@ -332,7 +400,7 @@ describe('NodesTable', () => {
                     : Promise.reject(new Error('HTTP error'))
             );
             renderWithRouter(<NodesTable/>);
-            const checkboxes = await screen.findAllByRole('checkbox');
+            const checkboxes = await tableCheckboxes();
             fireEvent.click(checkboxes[1]);
             fireEvent.click(checkboxes[2]);
             const actionsBtn = screen.getByRole('button', {name: 'Actions'});
@@ -402,7 +470,7 @@ describe('NodesTable', () => {
         test('correct URL for daemon stop via menu', async () => {
             global.fetch = vi.fn().mockResolvedValue({ok: true});
             renderWithRouter(<NodesTable/>);
-            const checkboxes = await screen.findAllByRole('checkbox');
+            const checkboxes = await tableCheckboxes();
             fireEvent.click(checkboxes[1]);
             const actionsBtn = screen.getByRole('button', {name: 'Actions'});
             await waitFor(() => expect(actionsBtn).toBeEnabled());
@@ -420,7 +488,7 @@ describe('NodesTable', () => {
         test('correct URL for node-level freeze via menu', async () => {
             global.fetch = vi.fn().mockResolvedValue({ok: true});
             renderWithRouter(<NodesTable/>);
-            const checkboxes = await screen.findAllByRole('checkbox');
+            const checkboxes = await tableCheckboxes();
             fireEvent.click(checkboxes[1]);
             const actionsBtn = screen.getByRole('button', {name: 'Actions'});
             await waitFor(() => expect(actionsBtn).toBeEnabled());
@@ -437,7 +505,7 @@ describe('NodesTable', () => {
 
         test('no dequeue: the daemon dequeues the actions the collector says queued, on each feed', async () => {
             renderWithRouter(<NodesTable/>);
-            const checkboxes = await screen.findAllByRole('checkbox');
+            const checkboxes = await tableCheckboxes();
             fireEvent.click(checkboxes[1]);
             const actionsBtn = screen.getByRole('button', {name: 'Actions'});
             await waitFor(() => expect(actionsBtn).toBeEnabled());
@@ -460,7 +528,7 @@ describe('NodesTable', () => {
         ])('correct URL for %s', async (label, urlPattern) => {
             global.fetch = vi.fn().mockResolvedValue({ok: true});
             renderWithRouter(<NodesTable/>);
-            const checkboxes = await screen.findAllByRole('checkbox');
+            const checkboxes = await tableCheckboxes();
             fireEvent.click(checkboxes[1]);
             const actionsBtn = screen.getByRole('button', {name: 'Actions'});
             await waitFor(() => expect(actionsBtn).toBeEnabled());
@@ -520,7 +588,7 @@ describe('NodesTable', () => {
 
         test('root enrolls a node: the accent of what creates, opening its dialog; others are not offered it', async () => {
             const {unmount} = renderWithRouter(<NodesTable/>);
-            await screen.findAllByRole('checkbox');
+            await tableCheckboxes();
             expect(screen.queryByRole('button', {name: 'Enroll'})).toBeNull();
             unmount();
             mockGrants.value = {root: null};
@@ -612,7 +680,7 @@ describe('NodesTable', () => {
                 },
             });
             renderWithRouter(<NodesTable/>);
-            const checkboxes = await screen.findAllByRole('checkbox');
+            const checkboxes = await tableCheckboxes();
             fireEvent.click(checkboxes[1]);
             fireEvent.click(checkboxes[2]);
             fireEvent.click(screen.getByRole('button', {name: 'Actions'}));
@@ -633,7 +701,7 @@ describe('NodesTable', () => {
 
         test('handleAction without nodename closes actions menu', async () => {
             renderWithRouter(<NodesTable/>);
-            const checkboxes = await screen.findAllByRole('checkbox');
+            const checkboxes = await tableCheckboxes();
             fireEvent.click(checkboxes[1]);
             fireEvent.click(screen.getByRole('button', {name: 'Actions'}));
             await waitFor(() => expect(screen.getByRole('menu')).toBeInTheDocument());
@@ -799,7 +867,7 @@ describe('NodesTable', () => {
     describe('additional branch coverage', () => {
         test('bulk menu closes on a click outside', async () => {
             renderWithRouter(<NodesTable/>);
-            const checkboxes = await screen.findAllByRole('checkbox');
+            const checkboxes = await tableCheckboxes();
             fireEvent.click(checkboxes[1]);
             const actionsBtn = screen.getByRole('button', {name: 'Actions'});
             fireEvent.click(actionsBtn);

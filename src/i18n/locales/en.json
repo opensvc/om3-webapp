@@ -532,8 +532,6 @@
       "routine": "Routine",
       "beating": "Beating",
       "id": "ID",
-      "show": "Show filters",
-      "hide": "Hide filters",
       "driver": "Driver",
       "clearAll": "Clear all filters"
     },
@@ -1413,6 +1411,16 @@
       "daysAgo": "{{count}}d ago"
     },
     "selectHint": "Select nodes to act on them, or open one",
+    "noMatch": "No node matches.",
+    "filters": {
+      "state": "State",
+      "frozen": "Frozen",
+      "frozenValues": {
+        "frozen": "frozen",
+        "thawed": "not frozen"
+      },
+      "label": "Label"
+    },
     "short": {
       "score": "score",
       "load": "load",
@@ -2768,7 +2776,6 @@
     "loadError": "The resources could not be read: {{message}}",
     "filter": "Filter the resources",
     "group": "Driver",
-    "all": "All",
     "count": "{{shown}} / {{total}}",
     "refresh": "Refresh",
     "empty": "No resource reported.",
@@ -2794,8 +2801,6 @@
       "encap": "encapsulated"
     },
     "rail": "Filters",
-    "chosen_one": "{{count}} chosen",
-    "chosen_other": "{{count}} chosen",
     "selection": {
       "all": "Select all the resources",
       "one": "Select {{rid}} of {{path}} on {{node}}",

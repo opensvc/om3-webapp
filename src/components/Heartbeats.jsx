@@ -5,15 +5,14 @@ import React, {
     useCallback,
     useRef,
     useDeferredValue,
-    useSyncExternalStore,
 } from "react";
 import {useLocation, useNavigate} from "react-router-dom";
 import {useTranslation} from "react-i18next";
 
 import useEventStore from "../hooks/useEventStore.js";
 import {retainEventReception} from "../eventSourceManager.jsx";
-import {Table, HeaderRow, HeaderCell, SortHeaderCell, Row, Cell, EmptyRow} from "../ui/components/Table";
-import {Checkbox, Select} from "../ui/components/Field";
+import {Table, HeaderRow, HeaderCell, SortHeaderCell, Row, Cell, EmptyRow, LIST_RAIL_QUERY} from "../ui/components/Table";
+import {Checkbox} from "../ui/components/Field";
 import {Button} from "../ui/components/Button";
 import {Dialog} from "../ui/components/Dialog";
 import {URL_NODE} from "../config/apiPath.js";
@@ -33,23 +32,39 @@ import {tabPanelProps, useTabsId} from "../ui/components/tabs-ids";
 import LogsViewer from "./LogsViewer";
 import {heartbeatLogs} from "../app/heartbeat-logs";
 import {MoreRows, useRowsOnDemand} from "../ui/components/RowsOnDemand";
-import {ChevronDownIcon, CloseIcon, FilterIcon} from "../ui/icons";
+import {CloseIcon} from "../ui/icons";
+import {useMediaQuery} from "../ui/lib/media";
+import {facetCounts, toggled} from "../app/facets";
+import {FilterRail, FilterToolbar} from "./FilterRail";
 
-// The breakpoints of the MUI theme the view used: below md (900px) the filters fold
-// behind a button, from lg (1200px) they are always shown at first.
-const MOBILE_QUERY = "(max-width:899.95px)";
-const WIDE_QUERY = "(min-width:1200px)";
-
-/** Whether a media query matches, kept up to date; false where matchMedia is missing. */
-const useMediaQuery = (query) => useSyncExternalStore(
-    useCallback((onChange) => {
-        if (typeof window.matchMedia !== "function") return () => {};
-        const list = window.matchMedia(query);
-        list.addEventListener("change", onChange);
-        return () => list.removeEventListener("change", onChange);
-    }, [query]),
-    () => typeof window.matchMedia === "function" && window.matchMedia(query).matches,
-);
+/**
+ * The filters of the streams, by the key of each in the address: several values of
+ * each kept at once, comma-separated, none keeping every stream. A heartbeat by its
+ * name alone, "1" of "hb#1" or of its stream "hb#1.rx", as the overview links it.
+ */
+const FILTER_KEYS = ["state", "status", "node", "id", "type"];
+const heartbeatOf = (id) => id.replace(/^hb#/, "").replace(/\.(rx|tx)$/, "");
+const filtersOf = (search) => {
+    const params = new URLSearchParams(search);
+    const values = (key) => (params.get(key) ?? "").split(",").filter((v) => v && v !== "all");
+    return {
+        state: values("state"),
+        // Beating, or stale: no other value.
+        status: values("status").filter((v) => v === "beating" || v === "stale"),
+        node: values("node"),
+        id: [...new Set(values("id").map(heartbeatOf))],
+        type: values("type"),
+    };
+};
+const sameFilters = (a, b) => FILTER_KEYS.every((key) => a[key].join(",") === b[key].join(","));
+/** What a stream is of each filter. */
+const STREAM_VALUES = {
+    state: (row) => [row.state],
+    status: (row) => [row.isBeating ? "beating" : "stale"],
+    node: (row) => [row.node],
+    id: (row) => [heartbeatOf(row.id)],
+    type: (row) => [row.type],
+};
 
 /** A running stream is up, a stopped or failed one down, a warning one warn. */
 const STREAM_STATUS = {running: "up", warning: "warn", stopped: "down", failed: "down"};
@@ -153,23 +168,15 @@ const Heartbeats = () => {
     const location = useLocation();
     const navigate = useNavigate();
     const eventStarted = useRef(false);
-    const isMobile = useMediaQuery(MOBILE_QUERY);
-    const isWideScreen = useMediaQuery(WIDE_QUERY);
+    const hasRail = useMediaQuery(LIST_RAIL_QUERY);
 
     const heartbeatStatus = useEventStore((state) => state.heartbeatStatus);
     const [stoppedStreamsCache, setStoppedStreamsCache] = useState({});
     const [sortColumn, setSortColumn] = useState("node");
     const [sortDirection, setSortDirection] = useState("asc");
 
-    const [showFilters, setShowFilters] = useState(() => isWideScreen ? true : !isMobile);
-
     // Read query parameters
     const queryParams = new URLSearchParams(location.search);
-    const rawStatus = queryParams.get("status") || "all";
-    const rawNode = queryParams.get("node") || "all";
-    const rawState = queryParams.get("state") || "all";
-    const rawId = queryParams.get("id") || "all";
-    const rawType = queryParams.get("type") || "all";
     // The tab shown: the overview, the default; the streams; the logs of the heartbeats.
     // Followed at once, the URL after.
     const urlView = ["data", "logs"].includes(queryParams.get("view")) ? queryParams.get("view") : "overview";
@@ -178,26 +185,9 @@ const Heartbeats = () => {
     const tabsId = useTabsId();
     // In the logs, the changes of the peers beating only.
     const [changesOnly, setChangesOnly] = useState(false);
-    // A driver, "unicast": the streams of its heartbeats only.
-    const [filterType, setFilterType] = useState(rawType);
-
-    const [filterBeating, setFilterBeating] = useState(
-        ["all", "beating", "stale"].includes(rawStatus) ? rawStatus : "all"
-    );
-    const [filterNode, setFilterNode] = useState(rawNode);
-    const [filterState, setFilterState] = useState(rawState);
-    const [filterId, setFilterId] = useState(() => {
-        let cleaned = rawId;
-        if (cleaned.startsWith("hb#")) {
-            cleaned = cleaned.replace(/^hb#/, "");
-        }
-        return cleaned.replace(/\.(rx|tx)$/, "");
-    });
-
-    const deferredFilterBeating = useDeferredValue(filterBeating);
-    const deferredFilterNode = useDeferredValue(filterNode);
-    const deferredFilterState = useDeferredValue(filterState);
-    const deferredFilterId = useDeferredValue(filterId);
+    // The values kept of each filter, from the address first (filtersOf).
+    const [filters, setFilters] = useState(() => filtersOf(location.search));
+    const deferredFilters = useDeferredValue(filters);
     const deferredSortColumn = useDeferredValue(sortColumn);
     const deferredSortDirection = useDeferredValue(sortDirection);
 
@@ -210,59 +200,26 @@ const Heartbeats = () => {
         "CONNECTION_CLOSED"
     ], []);
 
-    // Update URL when filters change
+    // The filters written to the address as they change: the other parameters, the page
+    // size and the open panel's, stay as they are; the page goes, the list filtered
+    // otherwise starting over from its first.
     useEffect(() => {
         const timer = setTimeout(() => {
-            const currentParams = new URLSearchParams(location.search);
-            const currentStatus = currentParams.get("status") || "all";
-            const currentNode = currentParams.get("node") || "all";
-            const currentState = currentParams.get("state") || "all";
-            const currentId = currentParams.get("id") || "all";
-            const currentType = currentParams.get("type") || "all";
-
-            if (currentStatus === filterBeating &&
-                currentNode === filterNode &&
-                currentState === filterState &&
-                currentId === filterId &&
-                currentType === filterType) {
-                return;
-            }
-
-            // The other parameters, the page size and the open panel's, stay as they
-            // are; the page goes, the list filtered otherwise starting over from its first.
-            const newQueryParams = new URLSearchParams(location.search);
-            ["status", "node", "state", "id", "type", "offset"].forEach((key) => newQueryParams.delete(key));
-            if (filterBeating !== "all") newQueryParams.set("status", filterBeating);
-            if (filterNode !== "all") newQueryParams.set("node", filterNode);
-            if (filterState !== "all") newQueryParams.set("state", filterState);
-            if (filterId !== "all") newQueryParams.set("id", filterId);
-            if (filterType !== "all") newQueryParams.set("type", filterType);
-
-            const queryString = newQueryParams.toString();
-            const newUrl = `${location.pathname}${queryString ? `?${queryString}` : ""}`;
-
-            if (newUrl !== location.pathname + location.search) {
-                navigate(newUrl, {replace: true});
-            }
+            if (sameFilters(filtersOf(location.search), filters)) return;
+            const params = new URLSearchParams(location.search);
+            [...FILTER_KEYS, "offset"].forEach((key) => params.delete(key));
+            for (const key of FILTER_KEYS) if (filters[key].length > 0) params.set(key, filters[key].join(","));
+            const query = params.toString();
+            navigate(`${location.pathname}${query ? `?${query}` : ""}`, {replace: true});
         }, 300);
-
         return () => clearTimeout(timer);
-    }, [filterBeating, filterNode, filterState, filterId, filterType, navigate, location.pathname, location.search]);
+    }, [filters, navigate, location.pathname, location.search]);
 
-    // Initialize filter states from URL
+    // The address changed (a link, Back): its filters.
     useEffect(() => {
-        let cleanedId = rawId;
-        if (cleanedId.startsWith("hb#")) {
-            cleanedId = cleanedId.replace(/^hb#/, "");
-        }
-        const baseId = cleanedId.replace(/\.(rx|tx)$/, "");
-
-        setFilterBeating(["all", "beating", "stale"].includes(rawStatus) ? rawStatus : "all");
-        setFilterNode(rawNode);
-        setFilterState(rawState);
-        setFilterId(baseId);
-        setFilterType(rawType);
-    }, [location.search, rawStatus, rawNode, rawState, rawId, rawType]);
+        const fromAddress = filtersOf(location.search);
+        setFilters((prev) => (sameFilters(prev, fromAddress) ? prev : fromAddress));
+    }, [location.search]);
 
     // Cache stopped streams with their last known peers
     useEffect(() => {
@@ -430,20 +387,9 @@ const Heartbeats = () => {
         });
     }, [streamRows, deferredSortColumn, deferredSortDirection]);
 
-    const filteredRows = useMemo(() => {
-        return sortedRows.filter((row) => {
-            const rowBaseId = row.id.replace(/\.(rx|tx)$/, "");
-            return (
-                (deferredFilterBeating === "all" ||
-                    (deferredFilterBeating === "beating" && row.isBeating === true) ||
-                    (deferredFilterBeating === "stale" && row.isBeating === false)) &&
-                (deferredFilterNode === "all" || row.node === deferredFilterNode) &&
-                (deferredFilterState === "all" || row.state === deferredFilterState) &&
-                (deferredFilterId === "all" || rowBaseId === deferredFilterId) &&
-                (filterType === "all" || row.type === filterType)
-            );
-        });
-    }, [sortedRows, deferredFilterBeating, deferredFilterNode, deferredFilterState, deferredFilterId, filterType]);
+    const filteredRows = useMemo(() => sortedRows.filter((row) => FILTER_KEYS.every((key) => (
+        deferredFilters[key].length === 0 || STREAM_VALUES[key](row).some((value) => deferredFilters[key].includes(value))
+    ))), [sortedRows, deferredFilters]);
 
     // The drivers of the streams, for their filter.
     const availableTypes = useMemo(() => [...new Set(streamRows.map((row) => row.type))]
@@ -451,14 +397,40 @@ const Heartbeats = () => {
         .sort(), [streamRows, t]);
 
     // The filters of the streams, of the Data tab only: any set, all of them cleared at once.
-    const filtered = [filterBeating, filterNode, filterState, filterId, filterType].some((value) => value !== "all");
-    const clearAllFilters = useCallback(() => {
-        setFilterBeating("all");
-        setFilterNode("all");
-        setFilterState("all");
-        setFilterId("all");
-        setFilterType("all");
-    }, []);
+    const filtered = FILTER_KEYS.some((key) => filters[key].length > 0);
+    const clearAllFilters = useCallback(() => setFilters(filtersOf("")), []);
+
+    // Each filter a facet, its values counted under the others: in the rail, or in the
+    // popovers of the toolbar, as on the other lists.
+    const counts = useMemo(() => facetCounts(streamRows, {
+        facets: Object.fromEntries(FILTER_KEYS.map((key) => [key, {selected: filters[key], valuesOf: STREAM_VALUES[key]}])),
+    }), [streamRows, filters]);
+    const facet = (key, label, values, text = (value) => value) => ({
+        label,
+        options: [...values, ...filters[key].filter((value) => !values.includes(value))].map((value) => ({value, text: text(value)})),
+        selected: filters[key],
+        counts: counts[key],
+        onToggle: (value) => setFilters((prev) => ({...prev, [key]: toggled(prev[key], value)})),
+        onClear: () => setFilters((prev) => ({...prev, [key]: []})),
+    });
+    const facets = [
+        facet("state", t("heartbeats.filters.routine"), availableStates.filter((s) => s !== "all"), (state) => routineWord(state, t)),
+        facet("status", t("heartbeats.filters.beating"), ["beating", "stale"], (value) => t(`heartbeats.marks.${value}`)),
+        facet("node", t("common.node"), nodes),
+        facet("id", t("heartbeats.filters.id"), availableIds),
+        facet("type", t("heartbeats.filters.driver"), availableTypes),
+    ];
+    // Any filter set, a tool clearing them all.
+    const clearAll = filtered && (
+        <Button
+            size="sm"
+            icon={<CloseIcon className="h-3.5 w-3.5"/>}
+            onClick={clearAllFilters}
+            data-clear-all=""
+        >
+            {t("heartbeats.filters.clearAll")}
+        </Button>
+    );
 
     // The tab in the URL, the first one not named.
     const setView = useCallback((key) => {
@@ -545,26 +517,6 @@ const Heartbeats = () => {
         });
     }, []);
 
-    const toggleShowFilters = useCallback(() => {
-        setShowFilters(prev => !prev);
-    }, []);
-
-    const handleFilterChange = useCallback((setter) => (event) => {
-        setter(event.target.value);
-    }, []);
-
-    const filterSelect = (label, value, setter, options) => (
-        <label className="flex items-center gap-1 text-ink-muted">
-            {label}
-            <Select className="h-7" value={value} onChange={handleFilterChange(setter)}>
-                <option value="all">{t("common.all")}</option>
-                {options.map(([optionValue, optionLabel]) => (
-                    <option key={optionValue} value={optionValue}>{optionLabel}</option>
-                ))}
-            </Select>
-        </label>
-    );
-
     return (
         // The page grows with its table, all its rows shown, the page scrolling
         // rather than the table in a box under the mesh.
@@ -621,81 +573,47 @@ const Heartbeats = () => {
             )}
 
             {view === "data" && (
-                <div id="heartbeats-streams" {...tabPanelProps(tabsId, "data")} className="flex flex-col space-y-3">
-                    <div className="flex shrink-0 flex-wrap items-center gap-3">
-                        {isMobile && (
-                            <Button
-                                size="sm"
-                                icon={<FilterIcon className="h-4 w-4"/>}
-                                onClick={toggleShowFilters}
-                                aria-label={showFilters ? t("heartbeats.filters.hide") : t("heartbeats.filters.show")}
-                                aria-expanded={showFilters}
-                                aria-controls="heartbeats-filters"
-                            >
-                                <span className="hidden sm:inline">{t("common.filters")}</span>
-                                <ChevronDownIcon className={showFilters ? "h-4 w-4 rotate-180" : "h-4 w-4"}/>
-                            </Button>
+                <div id="heartbeats-streams" {...tabPanelProps(tabsId, "data")} className="flex gap-6">
+                    <div className="flex min-w-0 flex-1 flex-col space-y-3">
+                        {/* Wide, the filters beside the table, as facets; narrower, popovers over it. */}
+                        {!hasRail && (
+                            <div className="flex shrink-0 flex-wrap items-center gap-3">
+                                <FilterToolbar facets={facets}>{clearAll}</FilterToolbar>
+                            </div>
                         )}
-                        <div
-                            id="heartbeats-filters"
-                            hidden={!showFilters}
-                            className="flex flex-wrap items-center gap-3"
-                        >
-                            {filterSelect(t("heartbeats.filters.routine"), filterState, setFilterState, availableStates
-                                .filter(s => s !== "all")
-                                .map(state => [state, routineWord(state, t)]))}
-                            {filterSelect(t("heartbeats.filters.beating"), filterBeating, setFilterBeating, [
-                                ["beating", t("heartbeats.marks.beating")],
-                                ["stale", t("heartbeats.marks.stale")],
-                            ])}
-                            {filterSelect(t("common.node"), filterNode, setFilterNode, nodes.map(node => [node, node]))}
-                            {filterSelect(t("heartbeats.filters.id"), filterId, setFilterId, availableIds.map(id => [id, id]))}
-                            {filterSelect(t("heartbeats.filters.driver"), filterType, setFilterType, availableTypes.map(type => [type, type]))}
-                            {/* Any filter set, a tool clearing them all. */}
-                            {filtered && (
-                                <Button
-                                    size="sm"
-                                    icon={<CloseIcon className="h-3.5 w-3.5"/>}
-                                    onClick={clearAllFilters}
-                                    data-clear-all=""
-                                >
-                                    {t("heartbeats.filters.clearAll")}
-                                </Button>
-                            )}
-                        </div>
-                    </div>
 
-
-                    <Table sticky>
-                        <thead>
-                            <HeaderRow>
-                                {COLUMNS.map(({labelKey, key}) => (
-                                    <SortHeaderCell
-                                        key={key}
-                                        label={t(labelKey)}
-                                        active={sortColumn === key}
-                                        direction={sortDirection}
-                                        onSort={() => handleSort(key)}
+                        <Table sticky>
+                            <thead>
+                                <HeaderRow>
+                                    {COLUMNS.map(({labelKey, key}) => (
+                                        <SortHeaderCell
+                                            key={key}
+                                            label={t(labelKey)}
+                                            active={sortColumn === key}
+                                            direction={sortDirection}
+                                            onSort={() => handleSort(key)}
+                                        />
+                                    ))}
+                                </HeaderRow>
+                            </thead>
+                            <tbody>
+                                {visibleRows.map(row => (
+                                    <HeartbeatRow
+                                        key={`${row.node}-${row.id}-${row.peer}`}
+                                        row={row}
+                                        isSingleNode={isSingleNode}
                                     />
                                 ))}
-                            </HeaderRow>
-                        </thead>
-                        <tbody>
-                            {visibleRows.map(row => (
-                                <HeartbeatRow
-                                    key={`${row.node}-${row.id}-${row.peer}`}
-                                    row={row}
-                                    isSingleNode={isSingleNode}
-                                />
-                            ))}
-                            <MoreRows rows={drawn} colSpan={COLUMNS.length}/>
-                            {visibleRows.length === 0 && (
-                                <EmptyRow colSpan={COLUMNS.length}>
-                                    {t("heartbeats.empty")}
-                                </EmptyRow>
-                            )}
-                        </tbody>
-                    </Table>
+                                <MoreRows rows={drawn} colSpan={COLUMNS.length}/>
+                                {visibleRows.length === 0 && (
+                                    <EmptyRow colSpan={COLUMNS.length}>
+                                        {t("heartbeats.empty")}
+                                    </EmptyRow>
+                                )}
+                            </tbody>
+                        </Table>
+                    </div>
+                    {hasRail && <FilterRail label={t("objects.filters.rail")} head={clearAll || undefined} facets={facets}/>}
                 </div>
             )}
 

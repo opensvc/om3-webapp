@@ -21,16 +21,16 @@ import {FrozenMark} from "../ui/components/FrozenMark";
 import {MenuButton} from "../ui/components/MenuButton";
 import {Button, IconButton} from "../ui/components/Button";
 import {cn} from "../ui/cn";
-import {Checkbox, Input} from "../ui/components/Field";
+import {Checkbox} from "../ui/components/Field";
 import {useMediaQuery} from "../ui/lib/media";
 import {objectFacets} from "../app/object-facets";
-import {FilterRail} from "./FilterRail";
+import {FilterRail, FilterToolbar} from "./FilterRail";
 import {BADGE, KeyCells, NotProvisionedMark, OrchestrateBadge, PropertyCells, SideText, StatusMarks, markState} from "./ObjectCells";
 import {useGrants} from "../hooks/useGrants";
 import {canWriteClaims} from "../app/namespace-claims";
 import {MoreRows, useRowsOnDemand} from "../ui/components/RowsOnDemand";
 import {ALL_LIST, OBJECT_LISTS, OBJECTS_TABS, listOfKind} from "../utils/objectLists";
-import {BoltIcon, ChevronDownIcon, FilterIcon, GearIcon, PlusIcon, SearchIcon} from "../ui/icons";
+import {BoltIcon, GearIcon, PlusIcon} from "../ui/icons";
 import {menuColumns, menuFilter} from "../app/action-menu";
 import {Term} from "../app/Term";
 import {rangeSelect, withShift} from "../app/range-select";
@@ -411,68 +411,6 @@ const TableRowComponent = React.memo(({
     );
 });
 
-/**
- * A multi-valued filter of the toolbar: a popover of checkboxes, as oc3 does for its
- * column picker. The summary tells the filter and what it keeps; a click outside or
- * Escape closes the popover.
- */
-const FilterPopover = ({label, options, selected, onToggle}) => {
-    const {t} = useTranslation();
-    const ref = useRef(null);
-
-    useEffect(() => {
-        const onPointerDown = (event) => {
-            const details = ref.current;
-            if (details?.open && !details.contains(event.target)) details.open = false;
-        };
-        document.addEventListener("pointerdown", onPointerDown);
-        return () => document.removeEventListener("pointerdown", onPointerDown);
-    }, []);
-
-    const onKeyDown = (event) => {
-        const details = ref.current;
-        if (event.key !== "Escape" || !details?.open) return;
-        event.preventDefault();
-        event.stopPropagation();
-        details.open = false;
-        details.querySelector("summary")?.focus();
-    };
-
-    const labelOf = (value) => options.find((option) => option.value === value)?.text ?? value;
-    const summary = selected.length === 0 ? t("common.all") : selected.map(labelOf).join(", ");
-
-    return (
-        <details ref={ref} className="relative" onKeyDown={onKeyDown}>
-            <summary
-                className="flex h-7 cursor-pointer list-none items-center gap-1 rounded-(--radius-control) border border-line bg-surface px-2 whitespace-nowrap text-ink-muted hover:border-line-strong [&::-webkit-details-marker]:hidden">
-                {label}
-                <span className="max-w-40 truncate text-ink">{summary}</span>
-                <ChevronDownIcon className="h-3.5 w-3.5"/>
-            </summary>
-            <div
-                role="group"
-                aria-label={label}
-                className="absolute top-full left-0 z-30 mt-1 flex max-h-72 min-w-44 flex-col gap-1 overflow-auto rounded-(--radius-panel) border border-line bg-surface-raised p-2 shadow-lg"
-            >
-                {options.length === 0 && <span className="text-ink-muted">{t("common.none")}</span>}
-                {options.map((option) => (
-                    <Checkbox
-                        key={option.value}
-                        checked={selected.includes(option.value)}
-                        onChange={() => onToggle(option.value)}
-                        label={
-                            <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
-                                {option.mark && <span aria-hidden="true" className="inline-flex">{option.mark}</span>}
-                                {option.text}
-                            </span>
-                        }
-                    />
-                ))}
-            </div>
-        </details>
-    );
-};
-
 /** The values on offer, plus those chosen (from the URL) that the data does not hold. */
 const withSelected = (values, selected) => [...values, ...selected.filter((value) => !values.includes(value))];
 
@@ -546,15 +484,12 @@ const Objects = () => {
     const isMobile = useMediaQuery(MOBILE_QUERY);
     const hasRail = useMediaQuery(LIST_RAIL_QUERY);
 
-    const [showFilters, setShowFilters] = useState(() => isWideScreen ? true : !isMobile);
 
     const deferredSearchQuery = useDeferredValue(searchQuery);
     const deferredSelectedGlobalStates = useDeferredValue(selectedGlobalStates);
     const deferredSelectedNamespaces = useDeferredValue(selectedNamespaces);
     const deferredSelectedKinds = useDeferredValue(selectedKinds);
 
-
-    const filtersId = React.useId();
 
     const objects = useMemo(
         () => (Object.keys(objectStatus).length ? objectStatus : daemon?.cluster?.object || {}),
@@ -752,10 +687,6 @@ const Objects = () => {
         setSearchQuery(e.target.value);
     }, []);
 
-    const toggleShowFilters = useCallback(() => {
-        setShowFilters(prev => !prev);
-    }, []);
-
     const handleGlobalStateChange = useCallback((state) => {
         setSelectedGlobalStates(prev => {
             if (prev.includes(state)) {
@@ -930,7 +861,7 @@ const Objects = () => {
 
     // The filters beside the table, each value counted under the others.
     const facetCounts = useMemo(
-        () => (hasRail ? objectFacets(listObjectNames, {
+        () => objectFacets(listObjectNames, {
             search: deferredSearchQuery,
             namespaces: deferredSelectedNamespaces,
             kinds: deferredSelectedKinds,
@@ -941,17 +872,23 @@ const Objects = () => {
             kindOf: (name) => parseObjectName(name).kind,
             useGlobalState: hasGlobalState,
             useKind: hasKindFilter,
-        }) : null),
-        [hasRail, listObjectNames, deferredSearchQuery, deferredSelectedNamespaces, deferredSelectedKinds,
+        }),
+        [listObjectNames, deferredSearchQuery, deferredSelectedNamespaces, deferredSelectedKinds,
             deferredSelectedGlobalStates, objects, hasGlobalState, hasKindFilter]
     );
-    const railFacets = facetCounts === null ? [] : [
-        hasGlobalState && {label: t("objects.filters.globalState"), options: globalStateOptions, selected: selectedGlobalStates,
-            counts: facetCounts.globalState, onToggle: handleGlobalStateChange, onClear: clearGlobalStates},
-        hasKindFilter && {label: t("objects.filters.kind"), options: kindOptions, selected: selectedKinds,
-            counts: facetCounts.kind, onToggle: handleKindChange, onClear: clearKinds},
-        {label: t("objects.filters.namespace"), options: namespaceOptions, selected: selectedNamespaces,
-            counts: facetCounts.namespace, onToggle: handleNamespaceChange, onClear: clearNamespaces},
+    // The same facets in the rail and in the toolbar, each value counted under the others;
+    // in the toolbar, a namespace or a kind with a choice to make only.
+    const globalStateFacet = hasGlobalState && {label: t("objects.filters.globalState"), options: globalStateOptions,
+        selected: selectedGlobalStates, counts: facetCounts.globalState, onToggle: handleGlobalStateChange, onClear: clearGlobalStates};
+    const kindFacet = hasKindFilter && {label: t("objects.filters.kind"), options: kindOptions, selected: selectedKinds,
+        counts: facetCounts.kind, onToggle: handleKindChange, onClear: clearKinds};
+    const namespaceFacet = {label: t("objects.filters.namespace"), options: namespaceOptions, selected: selectedNamespaces,
+        counts: facetCounts.namespace, onToggle: handleNamespaceChange, onClear: clearNamespaces};
+    const railFacets = [globalStateFacet, kindFacet, namespaceFacet].filter(Boolean);
+    const toolbarFacets = [
+        globalStateFacet,
+        hasChoice(namespaces, selectedNamespaces) && namespaceFacet,
+        kindFacet && hasChoice(kinds, selectedKinds) && kindFacet,
     ].filter(Boolean);
 
     const objectCount = <p className="text-ink-muted tabular-nums">{t("objects.count", {count: rowObjectNames.length})}</p>;
@@ -999,60 +936,13 @@ const Objects = () => {
                 {/* Wide, the actions and the pager at the head of the rail: their rows to the table. */}
                 {!hasRail && (
                     <div className="flex shrink-0 flex-wrap items-center gap-3">
-                        {isMobile && (
-                            <Button
-                                size="sm"
-                                icon={<FilterIcon className="h-4 w-4"/>}
-                                onClick={toggleShowFilters}
-                                aria-label={showFilters ? t("objects.filters.hide") : t("objects.filters.show")}
-                                aria-expanded={showFilters}
-                                aria-controls={filtersId}
-                            >
-                                <span className="hidden sm:inline">{t("common.filters")}</span>
-                                <ChevronDownIcon className={showFilters ? "h-4 w-4 rotate-180" : "h-4 w-4"}/>
-                            </Button>
-                        )}
                         {/* Wide, the filters stand beside the table, as facets. */}
-                        {(!isMobile || showFilters) && (
-                            <div id={filtersId} className="flex flex-wrap items-center gap-3">
-                                {hasGlobalState && (
-                                    <FilterPopover
-                                        label={t("objects.filters.globalState")}
-                                        options={globalStateOptions}
-                                        selected={selectedGlobalStates}
-                                        onToggle={handleGlobalStateChange}
-                                    />
-                                )}
-                                {hasChoice(namespaces, selectedNamespaces) && (
-                                    <FilterPopover
-                                        label={t("objects.filters.namespace")}
-                                        options={namespaceOptions}
-                                        selected={selectedNamespaces}
-                                        onToggle={handleNamespaceChange}
-                                    />
-                                )}
-                                {hasKindFilter && hasChoice(kinds, selectedKinds) && (
-                                    <FilterPopover
-                                        label={t("objects.filters.kind")}
-                                        options={kindOptions}
-                                        selected={selectedKinds}
-                                        onToggle={handleKindChange}
-                                    />
-                                )}
-                                <label className="flex items-center gap-1 text-ink-muted">
-                                    {t("common.name")}
-                                    <span className="relative flex items-center">
-                                        <SearchIcon className="pointer-events-none absolute left-2 h-3.5 w-3.5"/>
-                                        <Input
-                                            type="search"
-                                            className="h-7 w-48 pl-7"
-                                            value={searchQuery}
-                                            onChange={handleSearchChange}
-                                        />
-                                    </span>
-                                </label>
-                            </div>
-                        )}
+                        <FilterToolbar
+                            facets={toolbarFacets}
+                            search={searchQuery}
+                            onSearch={handleSearchChange}
+                            searchLabel={t("common.name")}
+                        />
                         <div className="ml-auto flex items-center gap-3">{listActions("end")}</div>
                     </div>
                 )}

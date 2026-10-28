@@ -97,12 +97,16 @@ const setMedia = ({mobile = false, wide = false} = {}) => {
 
 const SELECT_LABEL = {running: "Routine", beating: "Beating", node: "Node", id: "ID", driver: "Driver"};
 
+/** A filter, the popover of its values (FilterPopover). */
 const getFilter = (selectKey, options) =>
-    screen.getByRole("combobox", {name: SELECT_LABEL[selectKey], ...options});
+    screen.getByRole("group", {name: SELECT_LABEL[selectKey], ...options});
 
+/** A value of a filter kept, by its name; All, the values of the filter cleared. */
 const selectFilterOption = async (user, selectKey, optionName) => {
-    const select = getFilter(selectKey);
-    await user.selectOptions(select, within(select).getByRole("option", {name: optionName}));
+    const group = getFilter(selectKey);
+    await user.click(optionName === "All"
+        ? within(group).getByRole("button", {name: `Clear the ${SELECT_LABEL[selectKey]} filter`})
+        : within(group).getByRole("checkbox", {name: optionName}));
 };
 
 const EMPTY_MESSAGE = "No heartbeats found matching the current filters.";
@@ -207,7 +211,8 @@ describe("Heartbeats Component", () => {
         expect(screen.queryByRole("region", {name: "Mesh"})).toBeNull();
         expect(mockNavigate).toHaveBeenCalledWith("/?view=data", {replace: true});
         expect(mesh.querySelector("[data-legend]").parentElement).toHaveClass("bg-surface-raised");
-        expect(document.querySelector("details")).toBeNull();
+        // Nothing folded but the popovers of the filters.
+        expect(document.querySelector("details:not([data-filter])")).toBeNull();
     });
 
     test("the streams in the Data tab, their count in its name; the Logs tab named in the URL", () => {
@@ -593,6 +598,36 @@ describe("Heartbeats Component", () => {
         }, {timeout: 1500});
     });
 
+    test("several values of a filter kept at once, comma-separated in the URL; each value counted", async () => {
+        const user = userEvent.setup();
+        mockHeartbeatStore(buildStatus([
+            {node: "node1", streams: [{id: "hb#1.rx", state: "running", type: "t", peers: {p: {is_beating: true, desc: "d"}}}]},
+            {node: "node2", streams: [{id: "hb#1.rx", state: "running", type: "t", peers: {p: {is_beating: true, desc: "d"}}}]},
+            {node: "node3", streams: [{id: "hb#2.rx", state: "stopped", type: "t", peers: {p: {is_beating: false, desc: "d"}}}]},
+        ]));
+        renderWithRouter(<Heartbeats/>);
+        // Each value its count, as in the rail of a wider window.
+        expect(within(getFilter("id")).getByRole("checkbox", {name: "1"}).closest("span.flex")).toHaveTextContent(/12$/);
+        await selectFilterOption(user, "node", "node1");
+        await selectFilterOption(user, "node", "node3");
+        expect(getDataRows()).toHaveLength(2);
+        await waitFor(() => {
+            expect(mockNavigate).toHaveBeenCalledWith("/?view=data&node=node1%2Cnode3", {replace: true});
+        }, {timeout: 1500});
+        // The other filters counted under the nodes kept.
+        expect(within(getFilter("id")).getByRole("checkbox", {name: "1"}).closest("span.flex")).toHaveTextContent(/11$/);
+    });
+
+    test("wide, the filters beside the streams as facets", () => {
+        window.matchMedia = (query) => ({matches: query.includes("1536px"), addEventListener() {}, removeEventListener() {}});
+        mockHeartbeatStore(TWO_NODES());
+        renderWithRouter(<Heartbeats/>, {route: "/?node=n1"});
+        const rail = screen.getByRole("complementary", {name: "Filters"});
+        expect(within(rail).getByRole("region", {name: "Node"})).toBeInTheDocument();
+        expect(within(rail).getByRole("button", {name: "Clear all filters"})).toBeInTheDocument();
+        expect(document.querySelector("[data-filter-toolbar]")).toBeNull();
+    });
+
     test("clears URL when all filters are reset to all", async () => {
         const user = userEvent.setup();
         mockHeartbeatStore(buildStatus([{
@@ -735,8 +770,8 @@ describe("Heartbeats Component", () => {
             ]
         }]));
         renderWithRouter(<Heartbeats/>);
-        const options = within(getFilter("running")).getAllByRole("option");
-        expect(options.map(o => o.value)).toEqual(["all"]);
+        // No state, no value: no filter of the routines.
+        expect(screen.queryByRole("group", {name: "Routine"})).toBeNull();
     });
 
     test("stream with id 'all' is skipped by availableIds", () => {
@@ -748,10 +783,8 @@ describe("Heartbeats Component", () => {
             ]
         }]));
         renderWithRouter(<Heartbeats/>);
-        // The five filters.
-        expect(screen.getAllByRole("combobox")).toHaveLength(5);
-        const ids = within(getFilter("id")).getAllByRole("option").map(o => o.value);
-        expect(ids).toEqual(["all", "1"]);
+        // One heartbeat, "all" none: no choice, no filter of the ids.
+        expect(screen.queryByRole("group", {name: "ID"})).toBeNull();
     });
 
     test("empty string peer key shows N/A for peer", () => {
@@ -1271,10 +1304,11 @@ describe("Heartbeats Component", () => {
         renderWithRouter(<Heartbeats/>, {route: "/heartbeats?id=1&node=n1&state=running&status=beating"});
         expect(getDataRows()).toHaveLength(2);
         const clear = screen.getByRole("button", {name: "Clear all filters"});
-        expect(clear.closest("#heartbeats-filters")).not.toBeNull();
+        expect(clear.closest("[data-filter-toolbar]")).not.toBeNull();
         fireEvent.click(clear);
-        expect(getFilter("node")).toHaveValue("all");
-        expect(getFilter("id")).toHaveValue("all");
+        expect(within(getFilter("node")).getAllByRole("checkbox").filter((box) => box.checked)).toEqual([]);
+        // One heartbeat, its filter cleared: no choice left, no popover.
+        expect(screen.queryByRole("group", {name: "ID"})).toBeNull();
         expect(getDataRows()).toHaveLength(4);
         expect(screen.queryByRole("button", {name: "Clear all filters"})).toBeNull();
     });
@@ -1333,37 +1367,36 @@ describe("Heartbeats Component", () => {
         ["desktop", false, false, false, true],
     ])("filter visibility on %s", async (_, isMobile, isWide, buttonExists, initiallyVisible) => {
         setMedia({mobile: isMobile, wide: isWide});
-        mockHeartbeatStore({node1: {streams: []}});
+        mockHeartbeatStore(TWO_NODES());
         renderWithRouter(<Heartbeats/>);
 
         const filterButton = screen.queryByRole("button", {name: /filters/i});
         expect(!!filterButton).toBe(buttonExists);
 
-        const nodeFilter = getFilter("node", {hidden: true});
+        // Folded, the filters not drawn until the button opens them.
         if (initiallyVisible) {
-            expect(nodeFilter).toBeVisible();
+            expect(getFilter("node")).toBeInTheDocument();
         } else {
-            expect(nodeFilter).not.toBeVisible();
+            expect(screen.queryByRole("group", {name: "Node"})).toBeNull();
             expect(filterButton).toHaveAttribute("aria-expanded", "false");
         }
     });
 
     test("mobile filter button toggles visibility", async () => {
         setMedia({mobile: true});
-        mockHeartbeatStore({node1: {streams: []}});
+        mockHeartbeatStore(TWO_NODES());
         renderWithRouter(<Heartbeats/>);
 
         const filterButton = screen.getByRole("button", {name: "Show filters"});
-        expect(filterButton).toHaveAttribute("aria-controls", "heartbeats-filters");
-        expect(getFilter("node", {hidden: true})).not.toBeVisible();
+        expect(screen.queryByRole("group", {name: "Node"})).toBeNull();
 
         await userEvent.click(filterButton);
         expect(filterButton).toHaveAccessibleName("Hide filters");
         expect(filterButton).toHaveAttribute("aria-expanded", "true");
-        expect(getFilter("node")).toBeVisible();
+        expect(document.getElementById(filterButton.getAttribute("aria-controls"))).toContainElement(getFilter("node"));
 
         await userEvent.click(filterButton);
         expect(filterButton).toHaveAccessibleName("Show filters");
-        expect(getFilter("node", {hidden: true})).not.toBeVisible();
+        expect(screen.queryByRole("group", {name: "Node"})).toBeNull();
     });
 });

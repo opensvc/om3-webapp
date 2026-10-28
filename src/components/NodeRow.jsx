@@ -215,7 +215,7 @@ const NodeRow = ({
                     {Object.keys(info?.labels ?? {}).length === 0 ? "-" : (
                         <span className="flex gap-1 whitespace-nowrap" aria-label={t("nodes.columns.labels")}>
                             {Object.entries(info.labels).sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => (
-                                <span key={k} className="rounded-full border border-line px-1.5 text-data text-ink-muted">
+                                <span key={k} className={BADGE}>
                                     {v === "" ? k : `${k}=${v}`}
                                 </span>
                             ))}

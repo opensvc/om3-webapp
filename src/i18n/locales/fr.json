@@ -532,8 +532,6 @@
       "routine": "Routine",
       "beating": "Battement",
       "id": "ID",
-      "show": "Afficher les filtres",
-      "hide": "Masquer les filtres",
       "driver": "Pilote",
       "clearAll": "Effacer tous les filtres"
     },
@@ -1413,6 +1411,16 @@
       "daysAgo": "il y a {{count}} j"
     },
     "selectHint": "Sélectionnez des nœuds pour agir dessus, ou ouvrez-en un",
+    "noMatch": "Aucun nœud ne correspond.",
+    "filters": {
+      "state": "État",
+      "frozen": "Gelé",
+      "frozenValues": {
+        "frozen": "gelé",
+        "thawed": "non gelé"
+      },
+      "label": "Étiquette"
+    },
     "short": {
       "score": "score",
       "load": "charge",
@@ -2768,7 +2776,6 @@
     "loadError": "Les ressources n’ont pas pu être lues : {{message}}",
     "filter": "Filtrer les ressources",
     "group": "Pilote",
-    "all": "Tous",
     "count": "{{shown}} / {{total}}",
     "refresh": "Rafraîchir",
     "empty": "Aucune ressource signalée.",
@@ -2794,8 +2801,6 @@
       "encap": "encapsulée"
     },
     "rail": "Filtres",
-    "chosen_one": "{{count}} choisi",
-    "chosen_other": "{{count}} choisis",
     "selection": {
       "all": "Sélectionner toutes les ressources",
       "one": "Sélectionner {{rid}} de {{path}} sur {{node}}",

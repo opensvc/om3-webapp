@@ -278,7 +278,12 @@ const objectNamesInOrder = () => {
     const table = screen.getByRole('table', {name: 'Objects'});
     const column = within(table).getAllByRole('columnheader')
         .findIndex((h) => h.textContent.replace(/[▲▼]/g, '').trim() === 'Object');
-    return objectRows().map((row) => rowCells(row)[column].textContent);
+    // The name alone, not the reason under it (ObjectReason).
+    return objectRows().map((row) => {
+        const cell = rowCells(row)[column].cloneNode(true);
+        cell.querySelector('[data-reason]')?.remove();
+        return cell.textContent;
+    });
 };
 
 const makeMany = (n) => {
@@ -341,6 +346,20 @@ describe('Objects Component', () => {
         setup();
         await waitForLoad();
         expect(mockRetainEventReception).not.toHaveBeenCalled();
+    });
+
+    test('an object not up says why under its name, as its status board: its first note, the others counted; one up, nothing', async () => {
+        setup({}, '', {isWideScreen: true, isMobile: false});
+        await waitForLoad();
+        const reason = (name) => objectRow(name).querySelector('[data-reason]');
+        expect(reason('test-ns/svc/test1')).toBeNull();
+        expect(reason('test-ns/svc/test2')).toHaveAttribute('data-reason', 'error');
+        expect(reason('test-ns/svc/test2')).toHaveTextContent(/^failed: the orchestration gave up, clear the instance to retry \+1 more$/);
+        // The whole of it hovered.
+        expect(reason('test-ns/svc/test2')).toHaveAttribute('title', expect.stringMatching(/^failed: the orchestration gave up/));
+        expect(reason('root/svc/test3')).toHaveTextContent(/^no instance monitor/);
+        // n/a: no reason to give.
+        expect(reason('test-ns/svc/test4')).toBeNull();
     });
 
     test('renders object data correctly (status labels)', async () => {

@@ -1,5 +1,5 @@
 import type { CSSProperties, ReactNode } from "react";
-import { Fragment } from "react";
+import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { cn } from "../ui/cn";
 import { AlertTriangleIcon, DrpIcon, HistoryIcon, InfoIcon, PlayIcon, PauseIcon, SnowflakeIcon, TargetIcon } from "../ui/icons";
@@ -376,6 +376,180 @@ function SelectBox({
   );
 }
 
+/** The steps of the board scaled down to its room: past the last one, its nodes one under the other. */
+export const BOARD_LAYOUT_STEPS = 2;
+
+/**
+ * What the board shows at a step of its scaling down, 0 the whole table: then the
+ * type and the description of a row under its name, their columns dropped; then
+ * each node a block of its own, its instance and its resources, one under the
+ * other, no column left to squeeze.
+ */
+export const boardLayout = (step: number) => ({
+  sideColumns: step < 1,
+  nodeColumns: step < 2,
+});
+
+/** The rows telling an instance, after its state: the monitor, the expectation… */
+const INSTANCE_DETAILS: ReadonlySet<string> = new Set(["monitor", "expect", "provisioned", "orchestration"]);
+
+/** The description of a row: a subset run in parallel said so, its words else; none for the instances. */
+function RowDescription({ row }: { row: BoardRow }) {
+  const { t } = useTranslation();
+  if (row.kind === "instance") return null;
+  if (row.kind === "subset" && row.desc.length > 0)
+    return <span className="rounded-full border border-line px-2 text-ink-muted">{t("statusBoard.parallel")}</span>;
+  return <>{row.desc.map((s) => s.text).join("")}</>;
+}
+
+/** The type and the description of a row on one muted line, under its name: none when it has neither. */
+function SideText({ row, className }: { row: BoardRow; className?: string }) {
+  const desc = row.kind === "instance" ? "" : row.desc.map((s) => s.text).join("").trim();
+  if (row.typ === "" && desc === "" && row.kind !== "subset") return null;
+  return (
+    <span data-side-text="" className={cn("flex flex-wrap items-center gap-x-1.5 text-[0.75rem] font-normal break-all text-ink-muted not-italic", className)}>
+      {row.typ !== "" && <span>{row.typ}</span>}
+      {row.typ !== "" && desc !== "" && <span aria-hidden="true">·</span>}
+      <RowDescription row={row} />
+    </span>
+  );
+}
+
+/**
+ * The board with no room for a column a node, on a phone say: each node a block of
+ * its own, one under the other. Its head the node, its instance's state, and what
+ * selects the instance; then the monitor, the expectation… of the instance; then
+ * the resources on that node, each its name, its value there opening the resource on
+ * that instance, its type and description under. A resource on several nodes is
+ * selected node by node, in each block.
+ */
+function NodeBlocks({
+  board,
+  selection,
+  linkNode,
+  linkResource,
+  openCell,
+}: {
+  board: Board;
+  selection?: BoardSelection;
+  linkNode?: (node: string) => ReactNode;
+  linkResource?: (rid: string) => ReactNode;
+  openCell?: (rid: string, node: string) => void;
+}) {
+  const { t } = useTranslation();
+  const details = useCellDetails();
+  const instanceRow = board.rows.find((r) => r.kind === "instance");
+  const detailRows = board.rows.filter((r) => INSTANCE_DETAILS.has(r.kind));
+  const resourceRows = board.rows.filter((r) => r.kind === "resource" || r.kind === "subset" || r.kind === "label");
+  return (
+    <div role="list" aria-label={t("statusBoard.caption", { path: board.path })} data-node-blocks="" className="space-y-3">
+      {board.nodes.map((n, j) => {
+        const picked = selection?.isNode(n.name) ?? false;
+        // The resources on this node, their subsets and labels with the first of them after.
+        const onNode = resourceRows.filter((r, i) => {
+          if (r.kind === "resource") return rowNodes(board, r).includes(n.name);
+          const next = resourceRows.slice(i + 1).find((x) => x.kind === "resource");
+          return next !== undefined && rowNodes(board, next).includes(n.name);
+        });
+        const count = onNode.filter((r) => r.kind === "resource").length;
+        return (
+          <section
+            key={n.name}
+            role="listitem"
+            aria-label={t("statusBoard.instanceOn", { node: n.name })}
+            data-node-block={n.name}
+            className={cn("overflow-hidden rounded-(--radius-panel) border bg-surface-raised text-data", picked ? "border-accent" : "border-line")}
+          >
+            <div className={cn("group flex items-center gap-2 border-b border-line px-2 py-1.5", picked ? SELECTED : "bg-surface-sunken")}>
+              {selection !== undefined && (
+                <SelectBox checked={picked} label={t("statusBoard.selectInstance", { node: n.name })} onToggle={() => selection.toggleNode(n.name)} />
+              )}
+              <span className="font-semibold text-ink">{linkNode ? linkNode(n.name) : n.name}</span>
+              {n.frozen && <FrozenMark frozen />}
+              {instanceRow && (
+                <span className="ml-auto">
+                  <HoverNotes notes={instanceRow.cellNotes[j] ?? []} details={details(instanceRow.cells[j] ?? [])}>
+                    <Pieces text={instanceRow.cells[j] ?? []} kind="instance" />
+                  </HoverNotes>
+                </span>
+              )}
+            </div>
+            {detailRows.some((r) => (r.cells[j] ?? []).length > 0) && (
+              <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-0.5 px-2 py-1.5">
+                {detailRows.map((r) => (
+                  <Fragment key={r.kind}>
+                    <dt className="text-ink-muted">
+                      {ROW_TERMS[r.kind] ? <Term term={ROW_TERMS[r.kind] as string}>{t(`statusBoard.rows.${r.kind}`)}</Term> : t(`statusBoard.rows.${r.kind}`)}
+                    </dt>
+                    <dd>
+                      <HoverNotes notes={r.cellNotes[j] ?? []} details={details(r.cells[j] ?? [])}>
+                        <Pieces text={r.cells[j] ?? []} kind={r.kind} />
+                      </HoverNotes>
+                    </dd>
+                  </Fragment>
+                ))}
+              </dl>
+            )}
+            {count > 0 && (
+              <>
+                <h4 className="border-t border-line bg-surface-sunken px-2 py-1 font-normal text-ink">
+                  {t("statusBoard.rows.resources", { count })}
+                </h4>
+                <ul aria-label={t("statusBoard.rows.resources", { count })} className="divide-y divide-line/40">
+                  {onNode.map((r, i) => {
+                    if (r.kind !== "resource")
+                      return (
+                        <li key={i} className="px-2 py-1 text-ink-muted italic">
+                          {r.kind === "subset" ? r.name : null}
+                          <SideText row={r} />
+                        </li>
+                      );
+                    const cell = r.cells[j] ?? [];
+                    const pickedCell = selection?.isCell(r.name, n.name) ?? false;
+                    return (
+                      <li key={i} className={cn("group flex items-start gap-2 px-2 py-1", pickedCell && SELECTED)}>
+                        {selection !== undefined && (
+                          <span className="pt-0.5">
+                            <SelectBox
+                              checked={pickedCell}
+                              label={t("statusBoard.selectCell", { rid: r.name, node: n.name })}
+                              onToggle={() => selection.toggleCell(r.name, n.name)}
+                            />
+                          </span>
+                        )}
+                        <span className="min-w-0 flex-1">
+                          <HoverNotes notes={r.rowNotes} showNodes>
+                            <span className="font-medium">{linkResource ? linkResource(r.name) : r.name}</span>
+                          </HoverNotes>
+                          <SideText row={r} />
+                        </span>
+                        <HoverNotes notes={r.cellNotes[j] ?? []} details={details(cell)}>
+                          {openCell ? (
+                            <button
+                              type="button"
+                              aria-label={t("statusBoard.openCell", { rid: r.name, node: n.name })}
+                              onClick={() => openCell(r.name, n.name)}
+                              className="inline-flex min-h-5 min-w-9 cursor-pointer items-center justify-center gap-1 rounded-full border border-line bg-surface px-1.5 py-px hover:border-line-strong hover:bg-surface-sunken focus-visible:outline-2 focus-visible:outline-(--focus-ring)"
+                            >
+                              <Pieces text={cell} kind="resource" />
+                            </button>
+                          ) : (
+                            <Pieces text={cell} kind="resource" />
+                          )}
+                        </HoverNotes>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </>
+            )}
+          </section>
+        );
+      })}
+    </div>
+  );
+}
+
 /**
  * The status of an object as `om <path> status` tells it (`statusboard.ts`), drawn
  * as the rest of the webapp: its summary, the table of its instances and resources
@@ -389,6 +563,10 @@ function SelectBox({
  * node opens what the caller shows of it: the resource on that instance alone. The names are the caller's badges
  * (`linkNode`, `linkResource`): a click on one opens its record. `facts`, what the
  * caller adds to the summary, a line each after the count of the instances up.
+ *
+ * Scaled down to its room a step at a time while it overflows (`boardLayout`), the
+ * least missed first, as the lists are: in a narrow panel, on a phone, its nodes
+ * each a block, one under the other.
  */
 export function StatusBoard({
   board,
@@ -423,6 +601,28 @@ export function StatusBoard({
   const resources = board.rows.filter((r) => r.kind === "resource").length;
   const instanceRow = board.rows.find((r) => r.kind === "instance");
   const nodeSelected = (node: string) => selection?.isNode(node) ?? false;
+
+  // Scaled down while its table overflows its frame; resized, the whole table tried again.
+  const root = useRef<HTMLDivElement>(null);
+  const frame = useRef<HTMLDivElement>(null);
+  const [step, setStep] = useState(0);
+  useLayoutEffect(() => {
+    const element = frame.current;
+    if (element && step < BOARD_LAYOUT_STEPS && element.scrollWidth > element.clientWidth + 1) setStep((n) => n + 1);
+  });
+  useEffect(() => {
+    const element = root.current;
+    if (!element || typeof ResizeObserver !== "function") return undefined;
+    let width = element.clientWidth;
+    const observer = new ResizeObserver(() => {
+      if (element.clientWidth === width) return;
+      width = element.clientWidth;
+      setStep(0);
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+  const layout = boardLayout(step);
 
   /*
    * The grid of what is selected, as drawn: the header row first, then the rows of
@@ -462,7 +662,7 @@ export function StatusBoard({
   });
 
   return (
-    <div className="space-y-3">
+    <div ref={root} data-board-step={step} className="space-y-3">
       {/* The summary: the statuses of the object, one a line, and beside them what is
           wrong with it, if anything: a state coming or going (frozen, not provisioned)
           moves nothing below. Short of room, the states go under. */}
@@ -523,8 +723,10 @@ export function StatusBoard({
       {toolbar}
 
       {/* A light border, a very light line between the rows; the headings on a grey band, as the group lines of the lists. */}
-      {/* Its columns are its nodes: the board keeps them, never cards. */}
+      {/* Its columns are its nodes: the board keeps them, never cards; no room for them, a block each. */}
+      {layout.nodeColumns ? (
       <Table
+        ref={frame}
         aria-label={t("statusBoard.caption", { path: board.path })}
         className="bg-transparent"
         cards={false}
@@ -533,8 +735,12 @@ export function StatusBoard({
           {/* The heading of the instances on the line of the nodes, a line under them. */}
           <HeaderRow className="border-b border-line bg-surface-sunken">
             <HeaderCell className="font-normal text-ink">{t("statusBoard.rows.instances", { count: instances })}</HeaderCell>
-            <HeaderCell>{t("common.type")}</HeaderCell>
-            <HeaderCell>{t("statusBoard.description")}</HeaderCell>
+            {layout.sideColumns && (
+              <>
+                <HeaderCell>{t("common.type")}</HeaderCell>
+                <HeaderCell>{t("statusBoard.description")}</HeaderCell>
+              </>
+            )}
             {board.nodes.map((n, j) => {
               const pick = selection !== undefined;
               const picked = nodeSelected(n.name);
@@ -567,7 +773,7 @@ export function StatusBoard({
               return (
                 // A line under the heading of the resources, as under the one of the instances.
                 <tr key={i} className="border-b border-line bg-surface-sunken">
-                  <th scope="rowgroup" colSpan={FIRST_NODE} className="h-[1.875rem] px-2 pt-3 text-left font-normal text-ink">
+                  <th scope="rowgroup" colSpan={layout.sideColumns ? FIRST_NODE : 1} className="h-[1.875rem] px-2 pt-3 text-left font-normal text-ink">
                     {t("statusBoard.rows.resources", { count: resources })}
                   </th>
                   {/* The line before the nodes runs through the heading too. */}
@@ -622,15 +828,17 @@ export function StatusBoard({
                       </span>
                     </HoverNotes>
                   </span>
+                  {/* No room for their columns, the type and the description under the name. */}
+                  {!layout.sideColumns && <SideText row={r} className="mt-0.5 max-w-64 whitespace-normal" />}
                 </th>
-                <Cell className="text-ink-muted">{r.typ}</Cell>
-                <Cell className={cn("break-all", r.kind === "label" && "text-ink-muted")}>
-                  {r.kind === "instance" ? null : r.kind === "subset" && r.desc.length > 0 ? (
-                    <span className="rounded-full border border-line px-2 text-ink-muted">{t("statusBoard.parallel")}</span>
-                  ) : (
-                    r.desc.map((s) => s.text).join("")
-                  )}
-                </Cell>
+                {layout.sideColumns && (
+                  <>
+                    <Cell className="text-ink-muted">{r.typ}</Cell>
+                    <Cell className={cn("break-all", r.kind === "label" && "text-ink-muted")}>
+                      <RowDescription row={r} />
+                    </Cell>
+                  </>
+                )}
                 {r.cells.map((c, j) => {
                   const node = board.nodes[j]?.name ?? "";
                   // A resource cell selects the resource on its node, by its checkbox.
@@ -682,6 +890,15 @@ export function StatusBoard({
           })}
         </tbody>
       </Table>
+      ) : (
+        <NodeBlocks
+          board={board}
+          selection={selection}
+          linkNode={linkNode}
+          linkResource={linkResource}
+          openCell={openCell}
+        />
+      )}
 
       {board.notes.length > 0 && (
         <section aria-labelledby="status-notes" className="space-y-1">

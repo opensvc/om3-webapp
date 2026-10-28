@@ -1699,6 +1699,10 @@
     "designToText": "Edit as text"
   },
   "objects": {
+    "reason": {
+      "more_one": "+{{count}} more",
+      "more_other": "+{{count}} more"
+    },
     "noInstanceStatus": "No status from {{node}}: the node is gone or not heard from",
     "flex": {
       "title": "Flex",
@@ -2076,6 +2080,7 @@
       "cluster": "the cluster, on all its nodes"
     },
     "selectInstance": "Select the instance on {{node}}",
+    "instanceOn": "Instance on {{node}}",
     "selectResource": "Select {{rid}} on all its nodes",
     "selectCell": "Select {{rid}} on {{node}}",
     "openCell": "Open {{rid}} on {{node}}",

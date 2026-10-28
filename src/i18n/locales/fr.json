@@ -1699,6 +1699,10 @@
     "designToText": "Modifier en texte"
   },
   "objects": {
+    "reason": {
+      "more_one": "+{{count}} autre",
+      "more_other": "+{{count}} autres"
+    },
     "noInstanceStatus": "Aucun état de {{node}} : le nœud est perdu ou ne répond pas",
     "flex": {
       "title": "Flex",
@@ -2076,6 +2080,7 @@
       "cluster": "le cluster, sur tous ses nœuds"
     },
     "selectInstance": "Sélectionner l'instance sur {{node}}",
+    "instanceOn": "Instance sur {{node}}",
     "selectResource": "Sélectionner {{rid}} sur tous ses nœuds",
     "selectCell": "Sélectionner {{rid}} sur {{node}}",
     "openCell": "Ouvrir {{rid}} sur {{node}}",

@@ -30,7 +30,8 @@ import {useGrants} from "../hooks/useGrants";
 import {canWriteClaims} from "../app/namespace-claims";
 import {MoreRows, useRowsOnDemand} from "../ui/components/RowsOnDemand";
 import {ALL_LIST, OBJECT_LISTS, OBJECTS_TABS, listOfKind} from "../utils/objectLists";
-import {BoltIcon, GearIcon, PlusIcon} from "../ui/icons";
+import {AlertTriangleIcon, BoltIcon, GearIcon, InfoIcon, PlusIcon} from "../ui/icons";
+import {cachedReason, needsReason} from "../app/object-reason";
 import {menuColumns, menuFilter} from "../app/action-menu";
 import {Term} from "../app/Term";
 import {rangeSelect, withShift} from "../app/range-select";
@@ -330,6 +331,50 @@ const NamespaceRow = ({namespace, colSpan, nodeCount = 0, selectedCount, total, 
     );
 };
 
+/** The ink of a reason, by the level of its note. */
+const REASON_INK = {error: "text-state-down", warn: "text-state-warn", info: "text-ink-muted"};
+
+/**
+ * Why an object is not up, from what the stream holds of it (`object-reason`): the
+ * same reason while its object, its instances, their configurations and monitors
+ * do not change. Up, or of no status, none.
+ */
+const selectReason = (objectName) => (s) => {
+    const object = s.objectStatus?.[objectName];
+    if (!needsReason(object)) return null;
+    const instances = s.objectInstanceStatus?.[objectName];
+    const configs = s.instanceConfig?.[objectName];
+    const monitors = {};
+    for (const node of new Set([...Object.keys(instances ?? {}), ...Object.keys(configs ?? {})])) {
+        monitors[node] = s.instanceMonitor?.[`${node}:${objectName}`];
+    }
+    return cachedReason(objectName, {object, instances, monitors, configs});
+};
+
+/**
+ * Under the name of an object not up, why, in a line: its first note, as its status
+ * board says it, the others counted; the whole of it hovered, the board in its panel.
+ */
+function ObjectReason({objectName}) {
+    const {t} = useTranslation();
+    const reason = useEventStore(useMemo(() => selectReason(objectName), [objectName]));
+    if (reason === null) return null;
+    const Icon = reason.level === "info" ? InfoIcon : AlertTriangleIcon;
+    const more = reason.more > 0 ? ` ${t("objects.reason.more", {count: reason.more})}` : "";
+    return (
+        <span
+            data-reason={reason.level}
+            title={`${reason.text}${more}`}
+            // No wider than the room of the names on a phone: cut, not past the table.
+            className="flex max-w-md min-w-0 items-center gap-1 text-[0.75rem] font-normal text-ink-muted max-md:max-w-[44vw]"
+        >
+            <Icon aria-hidden="true" className={cn("h-3 w-3 shrink-0", REASON_INK[reason.level])}/>
+            <span className="truncate">{reason.text}</span>
+            {more && <span className="shrink-0 tabular-nums">{more}</span>}
+        </span>
+    );
+}
+
 const TableRowComponent = React.memo(({
                                           objectName,
                                           isSelected,
@@ -371,9 +416,16 @@ const TableRowComponent = React.memo(({
                                 <OrchestrateBadge objectName={objectName}/>
                             </span>
                             {objectName}
+                            {/* Not up, why, under its name. */}
+                            <ObjectReason objectName={objectName}/>
                         </span>
                     )
-                    : objectName}
+                    : namesOnly ? objectName : (
+                        <span className="flex flex-col items-start">
+                            {objectName}
+                            <ObjectReason objectName={objectName}/>
+                        </span>
+                    )}
             </Cell>
             {namesOnly && <KeyCells objectName={objectName}/>}
             {!namesOnly && <PropertyCells objectName={objectName} narrow={isNarrow}/>}

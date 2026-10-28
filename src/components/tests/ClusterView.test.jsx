@@ -250,6 +250,10 @@ describe('ClusterView', () => {
         expect(within(card('objects')).queryByRole('link', {name: 'ns1/svc/db'})).toBeNull();
         expect(within(card('objects')).queryByRole('button', {name: 'ns1/svc/db'})).toBeNull();
         expect(card('objects')).toHaveTextContent(/cfg1/);
+        // A tile of each kind, those that run first, the configurations after.
+        const kinds = [...card('objects').querySelectorAll('[data-kind]')].map((k) => k.dataset.kind);
+        expect(kinds.indexOf('svc')).toBe(0);
+        expect(kinds.indexOf('cfg')).toBeGreaterThan(kinds.indexOf('svc'));
         // Each count a badge opening the objects filtered on it: the services and volumes by state, the objects by kind.
         const href = (name) => within(card('objects')).getByRole('link', {name}).getAttribute('href');
         expect(href('Open the page filtered on down: 1')).toBe('/objects?list=any&kind=svc%2Cvol&globalState=down');

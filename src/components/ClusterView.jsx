@@ -12,7 +12,7 @@ import {IO_FIGURES, sumUsage} from "../app/pg-usage";
 import {ioFigure} from "./ClusterUsage";
 import {formatCpu} from "../app/namespace-usage";
 import {formatBytes} from "../ui/lib/format";
-import {ObjectIcon} from "../ui/components/ObjectIcon";
+import {ObjectIcon, om3ObjectKind} from "../ui/components/ObjectIcon";
 import {UsageBar} from "../ui/components/UsageBar";
 import {FrozenMark} from "../ui/components/FrozenMark";
 import {Overall} from "./HeartbeatMesh";
@@ -26,6 +26,9 @@ export const OVERVIEW_REFRESH_MS = 30_000;
 const SHOWN = 5;
 const ZERO_TIME = "0001-01-01T00:00:00Z";
 const ACTORS = ["svc", "vol"];
+/** The kinds of objects in the order of the menu: those that run, then the data, then the configurations of the namespaces and the cluster. */
+const KIND_ORDER = ["svc", "vol", "cfg", "sec", "usr", "nscfg", "ccfg"];
+const kindRank = (kind) => (KIND_ORDER.includes(kind) ? KIND_ORDER.indexOf(kind) : KIND_ORDER.length);
 
 /** The nodes by their state, the worst first: dropped, its status gone; overloaded; optimal. [state, arc, dot, ink] */
 const NODE_STATES = [
@@ -334,8 +337,9 @@ export default function ClusterView() {
         if (a === "up" || a === "warn" || a === "down") avail[a] += 1;
         else avail.na += 1;
     }
+    // The kinds, those that run first, the configurations after; one unknown last, by name.
     const kinds = Object.entries(paths.reduce((acc, p) => ({...acc, [kindOf(p)]: (acc[kindOf(p)] ?? 0) + 1}), {}))
-        .sort(([a], [b]) => a.localeCompare(b));
+        .sort(([a], [b]) => kindRank(a) - kindRank(b) || a.localeCompare(b));
 
     // The namespaces, by the objects they hold: "ns/kind/name" of its namespace, "kind/name" and a bare name of the root one.
     const byNamespace = paths.reduce((acc, p) => {
@@ -443,18 +447,27 @@ export default function ClusterView() {
                     {ready ? (
                         <CountsRing name="objects" states={AVAIL_STATES} counts={avail} good="up" label={t("clusterView.objects.operational")} words="clusterView.objects" link={availUrl}/>
                     ) : <p className="text-ink-muted">{t("clusterView.reading")}</p>}
-                    <dl aria-label={t("clusterView.objects.kinds")} className="flex flex-wrap justify-center gap-x-3 text-data">
+                    {/* A tile of each kind, a grid apart from the badges of the states over it: its pictogram and its
+                        name, its count under them, large; the whole tile its link. */}
+                    <dl aria-label={t("clusterView.objects.kinds")} className="grid grid-cols-[repeat(auto-fit,minmax(4rem,1fr))] gap-1.5">
                         {kinds.map(([kind, n]) => (
-                            <div key={kind} className={`relative ${FILTER_BADGE}`}>
-                                <dt className="text-ink-muted">{kind}</dt>
-                                <dd className="tabular-nums">
+                            <div
+                                key={kind}
+                                data-kind={kind}
+                                className="relative flex flex-col-reverse items-center rounded-(--radius-control) border border-line bg-surface px-1.5 py-1 hover:border-line-strong hover:bg-surface-sunken has-[a:focus-visible]:outline-2 has-[a:focus-visible]:outline-accent"
+                            >
+                                <dt className="flex items-center gap-1 text-data text-ink-muted">
+                                    <ObjectIcon kind={om3ObjectKind(kind)} className="h-3.5 w-3.5"/>
+                                    {kind}
+                                </dt>
+                                <dd className="text-lg font-semibold leading-tight tabular-nums">
                                     <Link
                                         to={objectsUrl({kind})}
                                         title={t("clusterView.objects.ofKind", {kind})}
                                         aria-label={`${t("clusterView.objects.ofKind", {kind})}: ${n}`}
-                                        // Static, unlike the card's other links (Card): stretched over the whole badge, not the count alone.
+                                        // Static, unlike the card's other links (Card): stretched over the whole tile, not the count alone.
                                         style={{position: "static"}}
-                                        className="outline-none after:absolute after:inset-0 after:rounded-full"
+                                        className="outline-none after:absolute after:inset-0 after:rounded-(--radius-control)"
                                     >
                                         {n}
                                     </Link>

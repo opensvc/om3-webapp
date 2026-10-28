@@ -22,6 +22,9 @@ const pgPage = (memory, usec, told = true) => [
     ] : []),
 ].join('\n');
 
+/** The labels beside the arcs of a ring, each its word and count. */
+const labels = (ring) => [...ring.querySelectorAll('[data-label] text')].map((text) => text.textContent);
+
 describe('ClusterView', () => {
     let resourcesFail;
     let pgTold;
@@ -61,6 +64,18 @@ describe('ClusterView', () => {
                     {ref: 'tar1', type: 'tar', url: '/srv', share: ['*'], stats: {runs: 6, last_created_at: '2026-10-20T10:00:00Z'}},
                     {ref: 'from test/sec/stores store#tar2', type: 'tar', url: 'sftp://x', share: ['test'], stats: {runs: 11, check_error: 'refused'}},
                 ]});
+            }
+            if (u.startsWith('/api/cluster/status')) {
+                return json({cluster: {
+                    config: {id: '82e47bfb-182f', ca_sec_paths: [`system/sec/ca-former-${new Date(Date.now() - 10 * 86400000).toISOString().slice(0, 10).replaceAll('-', '')}`]},
+                    status: {is_compat: true},
+                    node: {
+                        n1: {status: {agent: 'v3.0.1', is_leader: true, booted_at: new Date(Date.now() - 5 * 86400000).toISOString()}, config: {env: 'DEV'},
+                            daemon: {collector: {state: 'speaker', url: 'http://oc3:8080'}, daemondata: {created_at: new Date(Date.now() - 2 * 3600000).toISOString()}}},
+                        n2: {status: {agent: 'v3.0.1', booted_at: new Date(Date.now() - 10 * 86400000).toISOString()}, config: {env: 'DEV'},
+                            daemon: {collector: {state: 'warning', url: 'unknown'}, daemondata: {created_at: new Date(Date.now() - 3 * 3600000).toISOString()}}},
+                    },
+                }});
             }
             if (u.startsWith('/api/resource')) {
                 if (resourcesFail) return json({detail: 'boom'}, 500);
@@ -154,10 +169,30 @@ describe('ClusterView', () => {
         render(<MemoryRouter initialEntries={['/cluster']}><ClusterView/><Search/></MemoryRouter>);
         // No button acting on the page: its card, named for what it opens.
         expect(screen.queryByRole('button', {name: /configuration/i})).toBeNull();
-        expect(within(card('config')).getByRole('heading')).toHaveTextContent('Cluster configuration');
-        fireEvent.click(within(card('config')).getByRole('link', {name: 'Open Cluster configuration'}));
+        expect(within(card('config')).getByRole('heading')).toHaveTextContent(/^Cluster$/);
+        fireEvent.click(within(card('config')).getByRole('link', {name: 'Open Cluster'}));
         expect(screen.getByTestId('search')).toHaveTextContent('peek=object:cluster');
         expect(card('config')).not.toHaveTextContent(/frozen/);
+    });
+
+    test('the cluster in a few lines: the collector fed and the nodes not linked, the agent, the uptimes, the env and id, a recent ca rotation; the words selectable, the room around them the link', async () => {
+        render(<ClusterView/>, {wrapper: MemoryRouter});
+        const fact = async (name) => (await waitFor(() => {
+            const el = card('config').querySelector(`[data-fact=${name}]`);
+            expect(el).not.toBeNull();
+            return el;
+        })).textContent;
+        expect(await fact('collector')).toBe('Collectorhttp://oc3:8080 fed by n1.No link on n2.');
+        expect(await fact('agent')).toBe('Agentv3.0.1');
+        expect(await fact('daemons')).toBe('Daemonsup 2h');
+        expect(await fact('nodes')).toBe('Nodesup 5d – 10d');
+        expect(await fact('identity')).toBe('EnvDEV');
+        expect(await fact('id')).toMatch(/^Id82e47bfb-182f/);
+        expect(await fact('ca')).toMatch(/former authority still trusted$/);
+        // No leader said.
+        expect(card('config')).not.toHaveTextContent(/Leader/);
+        // The words above the link of the card, selectable; their list lets the clicks around them through.
+        expect(card('config').querySelector('dl')).toHaveClass('pointer-events-none');
     });
 
     test('the links, the ring of the heartbeats page; the nodes, a ring of the dropped, overloaded and optimal, the frozen said', async () => {
@@ -170,7 +205,8 @@ describe('ClusterView', () => {
         expect(ring).toHaveAttribute('data-state', 'warn');
         expect(ring).toHaveTextContent('1/3nodes optimaldegraded');
         expect([...ring.querySelectorAll('[data-arc]')].map((a) => a.getAttribute('data-arc'))).toEqual(['dropped', 'overloaded', 'optimal']);
-        expect(ring.querySelector('[data-ring-legend]')).toHaveTextContent('dropped1overloaded1optimal1');
+        // Beside each arc, its word and count.
+        expect(labels(ring)).toEqual(['dropped 1', 'overloaded 1', 'optimal 1']);
         expect(card('nodes')).toHaveTextContent('1 frozen');
         expect(card('nodes').querySelector('[data-node=n2]')).toHaveClass('text-state-warn');
         expect(card('nodes').querySelector('[data-node=n3]')).toHaveAttribute('data-state', 'dropped');
@@ -218,7 +254,7 @@ describe('ClusterView', () => {
         const ring = card('arbitrators').querySelector('[data-ring=arbitrators]');
         expect(ring).toHaveAttribute('data-state', 'warn');
         expect(ring).toHaveTextContent('1/3nodes reach itdegraded');
-        expect(ring.querySelector('[data-ring-legend]')).toHaveTextContent(/^not reached2up1$/);
+        expect(labels(ring)).toEqual(['not reached 2', 'up 1']);
         const item = card('arbitrators').querySelector('[data-arbitrator=arb1]');
         expect(item).toHaveClass('text-state-warn');
         expect(item).toHaveAttribute('title', 'https://arb1:1215\n1 of 3 nodes reach it');
@@ -246,7 +282,7 @@ describe('ClusterView', () => {
         expect(ring).toHaveAttribute('data-state', 'warn');
         expect(ring).toHaveTextContent('2/5services and volumes updegraded');
         expect([...ring.querySelectorAll('[data-arc]')].map((a) => a.getAttribute('data-arc'))).toEqual(['down', 'warn', 'up', 'na']);
-        expect(ring.querySelector('[data-ring-legend]')).toHaveTextContent('down1warn1up2n/a1');
+        expect(labels(ring)).toEqual(['down 1', 'warn 1', 'up 2', 'n/a 1']);
         expect(within(card('objects')).queryByRole('link', {name: 'ns1/svc/db'})).toBeNull();
         expect(within(card('objects')).queryByRole('button', {name: 'ns1/svc/db'})).toBeNull();
         expect(card('objects')).toHaveTextContent(/cfg1/);
@@ -284,7 +320,7 @@ describe('ClusterView', () => {
             .toBe('/api/resource?path=*%2Fsvc%2F*%2C*%2Fvol%2F*');
         const ring = card('resources').querySelector('[data-ring=resources]');
         expect([...ring.querySelectorAll('[data-arc]')].map((a) => a.getAttribute('data-arc'))).toEqual(['warn', 'other']);
-        expect(ring.querySelector('[data-ring-legend]')).toHaveTextContent(/^warn1other4$/);
+        expect(labels(ring)).toEqual(['warn 1', 'other 4']);
         // Those in warn on the resources page filtered so; the others, which no filter says, no badge.
         expect(within(ring).getByRole('link', {name: 'Open the page filtered on warn: 1'})).toHaveAttribute('href', '/resources?status=warn');
         expect(within(ring).getAllByRole('link')).toHaveLength(1);

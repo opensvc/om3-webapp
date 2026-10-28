@@ -569,6 +569,11 @@
         "up": "optimal",
         "warn": "dégradé",
         "down": "critique"
+      },
+      "arcs": {
+        "up": "battent",
+        "down": "en échec",
+        "stopped": "arrêtés"
       }
     },
     "actions": {
@@ -2985,9 +2990,25 @@
     "open": "Ouvrir {{page}}",
     "filtered": "Ouvrir la page filtrée sur {{state}}",
     "config": {
-      "title": "Configuration du cluster",
-      "holds": "Les mots-clés du cluster, ses verrous, et les actions sur le cluster entier.",
-      "frozen": "Le cluster est gelé : rien ne démarre ni ne bascule de lui-même."
+      "title": "Cluster",
+      "frozen": "Le cluster est gelé : rien ne démarre ni ne bascule de lui-même.",
+      "collector": "Collecteur",
+      "noCollector": "aucun configuré",
+      "noSpeaker": "{{url}}, alimenté par aucun nœud.",
+      "collectorErrors": "Avec des erreurs.",
+      "unlinked": "Pas de lien sur {{nodes}}.",
+      "agent": "Agent",
+      "incompatible": "versions incompatibles",
+      "identity": "Env",
+      "copyId": "Copier l'id du cluster",
+      "ca": "AC",
+      "caRotated_one": "renouvelée le {{day}}, {{count}} ancienne autorité encore reconnue",
+      "caRotated_other": "renouvelée le {{day}}, {{count}} anciennes autorités encore reconnues",
+      "fedBy": "{{url}} alimenté par {{node}}.",
+      "daemons": "Démons",
+      "nodes": "Nœuds",
+      "upFor": "actifs depuis {{duration}}",
+      "id": "Id"
     },
     "nodes": {
       "frozen_one": "{{count}} gelé",

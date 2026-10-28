@@ -569,6 +569,11 @@
         "up": "optimal",
         "warn": "degraded",
         "down": "critical"
+      },
+      "arcs": {
+        "up": "beating",
+        "down": "failing",
+        "stopped": "stopped"
       }
     },
     "actions": {
@@ -2985,9 +2990,25 @@
     "open": "Open {{page}}",
     "filtered": "Open the page filtered on {{state}}",
     "config": {
-      "title": "Cluster configuration",
-      "holds": "The keywords of the cluster, its locks, and the actions on the cluster as a whole.",
-      "frozen": "The cluster is frozen: nothing starts or moves by itself."
+      "title": "Cluster",
+      "frozen": "The cluster is frozen: nothing starts or moves by itself.",
+      "collector": "Collector",
+      "noCollector": "none configured",
+      "noSpeaker": "{{url}}, fed by no node.",
+      "collectorErrors": "With errors.",
+      "unlinked": "No link on {{nodes}}.",
+      "agent": "Agent",
+      "incompatible": "versions not compatible",
+      "identity": "Env",
+      "copyId": "Copy the cluster id",
+      "ca": "CA",
+      "caRotated_one": "rotated on {{day}}, {{count}} former authority still trusted",
+      "caRotated_other": "rotated on {{day}}, {{count}} former authorities still trusted",
+      "fedBy": "{{url}} fed by {{node}}.",
+      "daemons": "Daemons",
+      "nodes": "Nodes",
+      "upFor": "up {{duration}}",
+      "id": "Id"
     },
     "nodes": {
       "frozen_one": "{{count}} frozen",

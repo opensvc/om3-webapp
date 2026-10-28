@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { detailsUsage, namespaceUsage, namespacesUsage, nodeUsage, objectUsage, opensvcUsage, readPg, readPgScopes, sumUsage } from "../pg-usage";
+import { detailsUsage, namespaceUsage, namespacesUsage, nodeUsage, objectUsage, opensvcUsage, readPg, readPgScopes, sameReading, sumUsage } from "../pg-usage";
 import { namespaceOf } from "../namespace-usage";
 
 const page = `# HELP opensvc_pg_cgroup_cpu_usage_usec cpu
@@ -167,5 +167,34 @@ describe("sums", () => {
     const all = namespacesUsage(usage, namespaceOf);
     expect(Object.keys(all).sort()).toEqual(["prod", "root"]);
     expect(all.root).toEqual({ cpu: 0.1, memory: 1, limit: undefined });
+  });
+});
+
+describe("the times the daemon read the cgroups at", () => {
+  const reading = (walk: number | null, parts: number | null, cpu: number, rcpu: number) => `${walk === null ? "" : `opensvc_pg_collected_at_seconds{collection="walk"} ${walk}\n`}${parts === null ? "" : `opensvc_pg_collected_at_seconds{collection="parts"} ${parts}\n`}opensvc_pg_cgroup_cpu_usage_usec{namespace="prod",path="prod/svc/web",scope="object"} ${cpu}
+opensvc_pg_cgroup_cpu_usage_usec{namespace="prod",path="prod/svc/web",rid="app#1",scope="resource",subset=""} ${rcpu}
+`;
+
+  test("told: the rates over the times of the readings, not of the fetches; the parts over theirs", () => {
+    // Fetched 10s apart, read 2s apart for the node, 4s apart for the parts.
+    const before = { at: 100000, ...readPgScopes(reading(1000, 1000.5, 0, 0)) };
+    const after = { at: 110000, ...readPgScopes(reading(1002, 1004.5, 2000000, 2000000)) };
+    expect(before.walkAt).toBe(1000000);
+    expect(nodeUsage(before, after)["prod/svc/web"].cpu).toBe(1);
+    expect(detailsUsage(before, after)["prod/svc/web"].resources["app#1"].sample.cpu).toBe(0.5);
+  });
+
+  test("not told, by a daemon of before: the fetches", () => {
+    const before = { at: 100000, ...readPgScopes(reading(null, null, 0, 0)) };
+    const after = { at: 104000, ...readPgScopes(reading(null, null, 2000000, 0)) };
+    expect(nodeUsage(before, after)["prod/svc/web"].cpu).toBe(0.5);
+    expect(sameReading(before, after)).toBe(false);
+  });
+
+  test("the reading before again, of another scrape in its window: said, no rate over it", () => {
+    const before = { at: 100000, ...readPgScopes(reading(1000, null, 0, 0)) };
+    const again = { at: 100500, ...readPgScopes(reading(1000, null, 0, 0)) };
+    expect(sameReading(before, again)).toBe(true);
+    expect(nodeUsage(before, again)["prod/svc/web"].cpu).toBeNull();
   });
 });

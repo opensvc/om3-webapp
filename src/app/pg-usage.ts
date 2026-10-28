@@ -43,7 +43,15 @@ export interface PgSample {
  * namespace slices by namespace, the host when told, the other top-level slices by name.
  */
 export interface NodeReading {
+  /** When it was fetched, in ms: its time when the daemon does not tell when it was read. */
   at: number;
+  /**
+   * When the daemon read the cgroups, in ms (`opensvc_pg_collected_at_seconds`): the
+   * node, its slices and its objects (`walk`); the subsets and resources asked for
+   * (`parts`). Other scrapers decide when a reading is taken, the fetch may come later.
+   */
+  walkAt?: number;
+  partsAt?: number;
   byPath: Record<string, PgSample>;
   opensvc?: PgSample;
   namespaces?: Record<string, PgSample>;
@@ -129,11 +137,18 @@ export function readPgScopes(text: string): Omit<NodeReading, "at"> {
   let host: PgSample | undefined;
   const details: Record<string, ObjectDetail<PgSample>> = {};
   const absentGroups = new Set<string>();
+  let walkAt: number | undefined;
+  let partsAt: number | undefined;
   for (const { name, labels, value } of parsePrometheusText(text) as {
     name: string;
     labels: Record<string, string>;
     value: number;
   }[]) {
+    if (name === "opensvc_pg_collected_at_seconds") {
+      if (labels.collection === "walk") walkAt = value * 1000;
+      else if (labels.collection === "parts") partsAt = value * 1000;
+      continue;
+    }
     if (labels.scope === "opensvc") {
       if (name === "opensvc_pg_cgroup_exists" && value === 0) opensvcAbsent = true;
       const field = FIELDS[name];
@@ -205,6 +220,8 @@ export function readPgScopes(text: string): Omit<NodeReading, "at"> {
     else delete details[path]?.resources[name];
   }
   const reading: Omit<NodeReading, "at"> = { byPath, namespaces, slices };
+  if (walkAt !== undefined) reading.walkAt = walkAt;
+  if (partsAt !== undefined) reading.partsAt = partsAt;
   if (Object.keys(details).length > 0) reading.details = details;
   if (opensvc && !opensvcAbsent) reading.opensvc = opensvc;
   if (host) reading.host = host;
@@ -217,13 +234,30 @@ export function readPg(text: string): Record<string, PgSample> {
 }
 
 /**
+ * The time between two readings, in ms: between the times the daemon read them at
+ * when it tells (`walkAt`, or `partsAt` for the subsets and resources), else between
+ * their fetches; none without a reading before.
+ */
+function elapsed(previous: NodeReading | undefined, current: NodeReading, collection: "walkAt" | "partsAt" = "walkAt"): number {
+  if (!previous) return 0;
+  const before = previous[collection];
+  const now = current[collection];
+  return before !== undefined && now !== undefined ? now - before : current.at - previous.at;
+}
+
+/** Whether a reading is the one before again: read in the same window by another scrape. */
+export function sameReading(previous: NodeReading | undefined, current: NodeReading): boolean {
+  return previous?.walkAt !== undefined && previous.walkAt === current.walkAt;
+}
+
+/**
  * The usage of the instances of a node, from its last reading and the one before:
  * the cpu used between them, in cpus; none on a first reading, nor for a counter
  * gone back, a cgroup recreated.
  */
 export function nodeUsage(previous: NodeReading | undefined, current: NodeReading): Record<string, Usage> {
   const out: Record<string, Usage> = {};
-  const elapsedMs = previous ? current.at - previous.at : 0;
+  const elapsedMs = elapsed(previous, current);
   for (const [path, sample] of Object.entries(current.byPath)) {
     out[path] = sampleUsage(previous?.byPath[path], sample, elapsedMs);
   }
@@ -233,23 +267,23 @@ export function nodeUsage(previous: NodeReading | undefined, current: NodeReadin
 /** The usage of the namespace slices of a node, as that of its objects (nodeUsage): the cpu from a second reading. */
 export function namespaceSlicesUsage(previous: NodeReading | undefined, current: NodeReading): Record<string, Usage> {
   return nodeUsage(
-    previous && { at: previous.at, byPath: previous.namespaces ?? {} },
-    { at: current.at, byPath: current.namespaces ?? {} },
+    previous && { ...previous, byPath: previous.namespaces ?? {} },
+    { ...current, byPath: current.namespaces ?? {} },
   );
 }
 
 /** The usage of the other top-level slices of a node, by name, as that of its objects. */
 export function topSlicesUsage(previous: NodeReading | undefined, current: NodeReading): Record<string, Usage> {
   return nodeUsage(
-    previous && { at: previous.at, byPath: previous.slices ?? {} },
-    { at: current.at, byPath: current.slices ?? {} },
+    previous && { ...previous, byPath: previous.slices ?? {} },
+    { ...current, byPath: current.slices ?? {} },
   );
 }
 
 /** The usage of the groups in the slices of the objects asked for, by object path, as that of the objects. */
 export function detailsUsage(previous: NodeReading | undefined, current: NodeReading): Record<string, ObjectDetail<Usage>> {
   const out: Record<string, ObjectDetail<Usage>> = {};
-  const elapsedMs = previous ? current.at - previous.at : 0;
+  const elapsedMs = elapsed(previous, current, "partsAt");
   for (const [path, detail] of Object.entries(current.details ?? {})) {
     const before = previous?.details?.[path];
     out[path] = {
@@ -266,7 +300,7 @@ export function detailsUsage(previous: NodeReading | undefined, current: NodeRea
 /** The usage of the whole host, as that of its opensvc slice (opensvcUsage): undefined when not told. */
 export function hostUsage(previous: NodeReading | undefined, current: NodeReading): Usage | undefined {
   if (current.host === undefined) return undefined;
-  return sampleUsage(previous?.host, current.host, previous ? current.at - previous.at : 0);
+  return sampleUsage(previous?.host, current.host, elapsed(previous, current));
 }
 
 /**
@@ -276,7 +310,7 @@ export function hostUsage(previous: NodeReading | undefined, current: NodeReadin
  */
 export function opensvcUsage(previous: NodeReading | undefined, current: NodeReading): Usage | undefined {
   if (current.opensvc === undefined) return undefined;
-  return sampleUsage(previous?.opensvc, current.opensvc, previous ? current.at - previous.at : 0);
+  return sampleUsage(previous?.opensvc, current.opensvc, elapsed(previous, current));
 }
 
 /**

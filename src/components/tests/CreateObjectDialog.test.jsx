@@ -332,21 +332,29 @@ describe('CreateObjectDialog', () => {
             type('Value of netns', 'container#1');
             fireEvent.click(screen.getByRole('button', {name: 'Add network'}));
             const network = await screen.findByRole('combobox', {name: 'Value of network'});
-            return () => [...(document.getElementById(network.getAttribute('list'))?.options ?? [])].map((o) => [o.value, o.label]);
+            return () => {
+                fireEvent.click(network);
+                return within(screen.getByRole('listbox', {name: 'The values of network'})).getAllByRole('option').map((o) => o.textContent);
+            };
         };
 
         test('not root: the networks its namespace claims offered for an address drawn from one, by name', async () => {
             grants.current = {admin: ['ns1']};
-            answers['GET /api/network'] = {status: 200, text: JSON.stringify({items: [{name: 'default', type: 'bridge'}]})};
+            answers['GET /api/network'] = {status: 200, text: JSON.stringify({items: [{name: 'backend5', type: 'routed_bridge', network: '10.0.5.0/24', free: 250}]})};
             answers['GET /api/object/path/ns1/nscfg/namespace/config/file'] = {status: 200, text: '[claim#1]\ntype = network\nname = backend5\nlimit = 10\n[claim#2]\ntype = pool\nname = default\n[claim#3]\ntype = network\nname = backend3\n'};
             const offered = await netns();
-            await waitFor(() => expect(offered()).toEqual([['backend5', ''], ['backend3', '']]));
+            // Told when the networks may be read; one not there by its name alone.
+            await waitFor(() => expect(offered()).toEqual(['backend5routed_bridge10.0.5.0/24250 addresses free', 'backend3']));
         });
 
         test('an address drawn from a network: for root, the networks of the cluster offered, by name; any name still typed', async () => {
-            answers['GET /api/network'] = {status: 200, text: JSON.stringify({items: [{name: 'default', type: 'bridge'}, {name: 'backend1', type: 'routed_bridge'}]})};
+            answers['GET /api/network'] = {status: 200, text: JSON.stringify({items: [
+                {name: 'default', type: 'bridge', network: '10.22.0.0/16', free: 65533},
+                {name: 'backend1', type: 'routed_bridge', network: 'fd01::/64', free: 2 ** 64 - 1},
+            ]})};
             const offered = await netns();
-            await waitFor(() => expect(offered()).toEqual([['default', ''], ['backend1', '']]));
+            // An ipv6 /64: its free addresses not told.
+            await waitFor(() => expect(offered()).toEqual(['defaultbridge10.22.0.0/1665,533 addresses free', 'backend1routed_bridgefd01::/64']));
             // Its netns a free value: nothing offered.
             expect(screen.getByRole('textbox', {name: 'Value of netns'})).not.toHaveAttribute('list');
         });
@@ -477,6 +485,67 @@ describe('CreateObjectDialog', () => {
             await screen.findByRole('textbox', {name: 'Value of vg'});
             type('Value of vg', 'datavg');
             expect(card('[data-popular=create_options]')).toBeInTheDocument();
+        });
+
+        test('the pool of a volume picked among those of the cluster for root, each its type and free size', async () => {
+            answers['GET /api/node/name/localhost/capabilities'] = {status: 200, text: JSON.stringify({items: [{data: {name: 'drivers.resource.volume'}}]})};
+            answers['GET /api/pool'] = {status: 200, text: JSON.stringify({items: [
+                {name: 'default', type: 'directory', size: 100 * 2 ** 30, free: 22 * 2 ** 30},
+                {name: 'v1', type: 'virtual', size: 0, free: 0},
+            ]})};
+            KW('volume', [
+                {section: 'volume', option: 'size', types: [''], provisioning: true, provisioningRequired: true},
+                {section: 'volume', option: 'pool', types: [''], provisioning: true},
+            ]);
+            await design();
+            fireEvent.click(screen.getByRole('button', {name: 'Add a resource'}));
+            fireEvent.click(await screen.findByRole('button', {name: /^volume/}));
+            await screen.findByRole('heading', {name: /\[volume#1\]/});
+            type('Value of size', '1g');
+            fireEvent.click(await screen.findByRole('button', {name: 'Add pool'}));
+            // Opened by the field itself, no list of the browser's beside it.
+            const pool = await screen.findByRole('combobox', {name: 'Value of pool'});
+            expect(pool).not.toHaveAttribute('list');
+            await waitFor(() => {
+                fireEvent.click(pool);
+                expect(screen.getByRole('listbox', {name: 'The values of pool'})).toBeInTheDocument();
+            });
+            const picks = () => within(screen.getByRole('listbox', {name: 'The values of pool'})).getAllByRole('option').map((o) => o.textContent);
+            // Its type and free size; a virtual pool, of no size, its type alone.
+            expect(picks()).toEqual(['defaultdirectory22 GiB free', 'v1virtual']);
+            fireEvent.mouseDown(within(screen.getByRole('listbox', {name: 'The values of pool'})).getByRole('option', {name: /^default/}));
+            expect(pool).toHaveValue('default');
+            expect(screen.queryByRole('listbox', {name: 'The values of pool'})).toBeNull();
+            // Typed: filtered; the arrows and Enter take one.
+            fireEvent.change(pool, {target: {value: 'v'}});
+            expect(picks()).toEqual(['v1virtual']);
+            fireEvent.keyDown(pool, {key: 'Enter'});
+            expect(pool).toHaveValue('v1');
+        });
+
+        test('not root: the pools its namespace claims picked, told when the pools may be read', async () => {
+            grants.current = {admin: ['ns1']};
+            answers['GET /api/node/name/localhost/capabilities'] = {status: 200, text: JSON.stringify({items: [{data: {name: 'drivers.resource.volume'}}]})};
+            answers['GET /api/pool'] = {status: 200, text: JSON.stringify({items: [
+                {name: 'default', type: 'directory', size: 100 * 2 ** 30, free: 22 * 2 ** 30},
+                {name: 'fast', type: 'zpool', size: 10 * 2 ** 30, free: 5 * 2 ** 30},
+            ]})};
+            answers['GET /api/object/path/ns1/nscfg/namespace/config/file'] = {status: 200, text: '[claim#1]\ntype = pool\nname = fast\nlimit = 2g\n'};
+            KW('volume', [
+                {section: 'volume', option: 'size', types: [''], provisioning: true, provisioningRequired: true},
+                {section: 'volume', option: 'pool', types: [''], provisioning: true},
+            ]);
+            await design();
+            fireEvent.click(screen.getByRole('button', {name: 'Add a resource'}));
+            fireEvent.click(await screen.findByRole('button', {name: /^volume/}));
+            await screen.findByRole('heading', {name: /\[volume#1\]/});
+            type('Value of size', '1g');
+            fireEvent.click(await screen.findByRole('button', {name: 'Add pool'}));
+            const pool = await screen.findByRole('combobox', {name: 'Value of pool'});
+            await waitFor(() => {
+                fireEvent.click(pool);
+                expect(within(screen.getByRole('listbox', {name: 'The values of pool'})).getAllByRole('option').map((o) => o.textContent)).toEqual(['fastzpool5 GiB free']);
+            });
         });
 
         test('a driver the daemon does not know: said, nothing added', async () => {

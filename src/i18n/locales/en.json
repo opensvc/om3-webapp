@@ -3195,7 +3195,11 @@
     "unmanaged": "Unmanaged provisioning",
     "unmanagedTitle": "Unmanaged provisioning of {{section}}",
     "unmanagedText": "om will skip {{section}} when the object is provisioned and unprovisioned (provision = false). You are responsible for creating the system resources it manages, its devices, filesystems or addresses, before it starts, and for removing them when they are no longer needed. Its provisioning keywords are no longer required.",
-    "unmanagedConfirm": "I manage them"
+    "unmanagedConfirm": "I manage them",
+    "picks": "The values of {{keyword}}",
+    "free": "{{size}} free",
+    "freeAddresses_one": "{{free}} address free",
+    "freeAddresses_other": "{{free}} addresses free"
   },
   "driverSupport": {
     "lacking_one": "Not usable on {{nodes}}: its driver is not among the capabilities of the node.",

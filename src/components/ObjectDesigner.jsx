@@ -1,7 +1,11 @@
 import React, {useEffect, useId, useMemo, useRef, useState} from "react";
 import {useTranslation} from "react-i18next";
 import {getResponseErrorMessage} from "../services/api.jsx";
-import {URL_NETWORK, URL_NODE, URL_OBJECT} from "../config/apiPath.js";
+import {URL_NETWORK, URL_NODE, URL_OBJECT, URL_POOL} from "../config/apiPath.js";
+import {formatBytes} from "../ui/lib/format";
+
+/** Free addresses past this many say nothing (an ipv6 /64): not told. */
+const FREE_ADDRESSES_TOLD = 2 ** 32;
 import {parseClaims} from "../app/namespace-usage";
 import {
     FREE_SECTIONS,
@@ -67,18 +71,46 @@ const readCapabilities = () => readJson(`${URL_NODE}/localhost/capabilities`).th
 const readDrivers = (kind) => readCapabilities().then((names) => kindDrivers(kind, names));
 
 /**
- * The networks an address may be drawn from, by name: for root, every one of the
- * cluster; for another user, those its namespace claims (`[claim#N]` of its nscfg).
- * Unread, none.
+ * The networks an address may be drawn from, each its type, its range and its free
+ * addresses: for root, every one of the cluster; for another user, those its
+ * namespace claims (`[claim#N]` of its nscfg), described when the networks may be
+ * read. Unread, none.
  */
 const readNetworks = async (namespace, isRoot) => {
+    const networks = await readJson(URL_NETWORK).then((d) => d?.items ?? [], () => []);
     try {
-        if (isRoot) return ((await readJson(URL_NETWORK))?.items ?? []).map((n) => n.name);
-        const response = await fetch(`${URL_OBJECT}/${encodeURIComponent(namespace)}/nscfg/namespace/config/file`, {
-            headers: {Authorization: `Bearer ${localStorage.getItem("authToken") || ""}`},
+        const names = isRoot ? networks.map((n) => n.name) : await readClaimed(namespace, "network");
+        return names.map((name) => {
+            const network = networks.find((n) => n.name === name);
+            return {value: name, type: network?.type, network: network?.network, free: network?.free};
         });
-        if (!response.ok) return [];
-        return parseClaims(await response.text()).filter((c) => c.type === "network" && c.name).map((c) => c.name);
+    } catch {
+        return [];
+    }
+};
+
+/** The names of the pools or networks (`type`) a namespace claims (`[claim#N]` of its nscfg): none without one. */
+const readClaimed = async (namespace, type) => {
+    const response = await fetch(`${URL_OBJECT}/${encodeURIComponent(namespace)}/nscfg/namespace/config/file`, {
+        headers: {Authorization: `Bearer ${localStorage.getItem("authToken") || ""}`},
+    });
+    if (!response.ok) return [];
+    return parseClaims(await response.text()).filter((c) => c.type === type && c.name).map((c) => c.name);
+};
+
+/**
+ * The pools a volume may be drawn from, each its type and its free size: for root,
+ * every pool of the cluster; for another user, those its namespace claims, described
+ * when the pools may be read. Unread, none.
+ */
+const readPools = async (namespace, isRoot) => {
+    const pools = await readJson(URL_POOL).then((d) => d?.items ?? [], () => []);
+    try {
+        const names = isRoot ? pools.map((p) => p.name) : await readClaimed(namespace, "pool");
+        return names.map((name) => {
+            const pool = pools.find((p) => p.name === name);
+            return {value: name, type: pool?.type, free: pool && pool.size > 0 ? pool.free : undefined};
+        });
     } catch {
         return [];
     }
@@ -94,10 +126,15 @@ const firstLine = (text) => (text ?? "").trim().split("\n")[0];
  * A value of a keyword: a choice among its candidates, a boolean, or a text after its
  * default, `suggestions` offered under it, any other value still typed. Empty, the
  * example of a keyword without a default is taken by a click, or the right arrow.
+ * `picks`, values told with what helps choose them (`info`, and `side` at the end of
+ * the line: a pool its type and free size), listed under the text as it is clicked
+ * or typed in, filtered by it, the arrows and Enter or a click taking one.
  */
-function ValueInput({keyword, value, onChange, label, suggestions = []}) {
+function ValueInput({keyword, value, onChange, label, suggestions = [], picks = []}) {
     const {t} = useTranslation();
     const listId = useId();
+    const [picking, setPicking] = useState(false);
+    const [active, setActive] = useState(0);
     if (keyword?.candidates?.length > 0) {
         return (
             <Select aria-label={label} className="h-7 w-full" value={value} onChange={(e) => onChange(e.target.value)}>
@@ -116,6 +153,17 @@ function ValueInput({keyword, value, onChange, label, suggestions = []}) {
         );
     }
     const example = !keyword?.default && !keyword?.defaultText && value === "" ? keyword?.example ?? "" : "";
+    // The picks matching the text; all of them while it is one of them, or empty.
+    const typed = value.trim().toLowerCase();
+    const shown = typed === "" || picks.some((p) => p.value.toLowerCase() === typed)
+        ? picks
+        : picks.filter((p) => p.value.toLowerCase().includes(typed));
+    const current = Math.min(active, shown.length - 1);
+    const open = picking && shown.length > 0;
+    const take = (pick) => {
+        onChange(pick.value);
+        setPicking(false);
+    };
     return (
         <span className="relative block">
             <Input
@@ -123,15 +171,41 @@ function ValueInput({keyword, value, onChange, label, suggestions = []}) {
                 className={`h-7 w-full font-mono text-data ${example ? "pr-14" : ""}`}
                 value={value}
                 placeholder={keyword?.default || keyword?.defaultText || keyword?.example || ""}
-                onChange={(e) => onChange(e.target.value)}
+                onChange={(e) => {
+                    onChange(e.target.value);
+                    setActive(0);
+                    if (picks.length > 0) setPicking(true);
+                }}
+                onFocus={() => picks.length > 0 && setPicking(true)}
+                onClick={() => picks.length > 0 && setPicking(true)}
+                onBlur={() => setPicking(false)}
                 onKeyDown={(e) => {
                     if (example && e.key === "ArrowRight") {
                         e.preventDefault();
                         onChange(example);
+                    } else if (picks.length > 0 && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+                        e.preventDefault();
+                        if (!open) setPicking(true);
+                        else setActive((current + (e.key === "ArrowDown" ? 1 : shown.length - 1)) % shown.length);
+                    } else if (open && e.key === "Enter") {
+                        e.preventDefault();
+                        take(shown[current]);
+                    } else if (open && e.key === "Escape") {
+                        e.stopPropagation();
+                        setPicking(false);
                     }
                 }}
                 spellCheck={false}
-                list={suggestions.length > 0 ? listId : undefined}
+                autoComplete="off"
+                {...(picks.length > 0
+                    ? {
+                        role: "combobox",
+                        "aria-expanded": open,
+                        "aria-controls": listId,
+                        "aria-autocomplete": "list",
+                        "aria-activedescendant": open ? `${listId}-${current}` : undefined,
+                    }
+                    : {list: suggestions.length > 0 ? listId : undefined})}
             />
             {example && (
                 <button
@@ -144,10 +218,40 @@ function ValueInput({keyword, value, onChange, label, suggestions = []}) {
                     {t("objectDesigner.use")}
                 </button>
             )}
-            {suggestions.length > 0 && (
+            {picks.length === 0 && suggestions.length > 0 && (
                 <datalist id={listId}>
                     {suggestions.map((name) => <option key={name} value={name}/>)}
                 </datalist>
+            )}
+            {/* The values to pick, each with what helps choose it: opened by the text, filtered as typed. */}
+            {open && (
+                <ul
+                    id={listId}
+                    role="listbox"
+                    aria-label={t("objectDesigner.picks", {keyword: keyword?.option ?? ""})}
+                    className="absolute top-full right-0 left-0 z-20 mt-1 max-h-56 overflow-auto rounded-(--radius-control) border border-line bg-surface-raised p-1 shadow-lg"
+                >
+                    {shown.map((pick, n) => (
+                        <li
+                            key={pick.value}
+                            id={`${listId}-${n}`}
+                            role="option"
+                            aria-selected={n === current}
+                            data-pick={pick.value}
+                            // Taken before the text loses the focus, which closes the list.
+                            onMouseDown={(e) => {
+                                e.preventDefault();
+                                take(pick);
+                            }}
+                            onMouseEnter={() => setActive(n)}
+                            className="flex cursor-pointer items-baseline gap-2 rounded-(--radius-control) px-1.5 py-0.5 aria-selected:bg-accent-soft"
+                        >
+                            <span className="font-mono">{pick.value}</span>
+                            {(pick.info ?? []).map((info) => <span key={info} className="text-data text-ink-muted">{info}</span>)}
+                            {pick.side && <span className="ml-auto text-data text-ink-muted tabular-nums">{pick.side}</span>}
+                        </li>
+                    ))}
+                </ul>
             )}
         </span>
     );
@@ -357,7 +461,7 @@ function AddResource({kind, keywordsUrl, onAdd, onCancel}) {
  * claims say the networks offered to who is not root.
  */
 export function ObjectDesigner({kind, namespace = "", sections, onChange, keywordsUrl, isRoot = false, onToText, showRoot: shownRoot, onShowRoot}) {
-    const {t} = useTranslation();
+    const {t, i18n} = useTranslation();
     const ids = useId();
     const [selected, setSelected] = useState(sections[0]?.name ?? "DEFAULT");
     // The keywords read, by driver: DEFAULT at once, a resource's when added.
@@ -384,17 +488,38 @@ export function ObjectDesigner({kind, namespace = "", sections, onChange, keywor
             live = false;
         };
     }, [needs]);
+    // The pools a volume may be drawn from, read once there is a volume.
+    const [poolPicks, setPoolPicks] = useState([]);
+    useEffect(() => {
+        if (!needs) return undefined;
+        let live = true;
+        readPools(namespace, isRoot).then((items) => live && setPoolPicks(items));
+        return () => {
+            live = false;
+        };
+    }, [needs, namespace, isRoot]);
     // The networks of the cluster, read once a section draws its address from one.
     const [networks, setNetworks] = useState([]);
     const drawsAddress = sections.some((s) => NETWORK_DRIVERS.includes(`${s.group}.${s.type}`));
     useEffect(() => {
         if (!drawsAddress) return undefined;
         let live = true;
-        readNetworks(namespace, isRoot).then((names) => live && setNetworks(names));
+        readNetworks(namespace, isRoot).then((items) => live && setNetworks(items));
         return () => {
             live = false;
         };
     }, [drawsAddress, namespace, isRoot]);
+    // The pools and the networks to pick, with what tells them apart.
+    const poolChoices = useMemo(() => poolPicks.map((p) => ({
+        value: p.value,
+        info: p.type ? [p.type] : [],
+        side: p.free !== undefined ? t("objectDesigner.free", {size: formatBytes(p.free, i18n.language) || "0"}) : undefined,
+    })), [poolPicks, t, i18n.language]);
+    const networkChoices = useMemo(() => networks.map((n) => ({
+        value: n.value,
+        info: [n.type, n.network].filter(Boolean),
+        side: n.free !== undefined && n.free < FREE_ADDRESSES_TOLD ? t("objectDesigner.freeAddresses", {count: n.free, free: n.free.toLocaleString(i18n.language)}) : undefined,
+    })), [networks, t, i18n.language]);
 
     useEffect(() => {
         let live = true;
@@ -575,9 +700,10 @@ export function ObjectDesigner({kind, namespace = "", sections, onChange, keywor
                                                 value={entry.value}
                                                 onChange={(value) => setEntry(i, {value})}
                                                 label={t("objectDesigner.valueOf", {keyword: entry.key || t("objectDesigner.variable")})}
-                                            suggestions={
-                                                entry.key === "network" && NETWORK_DRIVERS.includes(`${section.group}.${section.type}`) ? networks
-                                                    : entry.key === "type" && NEEDS_GROUPS.includes(section.group) ? pools
+                                            suggestions={entry.key === "type" && NEEDS_GROUPS.includes(section.group) ? pools : []}
+                                            picks={
+                                                entry.key === "pool" && NEEDS_GROUPS.includes(section.group) ? poolChoices
+                                                    : entry.key === "network" && NETWORK_DRIVERS.includes(`${section.group}.${section.type}`) ? networkChoices
                                                         : []
                                             }
                                             />

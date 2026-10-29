@@ -366,6 +366,20 @@ describe('ConfigSection Component', () => {
         }
     });
 
+    test('an edit in progress, inline: kept when the editor is unmounted, a tab of its panel left', async () => {
+        const first = renderConfig({inline: true});
+        const edit = await screen.findByRole('button', {name: 'Edit configuration file'});
+        await act(() => user.click(edit));
+        const editor = await screen.findByRole('textbox', {name: 'Configuration file'});
+        fireEvent.change(editor, {target: {value: '[DEFAULT]\nnodes = n1\n'}});
+        first.unmount();
+        renderConfig({inline: true});
+        expect(await screen.findByRole('textbox', {name: 'Configuration file'})).toHaveValue('[DEFAULT]\nnodes = n1\n');
+        // Cancelled, forgotten.
+        await act(() => user.click(screen.getByRole('button', {name: 'Cancel'})));
+        expect(screen.queryByRole('textbox', {name: 'Configuration file'})).toBeNull();
+    });
+
     describe('no configuration yet', () => {
         const posts = () => global.fetch.mock.calls.filter(([, options]) => options?.method === 'POST');
 
@@ -848,6 +862,31 @@ describe('ConfigSection Component', () => {
             dialog = await openDesigner(user);
             await waitFor(() => expect(within(dialog).getByRole('textbox', {name: 'Value of orchestrate'})).toHaveValue('ha'));
             expect(configFileGets().length).toBeGreaterThan(reads);
+        });
+
+        test('changes designed: a stray Escape keeps them, the dialog open; Cancel discards them', async () => {
+            renderConfig();
+            const dialog = await openDesigner(user);
+            fireEvent.change(within(dialog).getByRole('textbox', {name: 'Value of orchestrate'}), {target: {value: 'no'}});
+            fireEvent.keyDown(within(dialog).getByRole('textbox', {name: 'Value of orchestrate'}), {key: 'Escape'});
+            expect(getDialogByTitle('Configuration design')).toBe(dialog);
+            expect(within(dialog).getByRole('textbox', {name: 'Value of orchestrate'})).toHaveValue('no');
+            await act(() => user.click(within(dialog).getByRole('button', {name: 'Cancel'})));
+            expect(screen.queryByRole('navigation', {name: 'Sections'})).toBeNull();
+            expect(patches()).toEqual([]);
+        });
+
+        test('a value on several lines: edited in a field of several lines, its line breaks kept', async () => {
+            global.fetch.mockImplementation((url, options) => (url.includes('/config/file')
+                ? Promise.resolve({ok: true, status: 200, text: () => Promise.resolve('[DEFAULT]\nnodes = *\n\n[task#1]\ncommand = echo a\n    echo b\n')})
+                : defaultFetchMock(url, options)));
+            renderConfig();
+            const dialog = await openDesigner(user);
+            const sections = within(dialog).getByRole('navigation', {name: 'Sections'});
+            await act(() => user.click(within(sections).getAllByRole('button', {name: /task#1/})[0]));
+            const command = await within(dialog).findByRole('textbox', {name: 'Value of command'});
+            expect(command.tagName).toBe('TEXTAREA');
+            expect(command.value).toContain('\n');
         });
 
         test('a file that can not be read: said', async () => {

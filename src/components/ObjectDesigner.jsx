@@ -33,7 +33,7 @@ import {
 } from "../app/object-design";
 import {Dialog} from "../ui/components/Dialog";
 import {Button, IconButton} from "../ui/components/Button";
-import {Checkbox, Input, Select} from "../ui/components/Field";
+import {Checkbox, Input, Select, Textarea} from "../ui/components/Field";
 import {Spinner} from "../ui/components/Spinner";
 import {CloseIcon, InfoIcon, PlusIcon, SearchIcon} from "../ui/icons";
 import {KeywordFacts} from "./ConfigText";
@@ -171,6 +171,20 @@ function ValueInput({keyword, value, onChange, label, suggestions = [], picks = 
                 <option value="true">true</option>
                 <option value="false">false</option>
             </Select>
+        );
+    }
+    // A value on several lines (a command, a script), as the file holds it: a field of one
+    // line would drop its line breaks, gluing them together at the first key typed.
+    if (value.includes("\n")) {
+        return (
+            <Textarea
+                aria-label={label}
+                className="w-full font-mono text-data"
+                rows={Math.min(value.split("\n").length, 8)}
+                value={value}
+                onChange={(e) => onChange(e.target.value)}
+                spellCheck={false}
+            />
         );
     }
     const example = !keyword?.default && !keyword?.defaultText && value === "" ? keyword?.example ?? "" : "";

@@ -81,6 +81,18 @@ describe('CreateObjectDialog', () => {
         expect(onClose).toHaveBeenCalledTimes(1);
     });
 
+    test('untouched, closed by Escape; something typed, kept open by a stray Escape, Cancel closing it', () => {
+        const onClose = vi.fn();
+        open({defaultKind: 'svc', onClose});
+        fireEvent.keyDown(screen.getByRole('dialog'), {key: 'Escape'});
+        expect(onClose).toHaveBeenCalledTimes(1);
+        type('Name', 'web2');
+        fireEvent.keyDown(screen.getByRole('dialog'), {key: 'Escape'});
+        expect(onClose).toHaveBeenCalledTimes(1);
+        fireEvent.click(screen.getByRole('button', {name: 'Cancel'}));
+        expect(onClose).toHaveBeenCalledTimes(2);
+    });
+
     test('opens on the kind and namespace it is given, a card each picked, the name focused; no wait to choose', () => {
         open({defaultKind: 'cfg', defaultNamespace: 'ns1'});
         expect(screen.getByRole('dialog', {name: 'New object'})).toBeInTheDocument();

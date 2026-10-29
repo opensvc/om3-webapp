@@ -2,6 +2,7 @@ import React, {createContext, useCallback, useContext, useEffect, useReducer, us
 import {decodeToken as decodeTokenFromLogin, refreshToken as doRefreshToken} from '../components/Login';
 import {updateEventSourceToken} from '../eventSourceManager';
 import logger from '../utils/logger.js';
+import {clearEditDrafts} from '../app/edit-drafts';
 
 const getLocalStorage = () => (typeof window !== 'undefined' && typeof window.localStorage !== 'undefined' ? window.localStorage : null);
 
@@ -36,6 +37,8 @@ const authReducer = (state, action) => {
         case Login:
             return {...state, user: action.data, isAuthenticated: true};
         case Logout: {
+            // The configuration edits kept in progress hold the files in clear: not left to the next user.
+            clearEditDrafts();
             const browserStorage = getLocalStorage();
             browserStorage?.removeItem('authToken');
             browserStorage?.removeItem('tokenExpiration');

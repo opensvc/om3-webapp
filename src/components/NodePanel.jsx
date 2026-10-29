@@ -45,6 +45,7 @@ import {propertyKeyword, useOrgEdit} from "./NodeOrgEdit";
 import {NodeLabels} from "./NodeLabels";
 import {RawDataButton} from "./JsonCode";
 import {matches} from "../app/facets";
+import {useEditDraft} from "../app/edit-drafts";
 
 /*
  * The record panel of a cluster node, as oc3 gives its nodes one: its state and
@@ -809,7 +810,8 @@ function NodeConfig({node}) {
     const [showSecrets, setShowSecrets] = useState(false);
     const secondsLeft = useAutoHide(showSecrets, () => setShowSecrets(false));
     const file = useNodeResource(node, `config/file?redact-secrets=${!showSecrets}`, {text: true});
-    const [edit, setEdit] = useState(null);
+    // The edit in progress, kept when a tab of the panel is left: found again on coming back.
+    const [edit, setEdit] = useEditDraft(`node\u0000${node}`);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState(null);
     const [evalOpen, setEvalOpen] = useState(false);

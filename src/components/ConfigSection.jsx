@@ -21,6 +21,7 @@ import useEventStore from "../hooks/useEventStore.js";
 import {newId, withId} from "../app/object-create";
 import {designChanges, designStart, parseDesign, rootOnlyKind} from "../app/object-design";
 import {ObjectDesigner} from "./ObjectDesigner";
+import {useEditDraft} from "../app/edit-drafts";
 
 /**
  * The object configuration file, its secrets redacted unless `showSecrets`: the
@@ -274,6 +275,8 @@ const DesignConfigDialog = ({
             onClose={onClose}
             title={t("config.design.title")}
             size="xl"
+            // Changes designed: not lost to an Escape, in the search of a picker or anywhere.
+            dirty={changes.set.length + changes.unset.length + changes.delete.length > 0}
             footer={
                 <>
                     <div className="mr-auto self-center">
@@ -383,8 +386,9 @@ const ConfigSection = ({
 
     // Direct edition of the file: `file` is the file the edit started from, `base`
     // the text edited as it started, `text` as edited: the whole file, or its
-    // `section` alone. Kept when the dialog closes, so an edit is not lost to Escape.
-    const [edit, setEdit] = useState(null);
+    // `section` alone. Kept when the dialog closes, and when the editor unmounts (a tab
+    // of its panel left): mounted again, the edit is where it was left.
+    const [edit, setEdit] = useEditDraft(`object\u0000${decodedObjectName}\u0000${section ?? ""}`);
     const [editLoading, setEditLoading] = useState(false);
     const [editError, setEditError] = useState(null);
     const [editConflict, setEditConflict] = useState(false);
@@ -838,6 +842,7 @@ const ConfigSection = ({
                 title={t("config.view.title")}
                 size="lg"
                 footer={footer}
+                dirty={editDirty}
             >
                 {body}
             </Dialog>

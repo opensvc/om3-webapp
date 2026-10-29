@@ -104,6 +104,16 @@ describe("Dialog", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
+  test("dirty, holding changes: not closed by Escape nor a click on the veil, by its cross yes", () => {
+    const onClose = vi.fn();
+    render(<Dialog open dirty title="T" onClose={onClose} />);
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+    fireEvent.pointerDown(screen.getByTestId("dialog-backdrop"));
+    expect(onClose).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
   test("Escape does not reach the listeners above the dialog", () => {
     const outer = vi.fn();
     render(

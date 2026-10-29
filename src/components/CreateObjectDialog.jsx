@@ -281,6 +281,8 @@ const CreateObjectDialog = ({open, onClose, defaultKind = "svc", defaultNamespac
     const nameRef = useRef(null);
     // The object whose copy is read: picked again meanwhile, an answer is not the one asked.
     const copying = useRef("");
+    // The design an opening starts from: another one, the user designed it.
+    const designAtStart = useRef(null);
 
     // Each opening starts over, on the kind of the list it was opened from.
     useEffect(() => {
@@ -292,7 +294,9 @@ const CreateObjectDialog = ({open, onClose, defaultKind = "svc", defaultNamespac
         setCopyFrom("");
         setFileName("");
         setConfig("");
-        setDesign(designStart(RUNNING_KINDS.includes(defaultKind)));
+        const start = designStart(RUNNING_KINDS.includes(defaultKind));
+        designAtStart.current = start;
+        setDesign(start);
         setStep("what");
         copying.current = "";
         setLoadingSource(false);
@@ -439,10 +443,13 @@ const CreateObjectDialog = ({open, onClose, defaultKind = "svc", defaultNamespac
 
     // A cfg or a sec has no second step: created at the first.
     const last = datastore || step === "how";
+    // Something typed, picked or designed: not lost to a stray Escape or click beside the dialog.
+    const dirty = name.trim() !== "" || config !== "" || copyFrom !== "" || fileName !== "" || design !== designAtStart.current;
     return (
         <Dialog
             open={open}
             onClose={submitting ? () => {} : onClose}
+            dirty={dirty}
             title={t("createObject.title")}
             size={step === "how" && source === "design" ? "xl" : "lg"}
             initialFocus={nameRef}

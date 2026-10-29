@@ -693,6 +693,34 @@ describe('ObjectStatus', () => {
             await waitFor(() => expect(posted).toEqual(['POST /api/node/name/dev3n1/instance/path/system/svc/dns/clear']));
         });
 
+        test('the note of a failed instance clears it, from a button of its own', async () => {
+            await ready();
+            const note = screen.getByText(/the orchestration gave up/).closest('li');
+            fireEvent.click(within(note).getByRole('button', {name: 'Clear'}));
+            expect(posted).toEqual([]);
+            confirm('clear');
+            await waitFor(() => expect(posted).toEqual([
+                'POST /api/node/name/dev3n1/instance/path/system/svc/dns/clear',
+                'POST /api/node/name/dev3n2/instance/path/system/svc/dns/clear',
+            ]));
+            // A note asking for nothing has no button.
+            expect(within(screen.getByText('system/vol/dns avail down').closest('li')).queryByRole('button')).not.toBeInTheDocument();
+        });
+
+        test('the note of a frozen instance unfreezes it; a failed one cleared, no clear offered', async () => {
+            const frozen = structuredClone(dns);
+            frozen.instances.dev3n2.status.frozen_at = '2026-10-12T10:00:00Z';
+            frozen.instances.dev3n1.monitor.state = 'idle';
+            frozen.instances.dev3n2.monitor.state = 'idle';
+            await ready(frozen);
+            expect(screen.queryByRole('button', {name: 'Clear'})).not.toBeInTheDocument();
+            fireEvent.click(within(screen.getByText(/takes no initiative/).closest('li')).getByRole('button', {name: 'Unfreeze'}));
+            confirm('unfreeze');
+            await waitFor(() => expect(posted).toEqual([
+                expect.stringMatching(/^POST \/api\/node\/name\/dev3n2\/instance\/path\/system\/svc\/dns\/action\/unfreeze/),
+            ]));
+        });
+
         test('an instance not failed has nothing to clear; freeze and unfreeze both offered', async () => {
             const idle = structuredClone(dns);
             idle.instances.dev3n2.monitor.state = 'idle';

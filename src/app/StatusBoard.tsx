@@ -9,7 +9,7 @@ import { StateGlyph } from "../ui/components/StateGlyph";
 import type { ObjectState } from "../ui/components/StatusBadge";
 import { statusBadge } from "../ui/components/status";
 import { Cell, HeaderCell, HeaderRow, Row, Table } from "../ui/components/Table";
-import type { Board, BoardRow, Level, Span, Text, Tone } from "./statusboard";
+import type { Board, BoardRow, Level, NoteFix, Span, Text, Tone } from "./statusboard";
 import { HoverNotes } from "./HoverNotes";
 import { Term } from "./Term";
 
@@ -563,6 +563,7 @@ function NodeBlocks({
  * node opens what the caller shows of it: the resource on that instance alone. The names are the caller's badges
  * (`linkNode`, `linkResource`): a click on one opens its record. `facts`, what the
  * caller adds to the summary, a line each after the count of the instances up.
+ * `noteFix`, the caller's button running the action a note asks for, in the note.
  *
  * Scaled down to its room a step at a time while it overflows (`boardLayout`), the
  * least missed first, as the lists are: in a narrow panel, on a phone, its nodes
@@ -576,6 +577,7 @@ export function StatusBoard({
   linkResource,
   openCell,
   facts = [],
+  noteFix,
 }: {
   board: Board;
   selection?: BoardSelection;
@@ -589,6 +591,8 @@ export function StatusBoard({
   openCell?: (rid: string, node: string) => void;
   /** More lines of the summary, after the count of the instances up. */
   facts?: { label: string; value: ReactNode }[];
+  /** The button running the action a note asks for; none without, or where it gives none. */
+  noteFix?: (fix: NoteFix) => ReactNode;
 }) {
   const { t } = useTranslation();
   const details = useCellDetails();
@@ -929,6 +933,7 @@ export function StatusBoard({
                       </p>
                     ))}
                     <p className={cn(g.level === "info" ? "text-ink-muted" : "text-ink")}>{g.text}</p>
+                    {g.fix !== undefined && noteFix !== undefined && noteFix(g.fix)}
                   </div>
                 </li>
               );

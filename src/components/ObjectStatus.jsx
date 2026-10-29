@@ -292,6 +292,32 @@ const ObjectStatus = ({path, onOrchestrationLogs, linkNode, linkResource, openCe
         // Freeze and unfreeze both, as on an object: either is harmless where it changes nothing.
         return [...(l.some((i) => i.failed) ? [CLEAR_ACTION] : []), ...INSTANCE_ACTIONS];
     };
+    /**
+     * The button of the action a note asks for, where the menus offer it: on the
+     * instances it names (`instanceActions`), or on the object (its menu). Confirmed
+     * first, as from a menu.
+     */
+    const noteFix = ({action, nodes}) => {
+        const def = nodes.length > 0
+            ? instanceActions(nodes).find((a) => a.name === action)
+            : objectActionsFor(kind).find((a) => a.name === action
+                && isActionAllowedForSelection(a.name, [path]) && !clusterIdle(a.name));
+        if (def === undefined) return null;
+        return (
+            <div className="pt-1">
+                <Button
+                    size="sm"
+                    variant="secondary"
+                    icon={actionIcon(def)}
+                    disabled={running}
+                    title={actionDescription(t, nodes.length > 0 ? "instance" : "object", action)}
+                    onClick={() => ask(action, nodes.length > 0 ? onInstances(nodes) : {})}
+                >
+                    {actionLabel(action)}
+                </Button>
+            </div>
+        );
+    };
     const menuItems = (actions, onSelect) => actions.map((a) => ({
         key: a.name,
         label: actionLabel(a.name),
@@ -490,6 +516,7 @@ const ObjectStatus = ({path, onOrchestrationLogs, linkNode, linkResource, openCe
                 linkResource={linkResource}
                 openCell={openCell}
                 facts={facts}
+                noteFix={noteFix}
             />
             <ActionDialogManager
                 pendingAction={pending}

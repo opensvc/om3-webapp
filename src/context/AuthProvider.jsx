@@ -1,5 +1,5 @@
 import React, {createContext, useCallback, useContext, useEffect, useReducer, useRef} from 'react';
-import {decodeToken as decodeTokenFromLogin, refreshToken as doRefreshToken} from '../components/Login';
+import {decodeToken as decodeTokenFromLogin, hasRefreshToken, refreshToken as doRefreshToken} from '../components/Login';
 import {updateEventSourceToken} from '../eventSourceManager';
 import logger from '../utils/logger.js';
 import {clearEditDrafts} from '../app/edit-drafts';
@@ -86,9 +86,11 @@ export const AuthProvider = ({children}) => {
         if (!payload?.exp) return;
 
         const expirationTime = payload.exp * 1000;
-        const refreshTime = expirationTime - Date.now() - 5000;
+        // Expired already, a tab reopened after a while: renewed at once with the refresh
+        // token, if one is held and valid; ended only without one.
+        const refreshTime = Math.max(expirationTime - Date.now() - 5000, hasRefreshToken() ? 0 : -1);
 
-        if (refreshTime > 0) {
+        if (refreshTime >= 0) {
             logger.info('Token refresh scheduled in', Math.round(refreshTime / 1000), 'seconds');
 
             refreshTimeout.current = setTimeout(async () => {
@@ -115,7 +117,7 @@ export const AuthProvider = ({children}) => {
                 }
             }, refreshTime);
         } else {
-            logger.warn('Token already expired or too close to expiration, no refresh scheduled');
+            logger.warn('Token expired and no refresh token to renew it: session ended');
             dispatch({type: Logout});
             if (typeof BroadcastChannel !== 'undefined' && channel.current) {
                 channel.current.postMessage({type: 'logout'});

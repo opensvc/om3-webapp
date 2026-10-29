@@ -48,6 +48,18 @@ export const decodeToken = (token) => {
     }
 };
 
+/**
+ * Whether a password session can be renewed: a refresh token held, not expired. Its
+ * access token expired (a tab reopened after a while), the session is renewed with
+ * it, not ended.
+ */
+export const hasRefreshToken = () => {
+    const token = localStorage.getItem('refreshToken');
+    if (!token) return false;
+    const expiration = localStorage.getItem('refreshTokenExpiration');
+    return !expiration || Date.now() < parseInt(expiration, 10);
+};
+
 // Queue mechanism for concurrent refresh token calls
 let refreshTokenPromise = null;
 

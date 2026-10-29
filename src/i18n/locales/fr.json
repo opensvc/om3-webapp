@@ -327,6 +327,7 @@
       "openid": "OpenID",
       "login": "Se connecter"
     },
+    "renewing": "Renouvellement de la session",
     "authenticating": {
       "title": "Authentification",
       "loading": "Chargement...",

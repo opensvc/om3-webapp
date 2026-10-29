@@ -1,7 +1,7 @@
 import React from 'react';
 import {render, screen, fireEvent, waitFor} from '@testing-library/react';
 import {vi, describe, test, expect, beforeEach} from 'vitest';
-import Login, {decodeToken, refreshToken} from '../Login';
+import Login, {decodeToken, hasRefreshToken, refreshToken} from '../Login';
 import {SetAccessToken, SetAuthChoice, useAuthDispatch} from '../../context/AuthProvider.jsx';
 import {URL_TOKEN} from '../../config/apiPath';
 
@@ -441,5 +441,20 @@ describe('Login Component', () => {
         expect(localStorage.getItem('refreshTokenExpiration')).toBeNull();
 
         removeItemSpy.mockRestore();
+    });
+});
+
+describe('hasRefreshToken', () => {
+    beforeEach(() => localStorage.clear());
+
+    test('a refresh token held and not expired: the session can be renewed; none, or expired, it cannot', () => {
+        expect(hasRefreshToken()).toBe(false);
+        localStorage.setItem('refreshToken', 'r');
+        // No expiration known: tried, the daemon says.
+        expect(hasRefreshToken()).toBe(true);
+        localStorage.setItem('refreshTokenExpiration', String(Date.now() + 60000));
+        expect(hasRefreshToken()).toBe(true);
+        localStorage.setItem('refreshTokenExpiration', String(Date.now() - 1000));
+        expect(hasRefreshToken()).toBe(false);
     });
 });

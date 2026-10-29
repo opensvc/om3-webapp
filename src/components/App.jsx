@@ -31,7 +31,8 @@ import {PageIntro} from "./PageIntro";
 import {InstantTitles} from "../app/InstantTitles";
 import {useShortcut} from "../ui/lib/shortcuts";
 
-import {decodeToken as decodeTokenFromLogin} from "./Login.jsx";
+import {decodeToken as decodeTokenFromLogin, hasRefreshToken, refreshToken as doRefreshToken} from "./Login.jsx";
+import {Spinner} from "../ui/components/Spinner";
 import {rememberReturn} from "../app/after-login";
 
 // Lazy load components for code splitting
@@ -292,6 +293,12 @@ const OidcInitializer = ({children, authInfo}) => {
                     }
                     return;
                 }
+                if (!isTokenValid(token) && hasRefreshToken()) {
+                    // Expired while away: renewed with the refresh token, the session kept.
+                    logger.info('Token expired on resume, renewing it with the refresh token');
+                    void doRefreshToken(authDispatch);
+                    return;
+                }
                 if (!isTokenValid(token)) {
                     logger.warn('Token invalid or expired on resume, redirecting to /auth-choice');
                     localStorage.removeItem('authToken');
@@ -337,6 +344,9 @@ const OidcInitializer = ({children, authInfo}) => {
 
 const ProtectedRoute = ({children}) => {
     const location = useLocation();
+    const {t} = useTranslation();
+    // Read again as the session changes: a token renewed shows the page, one refused leaves it.
+    useAuth();
     const token = localStorage.getItem("authToken");
     const authChoice = localStorage.getItem('authChoice');
 
@@ -352,6 +362,16 @@ const ProtectedRoute = ({children}) => {
             return <Navigate to="/auth-choice" replace/>;
         }
         return children;
+    }
+
+    // Expired, a tab reopened after a while: renewed with the refresh token (AuthProvider),
+    // the page waiting for it rather than its requests refused.
+    if (!isTokenValid(token) && hasRefreshToken()) {
+        return (
+            <div className="flex justify-center p-8">
+                <Spinner label={t("auth.renewing")}/>
+            </div>
+        );
     }
 
     if (!isTokenValid(token)) {

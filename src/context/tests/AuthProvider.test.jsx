@@ -12,7 +12,7 @@ import {
     useAuthDispatch,
 } from '../AuthProvider';
 import {updateEventSourceToken} from '../../eventSourceManager';
-import {decodeToken, refreshToken} from '../../components/Login';
+import {decodeToken, hasRefreshToken, refreshToken} from '../../components/Login';
 import logger from '../../utils/logger.js';
 
 // ── Mocks ──────────────────────────────────────────────────────────────
@@ -22,6 +22,8 @@ vi.mock('../../eventSourceManager', () => ({
 vi.mock('../../components/Login', () => ({
     decodeToken: vi.fn(),
     refreshToken: vi.fn(),
+    // No refresh token held, unless a test says so.
+    hasRefreshToken: vi.fn(() => false),
 }));
 vi.mock('../../utils/logger.js', () => ({
     default: {
@@ -138,6 +140,7 @@ const ErrorTest = ({hook}) => {
 let broadcastInstance;
 beforeEach(() => {
     vi.clearAllMocks();
+    hasRefreshToken.mockReturnValue(false);
     localStorage.clear();
     vi.useFakeTimers();
     tokenExpiredCallbackRef.current = null;
@@ -407,13 +410,28 @@ describe('AuthProvider', () => {
             expect(refreshToken).not.toHaveBeenCalled();
         });
 
-        test('does not schedule refresh for expired token and logs out', () => {
+        test('an expired token and no refresh token: the session ended, no refresh asked', () => {
             decodeToken.mockReturnValue({exp: Math.floor(Date.now() / 1000) - 10});
             renderProvider();
             setValidToken();
-            expect(logger.warn).toHaveBeenCalledWith('Token already expired or too close to expiration, no refresh scheduled');
+            expect(logger.warn).toHaveBeenCalledWith('Token expired and no refresh token to renew it: session ended');
             expect(getText('isAuthenticated')).toBe('false');
             expect(refreshToken).not.toHaveBeenCalled();
+        });
+
+        test('an expired token, a tab reopened after a while: renewed at once with the refresh token, the session kept', async () => {
+            hasRefreshToken.mockReturnValue(true);
+            decodeToken.mockReturnValue({exp: Math.floor(Date.now() / 1000) - 3600});
+            renderProvider();
+            setValidToken();
+            expect(logger.warn).not.toHaveBeenCalledWith('Token expired and no refresh token to renew it: session ended');
+            await act(async () => {
+                vi.advanceTimersByTime(0);
+                await Promise.resolve();
+            });
+            expect(refreshToken).toHaveBeenCalledTimes(1);
+            expect(broadcastInstance._messages).not.toContainEqual({type: 'logout'});
+            expect(broadcastInstance._messages).toContainEqual({type: 'tokenUpdated', data: 'new-token'});
         });
 
         test('does not schedule refresh when authChoice is openid', () => {

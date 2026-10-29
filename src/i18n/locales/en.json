@@ -1906,7 +1906,6 @@
     "webappVersion": "WebApp Version",
     "versionLoading": "vLoading...",
     "versionUnknown": "vUnknown",
-    "productName": "OM3 WebApp",
     "lightMode": "Light",
     "darkMode": "Dark",
     "language": "Language",
@@ -1924,7 +1923,9 @@
     "resetIntros_one": "Show the hidden introduction again",
     "resetIntros_other": "Show the {{count}} hidden introductions again",
     "resetIntros_zero": "No introduction hidden",
-    "grants": "Grants"
+    "grants": "Grants",
+    "latestRelease": "Latest release",
+    "thisVersion": "this version"
   },
   "panel": {
     "resize": "Resize the panel",
@@ -3585,6 +3586,7 @@
     "security": {
       "title": "Security",
       "text": "Report a vulnerability in confidence to <mail/>."
-    }
+    },
+    "webapp": "Webapp"
   }
 }

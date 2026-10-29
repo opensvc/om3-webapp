@@ -1906,7 +1906,6 @@
     "webappVersion": "Version de la WebApp",
     "versionLoading": "Chargement...",
     "versionUnknown": "Inconnue",
-    "productName": "WebApp OM3",
     "lightMode": "Clair",
     "darkMode": "Sombre",
     "language": "Langue",
@@ -1924,7 +1923,9 @@
     "resetIntros_one": "Montrer de nouveau l'introduction masquée",
     "resetIntros_other": "Montrer de nouveau les {{count}} introductions masquées",
     "resetIntros_zero": "Aucune introduction masquée",
-    "grants": "Droits"
+    "grants": "Droits",
+    "latestRelease": "Dernière version publiée",
+    "thisVersion": "cette version"
   },
   "panel": {
     "resize": "Redimensionner le panneau",
@@ -3585,6 +3586,7 @@
     "security": {
       "title": "Sécurité",
       "text": "Signalez une vulnérabilité en toute confidentialité à <mail/>."
-    }
+    },
+    "webapp": "Webapp"
   }
 }

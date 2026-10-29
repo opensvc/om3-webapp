@@ -1,6 +1,7 @@
 import React from 'react';
 import {render, screen, waitFor, fireEvent, within} from '@testing-library/react';
 import {hideIntro, reloadHiddenIntros} from '../../app/page-intro';
+import {APP_VERSION} from '../../app/version';
 import {MemoryRouter} from 'react-router-dom';
 import WhoAmI from '../WhoAmI';
 import {URL_AUTH_WHOAMI} from '../../config/apiPath';
@@ -245,6 +246,9 @@ describe('WhoAmI', () => {
         setupMocks({releaseCheck: null});
         renderComponent();
         expect(await screen.findByText('Not checked.')).toBeInTheDocument();
+        // The version built told all the same, the check off.
+        expect(APP_VERSION).not.toBe('');
+        expect(screen.getByText(APP_VERSION)).toBeInTheDocument();
         expect(screen.getByRole('link', {name: 'Allow the check'})).toHaveAttribute('href', '/about');
         expect(global.fetch.mock.calls.some(([url]) => String(url).includes('github'))).toBe(false);
     });

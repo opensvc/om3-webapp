@@ -15,6 +15,7 @@ import {useDarkMode} from "../context/DarkModeContext";
 import {clearObjectCache} from "../hooks/useEventStore.js";
 import {LANGUAGES, LANGUAGE_NAMES, isLanguage, setLanguage} from "../i18n";
 import {useReleaseCheck} from "../app/release-check";
+import {APP_VERSION, isRelease} from "../app/version";
 import {setIntrosEnabled, showAllIntros, useHiddenIntros, useIntrosEnabled} from "../app/page-intro";
 
 /** A labelled value of a panel: the label muted above, the value in monospace. */
@@ -239,16 +240,22 @@ const WhoAmI = () => {
                     </h2>
                     <dl className="space-y-2">
                         <Value label={t('user.connectedNode')}>{daemon?.nodename || t('user.nodeLoading')}</Value>
+                        {/* The version built, always; the latest release, when the user lets GitHub be asked. */}
+                        <Value label={t('user.webappVersion')}>{APP_VERSION || t('user.versionUnknown')}</Value>
                         <div>
-                            <dt className="text-data text-ink-muted">{t('user.webappVersion')}</dt>
+                            <dt className="text-data text-ink-muted">{t('user.latestRelease')}</dt>
                             <dd className="font-mono">
                                 {appVersion === undefined
                                     ? <span className="font-sans text-ink-muted">{t('user.versionNotChecked')} <Link to="/about" className="text-accent underline-offset-2 hover:underline">{t('user.versionOptIn')}</Link></span>
                                     : appVersion === null
                                         ? t('user.versionLoading')
-                                        : appVersion === '' ? t('user.versionUnknown') : `v${appVersion}`}
+                                        : appVersion === '' ? t('user.versionUnknown') : (
+                                            <>
+                                                {`v${appVersion}`}
+                                                {isRelease(APP_VERSION, appVersion) && <span className="ml-2 font-sans text-data text-state-up">{t('user.thisVersion')}</span>}
+                                            </>
+                                        )}
                             </dd>
-                            <dd className="text-data text-ink-muted">{t('user.productName')}</dd>
                         </div>
                     </dl>
                 </section>

@@ -2,6 +2,7 @@ import React from "react";
 import {Trans, useTranslation} from "react-i18next";
 import useEventStore from "../hooks/useEventStore.js";
 import {ProductTag} from "../ui/components/ProductTag";
+import {APP_VERSION} from "../app/version";
 import {Checkbox} from "../ui/components/Field";
 import {setReleaseCheck, useReleaseCheck} from "../app/release-check";
 
@@ -74,6 +75,7 @@ export function About() {
                     <ProductTag/>
                 </h1>
                 <p className="text-ink-muted">{t("about.tagline")}</p>
+                {APP_VERSION && <p data-about="webapp"><span className="text-ink-muted">{t("about.webapp")}</span> <span className="font-mono">{APP_VERSION}</span></p>}
                 {versions && <p data-about="agent"><span className="text-ink-muted">{t("about.agent")}</span> <span className="font-mono">{versions}</span></p>}
             </header>
 

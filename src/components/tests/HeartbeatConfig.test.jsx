@@ -147,7 +147,7 @@ describe('HeartbeatWizard', () => {
         ]);
     });
 
-    test('another driver: said, the section deleted first, then the keys of the new one set', async () => {
+    test('another driver: said, the section deleted and the keys of the new one set in one write', async () => {
         const calls = mockApi();
         const onSaved = vi.fn();
         render(<HeartbeatWizard name="hb#1" nodes={['n1', 'n2']} onClose={() => {}} onSaved={onSaved}/>);
@@ -162,9 +162,9 @@ describe('HeartbeatWizard', () => {
         fireEvent.click(screen.getByRole('button', {name: 'Write'}));
         await waitFor(() => expect(onSaved).toHaveBeenCalled());
         const writes = calls.filter((c) => c.method === 'PATCH').map(opsOf);
+        // All or nothing: a refused key would leave the heartbeat as it was, not deleted.
         expect(writes).toEqual([
-            [['delete', 'hb#1']],
-            [['set', 'hb#1.type=disk'], ['set', 'hb#1.dev=/dev/mapper/hb1']],
+            [['set', 'hb#1.type=disk'], ['set', 'hb#1.dev=/dev/mapper/hb1'], ['delete', 'hb#1']],
         ]);
     });
 

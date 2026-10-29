@@ -135,7 +135,7 @@ describe('NetworkWizard', () => {
         }]);
     });
 
-    test('a network modified to another type: warned, its section deleted then written anew', async () => {
+    test('a network modified to another type: warned, its section deleted and written anew in one write', async () => {
         const edit = {name: 'seg', values: {type: 'lan', network: '192.168.10.0/24', ranges: '192.168.10.128/25'}};
         const {onSaved} = renderWizard({edit});
         fireEvent.click(await screen.findByRole('radio', {name: /^bridge/}));
@@ -146,8 +146,8 @@ describe('NetworkWizard', () => {
         fireEvent.click(screen.getByRole('button', {name: 'Modify the network'}));
         await waitFor(() => expect(onSaved).toHaveBeenCalledWith('seg'));
         expect(requests.filter((r) => r.method === 'PATCH').map((r) => r.url)).toEqual([
-            '/api/cluster/config?delete=network%23seg',
-            '/api/cluster/config?set=network%23seg.type%3Dbridge&set=network%23seg.network%3D192.168.10.0%2F24',
+            // All or nothing: a refused key would leave the network as it was, not deleted.
+            '/api/cluster/config?set=network%23seg.type%3Dbridge&set=network%23seg.network%3D192.168.10.0%2F24&delete=network%23seg',
         ]);
     });
 

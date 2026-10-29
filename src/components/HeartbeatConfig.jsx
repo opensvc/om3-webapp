@@ -15,6 +15,7 @@ import {
     sectionValues,
 } from "../app/heartbeat-config";
 import {opsQuery} from "../app/namespace-claims";
+import {boolOn, boolWrite} from "../app/section-config";
 import {Alert} from "../ui/components/Alert";
 import {Button} from "../ui/components/Button";
 import {Dialog} from "../ui/components/Dialog";

@@ -6,6 +6,8 @@ import {trackRefused, trackWrite} from "../app/action-tracker";
 import {opsQuery} from "../app/namespace-claims";
 import {
     SECTION_NAME,
+    boolOn,
+    boolWrite,
     editOps,
     editPreview,
     firstParagraph,

@@ -158,10 +158,13 @@ describe('NodeDetailPanel', () => {
             .toEqual(['Monitor', 'Health', 'Labels0', 'Node', 'OS', 'CPU', 'Memory', 'Hardware']);
         expect(within(panel()).getByRole('region', {name: 'OS'})).toHaveTextContent('Architecturex86_64');
         expect(within(panel()).getByRole('region', {name: 'CPU'})).toHaveTextContent(/Model.*Threads/);
+        // Who gives the values: the node, or a person.
+        expect(within(panel()).getByRole('region', {name: 'OS'})).toHaveTextContent('reported by the node');
+        // A section with no value, its enclosure not probed: one line, together with the others so.
         const hardware = within(panel()).getByRole('region', {name: 'Hardware'});
-        expect(hardware).toHaveTextContent('organisation');
-        // A property not probed says why, muted.
-        expect(hardware).toHaveTextContent('Enclosurenot implemented');
+        expect(hardware).toHaveTextContent(/^Hardware:not set$/);
+        expect(hardware.parentElement).toHaveAttribute('data-folded', 'organisation');
+        expect(within(panel()).queryByText('Enclosure')).toBeNull();
         expect(within(panel()).queryByRole('table', {name: /properties/i})).toBeNull();
     });
 
@@ -173,11 +176,18 @@ describe('NodeDetailPanel', () => {
         ]};
         mockGrants.value = {root: null};
         renderPanel();
-        // A pencil on each block of the organisation, each editing them all.
-        await waitFor(() => expect(within(panel()).getAllByRole('button', {name: 'Edit the organisation properties'}).length).toBeGreaterThan(1));
-        fireEvent.click(within(panel()).getAllByRole('button', {name: 'Edit the organisation properties'}).at(-1));
+        // A pencil on each block of the organisation, each editing them all: on a block set,
+        // said set by you; on the line of one with no value.
+        const location = await within(panel()).findByRole('region', {name: 'Location'});
+        expect(location).toHaveTextContent('set by you');
+        expect(within(location).getByRole('button', {name: 'Edit the organisation properties'})).toBeInTheDocument();
+        const hardware = within(panel()).getByRole('region', {name: 'Hardware'});
+        expect(hardware).toHaveTextContent('Hardware:not set');
+        fireEvent.click(within(hardware).getByRole('button', {name: 'Edit the organisation properties'}));
         await waitFor(() => expect(within(panel()).queryAllByRole('button', {name: 'Edit the organisation properties'})).toEqual([]));
+        // Unfolded for its fields, the first of the one whose pencil was clicked focused.
         const enclosure = await within(panel()).findByRole('textbox', {name: 'Enclosure'});
+        expect(enclosure).toHaveFocus();
         const city = within(panel()).getByRole('textbox', {name: 'City'});
         // Edited, the keyword under its label.
         expect(within(panel()).getByText('node.loc_city')).toBeInTheDocument();

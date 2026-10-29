@@ -395,9 +395,23 @@ function NodeStatusTab({node, onOrchestrationLogs}) {
             </span>
         );
     };
+    // A section with no value to show, folded into one line: its title, "not set", its pencil.
+    // Unfolded while the organisation is edited, for its fields; the first field of the one
+    // whose pencil was clicked then focused.
+    const isUnset = (p) => p.value === "" || p.value === undefined || p.value === null;
+    const [focusGroup, setFocusGroup] = useState(null);
+    useEffect(() => {
+        if (!org.editing || focusGroup === null) return;
+        document.querySelector(`[aria-labelledby="${focusGroup}"] input`)?.focus();
+        setFocusGroup(null);
+    }, [org.editing, focusGroup]);
+    const editOrganisation = (sectionId) => {
+        org.start(organisationItems);
+        setFocusGroup(sectionId);
+    };
     const valueOf = (p) => {
         if (p.error) return <span className="text-ink-muted">{p.error}</span>;
-        if (p.value === "" || p.value === undefined || p.value === null) return <span className="text-ink-muted">{none}</span>;
+        if (isUnset(p)) return <span className="text-ink-muted">{none}</span>;
         // The memory in bytes, readable.
         if (p.name === "mem_bytes" && Number(p.value) > 0) return formatBytes(Number(p.value));
         // The last boot, as an age: its date hovered.
@@ -437,34 +451,58 @@ function NodeStatusTab({node, onOrchestrationLogs}) {
                     <Section id={`node-properties-${node}`} title={t("nodePanel.status.discovered")}>
                         <Loaded resource={properties}>{null}</Loaded>
                     </Section>
-                ) : groups.map(({family, group, items}) => (
-                    <Section
-                        key={`${family}-${group}`}
-                        id={`node-${family}-${group}-${node}`}
-                        title={t(`nodePanel.properties.${group}`)}
-                        tools={(
-                            <>
-                                <span className="text-data text-ink-muted">{t(`nodePanel.status.${family}Tag`)}</span>
-                                {/* Root edits the properties of the organisation, from any of their blocks: all of them at once. */}
-                                {mayConfigure && !org.editing && family === "organisation" && (
-                                    <IconButton size="sm" label={t("nodePanel.orgEdit.edit")} onClick={() => org.start(organisationItems)}>
-                                        <PencilIcon className="h-3 w-3"/>
-                                    </IconButton>
+                ) : ["discovered", "organisation"].flatMap((family) => {
+                    const own = groups.filter((g) => g.family === family);
+                    const editing = org.editing && family === "organisation";
+                    const editable = mayConfigure && !org.editing && family === "organisation";
+                    const sectionId = (group) => `node-${family}-${group}-${node}`;
+                    const pencil = (group) => editable && (
+                        <IconButton size="sm" label={t("nodePanel.orgEdit.edit")} onClick={() => editOrganisation(sectionId(group))}>
+                            <PencilIcon className="h-3 w-3"/>
+                        </IconButton>
+                    );
+                    const folded = editing ? [] : own.filter((g) => g.items.every(isUnset));
+                    const shown = own.filter((g) => !folded.includes(g));
+                    return [
+                        ...shown.map(({group, items}) => (
+                            <Section
+                                key={`${family}-${group}`}
+                                id={sectionId(group)}
+                                title={t(`nodePanel.properties.${group}`)}
+                                tools={(
+                                    <>
+                                        <span className="text-data text-ink-muted">{t(`nodePanel.status.${family}Tag`)}</span>
+                                        {/* Root edits the properties of the organisation, from any of their blocks: all of them at once. */}
+                                        {pencil(group)}
+                                    </>
                                 )}
-                            </>
-                        )}
-                    >
-                        <Facts facts={items.map((p) => (org.editing && family === "organisation"
-                            // Edited, the keyword written under its label.
-                            ? [p.name, (
-                                <span className="block">
-                                    {labelOf(p)}
-                                    <span className="block font-mono text-data text-ink-muted/70">{propertyKeyword(p.name)}</span>
-                                </span>
-                            ), orgField(p)]
-                            : [p.name, labelOf(p), valueOf(p)]))}/>
-                    </Section>
-                ))}
+                            >
+                                <Facts facts={items.map((p) => (editing
+                                    // Edited, the keyword written under its label.
+                                    ? [p.name, (
+                                        <span className="block">
+                                            {labelOf(p)}
+                                            <span className="block font-mono text-data text-ink-muted/70">{propertyKeyword(p.name)}</span>
+                                        </span>
+                                    ), orgField(p)]
+                                    : [p.name, labelOf(p), valueOf(p)]))}/>
+                            </Section>
+                        )),
+                        // The sections with nothing to show, a line each, together after the others of their family.
+                        ...(folded.length === 0 ? [] : [(
+                            <div key={`${family}-folded`} data-folded={family} className="space-y-1">
+                                {folded.map(({group}) => (
+                                    <section key={group} aria-labelledby={sectionId(group)} className="flex flex-wrap items-center gap-x-1.5">
+                                        <h3 id={sectionId(group)} className="font-semibold">{t(`nodePanel.properties.${group}`)}</h3>
+                                        <span aria-hidden="true" className="-ml-1.5">:</span>
+                                        <span className="text-ink-muted">{t(`nodePanel.status.${family}Unset`)}</span>
+                                        {pencil(group)}
+                                    </section>
+                                ))}
+                            </div>
+                        )]),
+                    ];
+                })}
             </div>
             {editing !== null && (
                 <MinAvailDialog

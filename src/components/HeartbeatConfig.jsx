@@ -166,9 +166,11 @@ export function HeartbeatWizard({name, nodes, onClose, onSaved}) {
                 const response = await fetch(`${URL_CLUSTER}/config?${query}`, {method: "PATCH", headers: headers()});
                 if (!response.ok) throw new Error((await getResponseErrorMessage(response)) || `HTTP ${response.status}`);
             };
-            // Another driver: the section of the former gone first, its keys meaning nothing to the new one.
-            if (ops.rewrite) await patch(opsQuery({delete: [hbName]}));
-            if (ops.set.length > 0 || ops.unset.length > 0) await patch(opsQuery({set: ops.set, unset: ops.unset}));
+            // One write: another driver, the section of the former deleted in it, its keys meaning
+            // nothing to the new one. All or nothing: a refused key leaves the heartbeat as it was.
+            if (ops.rewrite || ops.set.length > 0 || ops.unset.length > 0) {
+                await patch(opsQuery({delete: ops.rewrite ? [hbName] : [], set: ops.set, unset: ops.unset}));
+            }
             onSaved(hbName);
         } catch (err) {
             setError(err.message);
@@ -183,7 +185,8 @@ export function HeartbeatWizard({name, nodes, onClose, onSaved}) {
         if (kind === "bool") {
             return (
                 <div key={key}>
-                    <Checkbox label={label} checked={values[key] === "true"} onChange={(event) => set(key, event.target.checked ? "true" : "")}/>
+                    <Checkbox label={label} checked={boolOn(values[key], keyword?.default)}
+                              onChange={(event) => set(key, boolWrite(event.target.checked, keyword?.default))}/>
                     {keyword?.text && <p className="mt-1 text-data text-ink-muted">{keyword.text}</p>}
                 </div>
             );

@@ -82,6 +82,21 @@ export function typeDescriptions(keywords: Keyword[], section: string): Record<s
   return out;
 }
 
+/** The words om reads as true in a boolean keyword. */
+const TRUE_WORDS = new Set(["true", "yes", "y", "on", "1", "t"]);
+
+/** Whether a boolean keyword is on: its value written, else its default. */
+export const boolOn = (value: string | undefined, fallback?: unknown): boolean =>
+  TRUE_WORDS.has(String(value?.trim() ? value : (fallback ?? "")).trim().toLowerCase());
+
+/**
+ * What a boolean field writes, checked or not: nothing where it is the default, the
+ * keyword unset back to it; "true" or "false" where it is not, a "false" kept where
+ * the default is true.
+ */
+export const boolWrite = (checked: boolean, fallback?: unknown): string =>
+  checked === boolOn("", fallback) ? "" : String(checked);
+
 /** The first paragraph of a help text: a hint under a field, the rest in the keyword reference. */
 export const firstParagraph = (text?: string) => (text ?? "").split(/\n\s*\n/)[0].replace(/\s*\n\s*/g, " ").trim();
 

@@ -68,7 +68,10 @@ export const hideIntro = (page: string) => {
 export const showAllIntros = () => write([]);
 
 /** Read again from the storage: another tab, a test. */
-export const reloadHiddenIntros = () => write(readHidden());
+export const reloadHiddenIntros = () => {
+  off = readOff();
+  write(readHidden());
+};
 
 const subscribe = (listener: () => void) => {
   listeners.add(listener);
@@ -79,3 +82,34 @@ const subscribe = (listener: () => void) => {
 
 /** The pages whose intro is hidden, kept current. */
 export const useHiddenIntros = () => useSyncExternalStore(subscribe, () => snapshot);
+
+/*
+ * The intros of every page off at once, for whom knows OpenSVC: kept apart from the
+ * pages hidden one by one, so that turned on again they come back as they were.
+ */
+const OFF_KEY = "om3-webapp.introsOff";
+
+function readOff(): boolean {
+  try {
+    return localStorage.getItem(OFF_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
+let off = readOff();
+
+/** Turns the intros of every page off or on again. */
+export function setIntrosEnabled(enabled: boolean) {
+  off = !enabled;
+  try {
+    if (enabled) localStorage.removeItem(OFF_KEY);
+    else localStorage.setItem(OFF_KEY, "true");
+  } catch {
+    // Storage refused: for this visit only.
+  }
+  listeners.forEach((listener) => listener());
+}
+
+/** Whether the intros of the pages are on, kept current. */
+export const useIntrosEnabled = () => useSyncExternalStore(subscribe, () => !off);

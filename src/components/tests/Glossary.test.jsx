@@ -4,7 +4,7 @@ import {MemoryRouter} from 'react-router-dom';
 import {Glossary} from '../Glossary';
 import {PageIntro} from '../PageIntro';
 import {Term} from '../../app/Term';
-import {reloadHiddenIntros} from '../../app/page-intro';
+import {hideIntro, reloadHiddenIntros, setIntrosEnabled} from '../../app/page-intro';
 
 const renderAt = (url, ui) => render(<MemoryRouter initialEntries={[url]}>{ui}</MemoryRouter>);
 
@@ -52,6 +52,20 @@ describe('PageIntro', () => {
         // Another page keeps its own.
         renderAt('/nodes', <PageIntro/>);
         expect(screen.getByRole('complementary', {name: 'About this page'})).toHaveTextContent(/^These are the servers in your cluster\./);
+    });
+
+    test('all turned off: none on any page; on again, those hidden one by one still hidden', () => {
+        hideIntro('pools');
+        setIntrosEnabled(false);
+        const {unmount} = renderAt('/nodes', <PageIntro/>);
+        expect(document.querySelector('[data-page-intro]')).toBeNull();
+        unmount();
+        act(() => setIntrosEnabled(true));
+        renderAt('/nodes', <PageIntro/>);
+        expect(document.querySelector('[data-page-intro=nodes]')).not.toBeNull();
+        // Kept apart: the page hidden before, hidden still.
+        expect(localStorage.getItem('om3-webapp.hiddenIntros')).toBe('["pools"]');
+        expect(localStorage.getItem('om3-webapp.introsOff')).toBeNull();
     });
 
     test('none on a page without one', () => {

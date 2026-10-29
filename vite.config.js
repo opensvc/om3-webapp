@@ -1,3 +1,5 @@
+import {execSync} from 'node:child_process';
+import {readFileSync} from 'node:fs';
 import {defineConfig} from 'vite';
 import react from '@vitejs/plugin-react';
 import {viteSingleFile} from 'vite-plugin-singlefile';
@@ -18,7 +20,23 @@ import {
 
 const baseUrl = process.env.BASE_URL || 'https://localhost:1215/';
 
+/**
+ * The version of the webapp built, embedded in it: the release tag of the commit
+ * built, or how far past one ("v1.0.0-rc7-2-gb70a232"), "-dirty" with changes not
+ * committed; the version of package.json without git.
+ */
+const appVersion = (() => {
+    try {
+        return execSync('git describe --tags --always --dirty', {stdio: ['ignore', 'pipe', 'ignore']}).toString().trim();
+    } catch {
+        return JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')).version;
+    }
+})();
+
 export default defineConfig({
+    define: {
+        __APP_VERSION__: JSON.stringify(appVersion),
+    },
     plugins: [
         react({
             babel: {

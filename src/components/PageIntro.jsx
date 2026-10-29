@@ -1,22 +1,23 @@
 import React from "react";
 import {Link, useLocation} from "react-router-dom";
 import {useTranslation} from "react-i18next";
-import {hideIntro, introPage, useHiddenIntros} from "../app/page-intro";
+import {hideIntro, introPage, useHiddenIntros, useIntrosEnabled} from "../app/page-intro";
 import {IconButton} from "../ui/components/Button";
 import {CloseIcon, InfoIcon} from "../ui/icons";
 
 /**
  * What the page shown is about, for someone who does not know OpenSVC: a sentence
  * or two under the header, the glossary a click away. Hidden for the browser on
- * demand, page by page; the Glossary page shows them all again. Nothing on a page
- * with none.
+ * demand, page by page; the Glossary page and the user page show them all again,
+ * the user page turns them all off. Nothing on a page with none.
  */
 export function PageIntro() {
     const {t} = useTranslation();
     const location = useLocation();
     const hidden = useHiddenIntros();
+    const enabled = useIntrosEnabled();
     const page = introPage(location.pathname, location.search);
-    if (page === null || hidden.includes(page)) return null;
+    if (!enabled || page === null || hidden.includes(page)) return null;
     return (
         <aside
             aria-label={t("pageIntro.label")}

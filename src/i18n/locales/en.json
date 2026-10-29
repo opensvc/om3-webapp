@@ -1896,27 +1896,36 @@
   "user": {
     "loading": "Loading user information",
     "loadError": "Failed to load user information",
-    "myInfo": "My Information",
+    "myInfo": "Account",
     "username": "Username",
     "authMethod": "Auth Method",
     "permissions": "Permission Details",
-    "rawPermissions": "Raw Permissions",
     "server": "Server Information",
     "connectedNode": "Connected Node",
     "nodeLoading": "Loading...",
     "webappVersion": "WebApp Version",
     "versionLoading": "vLoading...",
     "versionUnknown": "vUnknown",
-    "productName": "OM3 WebApp",
-    "lightMode": "Light Mode",
-    "darkMode": "Dark Mode",
+    "lightMode": "Light",
+    "darkMode": "Dark",
     "language": "Language",
-    "logout": "Logout",
+    "logout": "Sign out",
     "versionNotChecked": "Not checked.",
     "versionOptIn": "Allow the check",
     "apiAccess": "API access",
     "apiAccessHint": "For a script or a quick test with curl, a token of its own, short-lived and of the roles you pick, rather than the one of your session.",
-    "createToken": "Create an API token"
+    "createToken": "Create an API token",
+    "apiDocs": "API documentation (Swagger)",
+    "preferences": "Preferences",
+    "theme": "Theme",
+    "hints": "Hints",
+    "showIntros": "Show the introduction of each page",
+    "resetIntros_one": "Show the hidden introduction again",
+    "resetIntros_other": "Show the {{count}} hidden introductions again",
+    "resetIntros_zero": "No introduction hidden",
+    "grants": "Grants",
+    "latestRelease": "Latest Release",
+    "thisVersion": "this version"
   },
   "panel": {
     "resize": "Resize the panel",
@@ -3577,6 +3586,7 @@
     "security": {
       "title": "Security",
       "text": "Report a vulnerability in confidence to <mail/>."
-    }
+    },
+    "webapp": "Webapp"
   }
 }

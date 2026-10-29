@@ -1,5 +1,7 @@
 import React from 'react';
-import {render, screen, waitFor, fireEvent} from '@testing-library/react';
+import {render, screen, waitFor, fireEvent, within} from '@testing-library/react';
+import {hideIntro, reloadHiddenIntros} from '../../app/page-intro';
+import {APP_VERSION} from '../../app/version';
 import {MemoryRouter} from 'react-router-dom';
 import WhoAmI from '../WhoAmI';
 import {URL_AUTH_WHOAMI} from '../../config/apiPath';
@@ -184,17 +186,17 @@ describe('WhoAmI', () => {
         renderComponent();
 
         await waitFor(() => {
-            expect(screen.getAllByText('My Information')[0]).toBeInTheDocument();
+            expect(screen.getAllByText('Account')[0]).toBeInTheDocument();
             expect(screen.getByText('testuser')).toBeInTheDocument();
             expect(screen.getByText('Auth Method')).toBeInTheDocument();
             expect(screen.getByText('user')).toBeInTheDocument();
-            expect(screen.getByText('Permission Details')).toBeInTheDocument();
+            expect(screen.getByText('Grants')).toBeInTheDocument();
             expect(screen.getByText('root')).toBeInTheDocument();
             expect(screen.getByText('Server Information')).toBeInTheDocument();
             expect(screen.getByText('test-node')).toBeInTheDocument();
             expect(screen.getByText('v1.2.3')).toBeInTheDocument();
-            expect(screen.getByRole('button', {name: /dark mode/i})).toBeInTheDocument();
-            expect(screen.getByRole('button', {name: /logout/i})).toBeInTheDocument();
+            expect(screen.getByRole('button', {name: 'Dark'})).toBeInTheDocument();
+            expect(screen.getByRole('button', {name: 'Sign out'})).toBeInTheDocument();
         });
     });
 
@@ -230,10 +232,23 @@ describe('WhoAmI', () => {
         });
     });
 
+    test('the API access: a token of its own to create, the documentation of the api out of the webapp', async () => {
+        setupMocks();
+        renderComponent();
+        expect(await screen.findByRole('link', {name: 'Create an API token'})).toHaveAttribute('href', '/token');
+        const docs = screen.getByRole('link', {name: 'API documentation (Swagger)'});
+        expect(docs).toHaveAttribute('href', '/api/docs/');
+        expect(docs).toHaveAttribute('target', '_blank');
+        expect(docs).toHaveAttribute('rel', 'noopener noreferrer');
+    });
+
     test('the release check not opted in: GitHub not asked, the way to allow it from the About page', async () => {
         setupMocks({releaseCheck: null});
         renderComponent();
         expect(await screen.findByText('Not checked.')).toBeInTheDocument();
+        // The version built told all the same, the check off.
+        expect(APP_VERSION).not.toBe('');
+        expect(screen.getByText(APP_VERSION)).toBeInTheDocument();
         expect(screen.getByRole('link', {name: 'Allow the check'})).toHaveAttribute('href', '/about');
         expect(global.fetch.mock.calls.some(([url]) => String(url).includes('github'))).toBe(false);
     });
@@ -358,7 +373,7 @@ describe('WhoAmI', () => {
             setupMocks({authToken: null});
             renderComponent();
             await waitFor(() => {
-                const headings = screen.getAllByText('My Information');
+                const headings = screen.getAllByText('Account');
                 expect(headings.length).toBeGreaterThan(0);
             });
             expect(mockFetchNodes).not.toHaveBeenCalled();
@@ -386,11 +401,14 @@ describe('WhoAmI', () => {
     });
 
     describe('dark mode toggle', () => {
-        test('button toggles dark mode', async () => {
+        test('the theme both told, the one on pressed; the other a click away, the one on nothing to do', async () => {
             setupMocks();
             renderComponent();
-            const button = await screen.findByRole('button', {name: /dark mode/i});
-            fireEvent.click(button);
+            const light = await screen.findByRole('button', {name: 'Light'});
+            expect(light).toHaveAttribute('aria-pressed', 'true');
+            fireEvent.click(light);
+            expect(mockToggleDarkMode).not.toHaveBeenCalled();
+            fireEvent.click(screen.getByRole('button', {name: 'Dark'}));
             expect(mockToggleDarkMode).toHaveBeenCalled();
         });
 
@@ -398,8 +416,7 @@ describe('WhoAmI', () => {
             setupMocks({isDarkMode: true});
             renderComponent();
 
-            const button = await screen.findByRole('button', {name: /light mode/i});
-            expect(button).toBeInTheDocument();
+            expect(await screen.findByRole('button', {name: 'Dark'})).toHaveAttribute('aria-pressed', 'true');
         });
     });
 
@@ -430,7 +447,7 @@ describe('WhoAmI', () => {
         ])('handles logout for $authChoice', async ({authChoice, shouldCallOidc}) => {
             setupMocks({authChoice});
             renderComponent();
-            const button = await screen.findByRole('button', {name: /logout/i});
+            const button = await screen.findByRole('button', {name: 'Sign out'});
             fireEvent.click(button);
 
             if (shouldCallOidc) {
@@ -449,7 +466,7 @@ describe('WhoAmI', () => {
         test('handles logout when auth is null', async () => {
             setupMocks({auth: null});
             renderComponent();
-            const button = await screen.findByRole('button', {name: /logout/i});
+            const button = await screen.findByRole('button', {name: 'Sign out'});
             fireEvent.click(button);
 
             expect(mockSignoutRedirect).not.toHaveBeenCalled();
@@ -466,12 +483,34 @@ describe('WhoAmI', () => {
             renderComponent();
 
             await waitFor(() => {
-                expect(screen.getByRole('region', {name: 'My Information'})).toHaveTextContent('testuser');
-                expect(screen.getByRole('region', {name: 'Permission Details'})).toHaveTextContent('root');
+                // The session in the account: its permissions, its sign out.
+                const account = screen.getByRole('region', {name: 'Account'});
+                expect(account).toHaveTextContent('testuser');
+                expect(account).toHaveTextContent('root');
+                expect(within(account).getByRole('button', {name: 'Sign out'})).toBeInTheDocument();
+                // The language, the theme, the hints in the preferences.
+                const preferences = screen.getByRole('region', {name: 'Preferences'});
+                expect(within(preferences).getByRole('combobox', {name: 'Language'})).toBeInTheDocument();
+                expect(within(preferences).getByRole('group', {name: 'Theme'})).toBeInTheDocument();
                 expect(screen.getByRole('region', {name: 'Server Information'})).toHaveTextContent('test-node');
-                expect(screen.getByRole('button', {name: /dark mode/i})).toBeInTheDocument();
-                expect(screen.getByRole('button', {name: /logout/i})).toBeInTheDocument();
             });
+        });
+
+        test('the hints: the introductions of the pages all off, or those hidden shown again', async () => {
+            reloadHiddenIntros();
+            hideIntro('nodes');
+            hideIntro('pools');
+            setupMocks();
+            renderComponent();
+            const reset = await screen.findByRole('button', {name: 'Show the 2 hidden introductions again'});
+            const intros = screen.getByRole('checkbox', {name: 'Show the introduction of each page'});
+            expect(intros).toBeChecked();
+            fireEvent.click(intros);
+            // Off: nothing shown again meanwhile.
+            expect(reset).toBeDisabled();
+            fireEvent.click(intros);
+            fireEvent.click(reset);
+            expect(screen.getByRole('button', {name: 'No introduction hidden'})).toBeDisabled();
         });
     });
 });

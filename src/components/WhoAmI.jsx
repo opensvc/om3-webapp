@@ -2,10 +2,10 @@ import React, {useEffect, useState} from 'react';
 import {useTranslation} from 'react-i18next';
 import {URL_AUTH_WHOAMI} from '../config/apiPath';
 import {Button} from '../ui/components/Button';
-import {Select} from '../ui/components/Field';
+import {Checkbox, Select} from '../ui/components/Field';
 import {Alert} from '../ui/components/Alert';
 import {Spinner} from '../ui/components/Spinner';
-import {GlobeIcon, KeyIcon, LockIcon, MoonIcon, ServerIcon, SignOutIcon, SunIcon, UserIcon} from '../ui/icons';
+import {GlobeIcon, InfoIcon, KeyIcon, MoonIcon, ServerIcon, GearIcon, SignOutIcon, SunIcon, UserIcon} from '../ui/icons';
 import {useOidc} from "../context/OidcAuthContext.tsx";
 import {useAuth, useAuthDispatch, Logout} from "../context/AuthProvider.jsx";
 import {Link, useNavigate} from "react-router-dom";
@@ -15,6 +15,8 @@ import {useDarkMode} from "../context/DarkModeContext";
 import {clearObjectCache} from "../hooks/useEventStore.js";
 import {LANGUAGES, LANGUAGE_NAMES, isLanguage, setLanguage} from "../i18n";
 import {useReleaseCheck} from "../app/release-check";
+import {APP_VERSION, isRelease} from "../app/version";
+import {setIntrosEnabled, showAllIntros, useHiddenIntros, useIntrosEnabled} from "../app/page-intro";
 
 /** A labelled value of a panel: the label muted above, the value in monospace. */
 const Value = ({label, children}) => (
@@ -40,6 +42,8 @@ const WhoAmI = () => {
     const {daemon, fetchNodes} = useFetchDaemonStatus();
     const {isDarkMode, toggleDarkMode} = useDarkMode();
     const {t, i18n} = useTranslation();
+    const introsEnabled = useIntrosEnabled();
+    const hiddenIntros = useHiddenIntros();
 
     // The latest release, from GitHub: asked only when the user opted in, from the About page.
     const releaseCheck = useReleaseCheck();
@@ -146,10 +150,12 @@ const WhoAmI = () => {
 
     const PANEL = "rounded-(--radius-panel) border border-line bg-surface-raised p-3";
 
+    // Every control in the card of what it acts on: the session in the account, the
+    // language, the theme and the hints in the preferences.
     return (
-        <div className="p-4 space-y-3">
-            <div className="grid gap-3 lg:grid-cols-3">
-                <section aria-labelledby="whoami-my-info" className={PANEL}>
+        <div className="p-4">
+            <div className="grid gap-3 lg:grid-cols-2">
+                <section aria-labelledby="whoami-my-info" className={`${PANEL} flex flex-col`}>
                     <h2 id="whoami-my-info" className="mb-2 flex items-center gap-2 font-semibold">
                         <UserIcon className="text-accent"/>
                         {t('user.myInfo')}
@@ -157,17 +163,56 @@ const WhoAmI = () => {
                     <dl className="space-y-2">
                         <Value label={t('user.username')}>{userInfo?.name || t('common.notAvailable')}</Value>
                         <Value label={t('user.authMethod')}>{userInfo?.auth || t('common.notAvailable')}</Value>
+                        <Value label={t('user.grants')}>{userInfo?.raw_grant || t('common.none')}</Value>
                     </dl>
+                    <div className="mt-auto flex justify-end pt-3">
+                        <Button icon={<SignOutIcon/>} onClick={handleLogout}>{t('user.logout')}</Button>
+                    </div>
                 </section>
 
-                <section aria-labelledby="whoami-permissions" className={PANEL}>
-                    <h2 id="whoami-permissions" className="mb-2 flex items-center gap-2 font-semibold">
-                        <LockIcon className="text-accent"/>
-                        {t('user.permissions')}
+                <section aria-labelledby="whoami-preferences" className={PANEL}>
+                    <h2 id="whoami-preferences" className="mb-2 flex items-center gap-2 font-semibold">
+                        <GearIcon className="text-accent"/>
+                        {t('user.preferences')}
                     </h2>
-                    <dl className="rounded-(--radius-control) bg-surface-sunken p-2">
-                        <Value label={t('user.rawPermissions')}>{userInfo?.raw_grant || t('common.none')}</Value>
-                    </dl>
+                    {/* A row each: its pictogram, its name, its control; the hints two lines, their reset under the switch. */}
+                    <div className="grid grid-cols-[1rem_6rem_minmax(0,1fr)] items-center gap-x-2 gap-y-3">
+                        <GlobeIcon className="h-4 w-4 text-ink-muted"/>
+                        {/* Each language named in itself: found whatever the language shown. */}
+                        <label htmlFor="whoami-language" className="text-ink-muted">{t('user.language')}</label>
+                        <Select
+                            id="whoami-language"
+                            className="w-fit"
+                            value={isLanguage(i18n.language) ? i18n.language : 'en'}
+                            onChange={(event) => setLanguage(event.target.value)}
+                        >
+                            {LANGUAGES.map((language) => (
+                                <option key={language} value={language} lang={language}>{LANGUAGE_NAMES[language]}</option>
+                            ))}
+                        </Select>
+
+                        {isDarkMode ? <MoonIcon className="h-4 w-4 text-ink-muted"/> : <SunIcon className="h-4 w-4 text-ink-muted"/>}
+                        <span id="whoami-theme" className="text-ink-muted">{t('user.theme')}</span>
+                        {/* The theme, both told: the one on pressed, the other a click away. */}
+                        <span role="group" aria-labelledby="whoami-theme" className="inline-flex">
+                            <Button size="sm" aria-pressed={!isDarkMode} onClick={() => isDarkMode && toggleDarkMode()} className="rounded-r-none">
+                                {t('user.lightMode')}
+                            </Button>
+                            <Button size="sm" aria-pressed={isDarkMode} onClick={() => !isDarkMode && toggleDarkMode()} className="-ml-px rounded-l-none">
+                                {t('user.darkMode')}
+                            </Button>
+                        </span>
+
+                        <InfoIcon className="h-4 w-4 text-ink-muted"/>
+                        <span className="text-ink-muted">{t('user.hints')}</span>
+                        {/* The intros of the pages: all off for whom knows OpenSVC, or those hidden one by one shown again. */}
+                        <Checkbox label={t('user.showIntros')} checked={introsEnabled} onChange={(e) => setIntrosEnabled(e.target.checked)}/>
+                        <span className="col-start-3">
+                            <Button size="sm" onClick={showAllIntros} disabled={!introsEnabled || hiddenIntros.length === 0}>
+                                {t('user.resetIntros', {count: hiddenIntros.length})}
+                            </Button>
+                        </span>
+                    </div>
                 </section>
 
                 {/* A token of its own for a script or a quick test, never the one of the session. */}
@@ -177,9 +222,15 @@ const WhoAmI = () => {
                         {t('user.apiAccess')}
                     </h2>
                     <p className="mb-2 text-ink-muted">{t('user.apiAccessHint')}</p>
-                    <Link to="/token" className="inline-flex h-8 items-center rounded-(--radius-control) border border-line px-3 font-medium hover:bg-surface-sunken">
-                        {t('user.createToken')}
-                    </Link>
+                    <div className="flex flex-wrap items-center gap-3">
+                        <Link to="/token" className="inline-flex h-8 items-center rounded-(--radius-control) border border-line px-3 font-medium hover:bg-surface-sunken">
+                            {t('user.createToken')}
+                        </Link>
+                        {/* The api of the node, documented by its own Swagger UI (om3 /api/docs/), out of the webapp. */}
+                        <a href="/api/docs/" target="_blank" rel="noopener noreferrer" className="text-accent underline-offset-2 hover:underline">
+                            {t('user.apiDocs')}
+                        </a>
+                    </div>
                 </section>
 
                 <section aria-labelledby="whoami-server" className={PANEL}>
@@ -189,44 +240,25 @@ const WhoAmI = () => {
                     </h2>
                     <dl className="space-y-2">
                         <Value label={t('user.connectedNode')}>{daemon?.nodename || t('user.nodeLoading')}</Value>
+                        {/* The version built, always; the latest release, when the user lets GitHub be asked. */}
+                        <Value label={t('user.webappVersion')}>{APP_VERSION || t('user.versionUnknown')}</Value>
                         <div>
-                            <dt className="text-data text-ink-muted">{t('user.webappVersion')}</dt>
+                            <dt className="text-data text-ink-muted">{t('user.latestRelease')}</dt>
                             <dd className="font-mono">
                                 {appVersion === undefined
                                     ? <span className="font-sans text-ink-muted">{t('user.versionNotChecked')} <Link to="/about" className="text-accent underline-offset-2 hover:underline">{t('user.versionOptIn')}</Link></span>
                                     : appVersion === null
                                         ? t('user.versionLoading')
-                                        : appVersion === '' ? t('user.versionUnknown') : `v${appVersion}`}
+                                        : appVersion === '' ? t('user.versionUnknown') : (
+                                            <>
+                                                {`v${appVersion}`}
+                                                {isRelease(APP_VERSION, appVersion) && <span className="ml-2 font-sans text-data text-state-up">{t('user.thisVersion')}</span>}
+                                            </>
+                                        )}
                             </dd>
-                            <dd className="text-data text-ink-muted">{t('user.productName')}</dd>
                         </div>
                     </dl>
                 </section>
-            </div>
-
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                {/* Each language named in itself: found whatever the language shown. */}
-                <label className="flex items-center gap-2">
-                    <GlobeIcon className="h-4 w-4 text-ink-muted"/>
-                    <span>{t('user.language')}</span>
-                    <Select
-                        value={isLanguage(i18n.language) ? i18n.language : 'en'}
-                        onChange={(event) => setLanguage(event.target.value)}
-                    >
-                        {LANGUAGES.map((language) => (
-                            <option key={language} value={language} lang={language}>{LANGUAGE_NAMES[language]}</option>
-                        ))}
-                    </Select>
-                </label>
-                <Button
-                    onClick={toggleDarkMode}
-                    icon={isDarkMode ? <SunIcon className="h-4 w-4"/> : <MoonIcon className="h-4 w-4"/>}
-                >
-                    {isDarkMode ? t('user.lightMode') : t('user.darkMode')}
-                </Button>
-                <Button icon={<SignOutIcon/>} onClick={handleLogout}>
-                    {t('user.logout')}
-                </Button>
             </div>
         </div>
     );

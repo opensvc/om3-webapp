@@ -2,7 +2,7 @@ import { useState } from "react";
 import { describe, expect, test, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MenuButton, submenuShift, verticalPlacement, type MenuItem } from "../components/MenuButton";
+import { MenuButton, horizontalPlacement, submenuShift, verticalPlacement, type MenuItem } from "../components/MenuButton";
 import { Dialog } from "../components/Dialog";
 
 function items(handlers: Record<string, () => void> = {}): MenuItem[] {
@@ -550,5 +550,27 @@ describe("MenuButton filter", () => {
     await user.keyboard("{Escape}");
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Actions" })).toHaveFocus();
+  });
+});
+
+describe("horizontalPlacement", () => {
+  const trigger = (left: number, right: number) => ({ left, right, top: 0, bottom: 20, width: right - left, height: 20, x: left, y: 0, toJSON: () => ({}) }) as DOMRect;
+
+  test("on the edge of the trigger asked, when it fits", () => {
+    expect(horizontalPlacement(trigger(100, 180), 240, "start", 1600)).toEqual({ left: 100 });
+    expect(horizontalPlacement(trigger(1300, 1380), 240, "end", 1600)).toEqual({ right: 220 });
+  });
+
+  test("a trigger near the right edge: the menu pushed back in, not past the window", () => {
+    // An Actions button beside the rail: left 1500, a menu 300 wide in 1600.
+    expect(horizontalPlacement(trigger(1500, 1600), 300, "start", 1600)).toEqual({ left: 1600 - 8 - 300 });
+  });
+
+  test("a trigger near the left edge, lined up on its right: the menu kept in the window", () => {
+    expect(horizontalPlacement(trigger(10, 60), 300, "end", 1600)).toEqual({ right: 1600 - 8 - 300 });
+  });
+
+  test("a menu wider than the window: its left edge kept in", () => {
+    expect(horizontalPlacement(trigger(200, 260), 2000, "start", 1600)).toEqual({ left: 8 });
   });
 });

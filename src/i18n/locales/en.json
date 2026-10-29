@@ -2491,7 +2491,8 @@
       "none": "No other sec in the namespace.",
       "signedBy": "Signed by {{ca}}, written as the ca of the sec.",
       "selfSigned": "No ca: self-signed.",
-      "reading": "Reading the ca of the sec…"
+      "reading": "Reading the ca of the sec…",
+      "unread": "The ca of the sec could not be read: the certificate is not created until what signs it is known."
     }
   },
   "actionMenus": {

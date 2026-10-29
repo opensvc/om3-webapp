@@ -143,6 +143,28 @@ describe('SecCertificate', () => {
         expect(calls('PATCH')).toEqual([`${CONFIG}?unset=ca`]);
     });
 
+    test('the ca of the sec not read: no choice shown, no creation, nothing unset; read again, the creation offered', async () => {
+        let fail = true;
+        daemon({ca: 'system/sec/ca', routes: {[`GET ${CONFIG}`]: () => (fail
+            ? answer(500, {detail: 'busy'})
+            : answer(200, {items: [{keyword: 'ca', value: 'system/sec/ca'}]}))}});
+        show();
+        openMenu();
+        fireEvent.click(screen.getByRole('menuitem', {name: 'Create'}));
+        const dialog = screen.getByRole('dialog', {name: `Create: ${PATH}`});
+        expect(await within(dialog).findByText(/could not be read/)).toBeInTheDocument();
+        // Not offered as self-signed: no choice of what signs it, the creation off.
+        expect(within(dialog).queryByRole('group', {name: 'Signed by'})).toBeNull();
+        expect(within(dialog).getByRole('button', {name: 'Create'})).toBeDisabled();
+        fail = false;
+        fireEvent.click(within(dialog).getByRole('button', {name: 'Retry'}));
+        await within(dialog).findByRole('group', {name: 'Signed by'});
+        expect(clusterCa()).toBeChecked();
+        fireEvent.click(within(dialog).getByRole('button', {name: 'Create'}));
+        await waitFor(() => expect(calls('POST')).toEqual([CREATE]));
+        expect(calls('PATCH')).toEqual([]);
+    });
+
     test('another ca named: the picker open on it', async () => {
         daemon({ca: 'prod/sec/ca2'});
         show();

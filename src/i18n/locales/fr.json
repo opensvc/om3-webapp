@@ -2491,7 +2491,8 @@
       "none": "Pas d'autre sec dans le namespace.",
       "signedBy": "Signé par {{ca}}, écrit comme ca du sec.",
       "selfSigned": "Pas de ca : auto-signé.",
-      "reading": "Lecture du ca du sec…"
+      "reading": "Lecture du ca du sec…",
+      "unread": "Le ca du sec n'a pas pu être lu : le certificat n'est pas créé tant qu'on ne sait pas ce qui le signe."
     }
   },
   "actionMenus": {

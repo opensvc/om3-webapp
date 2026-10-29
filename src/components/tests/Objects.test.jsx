@@ -1517,6 +1517,53 @@ describe('Objects Component', () => {
             expect(within(menu).queryByRole('menuitem', {name: /^Enable$/})).not.toBeInTheDocument();
             expect(within(menu).queryByRole('menuitem', {name: /^Disable$/})).not.toBeInTheDocument();
         });
+
+        test('a mixed selection: the action sent to the objects whose kind takes it, the others left out, said so', async () => {
+            setup({
+                objectStatus: {
+                    ...defaultState.objectStatus,
+                    'test-ns/vol/v1': {avail: 'up', frozen: 'unfrozen', provisioned: 'true'},
+                },
+                objectInstanceStatus: {
+                    ...defaultState.objectInstanceStatus,
+                    'test-ns/vol/v1': {node1: {avail: 'up'}},
+                },
+            }, '?list=any');
+            await waitForLoad();
+            selectRow('test-ns/svc/test1');
+            selectRow('test-ns/vol/v1');
+            openActionsMenu();
+            // Offered, a service of the selection taking it.
+            await clickMenuItem('Start');
+            // Counted without the volume.
+            expect(await screen.findByRole('dialog')).toHaveTextContent('start on 1 objects');
+            await confirmDialog();
+            await waitFor(() => expect(global.fetch).toHaveBeenCalledWith(
+                '/api/object/path/test-ns/svc/test1/action/start', expect.any(Object)));
+            expect(global.fetch).not.toHaveBeenCalledWith(expect.stringContaining('/vol/v1/'), expect.anything());
+            expect(tray()).toContainEqual(['start', 'test-ns/vol/v1', 'refused', 'left out: a vol does not take this action']);
+        });
+
+        test('the namespace configuration, selected with the objects of its namespace, left out of their action', async () => {
+            setup({
+                objectStatus: {
+                    ...defaultState.objectStatus,
+                    'test-ns/nscfg/namespace': {avail: 'n/a'},
+                },
+            }, '?list=any');
+            await waitForLoad();
+            selectRow('test-ns/svc/test1');
+            act(() => {
+                // Its row not shown: selected as the tick of its namespace selects it.
+                fireEvent.click(screen.getByRole('checkbox', {name: 'Select the objects of test-ns'}));
+            });
+            openActionsMenu();
+            await clickMenuItem('Freeze');
+            await confirmDialog();
+            await waitFor(() => expect(global.fetch).toHaveBeenCalledWith(
+                '/api/object/path/test-ns/svc/test1/action/freeze', expect.any(Object)));
+            expect(global.fetch).not.toHaveBeenCalledWith(expect.stringContaining('/nscfg/'), expect.anything());
+        });
     });
 
     describe('per-node stopped and RPO-breached indicators', () => {

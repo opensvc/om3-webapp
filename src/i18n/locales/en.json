@@ -2319,7 +2319,8 @@
       "unknownObject": "the object is not known",
       "alreadyFrozen": "already frozen",
       "alreadyUnfrozen": "not frozen",
-      "clusterInSelection": "left out: the cluster is acted on alone"
+      "clusterInSelection": "left out: the cluster is acted on alone",
+      "notForKind": "left out: a {{kind}} does not take this action"
     },
     "monitor": "{{node}}: the monitor is {{state}}",
     "subjects": {

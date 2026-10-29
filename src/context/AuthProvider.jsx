@@ -69,6 +69,12 @@ const authReducer = (state, action) => {
     }
 };
 
+/**
+ * The delays before a renewal is tried again, its refresh token kept: the network or
+ * the daemon failed, not the token. The last one repeated while the token is valid.
+ */
+const RETRY_DELAYS_MS = [5000, 10000, 20000, 30000, 60000];
+
 const AuthContext = createContext(null);
 const AuthDispatchContext = createContext(null);
 
@@ -93,7 +99,7 @@ export const AuthProvider = ({children}) => {
         if (refreshTime >= 0) {
             logger.info('Token refresh scheduled in', Math.round(refreshTime / 1000), 'seconds');
 
-            refreshTimeout.current = setTimeout(async () => {
+            const renew = async (attempt) => {
                 const latestToken = localStorage.getItem('authToken');
                 if (latestToken && latestToken !== token) {
                     logger.debug('Refresh skipped, token already updated by another tab');
@@ -107,6 +113,20 @@ export const AuthProvider = ({children}) => {
                             channel.current.postMessage({type: 'tokenUpdated', data: newToken});
                         }
                         scheduleRefresh(newToken);
+                        return;
+                    }
+                    // Refused, the tokens are cleared: the session ended. Failed otherwise (the
+                    // network, the daemon restarting), the refresh token kept: tried again.
+                    if (hasRefreshToken()) {
+                        const delay = RETRY_DELAYS_MS[Math.min(attempt, RETRY_DELAYS_MS.length - 1)];
+                        logger.info('Token refresh tried again in', Math.round(delay / 1000), 'seconds');
+                        refreshTimeout.current = setTimeout(() => void renew(attempt + 1), delay);
+                    } else if (Date.now() >= expirationTime) {
+                        // The refresh token expired meanwhile, the access token too: nothing to renew it with.
+                        dispatch({type: Logout});
+                        if (typeof BroadcastChannel !== 'undefined' && channel.current) {
+                            channel.current.postMessage({type: 'logout'});
+                        }
                     }
                 } catch (err) {
                     logger.error('Token refresh error:', err);
@@ -115,7 +135,8 @@ export const AuthProvider = ({children}) => {
                         channel.current.postMessage({type: 'logout'});
                     }
                 }
-            }, refreshTime);
+            };
+            refreshTimeout.current = setTimeout(() => void renew(0), refreshTime);
         } else {
             logger.warn('Token expired and no refresh token to renew it: session ended');
             dispatch({type: Logout});

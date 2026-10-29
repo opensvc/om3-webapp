@@ -60,6 +60,14 @@ export const hasRefreshToken = () => {
     return !expiration || Date.now() < parseInt(expiration, 10);
 };
 
+/**
+ * The answers of the daemon refusing a refresh token: invalid or expired (401), not
+ * allowed (403), a request it rejects (400). The session ends. Any other failure, the
+ * network, a daemon restarting (5xx), a timeout, says nothing of the token: kept, the
+ * renewal tried again (AuthProvider).
+ */
+const REFUSED = [400, 401, 403];
+
 // Queue mechanism for concurrent refresh token calls
 let refreshTokenPromise = null;
 
@@ -91,8 +99,15 @@ export const refreshToken = async (dispatch) => {
             });
 
             if (!response.ok) {
-                logger.error('Error refreshing token: Token refresh failed');
-                dispatch({type: SetAccessToken, data: null});
+                if (REFUSED.includes(response.status)) {
+                    logger.error(`Token refresh refused (HTTP ${response.status}): session ended`);
+                    // Gone at once, not at the next render: no renewal tried again with it.
+                    localStorage.removeItem('refreshToken');
+                    localStorage.removeItem('refreshTokenExpiration');
+                    dispatch({type: SetAccessToken, data: null});
+                } else {
+                    logger.warn(`Token refresh failed (HTTP ${response.status}): session kept, tried again`);
+                }
                 return null;
             }
 
@@ -119,8 +134,8 @@ export const refreshToken = async (dispatch) => {
             dispatch({type: SetAccessToken, data: data.access_token});
             return data.access_token;
         } catch (error) {
-            logger.error('Error refreshing token:', error);
-            dispatch({type: SetAccessToken, data: null});
+            // No answer (the network, the daemon down): nothing said of the token, kept.
+            logger.warn('Token refresh got no answer: session kept, tried again', error);
             return null;
         } finally {
             // Clear the promise once completed

@@ -434,6 +434,50 @@ describe('AuthProvider', () => {
             expect(broadcastInstance._messages).toContainEqual({type: 'tokenUpdated', data: 'new-token'});
         });
 
+        test('a refresh failed, the daemon or the network down: tried again later, the session kept, renewed once it answers', async () => {
+            hasRefreshToken.mockReturnValue(true);
+            refreshToken.mockResolvedValueOnce(null).mockResolvedValueOnce(null).mockResolvedValueOnce('new-token');
+            decodeToken.mockReturnValue({exp: Math.floor(Date.now() / 1000) + 10});
+            renderProvider();
+            setValidToken();
+            const advance = async (ms) => act(async () => {
+                vi.advanceTimersByTime(ms);
+                await Promise.resolve();
+                await Promise.resolve();
+            });
+            await advance(5100);
+            expect(refreshToken).toHaveBeenCalledTimes(1);
+            expect(logger.info).toHaveBeenCalledWith('Token refresh tried again in', 5, 'seconds');
+            expect(getText('isAuthenticated')).toBe('true');
+            await advance(5000);
+            expect(refreshToken).toHaveBeenCalledTimes(2);
+            expect(logger.info).toHaveBeenCalledWith('Token refresh tried again in', 10, 'seconds');
+            await advance(10000);
+            expect(refreshToken).toHaveBeenCalledTimes(3);
+            expect(broadcastInstance._messages).toContainEqual({type: 'tokenUpdated', data: 'new-token'});
+            expect(broadcastInstance._messages).not.toContainEqual({type: 'logout'});
+        });
+
+        test('a refresh refused, its refresh token gone: not tried again', async () => {
+            // Refused, the refresh token cleared: none held after it.
+            hasRefreshToken.mockReturnValueOnce(true).mockReturnValue(false);
+            refreshToken.mockResolvedValue(null);
+            decodeToken.mockReturnValue({exp: Math.floor(Date.now() / 1000) + 10});
+            renderProvider();
+            setValidToken();
+            await act(async () => {
+                vi.advanceTimersByTime(5100);
+                await Promise.resolve();
+            });
+            expect(refreshToken).toHaveBeenCalledTimes(1);
+            await act(async () => {
+                vi.advanceTimersByTime(120000);
+                await Promise.resolve();
+            });
+            expect(refreshToken).toHaveBeenCalledTimes(1);
+            expect(logger.info).not.toHaveBeenCalledWith('Token refresh tried again in', expect.any(Number), 'seconds');
+        });
+
         test('does not schedule refresh when authChoice is openid', () => {
             renderProvider();
             click('setAuthChoiceOpenid');

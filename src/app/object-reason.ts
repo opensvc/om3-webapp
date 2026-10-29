@@ -5,13 +5,15 @@
  * down, then what else it says (frozen). An object up, or of no status (a
  * configuration, a secret), no reason.
  */
-import { buildBoard, type InstanceStates, type ObjectData } from "./statusboard";
+import { buildBoard, type InstanceStates, type NoteFix, type ObjectData } from "./statusboard";
 
 export interface Reason {
   level: "error" | "warn" | "info";
   text: string;
   /** The other notes worth a look, warnings and errors, the panel says. */
   more: number;
+  /** The action its note asks for, as the status board offers it. */
+  fix?: NoteFix;
 }
 
 /** What the event stream holds of an object, as the store keeps it. */
@@ -77,6 +79,7 @@ export function objectReason(path: string, events: ObjectEvents): Reason | null 
       level: pick.level,
       text: named ? `${subjectOf(pick)}: ${pick.text}` : pick.text,
       more: board.notes.filter((g) => g !== pick && g.level !== "info").length,
+      ...(pick.fix ? { fix: pick.fix } : {}),
     };
   }
   if (down.length === 0) return null;

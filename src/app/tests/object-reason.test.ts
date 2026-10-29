@@ -15,6 +15,8 @@ describe("why an object is not up", () => {
       level: "error",
       text: "start failed: the orchestration gave up, clear the instance to retry",
       more: 0,
+      // The action its note asks for: the clear of both its instances.
+      fix: { action: "clear", nodes: ["dev3n1", "dev3n2"] },
     });
   });
 
@@ -53,12 +55,17 @@ describe("why an object is not up", () => {
       monitors: { n1: { state: "idle", updated_at: at } },
       configs: undefined,
     });
-    expect(objectReason("root/svc/s", events({ "fs#1": { status: "down" } }, true))?.text).toMatch(/^stopped on purpose/);
+    expect(objectReason("root/svc/s", events({ "fs#1": { status: "down" } }, true))).toMatchObject({
+      text: expect.stringMatching(/^stopped on purpose/),
+      // A failover object down, started by its orchestration.
+      fix: { action: "start", nodes: [] },
+    });
     expect(objectReason("root/svc/s", events({ "fs#1": { status: "down" } }, false))?.text).toBe("fs#1 down");
     expect(objectReason("root/svc/s", events({}, false))).toEqual({
       level: "info",
       text: "frozen: the daemon takes no initiative on the instance",
       more: 0,
+      fix: { action: "unfreeze", nodes: ["n1"] },
     });
   });
 

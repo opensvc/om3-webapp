@@ -354,12 +354,28 @@ describe('Objects Component', () => {
         const reason = (name) => objectRow(name).querySelector('[data-reason]');
         expect(reason('test-ns/svc/test1')).toBeNull();
         expect(reason('test-ns/svc/test2')).toHaveAttribute('data-reason', 'error');
-        expect(reason('test-ns/svc/test2')).toHaveTextContent(/^failed: the orchestration gave up, clear the instance to retry \+1 more$/);
+        expect(reason('test-ns/svc/test2')).toHaveTextContent(/^failed: the orchestration gave up, clear the instance to retry \+1 moreClear$/);
         // The whole of it hovered.
         expect(reason('test-ns/svc/test2')).toHaveAttribute('title', expect.stringMatching(/^failed: the orchestration gave up/));
         expect(reason('root/svc/test3')).toHaveTextContent(/^no instance monitor/);
         // n/a: no reason to give.
         expect(reason('test-ns/svc/test4')).toBeNull();
+    });
+
+    test('the action a reason asks for, a button at its end: confirmed, then posted, the panel not opened', async () => {
+        setup({}, '', {isWideScreen: true, isMobile: false});
+        await waitForLoad();
+        const reason = (name) => objectRow(name).querySelector('[data-reason]');
+        // A note asking for nothing, no button.
+        expect(within(reason('root/svc/test3')).queryByRole('button')).toBeNull();
+        fireEvent.click(within(reason('test-ns/svc/test2')).getByRole('button', {name: 'Clear test-ns/svc/test2'}));
+        expect(mockNavigate).not.toHaveBeenCalled();
+        expect(global.fetch).not.toHaveBeenCalledWith(expect.stringContaining('/clear'), expect.anything());
+        const dialog = screen.getByRole('dialog');
+        expect(dialog).toHaveTextContent('test-ns/svc/test2 on node1');
+        fireEvent.click(within(dialog).getByRole('button', {name: 'Confirm'}));
+        await waitFor(() => expect(global.fetch).toHaveBeenCalledWith(
+            '/api/node/name/node1/instance/path/test-ns/svc/test2/clear', expect.objectContaining({method: 'POST'})));
     });
 
     test('renders object data correctly (status labels)', async () => {

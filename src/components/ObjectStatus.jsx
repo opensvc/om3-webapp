@@ -24,7 +24,7 @@ import {OrchestrationBadge, orchestrationOf} from "./OrchestrationBadge";
 import {PolicyTag} from "../ui/components/PolicyTag";
 import ActionDialogManager from "./ActionDialogManager";
 import ConsoleTerminal from "./ConsoleTerminal.jsx";
-import {CLEAR_ACTION, postAction, resourceActions, syncVariant} from "./objectActions";
+import {CLEAR_ACTION, noteFixAction, postAction, resourceActions, syncVariant} from "./objectActions";
 import {DatastoreLinks, RefreshStatusButton, datastoresOf, volumesOf} from "./InstanceActions";
 import logger from "../utils/logger.js";
 import {actionDescription, explainedMenu} from "../app/action-menu";
@@ -293,16 +293,13 @@ const ObjectStatus = ({path, onOrchestrationLogs, linkNode, linkResource, openCe
         return [...(l.some((i) => i.failed) ? [CLEAR_ACTION] : []), ...INSTANCE_ACTIONS];
     };
     /**
-     * The button of the action a note asks for, where the menus offer it: on the
-     * instances it names (`instanceActions`), or on the object (its menu). Confirmed
-     * first, as from a menu.
+     * The button of the action a note asks for, where the menus offer it
+     * (`noteFixAction`), the cluster not frozen or unfrozen again. Confirmed first, as
+     * from a menu.
      */
     const noteFix = ({action, nodes}) => {
-        const def = nodes.length > 0
-            ? instanceActions(nodes).find((a) => a.name === action)
-            : objectActionsFor(kind).find((a) => a.name === action
-                && isActionAllowedForSelection(a.name, [path]) && !clusterIdle(a.name));
-        if (def === undefined) return null;
+        const def = noteFixAction(path, {action, nodes});
+        if (def === undefined || (nodes.length === 0 && clusterIdle(action))) return null;
         return (
             <div className="pt-1">
                 <Button

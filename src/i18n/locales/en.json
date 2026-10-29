@@ -1700,7 +1700,8 @@
   "objects": {
     "reason": {
       "more_one": "+{{count}} more",
-      "more_other": "+{{count}} more"
+      "more_other": "+{{count}} more",
+      "fix": "{{action}} {{name}}"
     },
     "noInstanceStatus": "No status from {{node}}: the node is gone or not heard from",
     "flex": {

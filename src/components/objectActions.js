@@ -1,7 +1,7 @@
 import {URL_CLUSTER, URL_NODE, URL_OBJECT} from "../config/apiPath.js";
-import {INSTANCE_ACTIONS, NODE_ACTIONS, OBJECT_ACTIONS, RESOURCE_ACTIONS} from "../constants/actions";
+import {INSTANCE_ACTIONS, NODE_ACTIONS, OBJECT_ACTIONS, RESOURCE_ACTIONS, objectActionsFor} from "../constants/actions";
 import {getResponseErrorMessage} from "../services/api.jsx";
-import {parseObjectPath} from "../utils/objectUtils.jsx";
+import {isActionAllowedForSelection, parseObjectPath} from "../utils/objectUtils.jsx";
 import {trackRefused, trackResponse} from "../app/action-tracker";
 import {optionsRequest} from "../app/action-options";
 import {configStamp} from "../app/config-stamps";
@@ -23,6 +23,21 @@ const pathParts = (path) => {
  * again: no action of the instance, it has an address of its own.
  */
 export const CLEAR_ACTION = {name: "clear", icon: NODE_ACTIONS.find((a) => a.name === "clear")?.icon};
+
+/**
+ * The action a note of a status board asks for (`NoteFix`), where the menus offer it:
+ * on instances, the instance actions, the clear its note says failed among them, the
+ * cluster object's freeze and unfreeze alone; on the object, its menu's. Undefined
+ * where none offers it.
+ */
+export function noteFixAction(path, {action, nodes}) {
+    const {kind} = parseObjectPath(path);
+    if (nodes.length === 0) {
+        return objectActionsFor(kind).find((a) => a.name === action && isActionAllowedForSelection(a.name, [path]));
+    }
+    if (kind === "ccfg") return INSTANCE_ACTIONS.find((a) => a.name === action && (action === "freeze" || action === "unfreeze"));
+    return [CLEAR_ACTION, ...INSTANCE_ACTIONS].find((a) => a.name === action);
+}
 
 /** The address of an action, given what it acts on. */
 export function actionUrl({path, action, node, rid}) {

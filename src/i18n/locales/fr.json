@@ -1700,7 +1700,8 @@
   "objects": {
     "reason": {
       "more_one": "+{{count}} autre",
-      "more_other": "+{{count}} autres"
+      "more_other": "+{{count}} autres",
+      "fix": "{{action}} {{name}}"
     },
     "noInstanceStatus": "Aucun état de {{node}} : le nœud est perdu ou ne répond pas",
     "flex": {

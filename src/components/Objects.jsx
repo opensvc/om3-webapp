@@ -1,4 +1,4 @@
-import React, {useEffect, useState, useMemo, useCallback, useRef, useDeferredValue} from "react";
+import React, {createContext, useContext, useEffect, useState, useMemo, useCallback, useRef, useDeferredValue} from "react";
 import {useLocation, useNavigate} from "react-router-dom";
 import useEventStore from "../hooks/useEventStore.js";
 import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus";
@@ -36,6 +36,10 @@ import {menuColumns, menuFilter} from "../app/action-menu";
 import {Term} from "../app/Term";
 import {SymbolLegend} from "../app/StatusBoard";
 import {Dialog} from "../ui/components/Dialog";
+import ActionDialogManager from "./ActionDialogManager";
+import {CLEAR_ACTION, noteFixAction, postAction} from "./objectActions";
+import {INSTANCE_ACTIONS, OBJECT_ACTIONS, actionLabel} from "../constants/actions";
+import {actionDescription} from "../app/action-menu";
 import {rangeSelect, withShift} from "../app/range-select";
 
 // The breakpoints of the MUI theme the view used: below md (900px) the filters fold
@@ -352,14 +356,62 @@ const selectReason = (objectName) => (s) => {
     return cachedReason(objectName, {object, instances, monitors, configs});
 };
 
+/** Asks for the action a note asks for, on an object of the list (`useNoteFix`); none, no button. */
+const NoteFixContext = createContext(null);
+
+/** Every action the confirmation of a note's action may have to say. */
+const FIX_ACTIONS = [...new Set([...OBJECT_ACTIONS, ...INSTANCE_ACTIONS, CLEAR_ACTION].map((a) => a.name))];
+
+/**
+ * The action a note asks for, run from the list as from the status board: confirmed
+ * first, then posted, on the instances it names or on the object; what comes of it
+ * the actions tray says. `ask(path, fix)`, and the dialog to render.
+ */
+function useNoteFix() {
+    const {t} = useTranslation();
+    const [pending, setPending] = useState(null);
+    const ask = useCallback((path, {action, nodes}) => setPending({
+        path,
+        action,
+        targets: nodes.map((node) => ({node})),
+        subject: nodes.length > 0 ? t("statusBoard.subjects.instance", {path, where: nodes.join(", ")}) : path,
+    }), [t]);
+    const run = async (_action, options) => {
+        if (pending === null) return;
+        const {path, action, targets} = pending;
+        setPending(null);
+        const on = targets.length > 0 ? targets : [{}];
+        await Promise.all(on.map(({node}) => postAction({path, action, node, options})));
+    };
+    const dialog = (
+        <ActionDialogManager
+            pendingAction={pending}
+            handleConfirm={run}
+            target={pending?.subject ?? ""}
+            instances={(pending?.targets.length ?? 0) > 0}
+            supportedActions={FIX_ACTIONS}
+            onClose={() => setPending(null)}
+        />
+    );
+    return {ask, dialog};
+}
+
+/** The icon of an action, at the size of the reason line. */
+const FIX_ICON = "flex h-3 w-3 items-center justify-center [&>svg]:h-3! [&>svg]:w-3!";
+
 /**
  * Under the name of an object not up, why, in a line: its first note, as its status
  * board says it, the others counted; the whole of it hovered, the board in its panel.
+ * The action the note asks for a button at its end, where the menus offer it.
  */
 function ObjectReason({objectName}) {
     const {t} = useTranslation();
     const reason = useEventStore(useMemo(() => selectReason(objectName), [objectName]));
+    const askFix = useContext(NoteFixContext);
     if (reason === null) return null;
+    const fix = reason.fix !== undefined && askFix !== null && noteFixAction(objectName, reason.fix) !== undefined
+        ? reason.fix
+        : null;
     const Icon = reason.level === "info" ? InfoIcon : AlertTriangleIcon;
     const more = reason.more > 0 ? ` ${t("objects.reason.more", {count: reason.more})}` : "";
     return (
@@ -372,6 +424,23 @@ function ObjectReason({objectName}) {
             <Icon aria-hidden="true" className={cn("h-3 w-3 shrink-0", REASON_INK[reason.level])}/>
             <span className="truncate">{reason.text}</span>
             {more && <span className="shrink-0 tabular-nums">{more}</span>}
+            {fix !== null && (
+                <button
+                    type="button"
+                    // The row opens the panel: not this click.
+                    onClick={(event) => {
+                        event.stopPropagation();
+                        askFix(objectName, fix);
+                    }}
+                    onKeyDown={stopPropagation}
+                    title={actionDescription(t, fix.nodes.length > 0 ? "instance" : "object", fix.action)}
+                    aria-label={t("objects.reason.fix", {action: actionLabel(fix.action), name: objectName})}
+                    className="ml-1 inline-flex h-5 shrink-0 items-center gap-1 rounded-(--radius-control) border border-line bg-surface-raised px-1.5 text-ink hover:bg-surface-sunken focus-visible:outline-2 focus-visible:outline-(--focus-ring)"
+                >
+                    <span aria-hidden="true" className={FIX_ICON}>{noteFixAction(objectName, fix).icon}</span>
+                    {actionLabel(fix.action)}
+                </button>
+            )}
         </span>
     );
 }
@@ -520,6 +589,8 @@ const Objects = () => {
     // The actions on the selection: the Actions menu, its dialog, and the feedback strip.
     const clearSelection = useCallback(() => setSelectedObjects([]), []);
     const {items: bulkActions, feedback, dialog: actionDialog, notify} = useObjectBulkActions({selectedObjects, onDone: clearSelection});
+    // The actions the reasons of the objects ask for, a button each.
+    const noteFix = useNoteFix();
     const [selectedNamespaces, setSelectedNamespaces] = useState(rawNamespaces);
     const [selectedKinds, setSelectedKinds] = useState(rawKinds);
     const [selectedGlobalStates, setSelectedGlobalStates] = useState(rawGlobalStates);
@@ -993,168 +1064,171 @@ const Objects = () => {
     const columnCount = namesOnly ? 4 : 3 + propertyColumns.length + (nodeColumns > 0 ? nodeColumns + 1 : 0);
 
     return (
-        <div className="flex h-full gap-6 p-4">
-            <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
-                {/* Wide, the actions and the pager at the head of the rail: their rows to the table. */}
-                {!hasRail && (
-                    <div className="flex shrink-0 flex-wrap items-center gap-3">
-                        {/* Wide, the filters stand beside the table, as facets. */}
-                        <FilterToolbar
-                            facets={toolbarFacets}
-                            search={searchQuery}
-                            onSearch={handleSearchChange}
-                            searchLabel={t("common.name")}
-                        />
-                        <div className="ml-auto flex items-center gap-3">{legendButton}{listActions("end")}</div>
-                    </div>
+        <NoteFixContext.Provider value={noteFix.ask}>
+            <div className="flex h-full gap-6 p-4">
+                <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
+                    {/* Wide, the actions and the pager at the head of the rail: their rows to the table. */}
+                    {!hasRail && (
+                        <div className="flex shrink-0 flex-wrap items-center gap-3">
+                            {/* Wide, the filters stand beside the table, as facets. */}
+                            <FilterToolbar
+                                facets={toolbarFacets}
+                                search={searchQuery}
+                                onSearch={handleSearchChange}
+                                searchLabel={t("common.name")}
+                            />
+                            <div className="ml-auto flex items-center gap-3">{legendButton}{listActions("end")}</div>
+                        </div>
+                    )}
+
+                    {feedback}
+
+                    {!hasRail && objectCount}
+
+                    <Table
+                        sticky
+                        aria-label={t("objects.tableLabel")}
+                        className="min-h-0 flex-1"
+                    >
+                        <thead>
+                            <HeaderRow>
+                                <HeaderCell className="w-8">
+                                    <Checkbox
+                                        checked={allSelected}
+                                        onChange={handleSelectAll}
+                                        aria-label={t("objects.selectAll")}
+                                    />
+                                </HeaderCell>
+                                {/* Each title sorts the namespaces by its column, their objects kept by path;
+                                    the keys, read for the rows shown only, do not. */}
+                                <SortHeaderCell
+                                    label={t("objects.columns.object")}
+                                    active={sortColumn === "object"}
+                                    direction={sortDirection}
+                                    onSort={() => sortBy("object")}
+                                />
+                                {namesOnly && (
+                                    <>
+                                        <HeaderCell className="text-right">{t("objects.columns.keys")}</HeaderCell>
+                                        <HeaderCell className="text-right" title={t("objects.columns.keysSizeHint")}>{t("objects.columns.keysSize")}</HeaderCell>
+                                    </>
+                                )}
+                                {!namesOnly && propertyColumns.map(({key, labelKey, term}) => (
+                                    <SortHeaderCell
+                                        key={key}
+                                        // In the button of the sort, the term said on hover: no focus of its own there.
+                                        label={term ? <Term term={term} focusable={false}>{t(labelKey)}</Term> : t(labelKey)}
+                                        active={sortColumn === key}
+                                        direction={sortDirection}
+                                        onSort={() => sortBy(key)}
+                                    />
+                                ))}
+                                {!namesOnly && (
+                                    <SortHeaderCell
+                                        label={t("common.status")}
+                                        active={sortColumn === "status"}
+                                        direction={sortDirection}
+                                        onSort={() => sortBy("status")}
+                                    />
+                                )}
+                                {!namesOnly && isWideScreen && allNodes.length > 0 && <th aria-hidden="true" className={NODE_GAP}/>}
+                                {!namesOnly && isWideScreen && allNodes.map((node, i) => (
+                                    <SortHeaderCell
+                                        key={node}
+                                        className={cn("text-data text-ink-muted", NODE_TINT, nodeEdge(i, allNodes.length))}
+                                        label={node}
+                                        active={sortColumn === `node:${node}`}
+                                        direction={sortDirection}
+                                        onSort={() => sortBy(`node:${node}`)}
+                                    />
+                                ))}
+                            </HeaderRow>
+                        </thead>
+                        <tbody>
+                            {visibleObjectNames.map((objectName, i) => {
+                                const ns = extractNamespace(objectName);
+                                // A line opens each namespace, and the page, which may start inside one.
+                                const opens = i === 0 || extractNamespace(visibleObjectNames[i - 1]) !== ns;
+                                const members = namespaceObjects.get(ns) ?? [];
+                                return (
+                                    <React.Fragment key={objectName}>
+                                        {opens && (
+                                            <NamespaceRow
+                                                namespace={ns}
+                                                colSpan={columnCount - 1}
+                                                nodeCount={nodeColumns}
+                                                total={members.length}
+                                                selectedCount={members.filter((name) => selectedObjects.includes(name)).length}
+                                                onToggle={handleSelectNamespace}
+                                                onOpen={handleObjectClick}
+                                                mayConfigure={mayWriteNscfg}
+                                                onCreate={createInNamespace}
+                                                narrow={isMobile}
+                                            />
+                                        )}
+                                        {/* A configuration alone in its namespace: its line, the namespace's, alone. */}
+                                        {!isNscfg(objectName) && <TableRowComponent
+                                            objectName={objectName}
+                                            isSelected={selectedObjects.includes(objectName)}
+                                            isOpen={panel.sel === objectName}
+                                            onSelectObject={handleSelectObject}
+                                            onObjectClick={handleObjectClick}
+                                            allNodes={allNodes}
+                                            isWideScreen={isWideScreen}
+                                            isNarrow={isMobile}
+                                            namesOnly={namesOnly}
+                                        />}
+                                    </React.Fragment>
+                                );
+                            })}
+                            <MoreRows rows={drawn} colSpan={columnCount}/>
+                            {visibleObjectNames.length === 0 && (
+                                <EmptyRow colSpan={columnCount}>
+                                    {t("objects.empty")}
+                                </EmptyRow>
+                            )}
+                        </tbody>
+                    </Table>
+                </div>
+                {hasRail && (
+                    <FilterRail
+                        head={(
+                            <>
+                                <div className="flex flex-wrap items-center gap-x-3 gap-y-2">{listActions("start")}{legendButton}</div>
+                                {objectCount}
+                            </>
+                        )}
+                        label={t("objects.filters.rail")}
+                        search={searchQuery}
+                        onSearch={handleSearchChange}
+                        searchLabel={t("common.name")}
+                        facets={railFacets}
+                    />
                 )}
 
-                {feedback}
-
-                {!hasRail && objectCount}
-
-                <Table
-                    sticky
-                    aria-label={t("objects.tableLabel")}
-                    className="min-h-0 flex-1"
-                >
-                    <thead>
-                        <HeaderRow>
-                            <HeaderCell className="w-8">
-                                <Checkbox
-                                    checked={allSelected}
-                                    onChange={handleSelectAll}
-                                    aria-label={t("objects.selectAll")}
-                                />
-                            </HeaderCell>
-                            {/* Each title sorts the namespaces by its column, their objects kept by path;
-                                the keys, read for the rows shown only, do not. */}
-                            <SortHeaderCell
-                                label={t("objects.columns.object")}
-                                active={sortColumn === "object"}
-                                direction={sortDirection}
-                                onSort={() => sortBy("object")}
-                            />
-                            {namesOnly && (
-                                <>
-                                    <HeaderCell className="text-right">{t("objects.columns.keys")}</HeaderCell>
-                                    <HeaderCell className="text-right" title={t("objects.columns.keysSizeHint")}>{t("objects.columns.keysSize")}</HeaderCell>
-                                </>
-                            )}
-                            {!namesOnly && propertyColumns.map(({key, labelKey, term}) => (
-                                <SortHeaderCell
-                                    key={key}
-                                    // In the button of the sort, the term said on hover: no focus of its own there.
-                                    label={term ? <Term term={term} focusable={false}>{t(labelKey)}</Term> : t(labelKey)}
-                                    active={sortColumn === key}
-                                    direction={sortDirection}
-                                    onSort={() => sortBy(key)}
-                                />
-                            ))}
-                            {!namesOnly && (
-                                <SortHeaderCell
-                                    label={t("common.status")}
-                                    active={sortColumn === "status"}
-                                    direction={sortDirection}
-                                    onSort={() => sortBy("status")}
-                                />
-                            )}
-                            {!namesOnly && isWideScreen && allNodes.length > 0 && <th aria-hidden="true" className={NODE_GAP}/>}
-                            {!namesOnly && isWideScreen && allNodes.map((node, i) => (
-                                <SortHeaderCell
-                                    key={node}
-                                    className={cn("text-data text-ink-muted", NODE_TINT, nodeEdge(i, allNodes.length))}
-                                    label={node}
-                                    active={sortColumn === `node:${node}`}
-                                    direction={sortDirection}
-                                    onSort={() => sortBy(`node:${node}`)}
-                                />
-                            ))}
-                        </HeaderRow>
-                    </thead>
-                    <tbody>
-                        {visibleObjectNames.map((objectName, i) => {
-                            const ns = extractNamespace(objectName);
-                            // A line opens each namespace, and the page, which may start inside one.
-                            const opens = i === 0 || extractNamespace(visibleObjectNames[i - 1]) !== ns;
-                            const members = namespaceObjects.get(ns) ?? [];
-                            return (
-                                <React.Fragment key={objectName}>
-                                    {opens && (
-                                        <NamespaceRow
-                                            namespace={ns}
-                                            colSpan={columnCount - 1}
-                                            nodeCount={nodeColumns}
-                                            total={members.length}
-                                            selectedCount={members.filter((name) => selectedObjects.includes(name)).length}
-                                            onToggle={handleSelectNamespace}
-                                            onOpen={handleObjectClick}
-                                            mayConfigure={mayWriteNscfg}
-                                            onCreate={createInNamespace}
-                                            narrow={isMobile}
-                                        />
-                                    )}
-                                    {/* A configuration alone in its namespace: its line, the namespace's, alone. */}
-                                    {!isNscfg(objectName) && <TableRowComponent
-                                        objectName={objectName}
-                                        isSelected={selectedObjects.includes(objectName)}
-                                        isOpen={panel.sel === objectName}
-                                        onSelectObject={handleSelectObject}
-                                        onObjectClick={handleObjectClick}
-                                        allNodes={allNodes}
-                                        isWideScreen={isWideScreen}
-                                        isNarrow={isMobile}
-                                        namesOnly={namesOnly}
-                                    />}
-                                </React.Fragment>
-                            );
-                        })}
-                        <MoreRows rows={drawn} colSpan={columnCount}/>
-                        {visibleObjectNames.length === 0 && (
-                            <EmptyRow colSpan={columnCount}>
-                                {t("objects.empty")}
-                            </EmptyRow>
-                        )}
-                    </tbody>
-                </Table>
-            </div>
-            {hasRail && (
-                <FilterRail
-                    head={(
-                        <>
-                            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">{listActions("start")}{legendButton}</div>
-                            {objectCount}
-                        </>
-                    )}
-                    label={t("objects.filters.rail")}
-                    search={searchQuery}
-                    onSearch={handleSearchChange}
-                    searchLabel={t("common.name")}
-                    facets={railFacets}
+                {actionDialog}
+                {noteFix.dialog}
+                <Dialog open={legendOpen} title={t("legend.toggle")} size="lg" onClose={() => setLegendOpen(false)}>
+                    <SymbolLegend/>
+                </Dialog>
+                <CreateObjectDialog
+                    open={createOpen}
+                    onClose={() => setCreateOpen(false)}
+                    defaultKind={LIST_KIND[list]}
+                    defaultNamespace={createIn ?? (selectedNamespaces.length === 1 ? selectedNamespaces[0] : "root")}
+                    namespaces={allNamespaces}
+                    paths={allObjectNames}
+                    onCreated={handleCreated}
                 />
-            )}
 
-            {actionDialog}
-            <Dialog open={legendOpen} title={t("legend.toggle")} size="lg" onClose={() => setLegendOpen(false)}>
-                <SymbolLegend/>
-            </Dialog>
-            <CreateObjectDialog
-                open={createOpen}
-                onClose={() => setCreateOpen(false)}
-                defaultKind={LIST_KIND[list]}
-                defaultNamespace={createIn ?? (selectedNamespaces.length === 1 ? selectedNamespaces[0] : "root")}
-                namespaces={allNamespaces}
-                paths={allObjectNames}
-                onCreated={handleCreated}
-            />
-
-            <ObjectDetailPanel
-                path={panel.sel}
-                tab={panel.tab}
-                onTabChange={panel.setTab}
-                onClose={() => selectObject(undefined)}
-            />
-        </div>
+                <ObjectDetailPanel
+                    path={panel.sel}
+                    tab={panel.tab}
+                    onTabChange={panel.setTab}
+                    onClose={() => selectObject(undefined)}
+                />
+            </div>
+        </NoteFixContext.Provider>
     );
 };
 

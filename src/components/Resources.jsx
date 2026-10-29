@@ -29,6 +29,8 @@ import {FilterRail} from "./FilterRail";
 import {InstanceLink} from "./RecordLinks";
 import {FilterField, matches} from "./NodePanel";
 import {BADGE} from "./ObjectCells";
+import {rangeSelect, withShift} from "../app/range-select";
+
 
 /*
  * The resources of the cluster, every object on every node, as `om <selector>
@@ -246,12 +248,17 @@ const Resources = () => {
     const clearSelection = () => setSelected(new Set());
     // All, every resource the filters keep, drawn yet or not; unticked, none.
     const selectAll = (checked) => setSelected(checked ? new Set(shown.map((l) => l.key)) : new Set());
-    const toggle = (key) => setSelected((prev) => {
-        const next = new Set(prev);
-        if (next.has(key)) next.delete(key);
-        else next.add(key);
-        return next;
-    });
+    // A resource ticked alone, or with Shift every one from the one ticked before, in the order shown.
+    const anchor = useRef(null);
+    const toggle = (key, event) => {
+        const checked = event.target.checked;
+        const shift = withShift(event);
+        setSelected((prev) => {
+            const next = rangeSelect(shown.map((l) => l.key), [...prev], anchor.current, key, checked, shift);
+            anchor.current = next.anchor;
+            return new Set(next.selected);
+        });
+    };
     const {ask, running, dialogs} = useActionRunner(undefined);
     const actionItems = commonResourceActions(selectedLines).map((a) => {
         const variant = syncVariant(a.name, selectedLines.map((l) => l.type));
@@ -418,7 +425,7 @@ const Resources = () => {
                                 <Cell className="w-8">
                                     <Checkbox
                                         checked={selected.has(l.key)}
-                                        onChange={() => toggle(l.key)}
+                                        onChange={(e) => toggle(l.key, e)}
                                         aria-label={t("resources.selection.one", {rid: l.rid, path: l.object, node: l.node})}
                                     />
                                 </Cell>

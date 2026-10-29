@@ -33,6 +33,8 @@ import {ALL_LIST, OBJECT_LISTS, OBJECTS_TABS, listOfKind} from "../utils/objectL
 import {BoltIcon, ChevronDownIcon, FilterIcon, GearIcon, PlusIcon, SearchIcon} from "../ui/icons";
 import {menuColumns, menuFilter} from "../app/action-menu";
 import {Term} from "../app/Term";
+import {rangeSelect, withShift} from "../app/range-select";
+
 
 // The breakpoints of the MUI theme the view used: below md (900px) the filters fold
 // behind a button, from lg (1200px) the node columns are shown.
@@ -690,10 +692,19 @@ const Objects = () => {
     const {rows: drawnOf} = drawn;
     const visibleObjectNames = useMemo(() => drawnOf(rowObjectNames), [drawnOf, rowObjectNames]);
 
+    // A row ticked alone, or with Shift every row from the one ticked before, in the
+    // order shown; the order read when ticked, the handler one for every row.
+    const rowOrderRef = useRef(rowObjectNames);
+    rowOrderRef.current = rowObjectNames;
+    const anchorRef = useRef(null);
     const handleSelectObject = useCallback((event, objectName) => {
-        setSelectedObjects((prev) =>
-            event.target.checked ? [...prev, objectName] : prev.filter((obj) => obj !== objectName)
-        );
+        const checked = event.target.checked;
+        const shift = withShift(event);
+        setSelectedObjects((prev) => {
+            const next = rangeSelect(rowOrderRef.current, prev, anchorRef.current, objectName, checked, shift);
+            anchorRef.current = next.anchor;
+            return next.selected;
+        });
     }, []);
 
     // A row is not rendered again for a new handler (TableRowComponent): one handler,

@@ -580,6 +580,21 @@ describe('Objects Component', () => {
         expect(screen.queryByText(/selected$/)).not.toBeInTheDocument();
     });
 
+    test('a range: Shift-click ticks every row from the one ticked before, in the order shown; unticks it the same', async () => {
+        setup();
+        await waitForLoad();
+        const boxes = rowCheckboxes();
+        expect(boxes.length).toBeGreaterThan(3);
+        fireEvent.click(boxes[0]);
+        fireEvent.click(boxes[3], {shiftKey: true});
+        rowCheckboxes().forEach((c, i) => (i <= 3 ? expect(c).toBeChecked() : expect(c).not.toBeChecked()));
+        expect(screen.getByText('4 selected')).toBeInTheDocument();
+        // From the same anchor: unticked down to the second row, the first kept.
+        fireEvent.click(rowCheckboxes()[1], {shiftKey: true});
+        expect(rowCheckboxes().map((c) => c.checked).slice(0, 4)).toEqual([true, true, false, false]);
+        expect(screen.getByText('2 selected')).toBeInTheDocument();
+    });
+
     test('select all selects the filtered objects only', async () => {
         setup();
         await waitForLoad();

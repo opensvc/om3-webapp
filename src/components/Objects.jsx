@@ -34,8 +34,9 @@ import {AlertTriangleIcon, BoltIcon, GearIcon, InfoIcon, PlusIcon} from "../ui/i
 import {cachedReason, needsReason} from "../app/object-reason";
 import {menuColumns, menuFilter} from "../app/action-menu";
 import {Term} from "../app/Term";
+import {SymbolLegend} from "../app/StatusBoard";
+import {Dialog} from "../ui/components/Dialog";
 import {rangeSelect, withShift} from "../app/range-select";
-
 
 // The breakpoints of the MUI theme the view used: below md (900px) the filters fold
 // behind a button, from lg (1200px) the node columns are shown.
@@ -943,6 +944,15 @@ const Objects = () => {
         kindFacet && hasChoice(kinds, selectedKinds) && kindFacet,
     ].filter(Boolean);
 
+    // What the marks of the objects and of their instances mean, the status board's
+    // legend: none for a list of names only, with no marks.
+    const [legendOpen, setLegendOpen] = useState(false);
+    const legendButton = namesOnly ? null : (
+        <Button size="sm" icon={<InfoIcon className="h-4 w-4"/>} title={t("legend.toggle")} onClick={() => setLegendOpen(true)}>
+            {t("legend.title")}
+        </Button>
+    );
+
     const objectCount = <p className="text-ink-muted tabular-nums">{t("objects.count", {count: rowObjectNames.length})}</p>;
 
     // A new object, and the actions on the selection: over the table, or at the head of the rail.
@@ -995,7 +1005,7 @@ const Objects = () => {
                             onSearch={handleSearchChange}
                             searchLabel={t("common.name")}
                         />
-                        <div className="ml-auto flex items-center gap-3">{listActions("end")}</div>
+                        <div className="ml-auto flex items-center gap-3">{legendButton}{listActions("end")}</div>
                     </div>
                 )}
 
@@ -1112,7 +1122,7 @@ const Objects = () => {
                 <FilterRail
                     head={(
                         <>
-                            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">{listActions("start")}</div>
+                            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">{listActions("start")}{legendButton}</div>
                             {objectCount}
                         </>
                     )}
@@ -1125,6 +1135,9 @@ const Objects = () => {
             )}
 
             {actionDialog}
+            <Dialog open={legendOpen} title={t("legend.toggle")} size="lg" onClose={() => setLegendOpen(false)}>
+                <SymbolLegend/>
+            </Dialog>
             <CreateObjectDialog
                 open={createOpen}
                 onClose={() => setCreateOpen(false)}

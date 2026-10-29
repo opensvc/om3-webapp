@@ -593,6 +593,32 @@ describe('Objects Component', () => {
         }
     });
 
+    test('the symbols legend opens from the toolbar: the marks of the node columns explained', async () => {
+        setup({}, '', {isWideScreen: true, isMobile: false});
+        await waitForLoad();
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', {name: 'Symbols'}));
+        const dialog = screen.getByRole('dialog', {name: 'What the symbols mean'});
+        expect(dialog.querySelector('[data-legend="marks-frozen"]')).not.toBeNull();
+        expect(within(dialog).getByText(/Stopped on purpose by an operator/)).toBeInTheDocument();
+        expect(within(dialog).getByText(/Not provisioned: its filesystems/)).toBeInTheDocument();
+        fireEvent.click(within(dialog).getByRole('button', {name: 'Close'}));
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+
+    test('the symbols legend at the head of the rail, on a wide screen', async () => {
+        setup({}, '', {isWideScreen: true, isMobile: false, hasRail: true});
+        await waitForLoad();
+        const head = screen.getByRole('complementary', {name: 'Filters'}).querySelector('[data-rail-head]');
+        expect(within(head).getByRole('button', {name: 'Symbols'})).toBeInTheDocument();
+    });
+
+    test('no symbols legend for the configurations, which have no marks', async () => {
+        setup({}, '?list=configs', {isWideScreen: true, isMobile: false});
+        await waitForLoad();
+        expect(screen.queryByRole('button', {name: 'Symbols'})).not.toBeInTheDocument();
+    });
+
     test('selection and select all', async () => {
         setup();
         await waitForLoad();

@@ -1916,7 +1916,8 @@
     "versionOptIn": "Allow the check",
     "apiAccess": "API access",
     "apiAccessHint": "For a script or a quick test with curl, a token of its own, short-lived and of the roles you pick, rather than the one of your session.",
-    "createToken": "Create an API token"
+    "createToken": "Create an API token",
+    "apiDocs": "API documentation (Swagger)"
   },
   "panel": {
     "resize": "Resize the panel",

@@ -177,9 +177,15 @@ const WhoAmI = () => {
                         {t('user.apiAccess')}
                     </h2>
                     <p className="mb-2 text-ink-muted">{t('user.apiAccessHint')}</p>
-                    <Link to="/token" className="inline-flex h-8 items-center rounded-(--radius-control) border border-line px-3 font-medium hover:bg-surface-sunken">
-                        {t('user.createToken')}
-                    </Link>
+                    <div className="flex flex-wrap items-center gap-3">
+                        <Link to="/token" className="inline-flex h-8 items-center rounded-(--radius-control) border border-line px-3 font-medium hover:bg-surface-sunken">
+                            {t('user.createToken')}
+                        </Link>
+                        {/* The api of the node, documented by its own Swagger UI (om3 /api/docs/), out of the webapp. */}
+                        <a href="/api/docs/" target="_blank" rel="noopener noreferrer" className="text-accent underline-offset-2 hover:underline">
+                            {t('user.apiDocs')}
+                        </a>
+                    </div>
                 </section>
 
                 <section aria-labelledby="whoami-server" className={PANEL}>

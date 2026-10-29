@@ -1916,7 +1916,8 @@
     "versionOptIn": "Autoriser la vérification",
     "apiAccess": "Accès à l'API",
     "apiAccessHint": "Pour un script ou un essai rapide avec curl, un jeton à part, de courte durée et des rôles que vous choisissez, plutôt que celui de votre session.",
-    "createToken": "Créer un jeton d’API"
+    "createToken": "Créer un jeton d’API",
+    "apiDocs": "Documentation de l'API (Swagger)"
   },
   "panel": {
     "resize": "Redimensionner le panneau",

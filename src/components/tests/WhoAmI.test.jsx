@@ -230,6 +230,16 @@ describe('WhoAmI', () => {
         });
     });
 
+    test('the API access: a token of its own to create, the documentation of the api out of the webapp', async () => {
+        setupMocks();
+        renderComponent();
+        expect(await screen.findByRole('link', {name: 'Create an API token'})).toHaveAttribute('href', '/token');
+        const docs = screen.getByRole('link', {name: 'API documentation (Swagger)'});
+        expect(docs).toHaveAttribute('href', '/api/docs/');
+        expect(docs).toHaveAttribute('target', '_blank');
+        expect(docs).toHaveAttribute('rel', 'noopener noreferrer');
+    });
+
     test('the release check not opted in: GitHub not asked, the way to allow it from the About page', async () => {
         setupMocks({releaseCheck: null});
         renderComponent();

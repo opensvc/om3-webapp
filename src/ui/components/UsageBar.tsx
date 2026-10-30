@@ -34,7 +34,6 @@ export function UsageBar({
   missing = "–",
   state,
   label,
-  title,
   showValue = true,
   digits = 1,
   className,
@@ -48,8 +47,6 @@ export function UsageBar({
   state?: UsageState;
   /** Accessible name of the bar. */
   label?: string;
-  /** Tooltip of the whole, such as "used/size". */
-  title?: string;
   showValue?: boolean;
   digits?: number;
   className?: string;
@@ -58,7 +55,7 @@ export function UsageBar({
   const track = "inline-block h-1 w-12 shrink-0 overflow-hidden rounded-full bg-surface-sunken";
   if (value === undefined || !Number.isFinite(value)) {
     return (
-      <span className={cn("inline-flex items-center gap-2 whitespace-nowrap", className)} title={title}>
+      <span className={cn("inline-flex items-center gap-2 whitespace-nowrap", className)}>
         <span className={cn(slot, "text-ink-muted")}>{missing}</span>
         <span aria-hidden="true" className={track} />
       </span>
@@ -67,7 +64,7 @@ export function UsageBar({
   const shown = Number(value.toFixed(digits));
   const tone = state ?? usageState(shown);
   return (
-    <span className={cn("inline-flex items-center gap-2 whitespace-nowrap", className)} title={title}>
+    <span className={cn("inline-flex items-center gap-2 whitespace-nowrap", className)}>
       {showValue && <span className={slot}>{text ?? `${value.toFixed(digits)}%`}</span>}
       <span
         role="progressbar"

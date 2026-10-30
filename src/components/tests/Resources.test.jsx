@@ -282,7 +282,6 @@ describe('Resources', () => {
                 await waitFor(() => expect(rows()).toHaveLength(4));
                 expect(headers()).toEqual(['Object', 'Resource', 'Status']);
                 expect(rows()[0]).toEqual(['ns1/svc/webn1', 'container#1container.docker', 'upup']);
-                expect(within(table()).getAllByTitle('Type')[0]).toHaveTextContent('container.docker');
                 // The node, by the object, still opens the instance.
                 fireEvent.click(within(within(table()).getAllByRole('row')[3]).getByRole('button', {name: 'n2'}));
                 expect(screen.getByTestId('search')).toHaveTextContent('peek=instance:ns1/svc/web@n2');
@@ -296,7 +295,6 @@ describe('Resources', () => {
             renderView();
             await waitFor(() => expect(rows()).toHaveLength(4));
             expect(headers()).toEqual(['Object', 'Node', 'Resource', 'Type', 'Status', 'Flags', 'Label']);
-            expect(within(table()).queryByTitle('Type')).toBeNull();
         });
     });
 });

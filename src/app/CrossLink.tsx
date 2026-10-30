@@ -40,7 +40,6 @@ export function CrossLink({
   return (
     <button
       type="button"
-      title={t("panel.crossLink", { kind: t(`panel.kinds.${kind}`) })}
       onClick={(event) => {
         // Not for the row: it would open its own panel under the record.
         event.stopPropagation();

@@ -338,7 +338,6 @@ const Resources = () => {
     const problems = (
         <Checkbox
             label={t("resources.problemsOnly")}
-            title={t("resources.problemsOnlyHint")}
             checked={problemsOnly}
             onChange={(e) => setProblemsOnly(e.target.checked)}
         />
@@ -431,7 +430,7 @@ const Resources = () => {
                                     <span className="inline-flex items-center gap-1.5">
                                         <CrossLink kind="resource" id={resourceId(l.object, l.rid, l.hostNode)}>{l.rid}</CrossLink>
                                         {/* No room for its column, the type a badge by the resource (resourceLayout). */}
-                                        {!layout.typeColumn && l.type && <span className={BADGE} title={t("common.type")}>{l.type}</span>}
+                                        {!layout.typeColumn && l.type && <span className={BADGE}>{l.type}</span>}
                                     </span>
                                 </Cell>
                                 {layout.typeColumn && <Cell className="text-ink-muted">{l.type}</Cell>}
@@ -439,7 +438,7 @@ const Resources = () => {
                                     <span className="inline-flex items-center gap-1.5">
                                         <StatusMark state={toObjectState(l.status)} label={l.status || t("instance.unknown")} muted={l.passive}/>
                                         <span className={l.passive ? "text-ink-muted" : undefined}>{l.status || "-"}</span>
-                                        {l.passive && <span className="text-ink-muted" title={t("resources.passiveHint")}>· {t("resources.passive")}</span>}
+                                        {l.passive && <span className="text-ink-muted">· {t("resources.passive")}</span>}
                                         {l.notProvisioned && <span className="text-state-warn">{t("resources.notProvisioned")}</span>}
                                     </span>
                                 </Cell>

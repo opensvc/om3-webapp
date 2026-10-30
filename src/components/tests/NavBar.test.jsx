@@ -151,7 +151,6 @@ describe('NavBar', () => {
         const button = screen.getByRole('button', {name: 'Show menu'});
         const badge = within(button).getByTestId('menu-alert');
         expect(badge).toHaveAttribute('data-level', 'down');
-        expect(badge).toHaveAttribute('title', '1 object down');
         unmount();
         renderNavBar({showSidebarToggle: true, sidebarOpen: true, menuAlert: null});
         expect(screen.queryByTestId('menu-alert')).not.toBeInTheDocument();
@@ -288,7 +287,6 @@ describe('NavBar', () => {
         setupMocks({online: false});
         renderNavBar();
         const badge = screen.getByText('Offline');
-        expect(badge).toHaveAttribute('title', 'You are offline — some features may be limited');
         expect(badge.querySelector('svg')).toHaveAttribute('data-glyph', 'down');
     });
 

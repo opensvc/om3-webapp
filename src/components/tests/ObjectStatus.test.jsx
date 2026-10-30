@@ -113,9 +113,6 @@ describe('ObjectStatus', () => {
         // One a line: label and value pairs of a two-column list.
         expect(screen.getByText('Avail').closest('dt')).toBeInTheDocument();
         expect(screen.getByText('Overall').closest('dt')).toBeInTheDocument();
-        // Words of OpenSVC: their definition on demand.
-        expect(screen.getByText('Avail')).toHaveAttribute('data-term', 'avail');
-        expect(screen.getByText('Overall')).toHaveAttribute('data-term', 'overall');
         expect(screen.getByRole('list', {name: 'Issues'})).toHaveTextContent('not provisioned');
         expect(screen.getByRole('list', {name: 'Issues'})).toHaveClass('flex-col');
         // Beside the summary, not under it: a state coming or going (frozen) moves nothing below.
@@ -125,9 +122,7 @@ describe('ObjectStatus', () => {
         // Out of a panel, the policies and the actions stand over the summary.
         const policies = screen.getByLabelText('Policies');
         expect(policies).toHaveTextContent('Topology: flexOrchestrate: haPlacement: nodes order');
-        // Each policy its value alone, no icon, named in its tooltip.
-        expect([...policies.querySelectorAll('[data-policy]')].map((tag) => [tag.dataset.policy, tag.title]))
-            .toEqual([['topology', 'Topology: flex'], ['orchestrate', 'Orchestrate: ha'], ['placement', 'Placement: nodes order']]);
+        // Each policy its value alone, no icon.
         expect(policies.querySelectorAll('[data-policy] svg')).toHaveLength(0);
         // Muted text, a dot apart, no pill.
         expect(policies.querySelector('[data-policy]')).toHaveClass('text-ink-muted');
@@ -825,41 +820,4 @@ describe('ObjectStatus', () => {
         });
     });
 
-    describe('notes on hover', () => {
-        test('a cell says what it shows, then the notes of its resource on its node', async () => {
-            answer(dns);
-            render(<ObjectStatus path="system/svc/dns"/>);
-            await screen.findByRole('table');
-            const cell = within(screen.getByRole('rowheader', {name: /volume#1$/}).closest('tr')).getAllByRole('cell')[2];
-            const target = cell.querySelector(':scope > span');
-            expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
-            fireEvent.mouseOver(target);
-            expect(screen.getByRole('tooltip')).toHaveTextContent('Status: down');
-            expect(screen.getByRole('tooltip')).toHaveTextContent('system/vol/dns avail down');
-            fireEvent.mouseOut(target);
-            expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
-            // A cell with nothing to explain, and no note: a monitor state.
-            fireEvent.mouseOver(within(screen.getByRole('rowheader', {name: 'Monitor'}).closest('tr')).getAllByText('start failed')[0]);
-            expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
-        });
-
-        test('an instance cell shows the notes about the instance of its node', async () => {
-            answer(dns);
-            render(<ObjectStatus path="system/svc/dns"/>);
-            await screen.findByRole('table');
-            const cell = within(screen.getByRole('rowheader', {name: 'State'}).closest('tr')).getAllByRole('cell')[3];
-            fireEvent.mouseOver(cell.firstElementChild);
-            expect(screen.getByRole('tooltip')).toHaveTextContent('Status: down');
-            expect(screen.getByRole('tooltip')).toHaveTextContent('start failed: the orchestration gave up, clear the instance to retry');
-        });
-
-        test('a resource name shows its notes on every node', async () => {
-            answer(dns);
-            render(<ObjectStatus path="system/svc/dns"/>);
-            await screen.findByRole('table');
-            fireEvent.mouseOver(within(screen.getByRole('rowheader', {name: /volume#1$/})).getByText('volume#1'));
-            expect(screen.getByRole('tooltip')).toHaveTextContent('all nodes');
-            expect(screen.getByRole('tooltip')).toHaveTextContent('system/vol/dns avail down');
-        });
-    });
 });

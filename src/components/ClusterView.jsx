@@ -120,8 +120,7 @@ const HEAT_FLOOR = 0.08;
  * Where the figures of the card come from, at a glance: a node a row, a figure a
  * column, a cell the darker the more the node takes of it against the busiest one,
  * in one tint. A column even, the load spread over the nodes; a cell standing out, a
- * node spiking. The figure of a cell told on hover, its share of the busiest with it;
- * one not read yet (a rate before its second reading), dotted.
+ * node spiking. A figure not read yet (a rate before its second reading), dotted.
  */
 function UsageHeatmap({nodes, totals, metrics, format}) {
     const {t, i18n} = useTranslation();
@@ -155,7 +154,7 @@ function UsageHeatmap({nodes, totals, metrics, format}) {
                                 ? t("clusterView.opensvc.cell", {node, metric: t(`clusterUsage.${key}`), value: format(key, value), share: Math.round(100 * (max[key] > 0 ? value / max[key] : 0))})
                                 : t("clusterView.opensvc.cellPending", {node, metric: t(`clusterUsage.${key}`)});
                             return (
-                                <td key={key} data-metric={key} data-level={known ? level.toFixed(2) : undefined} title={label} aria-label={label} className="p-0">
+                                <td key={key} data-metric={key} data-level={known ? level.toFixed(2) : undefined} aria-label={label} className="p-0">
                                     <span
                                         aria-hidden="true"
                                         className={`relative block h-5 overflow-hidden rounded-[3px] ${known ? "bg-surface-sunken" : "border border-dashed border-line"}`}
@@ -514,7 +513,6 @@ export default function ClusterView() {
                                     {/* Its streams on the heartbeats page. */}
                                     <Link
                                         to={`/heartbeats?${new URLSearchParams({view: "data", id: hb})}`}
-                                        title={t("clusterView.links.beating", {beating, total})}
                                         className={`${FILTER_BADGE} font-medium ${HB_INK[state]}`}
                                     >
                                         {hb}
@@ -589,7 +587,6 @@ export default function ClusterView() {
                                         key={name}
                                         data-arbitrator={name}
                                         data-state={state}
-                                        title={[url, t("clusterView.arbitrators.seen", {up, total})].filter(Boolean).join("\n")}
                                         className={`font-medium ${HB_INK[state]}`}
                                     >
                                         {name}
@@ -623,7 +620,6 @@ export default function ClusterView() {
                                 <dd className="text-lg font-semibold leading-tight tabular-nums">
                                     <Link
                                         to={objectsUrl({kind})}
-                                        title={t("clusterView.objects.ofKind", {kind})}
                                         aria-label={`${t("clusterView.objects.ofKind", {kind})}: ${n}`}
                                         // Static, unlike the card's other links (Card): stretched over the whole tile, not the count alone.
                                         style={{position: "static"}}

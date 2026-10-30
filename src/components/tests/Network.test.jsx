@@ -179,27 +179,6 @@ describe('Network Component', () => {
         });
     });
 
-    test('displays tooltip with used/size on percentage and progress bar', async () => {
-        axios.get.mockResolvedValueOnce({data: {items: mockNetworks}});
-
-        render(<Network/>, {wrapper: MemoryRouter});
-
-        await waitFor(() => {
-            expect(screen.getByText('lo')).toBeInTheDocument();
-        });
-
-        // The title covers both the percentage and the bar beside it
-        const loRow = screen.getByRole('row', {name: /lo/i});
-        const loUsage = within(loRow).getByTitle('50/100');
-        expect(loUsage).toContainElement(within(loRow).getByText('50.0%'));
-        expect(loUsage).toContainElement(usageBar(loRow));
-
-        const defaultRow = screen.getByRole('row', {name: /default/i});
-        const defaultUsage = within(defaultRow).getByTitle('100/200');
-        expect(defaultUsage).toContainElement(within(defaultRow).getByText('50.0%'));
-        expect(defaultUsage).toContainElement(usageBar(defaultRow));
-    });
-
     test('handles API error gracefully', async () => {
         const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {
         });
@@ -555,8 +534,6 @@ describe('Network Component', () => {
         const fill = bar.firstElementChild;
         expect(fill).toHaveStyle({width: '100%'});
         expect(bar).toHaveAttribute('data-state', 'down');
-
-        expect(within(overRow).getByTitle('120/100')).toContainElement(within(overRow).getByText('120.0%'));
     });
 
     test('opens the network panel over the list on row click', async () => {

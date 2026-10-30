@@ -128,7 +128,6 @@ export function Sketch({layout, title, caption, computed, route, texts, onOpen})
                     through tunnels, a pipe of two lines. */}
                 {layout.route && (
                     <g data-route={layout.route.tunnel ? "tunnel" : "routed"}>
-                        <title>{route?.title}</title>
                         {(layout.route.tunnel ? [-TUNNEL_HALF, TUNNEL_HALF] : [0]).map((dy) => (
                             <line key={dy} x1={layout.route.x1} y1={layout.route.y + dy} x2={layout.route.x2} y2={layout.route.y + dy}
                                   strokeWidth="1.5" className="stroke-accent"/>

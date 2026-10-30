@@ -363,7 +363,6 @@ const NodesTable = () => {
                     size="sm"
                     variant="create"
                     icon={<PlusIcon className="h-4 w-4"/>}
-                    title={t("enroll.buttonTitle")}
                     onClick={() => setEnrollOpen(true)}
                 >
                     {t("enroll.button")}

@@ -154,10 +154,10 @@ const Figure = ({name, label, children}) => (
     </div>
 );
 
-/** An age said within a sentence, `key` its words around `{{age}}`; the date and time hovered. */
+/** An age said within a sentence, `key` its words around `{{age}}`. */
 function AgeSentence({value, k}) {
     const {t, i18n} = useTranslation();
-    return <span title={new Date(value).toLocaleString(i18n.language)}>{t(k, {age: formatAge(value, t, i18n.language)})}</span>;
+    return <span>{t(k, {age: formatAge(value, t, i18n.language)})}</span>;
 }
 
 /**
@@ -600,7 +600,7 @@ export function StoreSnapshots({name, path: objectPath}) {
                             </Cell>
                             <Cell className="whitespace-nowrap">
                                 <span className="inline-flex items-center gap-1">
-                                    <span className="font-mono text-data" title={s.id}>{shortId(s.id)}</span>
+                                    <span className="font-mono text-data">{shortId(s.id)}</span>
                                     <CopyButton text={s.id} label={t("stores.snapshots.copyId", {id: s.id})}/>
                                 </span>
                             </Cell>
@@ -611,7 +611,7 @@ export function StoreSnapshots({name, path: objectPath}) {
                                 <span className="inline-flex items-center gap-1">
                                     <AgeTime value={s.created_at}/>
                                     {s.protected && (
-                                        <span title={t("stores.snapshots.protected")} className="text-ink-muted">
+                                        <span role="img" aria-label={t("stores.snapshots.protected")} className="text-ink-muted">
                                             <LockIcon className="h-3.5 w-3.5" aria-hidden="true"/>
                                             <span className="sr-only">{t("stores.snapshots.protected")}</span>
                                         </span>

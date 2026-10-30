@@ -20,7 +20,6 @@ describe("UsageBar", () => {
     expect(bar).toHaveAttribute("data-state", "warn");
     expect(bar.firstElementChild).toHaveClass("bg-state-warn");
     expect(bar.firstElementChild).toHaveStyle({ width: "63.5%" });
-    expect(bar.parentElement).toHaveAttribute("title", "3/5");
   });
 
   test("takes a given state, caps the fill, and can leave the value out", () => {
@@ -59,7 +58,7 @@ describe("UsageBar", () => {
 describe("StatusCount", () => {
   test("shows the mark and the count", () => {
     render(<StatusCount state="down" count={3} />);
-    expect(screen.getByTitle("down")).toHaveAttribute("data-state", "down");
+    expect(screen.getByText("down").parentElement).toHaveAttribute("data-state", "down");
     expect(screen.getByText("3")).toBeInTheDocument();
     expect(screen.queryByRole("button")).toBeNull();
   });
@@ -76,6 +75,6 @@ describe("StatusCount", () => {
     await user.click(screen.getByRole("button", { name: "Show the 5 up objects" }));
     expect(onClick).toHaveBeenCalledTimes(1);
     expect(onRow).not.toHaveBeenCalled();
-    expect(screen.getByTitle("running")).toBeInTheDocument();
+    expect(screen.getByText("running")).toBeInTheDocument();
   });
 });

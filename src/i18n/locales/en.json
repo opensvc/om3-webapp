@@ -3292,7 +3292,7 @@
   },
   "glossary": {
     "title": "Glossary",
-    "intro": "The words of OpenSVC used in this webapp, said plainly. A dotted underline on a label means its definition is a hover or a focus away.",
+    "intro": "The words of OpenSVC used in this webapp, said plainly.",
     "search": "Search the glossary",
     "noMatch": "No term matches.",
     "more": "More in the Glossary of the menu.",

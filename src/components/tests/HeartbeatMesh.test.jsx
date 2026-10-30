@@ -42,7 +42,7 @@ describe('HeartbeatMesh', () => {
         expect(svg.parentElement).toHaveClass('aspect-square');
         expect(svg.getAttribute('width')).toBe(svg.getAttribute('height'));
         expect([...container.querySelectorAll('[data-node]')].map((n) => n.dataset.node)).toEqual(['dev3n1', 'dev3n2']);
-        // No text drawn on a line: what a click shows in the tooltips of its halves alone.
+        // No text drawn on a line: what a click shows alone.
         expect(lines(container).map((g) => [g.dataset.group, g.dataset.state, g.querySelectorAll('text').length])).toEqual([
             // One end beating, the other not: a mix, orange.
             ['dev3n1 dev3n2', 'warn', 0],
@@ -56,11 +56,10 @@ describe('HeartbeatMesh', () => {
         expect(lines(container)[0]).toHaveAccessibleName('dev3n1 to dev3n2: 1 of 2 links beating');
     });
 
-    test('a half hovered: outlined, what a click shows said in a tooltip; the box of the streams kept as it is', () => {
+    test('a half hovered: outlined; the box of the streams kept as it is', () => {
         const {container} = render(<HeartbeatMesh heartbeatStatus={STATUS}/>);
         const [forward] = lines(container);
         const tx = forward.querySelector('[data-hover="tx"]');
-        expect(tx.querySelector('title')).toHaveTextContent('Click to see the stream');
         fireEvent.mouseEnter(tx);
         // Outlined, its arrow as it is; the other half not.
         expect([...forward.querySelectorAll('[data-outline]')].map((o) => o.dataset.outline)).toEqual(['tx']);
@@ -92,7 +91,6 @@ describe('HeartbeatMesh', () => {
         expect(cardsOf(box, ['hb', 'type', 'desc']).map((fields) => fields.join(' '))).toEqual(['hb#1 unicast → dev3n2:10011']);
         expect(box.querySelector('[data-field="side"]')).toBeNull();
         // The description, cut short in a narrow card, whole in a popup hovered.
-        expect(box.querySelector('[data-field="desc"]').parentElement).toHaveAttribute('title', 'unicast · → dev3n2:10011');
         expect(forward).toHaveAttribute('data-pinned', 'true');
         // The box of the streams beside the mesh not taken: its ring still.
         expect(details().querySelector('[data-overall]')).not.toBeNull();
@@ -164,8 +162,6 @@ describe('HeartbeatMesh', () => {
         expect(node('a').querySelector('rect')).toHaveClass('stroke-state-warn');
         expect(node('b').querySelector('rect')).toHaveClass('stroke-state-down');
         expect(node('c').querySelector('rect')).toHaveClass('stroke-line');
-        // What a click shows, said on hover.
-        expect(node('b').querySelector('title')).toHaveTextContent('b: click to see the 2 stopped routines');
         fireEvent.click(node('b'));
         const box = screen.getByRole('dialog', {name: 'b'});
         expect(box).toHaveTextContent('2 of 2 routines stopped');
@@ -175,8 +171,7 @@ describe('HeartbeatMesh', () => {
         fireEvent.keyDown(node('a'), {key: 'Enter'});
         expect([...screen.getByRole('dialog', {name: 'a'}).querySelectorAll('[data-stream]')].map((r) => r.dataset.stream)).toEqual(['hb#1.tx']);
         fireEvent.keyDown(screen.getByRole('dialog'), {key: 'Escape'});
-        // All running: its name in a tooltip, nothing to click.
-        expect(node('c').querySelector('title')).toHaveTextContent(/^c$/);
+        // All running: nothing to click.
         expect(node('c')).not.toHaveAttribute('role');
         fireEvent.click(node('c'));
         expect(dialog()).toBeNull();

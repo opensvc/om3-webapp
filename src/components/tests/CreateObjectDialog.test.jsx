@@ -451,7 +451,6 @@ describe('CreateObjectDialog', () => {
                 'lxcprovisionstartstop',
             ]);
             // A feature told on hover.
-            expect(within(types).getAllByText('start')[0]).toHaveAttribute('title', 'The start brings the resource up.');
             fireEvent.click(within(types).getByRole('button', {name: 'podman'}));
             expect(await screen.findByRole('heading', {name: /\[container#1\] container\.podman/})).toBeInTheDocument();
             // Podman provisions nothing: no box to take its provision on.

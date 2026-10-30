@@ -57,7 +57,7 @@ export const Button = forwardRef<
  * Square button holding an icon only, as the close cross of the oc3 panels: outlined,
  * as any button that neither creates nor deletes; of the accent fill with `tone`
  * "create", of the down fill with "delete".
- * The label is the tooltip and the accessible name.
+ * The label is the accessible name.
  */
 export const IconButton = forwardRef<
   HTMLButtonElement,
@@ -85,7 +85,6 @@ export const IconButton = forwardRef<
       <button
         ref={ref}
         type={type}
-        title={label}
         aria-label={label}
         className={cn(
           "inline-flex h-7 shrink-0 items-center justify-center rounded-(--radius-control) bg-accent px-2.5 font-medium text-accent-ink hover:brightness-110 disabled:pointer-events-none disabled:opacity-60 max-md:w-7 max-md:px-0",
@@ -106,7 +105,6 @@ export const IconButton = forwardRef<
     <button
       ref={ref}
       type={type}
-      title={label}
       className={cn(
         "inline-flex shrink-0 items-center justify-center rounded-(--radius-control) disabled:pointer-events-none disabled:opacity-60",
         size === "sm" ? "h-5 w-5" : "h-7 w-7",

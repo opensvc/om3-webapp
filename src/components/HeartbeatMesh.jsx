@@ -255,17 +255,13 @@ export function HeartbeatMesh({heartbeatStatus, onSelect, selected}) {
                                     onMouseEnter={hover({key: g.key, side})}
                                     onMouseLeave={leave}
                                     onClick={() => pick(g, side)}
-                                >
-                                    {/* What a click shows, said on hover. */}
-                                    <title>{t("heartbeats.mesh.clickHint", {count: g[side].links.length})}</title>
-                                </path>
+                                />
                             ))}
                         </g>
                     ))}
                     {/* The relays the heartbeats go through, in the centre the lines keep clear. */}
                     {layout.relays.map((r) => (
                         <g key={r.name} data-relay={r.name} data-state={r.state}>
-                            <title>{t("heartbeats.mesh.relayHint", {relay: r.name, hbs: r.hbs.join(", ")})}</title>
                             <rect
                                 x={r.x - r.width / 2}
                                 y={r.y - r.height / 2}
@@ -307,11 +303,6 @@ export function HeartbeatMesh({heartbeatStatus, onSelect, selected}) {
                                 } : {})}
                             >
                                 {/* A pill as wide as the name: a node name can be long, a circle would not hold it. */}
-                                <title>
-                                    {routines.stopped.length === 0
-                                        ? name
-                                        : t("heartbeats.mesh.nodeClickHint", {node: name, count: routines.stopped.length})}
-                                </title>
                                 <rect
                                     x={p.x - p.width / 2}
                                     y={p.y - p.height / 2}
@@ -385,7 +376,7 @@ export function HeartbeatMesh({heartbeatStatus, onSelect, selected}) {
                                     </span>
                                     <span className="flex items-baseline justify-between gap-2 text-ink-muted">
                                         {/* Cut short in a narrow card: the whole of it hovered. */}
-                                        <span className="min-w-0 truncate" title={l.desc ? `${l.type} · ${l.desc}` : undefined}>
+                                        <span className="min-w-0 truncate">
                                             <span data-field="type">{l.type}</span>
                                             {" · "}
                                             <span data-field="desc" className="font-mono">{l.desc || "–"}</span>

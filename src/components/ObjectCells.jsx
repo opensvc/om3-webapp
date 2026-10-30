@@ -6,10 +6,8 @@ import {useKeyStats} from "../hooks/useKeyStats";
 import {Cell} from "../ui/components/Table";
 import {NotProvisionedMark as PMark} from "../ui/components/StateMarks";
 import {FrozenMark} from "../ui/components/FrozenMark";
-import {HoverCard} from "../ui/components/HoverCard";
 import {formatBytes} from "../ui/lib/format";
 import {AlertTriangleIcon} from "../ui/icons";
-import {Figures} from "./Figures";
 import {parseObjectPath} from "../utils/objectUtils.jsx";
 
 /*
@@ -31,7 +29,7 @@ export const NotProvisionedMark = () => {
 
 /** Small muted text on one line: a global expect, a monitor state. */
 export const SideText = ({children}) => (
-    <span title={children} className="text-[0.75rem] whitespace-nowrap text-ink-muted">{children}</span>
+    <span className="text-[0.75rem] whitespace-nowrap text-ink-muted">{children}</span>
 );
 
 /** The tint of an availability as text: n/a muted, an unknown value in the unknown tint. */
@@ -41,7 +39,7 @@ const AVAIL_INK = {up: "text-state-up", down: "text-state-down", warn: "text-sta
 const DegradedMark = () => {
     const {t} = useTranslation();
     return (
-        <span role="img" aria-label={t("objects.degraded")} title={t("objects.degraded")}
+        <span role="img" aria-label={t("objects.degraded")}
               className="inline-flex text-state-warn">
             <AlertTriangleIcon className="h-3.5 w-3.5"/>
         </span>
@@ -68,30 +66,16 @@ export const StatusMarks = React.memo(({avail, isDegraded, isNotProvisioned, fro
     prev.globalExpect === next.globalExpect);
 
 /**
- * The flex parameters of an object in a badge, min-max then the target, each named
- * in its hover card: the badge says them in short, the card what each one is.
+ * The flex parameters of an object in a badge, min-max then the target.
  */
 export const FlexBadge = ({min, max, target}) => {
     const {t} = useTranslation();
     const hasTarget = target !== undefined && target !== null;
     return (
-        <HoverCard
-            focusable
-            card={
-                <Figures
-                    title={t("objects.flex.title")}
-                    lines={[
-                        [t("objects.flex.min"), min],
-                        [t("objects.flex.max"), max],
-                        ...(hasTarget ? [[t("objects.flex.target"), target]] : []),
-                    ]}
-                />
-            }
-        >
-            <span data-flex="" className="inline-flex rounded-(--radius-control) border border-line px-1 text-data tabular-nums leading-tight text-ink-muted">
-                {hasTarget ? `${min}-${max} · ${target}` : `${min}-${max}`}
-            </span>
-        </HoverCard>
+        <span data-flex="" className="inline-flex rounded-(--radius-control) border border-line px-1 text-data tabular-nums leading-tight text-ink-muted">
+            {hasTarget ? `${min}-${max} · ${target}` : `${min}-${max}`}
+        </span>
+
     );
 };
 
@@ -128,7 +112,6 @@ export const OrchestrateBadge = ({objectName}) => {
         <span
             role="img"
             aria-label={label}
-            title={label}
             data-mark="orchestrate"
             className={BADGE}
         >

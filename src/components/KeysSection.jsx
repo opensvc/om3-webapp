@@ -809,7 +809,6 @@ const KeysSection = ({decodedObjectName, openSnackbar, refreshKey}) => {
                         <Row
                             key={key.name}
                             onActivate={actionLoading ? undefined : () => handleViewKey(key.name)}
-                            title={t("keys.view.action", {key: key.name})}
                             selected={pickedKeys.includes(key.name)}
                         >
                             <Cell className="w-8">

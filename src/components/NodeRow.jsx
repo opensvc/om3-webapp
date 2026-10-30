@@ -49,7 +49,7 @@ function NameCell({nodename, env, layout, booted, updated}) {
         <Cell className="font-medium whitespace-nowrap">
             <span className="inline-flex items-center gap-1.5">
                 {nodename || "-"}
-                {!layout.envColumn && env && <span className={BADGE} title={t("nodes.columns.env")}>{env}</span>}
+                {!layout.envColumn && env && <span className={BADGE}>{env}</span>}
             </span>
             {layout.datesInName && (
                 <span data-dates="" className="block text-data font-normal text-ink-muted">
@@ -111,7 +111,7 @@ const NodeRow = ({
                 </Cell>
                 <Cell className="font-medium whitespace-nowrap">{nodename}</Cell>
                 <Cell className="whitespace-nowrap">
-                    <span title={t("nodes.row.lost")} className="flex justify-center font-semibold text-state-down">
+                    <span className="flex justify-center font-semibold text-state-down">
                         <span aria-hidden="true">?</span>
                         <span className="sr-only">{t("nodes.row.lost")}</span>
                     </span>
@@ -166,7 +166,6 @@ const NodeRow = ({
                     {isDaemonNode && (
                         <span
                             role="img"
-                            title={t("nodes.row.connected")}
                             aria-label={t("nodes.row.connected")}
                             className="text-state-up"
                         >
@@ -176,7 +175,6 @@ const NodeRow = ({
                     {versionDiffers && (
                         <span
                             role="img"
-                            title={t("nodes.row.versionDiff", {version: status.agent, common: commonVersion})}
                             aria-label={t("nodes.row.versionDiff", {version: status.agent, common: commonVersion})}
                             className="text-state-warn"
                         >

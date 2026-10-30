@@ -50,7 +50,7 @@ export type RowKind =
   | "label"
   | "blank";
 
-/** A note as a cell or a row shows it on hover: the nodes empty in a cell, said there. */
+/** A note as a cell or a row holds it: the nodes empty in a cell, said there. */
 export interface RowNote {
   marker: string;
   level: Level;

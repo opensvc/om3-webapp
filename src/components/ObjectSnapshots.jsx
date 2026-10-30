@@ -134,7 +134,7 @@ export function ObjectSnapshots({path}) {
                     <tbody>
                         {state.snapshots.map((snapshot) => (
                             <Row key={`${snapshot.rid} ${snapshot.id}`}>
-                                <Cell className="whitespace-nowrap font-mono" title={snapshot.id}>{shortId(snapshot.id)}</Cell>
+                                <Cell className="whitespace-nowrap font-mono">{shortId(snapshot.id)}</Cell>
                                 <Cell><ResourceLink path={path} rid={snapshot.rid}/></Cell>
                                 <Cell className="whitespace-nowrap"><RelativeTime value={snapshot.created_at} locale={i18n.language}/></Cell>
                                 <Cell>{snapshot.node ? <InstanceLink path={path} node={snapshot.node} label={snapshot.node}/> : "–"}</Cell>

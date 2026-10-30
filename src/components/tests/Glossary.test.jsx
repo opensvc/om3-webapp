@@ -3,7 +3,6 @@ import {act, fireEvent, render, screen, within} from '@testing-library/react';
 import {MemoryRouter} from 'react-router-dom';
 import {Glossary} from '../Glossary';
 import {PageIntro} from '../PageIntro';
-import {Term} from '../../app/Term';
 import {hideIntro, reloadHiddenIntros, setIntrosEnabled} from '../../app/page-intro';
 
 const renderAt = (url, ui) => render(<MemoryRouter initialEntries={[url]}>{ui}</MemoryRouter>);
@@ -11,32 +10,6 @@ const renderAt = (url, ui) => render(<MemoryRouter initialEntries={[url]}>{ui}</
 beforeEach(() => {
     localStorage.clear();
     reloadHiddenIntros();
-});
-
-describe('Term', () => {
-    test('a word of OpenSVC underlined, its definition in a card hovered or focused', () => {
-        render(<Term term="avail">Avail</Term>);
-        const word = screen.getByText('Avail');
-        expect(word).toHaveAttribute('data-term', 'avail');
-        expect(document.querySelector('[data-term-card]')).toBeNull();
-        fireEvent.focus(word.parentElement);
-        const card = document.querySelector('[data-term-card="avail"]');
-        expect(card).toHaveTextContent(/^Avail/);
-        expect(card.textContent.length).toBeGreaterThan(40);
-        // Reached by the keyboard, described by the card while it shows.
-        expect(word.parentElement).toHaveAttribute('tabindex', '0');
-        expect(word.parentElement).toHaveAccessibleDescription(/^Avail Is it running\? Only the resources it needs count\./);
-        fireEvent.blur(word.parentElement);
-        expect(document.querySelector('[data-term-card]')).toBeNull();
-    });
-
-    test('its name when no label; a key the glossary does not hold, the label alone', () => {
-        const {unmount} = render(<Term term="frozen"/>);
-        expect(screen.getByText('Frozen')).toHaveAttribute('data-term', 'frozen');
-        unmount();
-        render(<Term term="nope">Plain</Term>);
-        expect(screen.getByText('Plain')).not.toHaveAttribute('data-term');
-    });
 });
 
 describe('PageIntro', () => {
@@ -86,7 +59,6 @@ describe('Glossary', () => {
             .toEqual(['Status', 'Marks on an instance', 'Flags on a resource']);
         const frozen = symbols.querySelector('[data-legend="marks-frozen"]');
         // Said beside it: no tooltip of its own, as on the board, where the card of the cell says it.
-        expect(within(frozen).getByRole('img', {name: 'frozen'})).not.toHaveAttribute('title');
         expect(frozen.nextElementSibling).toHaveTextContent('Frozen: the cluster will not start, stop or move it automatically.');
         expect(symbols.querySelector('[data-legend="states-downQuiet"] [data-state="down"]')).toHaveClass('text-ink-muted');
         expect(symbols.querySelector('[data-legend="flags-M"]')).toHaveTextContent('M');

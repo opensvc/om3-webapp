@@ -83,7 +83,6 @@ describe('Sidebar', () => {
         mockPills.current = {'objects-any': {alert: null}, nodes: {alert: null}};
         renderSidebar();
         expect(screen.queryByTestId(/^alert-/)).toBeNull();
-        expect(screen.getByRole('link', {name: 'Nodes'})).not.toHaveAttribute('title');
     });
 
     test.each([
@@ -98,7 +97,6 @@ describe('Sidebar', () => {
         const badge = screen.getByTestId(`alert-${id}`);
         expect(badge).toHaveAttribute('data-level', level);
         expect(badge).toHaveClass(tint, 'rounded-full');
-        expect(badge).toHaveAttribute('title', text);
         expect(screen.getByRole('img', {name: text})).toBe(badge);
         // A badge, no count: its "!" is out of the accessible name.
         expect(badge).toHaveTextContent('!');

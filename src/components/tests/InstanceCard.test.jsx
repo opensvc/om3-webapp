@@ -37,7 +37,7 @@ const statusMark = () => document.querySelector('[data-state]');
 
 const stoppedMark = () => screen.queryByRole('img', {name: 'Instance on node node1 is stopped'});
 const laggingMark = () => screen.queryByRole('img', {name: 'Instance on node node1 is lagging'});
-const frozenMark = () => screen.queryByTitle('frozen');
+const frozenMark = () => screen.queryByText('frozen');
 const nodeState = (overrides = {}) =>
     vi.fn(() => ({avail: 'up', frozen: 'unfrozen', state: null, isStopped: false, isLagging: false, ...overrides}));
 
@@ -147,7 +147,6 @@ describe('InstanceCard Component', () => {
         renderCard({getNodeState});
         expect(getNodeState).toHaveBeenCalledWith('node1');
         expect(statusMark()).toHaveAttribute('data-state', state);
-        expect(statusMark()).toHaveAttribute('title', avail || 'unknown');
     });
 
     test.each([
@@ -164,12 +163,12 @@ describe('InstanceCard Component', () => {
 
     test('shows frozen mark when node is frozen', () => {
         renderCard({getNodeState: vi.fn(() => ({avail: 'up', frozen: 'frozen', state: null}))});
-        expect(screen.getByTitle('frozen')).toBeInTheDocument();
+        expect(screen.getByText('frozen')).toBeInTheDocument();
     });
 
     test('does not show frozen mark when node is not frozen', () => {
         renderCard({getNodeState: vi.fn(() => ({avail: 'up', frozen: 'unfrozen', state: null}))});
-        expect(screen.queryByTitle('frozen')).not.toBeInTheDocument();
+        expect(screen.queryByText('frozen')).not.toBeInTheDocument();
     });
 
     test.each([[false], ['false']])('shows not provisioned mark when provisioned is %p', (provisioned) => {
@@ -259,12 +258,10 @@ describe('InstanceCard Component', () => {
                 nodeData: {stopped_at: '2025-05-16T10:00:00Z'},
                 getNodeState: nodeState({avail: 'down', isStopped: true}),
             });
-            expect(stoppedMark()).toHaveAttribute('title', expect.stringContaining('stopped at'));
         });
 
         test('stopped tooltip is just "stopped" when no stopped_at is provided', () => {
             renderCard({getNodeState: nodeState({avail: 'down', isStopped: true})});
-            expect(stoppedMark()).toHaveAttribute('title', 'stopped');
         });
     });
 
@@ -285,15 +282,6 @@ describe('InstanceCard Component', () => {
             expect(laggingMark()).not.toBeInTheDocument();
         });
 
-        test('lagging tooltip is "RPO breached" and does NOT contain a date', () => {
-            renderCard({
-                nodeData: {rpo_breached_at: '2025-05-16T10:00:00Z'},
-                getNodeState: nodeState({isLagging: true}),
-            });
-            const title = laggingMark().getAttribute('title');
-            expect(title).toBe('RPO breached');
-            expect(title).not.toEqual(expect.stringContaining('2025'));
-        });
     });
 
     // ─── precedence and coexistence ─────────────────────────────────────
@@ -343,7 +331,6 @@ describe('InstanceCard Component', () => {
         try {
             renderCard({onViewInstance: vi.fn()});
             expect(screen.getByRole('group', {name: 'Instance sur le nœud node1'})).toBeInTheDocument();
-            expect(screen.getByTitle('Voir les ressources')).toBeInTheDocument();
         } finally {
             await i18n.changeLanguage('en');
         }

@@ -153,7 +153,6 @@ describe("RelativeTime", () => {
     const { container } = render(<RelativeTime value={STAMP} locale="en" />);
     const time = container.querySelector("time");
     expect(time).toHaveTextContent("3 minutes ago");
-    expect(time).toHaveAttribute("title", formatDateTime(STAMP, "en"));
     expect(time).toHaveAttribute("datetime", LOCAL.toISOString());
   });
 

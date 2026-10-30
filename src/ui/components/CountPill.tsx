@@ -17,7 +17,7 @@ export type CountTone = keyof typeof TONE;
 /**
  * A count in a small bordered pill, its border and text in the tint of what it
  * counts. The colour is not the only sign: `label` says what is counted, as the
- * tooltip and the accessible name. With `onClick` the pill is a button, which
+ * accessible name. With `onClick` the pill is a button, which
  * stops its click so that the row under it does not open.
  */
 export function CountPill({
@@ -37,7 +37,7 @@ export function CountPill({
   );
   if (onClick === undefined) {
     return (
-      <span className={className} title={label} aria-label={label} data-tone={tone}>
+      <span className={className} aria-label={label} data-tone={tone}>
         {count}
       </span>
     );
@@ -46,7 +46,6 @@ export function CountPill({
     <button
       type="button"
       className={cn(className, "hover:bg-surface-sunken")}
-      title={label}
       aria-label={label}
       data-tone={tone}
       onClick={(event) => {

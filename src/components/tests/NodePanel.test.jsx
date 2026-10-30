@@ -220,7 +220,6 @@ describe('NodeDetailPanel', () => {
         const node = await within(panel()).findByRole('region', {name: 'Node'});
         const age = node.querySelector('time');
         expect(age).toHaveAttribute('datetime', '2026-10-10T12:08:50.000Z');
-        expect(age).toHaveAttribute('title', expect.stringMatching(/10\/10\/26/));
         expect(age).toHaveTextContent(/ago|day|week/);
     });
 
@@ -234,7 +233,6 @@ describe('NodeDetailPanel', () => {
         expect(labels).not.toHaveTextContent('=');
         // Its own over the cluster's; the cluster's dashed, said so.
         expect(labels.querySelector('[data-label=toto]')).toHaveClass('border-dashed');
-        expect(labels.querySelector('[data-label=toto]')).toHaveAttribute('title', expect.stringMatching(/^From the cluster configuration/));
         expect(labels.querySelector('[data-label=az]')).not.toHaveClass('border-dashed');
 
         fireEvent.click(within(labels).getByRole('button', {name: 'Edit the labels'}));
@@ -303,7 +301,6 @@ describe('NodeDetailPanel', () => {
         const actions = within(panel()).getByRole('button', {name: 'Node actions'});
         expect(actions).toHaveClass('max-md:w-7', 'bg-accent');
         expect(actions).not.toHaveClass('rounded-(--radius-pill)');
-        expect(actions).toHaveAttribute('title', 'Node actions');
         // "Actions" in a wide window, the bolt alone in a narrow one.
         expect(actions).toHaveTextContent(/^Actions$/);
         fireEvent.click(actions);
@@ -667,14 +664,14 @@ describe('NodeDetailPanel', () => {
             expect(mockRetain).toHaveBeenCalledWith('tok', ['DaemonHeartbeatUpdated']);
             const heartbeats = await within(panel()).findByRole('table', {name: 'Heartbeats'});
             const row = () => within(heartbeats).getByRole('row', {name: /hb#1\.rx/});
-            expect(within(row()).getByTitle('Beating')).toBeInTheDocument();
+            expect(within(row()).getByText('Beating')).toBeInTheDocument();
             const statusReads = requests.filter((r) => r.url === '/api/cluster/status').length;
 
             // A DaemonHeartbeatUpdated: the peer of hb#1.rx stops beating.
             const heartbeat = structuredClone(daemon['cluster/status'].cluster.node.dev3n1.daemon.heartbeat);
             heartbeat.streams[0].peers.dev3n2.is_beating = false;
             act(() => useEventStore.setState({heartbeatStatus: {dev3n1: heartbeat}}));
-            expect(within(row()).getByTitle('Stale')).toBeInTheDocument();
+            expect(within(row()).getByText('Stale')).toBeInTheDocument();
             expect(requests.filter((r) => r.url === '/api/cluster/status')).toHaveLength(statusReads);
         });
 

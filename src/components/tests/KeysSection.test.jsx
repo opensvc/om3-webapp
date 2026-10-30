@@ -149,7 +149,6 @@ describe('KeysSection', () => {
         expect(screen.getByRole('rowheader', {name: 'k'})).toHaveClass('text-left');
         expect(screen.queryByRole('button', {name: 'View key k'})).not.toBeInTheDocument();
         const row = screen.getByRole('rowheader', {name: 'k'}).closest('tr');
-        expect(row).toHaveAttribute('title', 'View key k');
         // Edited and removed from its dialog and the selection: no tool on the line.
         expect(within(row).queryByRole('button')).toBeNull();
         // Solid: "Add" in a wide window, the plus alone in a narrow one; named in full.

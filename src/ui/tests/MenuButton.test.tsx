@@ -356,7 +356,6 @@ describe("MenuButton prominent", () => {
     expect(button).toHaveClass("rounded-(--radius-control)", "bg-accent", "text-accent-ink", "aria-expanded:brightness-110");
     expect(button).not.toHaveClass("rounded-(--radius-pill)", "border-line");
     expect(button).toHaveTextContent("Actions");
-    expect(button).not.toHaveAttribute("title");
   });
 
   test("solid, of the accent fill as the actions: its text in a wide window, its icon alone in a narrow one, named by its label", () => {
@@ -366,7 +365,6 @@ describe("MenuButton prominent", () => {
     expect(button).toHaveTextContent(/^Actions$/);
     expect(screen.getByText("Actions")).toHaveClass("max-md:hidden");
     expect(screen.getByTestId("bolt").parentElement).toHaveClass("hidden", "max-md:inline-flex");
-    expect(button).toHaveAttribute("title", "Node actions");
   });
 
   test("its label in a wide window, its icon alone in a narrow one, the label then its name and tooltip", () => {
@@ -377,7 +375,6 @@ describe("MenuButton prominent", () => {
     expect(icon).toHaveAttribute("aria-hidden", "true");
     expect(screen.getByText("Actions")).toHaveClass("max-md:sr-only");
     expect(button).toHaveClass("max-md:w-7");
-    expect(button).toHaveAttribute("title", "Actions");
   });
 });
 

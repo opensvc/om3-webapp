@@ -28,7 +28,6 @@ import {PanelReopenKey} from "../app/PanelReopenKey";
 import {ActionTray} from "../app/ActionTray";
 import {ShortcutsHelp} from "../app/ShortcutsHelp";
 import {PageIntro} from "./PageIntro";
-import {InstantTitles} from "../app/InstantTitles";
 import {useShortcut} from "../ui/lib/shortcuts";
 
 import {decodeToken as decodeTokenFromLogin, hasRefreshToken, refreshToken as doRefreshToken} from "./Login.jsx";
@@ -453,8 +452,6 @@ const App = () => {
             <OidcProvider>
                 <OidcInitializer authInfo={authInfo}>
                     <div id="app-root-container" style={appContainerStyle}>
-                        {/* The tooltips of every page, shown at once rather than after the browser's delay. */}
-                        <InstantTitles/>
                         <NavBar
                             sidebarOpen={sidebarOpen}
                             onToggleSidebar={toggleSidebar}

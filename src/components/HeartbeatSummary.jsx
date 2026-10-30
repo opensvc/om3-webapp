@@ -115,7 +115,6 @@ function SummaryCard({cardKey, title, detail, counts, onOpen, openLabel}) {
  */
 function RoutineZones({routines, nodes, onToggle, busy}) {
     const {t} = useTranslation();
-    const routineWord = (state) => (state === "running" || state === "stopped" ? t(`heartbeats.routine.${state}`) : (state || t("common.unknown")));
     return (
         <div className="flex flex-col gap-3 pt-2">
             {nodes.map((node) => (
@@ -144,7 +143,6 @@ function RoutineZones({routines, nodes, onToggle, busy}) {
                                                 key={key}
                                                 data-card={key}
                                                 aria-busy={isBusy || undefined}
-                                                title={`${name} · ${r.type} · ${routineWord(r.streamState)} · ${t("heartbeats.summary.beatingOf", {beating: r.beating, count: r.total})}`}
                                                 data-stopped={stopped || undefined}
                                                 className={cn("relative flex min-w-0 flex-col gap-1 px-2 py-1.5", CARD, isBusy && "animate-pulse")}
                                             >
@@ -238,7 +236,7 @@ export function HeartbeatSummary({heartbeatStatus, onToggle, busy, onOpenHeartbe
             </section>
             <section aria-labelledby={routinesId} className="min-w-0 space-y-2" data-box="routines">
                 {/* Its title, and how to act on a routine at the right of it, light; in an icon
-                    when the box is too narrow for it, the hint hovered. */}
+                    when the box is too narrow for it. */}
                 <div className="@container flex items-baseline justify-between gap-3">
                     <h2 id={routinesId} className="font-semibold">{t("heartbeats.summary.routines")}</h2>
                     {onToggle && (
@@ -247,7 +245,6 @@ export function HeartbeatSummary({heartbeatStatus, onToggle, busy, onOpenHeartbe
                             <span
                                 role="img"
                                 aria-label={t("heartbeats.summary.toggleHint")}
-                                title={t("heartbeats.summary.toggleHint")}
                                 className="self-center text-ink-muted @md:hidden"
                                 data-hint-icon=""
                             >

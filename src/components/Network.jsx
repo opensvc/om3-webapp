@@ -31,7 +31,6 @@ const Usage = ({network}) => {
         <UsageBar
             value={network.size ? (network.used / network.size) * 100 : undefined}
             missing={t("common.notAvailable")}
-            title={`${network.used}/${network.size}`}
             label={t("networks.usageOf", {name: network.name})}
         />
     );

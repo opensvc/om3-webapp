@@ -37,7 +37,6 @@ import {useLocalPaging} from "../app/paging";
 import {usePanelSearch} from "../app/panel-search";
 import {trackDone, trackRefused, trackResponse, useActionTracker} from "../app/action-tracker";
 import {driverCap, driverRows, nodeTools} from "../app/driver-caps";
-import {Term} from "../app/Term";
 import {refusalReason} from "./objectActions";
 import {MIN_AVAIL, MinAvailDialog, thresholdPct, useMinAvail} from "./NodeMinAvail";
 import {useGrants} from "../hooks/useGrants";
@@ -55,18 +54,6 @@ import {useEditDraft} from "../app/edit-drafts";
 
 const ZERO_TIME = "0001-01-01T00:00:00Z";
 export const isSet = (time) => !!time && time !== ZERO_TIME;
-
-/** The facts of a node named by a word of the glossary, its key by fact. */
-const NODE_TERMS = {
-    state: "monitor",
-    globalExpect: "globalExpect",
-    localExpect: "localExpect",
-    orchestration: "orchestration",
-    frozen: "frozen",
-    leader: "leader",
-    score: "score",
-    overloaded: "overloaded",
-};
 
 /** The events that keep the state of the nodes current, the Nodes view's. */
 const NODE_EVENTS = ["NodeStatusUpdated", "NodeMonitorUpdated", "NodeStatsUpdated"];
@@ -291,7 +278,7 @@ function NodeStatusTab({node, onOrchestrationLogs}) {
     const frozen = isSet(status?.frozen_at);
     const none = "–";
     // A fact named by a word of OpenSVC: its definition on demand.
-    const fact = (key, value) => [key, NODE_TERMS[key] ? <Term term={NODE_TERMS[key]}>{t(`nodePanel.status.${key}`)}</Term> : t(`nodePanel.status.${key}`), value];
+    const fact = (key, value) => [key, t(`nodePanel.status.${key}`), value];
     // When a value of the monitor was set, muted after it.
     const since = (at) => (isSet(at) ? <span className="text-ink-muted"><RelativeTime value={at} locale={i18n.language}/></span> : null);
     const withSince = (value, at) => <span className="inline-flex flex-wrap items-baseline gap-x-1.5">{value}{since(at)}</span>;
@@ -302,10 +289,9 @@ function NodeStatusTab({node, onOrchestrationLogs}) {
     const orchestrationId = monitor?.orchestration_id;
     const orchestration = orchestrationId && !/^0{8}-0{4}-0{4}-0{4}-0{12}$/.test(orchestrationId) ? (
         <span className="inline-flex flex-wrap items-baseline gap-x-1.5">
-            {/* Its logs a click away, its full id hovered. */}
+            {/* Its logs a click away. */}
             <button
                 type="button"
-                title={orchestrationId}
                 aria-label={t("nodePanel.status.orchestrationLogs", {id: orchestrationId})}
                 onClick={() => onOrchestrationLogs?.(orchestrationId)}
                 className="font-mono text-accent hover:underline"
@@ -415,7 +401,7 @@ function NodeStatusTab({node, onOrchestrationLogs}) {
         if (isUnset(p)) return <span className="text-ink-muted">{none}</span>;
         // The memory in bytes, readable.
         if (p.name === "mem_bytes" && Number(p.value) > 0) return formatBytes(Number(p.value));
-        // The last boot, as an age: its date hovered.
+        // The last boot, as an age.
         if (p.name === "last_boot") return <RelativeTime value={String(p.value)} locale={i18n.language}/>;
         return String(p.value);
     };
@@ -1049,7 +1035,7 @@ function NodeDrivers({node}) {
         <div className="space-y-6">
             <div className="flex flex-wrap items-center gap-2">
                 <Button size="sm" icon={scanning ? <Spinner label={t("nodePanel.drivers.scanning")}/> : <RefreshIcon className="h-3.5 w-3.5"/>}
-                        onClick={rescan} disabled={scanning} title={t("nodePanel.drivers.rescanHint")}>
+                        onClick={rescan} disabled={scanning}>
                     {scanning ? t("nodePanel.drivers.scanning") : t("nodePanel.drivers.rescan")}
                 </Button>
                 <FilterField label={t("nodePanel.drivers.filter")} value={filter} onChange={setFilter}/>
@@ -1087,7 +1073,7 @@ function NodeDrivers({node}) {
                                             label: t("nodePanel.drivers.columns.usable"),
                                             render: (r) => (r.usable
                                                 ? <span className="text-state-up">{t("nodePanel.drivers.usable")}</span>
-                                                : <span className="text-ink-muted" title={driverCap(r.id)}>{t("nodePanel.drivers.unusable")}</span>),
+                                                : <span className="text-ink-muted">{t("nodePanel.drivers.unusable")}</span>),
                                         },
                                         {key: "features", label: t("nodePanel.drivers.columns.features"), className: "font-mono text-data text-ink-muted", render: (r) => r.features.join(" ")},
                                     ]}

@@ -33,13 +33,11 @@ import {ALL_LIST, OBJECT_LISTS, OBJECTS_TABS, listOfKind} from "../utils/objectL
 import {AlertTriangleIcon, BoltIcon, GearIcon, InfoIcon, PlusIcon} from "../ui/icons";
 import {cachedReason, needsReason} from "../app/object-reason";
 import {menuColumns, menuFilter} from "../app/action-menu";
-import {Term} from "../app/Term";
 import {SymbolLegend} from "../app/StatusBoard";
 import {Dialog} from "../ui/components/Dialog";
 import ActionDialogManager from "./ActionDialogManager";
 import {CLEAR_ACTION, noteFixAction, postAction} from "./objectActions";
 import {INSTANCE_ACTIONS, OBJECT_ACTIONS, actionLabel} from "../constants/actions";
-import {actionDescription} from "../app/action-menu";
 import {rangeSelect, withShift} from "../app/range-select";
 
 // The breakpoints of the MUI theme the view used: below md (900px) the filters fold
@@ -105,7 +103,7 @@ const NodeStatus = React.memo(({objectName, node}) => {
     if (!hasData) {
         if (!expected) return null;
         return (
-            <span title={t("objects.noInstanceStatus", {node})} data-node={node} className="inline-flex w-4 justify-center font-semibold text-state-down">
+            <span data-node={node} className="inline-flex w-4 justify-center font-semibold text-state-down">
                 <span aria-hidden="true">?</span>
                 <span className="sr-only">{t("objects.noInstanceStatus", {node})}</span>
             </span>
@@ -118,7 +116,7 @@ const NodeStatus = React.memo(({objectName, node}) => {
     const marks = (
         <span className="inline-flex items-center gap-1.5" data-node={node}>
             <StatusMark state={markState(nodeData.avail)} label={nodeData.avail} muted={isQuietDown(nodeData.avail, objectAvail)}/>
-            {isStopped && <StoppedMark stoppedAt={stoppedAt}/>}
+            {isStopped && <StoppedMark/>}
             {/* A breached RPO takes the place of the frozen mark, as in the other views. */}
             {isLagging ? <RpoBreachedMark/> : <FrozenMark frozen={nodeData.frozen === "frozen"}/>}
             {isNodeNotProvisioned && <NotProvisionedMark/>}
@@ -134,7 +132,6 @@ const NodeStatus = React.memo(({objectName, node}) => {
                 event.stopPropagation();
                 peek("instance", instanceId(objectName, node));
             }}
-            title={t("objects.openInstance", {node})}
             aria-label={t("objects.openInstanceOf", {node, name: objectName})}
             className="inline-flex rounded-(--radius-control) hover:underline focus-visible:outline-2 focus-visible:outline-(--focus-ring)"
         >
@@ -149,8 +146,8 @@ const NodeStatus = React.memo(({objectName, node}) => {
  * to place (cfg, sec, usr) have no orchestrate nor topology.
  */
 export const PROPERTY_COLUMNS = [
-    {key: "orchestrate", labelKey: "objects.columns.orchestrate", term: "orchestrate", value: (status) => status?.orchestrate},
-    {key: "topology", labelKey: "objects.columns.topology", term: "topology", value: (status) => status?.topology},
+    {key: "orchestrate", labelKey: "objects.columns.orchestrate", value: (status) => status?.orchestrate},
+    {key: "topology", labelKey: "objects.columns.topology", value: (status) => status?.topology},
 ];
 
 /**
@@ -275,7 +272,6 @@ const NamespaceRow = ({namespace, colSpan, nodeCount = 0, selectedCount, total, 
         <tr
             data-namespace-row={namespace}
             tabIndex={exists ? 0 : undefined}
-            title={exists ? t("objects.openNamespaceConfig", {namespace}) : undefined}
             onClick={exists ? open : undefined}
             onKeyDown={exists ? (event) => {
                 if (event.target !== event.currentTarget || (event.key !== "Enter" && event.key !== " ")) return;
@@ -401,7 +397,7 @@ const FIX_ICON = "flex h-3 w-3 items-center justify-center [&>svg]:h-3! [&>svg]:
 
 /**
  * Under the name of an object not up, why, in a line: its first note, as its status
- * board says it, the others counted; the whole of it hovered, the board in its panel.
+ * board says it, the others counted; the board in its panel.
  * The action the note asks for a button at its end, where the menus offer it.
  */
 function ObjectReason({objectName}) {
@@ -417,7 +413,6 @@ function ObjectReason({objectName}) {
     return (
         <span
             data-reason={reason.level}
-            title={`${reason.text}${more}`}
             // No wider than the room of the names on a phone: cut, not past the table.
             className="flex max-w-md min-w-0 items-center gap-1 text-[0.75rem] font-normal text-ink-muted max-md:max-w-[44vw]"
         >
@@ -433,7 +428,6 @@ function ObjectReason({objectName}) {
                         askFix(objectName, fix);
                     }}
                     onKeyDown={stopPropagation}
-                    title={actionDescription(t, fix.nodes.length > 0 ? "instance" : "object", fix.action)}
                     aria-label={t("objects.reason.fix", {action: actionLabel(fix.action), name: objectName})}
                     className="ml-1 inline-flex h-5 shrink-0 items-center gap-1 rounded-(--radius-control) border border-line bg-surface-raised px-1.5 text-ink hover:bg-surface-sunken focus-visible:outline-2 focus-visible:outline-(--focus-ring)"
                 >
@@ -1019,7 +1013,7 @@ const Objects = () => {
     // legend: none for a list of names only, with no marks.
     const [legendOpen, setLegendOpen] = useState(false);
     const legendButton = namesOnly ? null : (
-        <Button size="sm" icon={<InfoIcon className="h-4 w-4"/>} title={t("legend.toggle")} onClick={() => setLegendOpen(true)}>
+        <Button size="sm" icon={<InfoIcon className="h-4 w-4"/>} onClick={() => setLegendOpen(true)}>
             {t("legend.title")}
         </Button>
     );
@@ -1110,14 +1104,13 @@ const Objects = () => {
                                 {namesOnly && (
                                     <>
                                         <HeaderCell className="text-right">{t("objects.columns.keys")}</HeaderCell>
-                                        <HeaderCell className="text-right" title={t("objects.columns.keysSizeHint")}>{t("objects.columns.keysSize")}</HeaderCell>
+                                        <HeaderCell className="text-right">{t("objects.columns.keysSize")}</HeaderCell>
                                     </>
                                 )}
-                                {!namesOnly && propertyColumns.map(({key, labelKey, term}) => (
+                                {!namesOnly && propertyColumns.map(({key, labelKey}) => (
                                     <SortHeaderCell
                                         key={key}
-                                        // In the button of the sort, the term said on hover: no focus of its own there.
-                                        label={term ? <Term term={term} focusable={false}>{t(labelKey)}</Term> : t(labelKey)}
+                                        label={t(labelKey)}
                                         active={sortColumn === key}
                                         direction={sortDirection}
                                         onSort={() => sortBy(key)}

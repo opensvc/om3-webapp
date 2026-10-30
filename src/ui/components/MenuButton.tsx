@@ -58,10 +58,10 @@ const ITEM =
  * `prominent` draws a menu the page is used for, the actions: of the accent fill, as
  * every button changing a state (`Button`), brighter when hovered or open, its label
  * and chevron in a wide window, its `icon` alone in a narrow one, the label then its
- * accessible name and tooltip.
+ * accessible name.
  *
  * om3 additions: `icon` without `prominent` makes the trigger an icon alone, `label`
- * staying its accessible name and tooltip; with `solid`, of the accent fill as the
+ * staying its accessible name; with `solid`, of the accent fill as the
  * actions, its `text` (the label without) shown in a wide window, its icon alone in a
  * narrow one;
  * `compact` makes it small, for a table
@@ -340,7 +340,6 @@ export function MenuButton({
           setOpen((previous) => !previous);
         }}
         onKeyDown={onButtonKeyDown}
-        title={iconOnly || (prominent && icon !== undefined) ? label : undefined}
         aria-label={iconOnly || trigger !== undefined ? label : undefined}
         className={
           // The actions change states: the accent fill, as every such button (`Button`).

@@ -115,7 +115,6 @@ export function Dialog({
           <button
             type="button"
             onClick={onClose}
-            title={close}
             className="ml-auto flex h-7 w-7 items-center justify-center rounded-(--radius-control) border border-line text-ink-muted hover:text-ink"
           >
             <CloseIcon />

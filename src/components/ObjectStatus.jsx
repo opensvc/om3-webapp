@@ -307,7 +307,6 @@ const ObjectStatus = ({path, onOrchestrationLogs, linkNode, linkResource, openCe
                     variant="secondary"
                     icon={actionIcon(def)}
                     disabled={running}
-                    title={actionDescription(t, nodes.length > 0 ? "instance" : "object", action)}
                     onClick={() => ask(action, nodes.length > 0 ? onInstances(nodes) : {})}
                 >
                     {actionLabel(action)}

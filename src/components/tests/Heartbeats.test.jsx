@@ -812,7 +812,6 @@ describe("Heartbeats Component", () => {
         renderWithRouter(<Heartbeats/>);
         const cells = within(screen.getAllByRole("row")[1]).getAllByRole("cell");
         expect(cells[8]).toHaveTextContent("2h ago");
-        expect(within(cells[9]).getByText("2h ago")).toHaveAttribute("title", new Date(twoHoursAgo).toLocaleString(i18n.language));
     });
 
     test("peer without desc/changed_at/last_beating_at shows N/A", () => {

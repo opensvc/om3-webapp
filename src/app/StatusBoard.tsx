@@ -10,16 +10,7 @@ import type { ObjectState } from "../ui/components/StatusBadge";
 import { statusBadge } from "../ui/components/status";
 import { Cell, HeaderCell, HeaderRow, Row, Table } from "../ui/components/Table";
 import type { Board, BoardRow, Level, NoteFix, Span, Text, Tone } from "./statusboard";
-import { HoverNotes } from "./HoverNotes";
-import { Term } from "./Term";
 
-/** The rows of the board named by a word of the glossary, its key by the kind of row. */
-const ROW_TERMS: Partial<Record<string, string>> = {
-  monitor: "monitor",
-  expect: "expect",
-  provisioned: "provisioned",
-  orchestration: "orchestration",
-};
 
 /** The inks of the webapp for om's colors. */
 const TONES: Record<Tone, string> = {
@@ -40,12 +31,6 @@ const LEVELS: Record<Level, { ink: string; Icon: typeof InfoIcon }> = {
   warn: { ink: "text-state-warn", Icon: AlertTriangleIcon },
   info: { ink: "text-ink-muted", Icon: InfoIcon },
 };
-
-/*
- * The pieces of a cell carry no tooltip of their own: the card of the cell
- * (`HoverNotes`) says what they mean, with the notes, and two tooltips over each
- * other could not be read. Each keeps its meaning for the screen readers.
- */
 
 const GLYPH_INK: Record<ObjectState, string> = {
   up: "text-state-up",
@@ -226,18 +211,6 @@ export function SymbolLegend() {
       {group("flags", LEGEND_FLAGS, Flag)}
     </div>
   );
-}
-
-/** What the pieces of a cell mean, in words: its status, its marks, its flags. The card of the cell says them. */
-function useCellDetails() {
-  const { t } = useTranslation();
-  return (text: Text): string[] =>
-    text.flatMap((s) => {
-      if (s.status !== undefined) return [t("statusBoard.details.status", { status: s.status === "n/a" ? "/" : s.status })];
-      if (s.mark !== undefined) return [t(`statusBoard.marks.${markKey(s)}`)];
-      if (s.flag) return [flagMeaning(s, t)];
-      return [];
-    });
 }
 
 /** What a cell holds: the status glyph, the marks, the flags, the markers of the notes. */
@@ -437,7 +410,6 @@ function NodeBlocks({
   openCell?: (rid: string, node: string) => void;
 }) {
   const { t } = useTranslation();
-  const details = useCellDetails();
   const instanceRow = board.rows.find((r) => r.kind === "instance");
   const detailRows = board.rows.filter((r) => INSTANCE_DETAILS.has(r.kind));
   const resourceRows = board.rows.filter((r) => r.kind === "resource" || r.kind === "subset" || r.kind === "label");
@@ -468,9 +440,9 @@ function NodeBlocks({
               {n.frozen && <FrozenMark frozen />}
               {instanceRow && (
                 <span className="ml-auto">
-                  <HoverNotes notes={instanceRow.cellNotes[j] ?? []} details={details(instanceRow.cells[j] ?? [])}>
+                  <span className="inline-flex">
                     <Pieces text={instanceRow.cells[j] ?? []} kind="instance" />
-                  </HoverNotes>
+                  </span>
                 </span>
               )}
             </div>
@@ -479,12 +451,12 @@ function NodeBlocks({
                 {detailRows.map((r) => (
                   <Fragment key={r.kind}>
                     <dt className="text-ink-muted">
-                      {ROW_TERMS[r.kind] ? <Term term={ROW_TERMS[r.kind] as string}>{t(`statusBoard.rows.${r.kind}`)}</Term> : t(`statusBoard.rows.${r.kind}`)}
+                      {t(`statusBoard.rows.${r.kind}`)}
                     </dt>
                     <dd>
-                      <HoverNotes notes={r.cellNotes[j] ?? []} details={details(r.cells[j] ?? [])}>
+                      <span className="inline-flex">
                         <Pieces text={r.cells[j] ?? []} kind={r.kind} />
-                      </HoverNotes>
+                      </span>
                     </dd>
                   </Fragment>
                 ))}
@@ -518,12 +490,12 @@ function NodeBlocks({
                           </span>
                         )}
                         <span className="min-w-0 flex-1">
-                          <HoverNotes notes={r.rowNotes} showNodes>
+                          <span className="inline-flex">
                             <span className="font-medium">{linkResource ? linkResource(r.name) : r.name}</span>
-                          </HoverNotes>
+                          </span>
                           <SideText row={r} />
                         </span>
-                        <HoverNotes notes={r.cellNotes[j] ?? []} details={details(cell)}>
+                        <span className="inline-flex">
                           {openCell ? (
                             <button
                               type="button"
@@ -536,7 +508,7 @@ function NodeBlocks({
                           ) : (
                             <Pieces text={cell} kind="resource" />
                           )}
-                        </HoverNotes>
+                        </span>
                       </li>
                     );
                   })}
@@ -595,7 +567,6 @@ export function StatusBoard({
   noteFix?: (fix: NoteFix) => ReactNode;
 }) {
   const { t } = useTranslation();
-  const details = useCellDetails();
   const columns = board.nodes.length + 3;
   const field = (name: string) => board.fields.find((f) => f.name === name)?.value;
   const avail = field("avail")?.[0];
@@ -674,13 +645,13 @@ export function StatusBoard({
         <dl className="grid w-max grid-cols-[auto_auto] items-center gap-x-3 gap-y-1">
           {avail !== undefined && (
             <>
-              <dt className="text-ink-muted"><Term term="avail">{t("statusBoard.avail")}</Term></dt>
+              <dt className="text-ink-muted">{t("statusBoard.avail")}</dt>
               <dd><SummaryStatus status={avail.status} /></dd>
             </>
           )}
           {overall !== undefined && (
             <>
-              <dt className="text-ink-muted"><Term term="overall">{t("statusBoard.overall")}</Term></dt>
+              <dt className="text-ink-muted">{t("statusBoard.overall")}</dt>
               <dd><SummaryStatus status={overall.status} /></dd>
             </>
           )}
@@ -793,9 +764,6 @@ export function StatusBoard({
                   : r.kind === "instance"
                     ? t("statusBoard.rows.state")
                     : t(`statusBoard.rows.${r.kind}`);
-            // A row named by a word of OpenSVC: its definition on demand.
-            const rowTerm = ROW_TERMS[r.kind];
-            const shownName = rowTerm ? <Term term={rowTerm}>{name}</Term> : name;
             const pickRow = selection !== undefined && r.kind === "resource";
             const nodesOfRow = pickRow ? rowNodes(board, r) : [];
             const rowState = rowSelectState(r);
@@ -826,11 +794,11 @@ export function StatusBoard({
                         onToggle={() => selection.toggleRow(r.name)}
                       />
                     )}
-                    <HoverNotes notes={r.rowNotes} showNodes fill>
+                    <span className="flex w-full">
                       <span className="flex w-full items-center gap-1">
-                        {r.kind === "resource" && linkResource ? linkResource(r.name) : shownName}
+                        {r.kind === "resource" && linkResource ? linkResource(r.name) : name}
                       </span>
-                    </HoverNotes>
+                    </span>
                   </span>
                   {/* No room for their columns, the type and the description under the name. */}
                   {!layout.sideColumns && <SideText row={r} className="mt-0.5 max-w-64 whitespace-normal" />}
@@ -857,7 +825,7 @@ export function StatusBoard({
                       key={j}
                       className={cn(j === 0 && NODES_START, pickCell && "group", look.className)}
                     >
-                      <HoverNotes notes={r.cellNotes[j] ?? []} details={details(c)} fill>
+                      <span className="flex w-full">
                         <span className="flex w-full items-center gap-1">
                           {pickCell ? (
                             <SelectBox
@@ -885,7 +853,7 @@ export function StatusBoard({
                             <Pieces text={c} kind={r.kind} />
                           )}
                         </span>
-                      </HoverNotes>
+                      </span>
                     </Cell>
                   );
                 })}
@@ -914,7 +882,7 @@ export function StatusBoard({
               const { ink, Icon } = LEVELS[g.level];
               return (
                 <li key={i} className="flex gap-2 px-2">
-                  <span className={cn("mt-0.5 shrink-0", ink)} title={t(`statusBoard.levels.${g.level}`)}>
+                  <span className={cn("mt-0.5 shrink-0", ink)}>
                     <Icon className="h-4 w-4" />
                     <span className="sr-only">{t(`statusBoard.levels.${g.level}`)}</span>
                   </span>

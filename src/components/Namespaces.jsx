@@ -8,8 +8,6 @@ import {computeLimit, formatCpu, kindCounts, networkUsage, poolUsage} from "../a
 import {Table, HeaderRow, SortHeaderCell, Row, Cell, EmptyRow} from "../ui/components/Table";
 import {CountPill} from "../ui/components/CountPill";
 import {SegmentedBar} from "../ui/components/SegmentedBar";
-import {Figures} from "./Figures";
-import {HoverCard} from "../ui/components/HoverCard";
 import {formatBytes} from "../ui/lib/format";
 import {usePanelSearch} from "../app/panel-search";
 import {NamespaceDetailPanel} from "./RecordPanels";
@@ -79,8 +77,7 @@ function KindPill({namespace, kind, count, onShow}) {
 
 /**
  * What a namespace holds of the pools or networks, out of what it may hold: a bar
- * with a segment for each pool or network, alone in the cell. The figures, the
- * share, and each pool or network, in its hover card.
+ * with a segment for each pool or network, alone in the cell.
  */
 function UsageCell({usage, format, title, locale}) {
     const {t} = useTranslation();
@@ -89,31 +86,15 @@ function UsageCell({usage, format, title, locale}) {
         name: s.name, used: format(s.used), total: format(s.total), percent: percentOf(s.used, s.total, locale),
     }));
     return (
-        <HoverCard
-            focusable
-            card={
-                <Figures
-                    title={title}
-                    lines={[
-                        [t("namespaces.usage.share"), percentOf(usage.used, usage.total, locale)],
-                        [t("namespaces.usage.free"), format(usage.free)],
-                        [t("namespaces.usage.used"), format(usage.used)],
-                        [t("namespaces.usage.total"), format(usage.total)],
-                    ]}
-                    notes={parts}
-                />
-            }
-        >
-            {/* The bar alone, its own line high: the figures are in the card. */}
-            <span className="inline-flex h-5 items-center">
-                <SegmentedBar
-                    segments={usage.segments.map((s) => ({name: s.name, value: s.used}))}
-                    total={usage.total}
-                    label={t("namespaces.usage.barLabel", {title, parts: parts.join(", ")})}
-                    width="w-28"
-                />
-            </span>
-        </HoverCard>
+        <span className="inline-flex h-5 items-center">
+            <SegmentedBar
+                segments={usage.segments.map((s) => ({name: s.name, value: s.used}))}
+                total={usage.total}
+                label={t("namespaces.usage.barLabel", {title, parts: parts.join(", ")})}
+                width="w-28"
+            />
+        </span>
+
     );
 }
 
@@ -135,34 +116,24 @@ const NamespaceRow = React.memo(({namespace, counts, pools, networks, cpu, memor
             <Cell><UsageCell usage={pools} format={(n) => size(n, locale)} title={t("namespaces.columns.pools")} locale={locale}/></Cell>
             <Cell><UsageCell usage={networks} format={(n) => n.toLocaleString(locale)} title={t("namespaces.columns.nets")} locale={locale}/></Cell>
             <Cell>
-                <HoverCard card={<Figures title={t("namespaces.columns.cpu")} lines={[
-                    [t("namespaces.usage.used"), cpuUsed === undefined ? "–" : cpus(cpuUsed)],
-                    [t("namespaces.usage.cap"), cpu.cap === undefined ? t("namespaces.usage.noClaim") : cpus(cpu.cap)],
-                    ...(cpu.cap === undefined ? [] : [[t("namespaces.usage.free"), cpus(Math.max(0, cpu.cap - (cpuUsed ?? 0)))]]),
-                ]}/>} focusable>
-                    <span className="inline-flex items-center gap-2">
-                        <span className="whitespace-nowrap tabular-nums">
-                            {cpu.cap === undefined
-                                ? cpuUsed === undefined ? "–" : cpus(cpuUsed)
-                                : t("namespaces.usage.percentOf", {percent: cpuUsed === undefined ? "–" : cpus(cpuUsed), total: cpus(cpu.cap)})}
-                        </span>
+                <span className="inline-flex items-center gap-2">
+                    <span className="whitespace-nowrap tabular-nums">
+                        {cpu.cap === undefined
+                            ? cpuUsed === undefined ? "–" : cpus(cpuUsed)
+                            : t("namespaces.usage.percentOf", {percent: cpuUsed === undefined ? "–" : cpus(cpuUsed), total: cpus(cpu.cap)})}
                     </span>
-                </HoverCard>
+                </span>
+
             </Cell>
             <Cell>
-                <HoverCard card={<Figures title={t("namespaces.columns.memory")} lines={[
-                    [t("namespaces.usage.used"), memoryUsed === undefined ? "–" : size(memoryUsed, locale)],
-                    [t("namespaces.usage.cap"), memory.cap === undefined ? t("namespaces.usage.noClaim") : size(memory.cap, locale)],
-                    ...(memory.cap === undefined ? [] : [[t("namespaces.usage.free"), size(Math.max(0, memory.cap - (memoryUsed ?? 0)), locale)]]),
-                ]}/>} focusable>
-                    <span className="inline-flex items-center gap-2">
-                        <span className="whitespace-nowrap tabular-nums">
-                            {memory.cap === undefined
-                                ? t("namespaces.memory.used", {used: memoryUsed === undefined ? "–" : size(memoryUsed, locale)})
-                                : t("namespaces.usage.percentOf", {percent: memoryUsed === undefined ? "–" : percentOf(memoryUsed, memory.cap, locale), total: size(memory.cap, locale)})}
-                        </span>
+                <span className="inline-flex items-center gap-2">
+                    <span className="whitespace-nowrap tabular-nums">
+                        {memory.cap === undefined
+                            ? t("namespaces.memory.used", {used: memoryUsed === undefined ? "–" : size(memoryUsed, locale)})
+                            : t("namespaces.usage.percentOf", {percent: memoryUsed === undefined ? "–" : percentOf(memoryUsed, memory.cap, locale), total: size(memory.cap, locale)})}
                     </span>
-                </HoverCard>
+                </span>
+
             </Cell>
         </Row>
     );

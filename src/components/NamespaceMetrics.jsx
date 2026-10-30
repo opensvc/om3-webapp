@@ -130,7 +130,7 @@ const NamespaceMetrics = ({namespace}) => {
                         {sortedRows.length > 0 ? sortedRows.map((row) => (
                             <Row key={row.path}>
                                 <Cell className="whitespace-nowrap"><CrossLink kind="object" id={row.path}>{row.path}</CrossLink></Cell>
-                                <Cell numeric title={row.instances.map((i) => i.node).join(", ")}>{row.instances.length}</Cell>
+                                <Cell numeric>{row.instances.length}</Cell>
                                 <Cell numeric>{cpuText(row.cpu)}</Cell>
                                 <Cell numeric>{formatBytes(row.memory)}</Cell>
                                 <Cell numeric>{formatBytes(row.limit)}</Cell>

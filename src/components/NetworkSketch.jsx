@@ -36,7 +36,7 @@ export function NetworkSketch({network, section, nodes, addresses}) {
             title={`${network.name} · ${network.type}`}
             caption={t("networks.sketch.label", {name: network.name, count: nodes.length})}
             computed={computed}
-            route={{label: routeLabel, title: t("networks.sketch.routed")}}
+            route={{label: routeLabel}}
             texts={{
                 count: (count) => t("networks.sketch.addresses", {count}),
                 shared: (count) => t("networks.sketch.sharedOn", {count}),

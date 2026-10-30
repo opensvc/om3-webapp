@@ -3292,7 +3292,7 @@
   },
   "glossary": {
     "title": "Glossaire",
-    "intro": "Les mots d'OpenSVC utilisés dans cette webapp, dits simplement. Un libellé souligné en pointillés donne sa définition au survol ou au focus.",
+    "intro": "Les mots d'OpenSVC utilisés dans cette webapp, dits simplement.",
     "search": "Chercher dans le glossaire",
     "noMatch": "Aucun terme ne correspond.",
     "more": "Plus dans le Glossaire du menu.",

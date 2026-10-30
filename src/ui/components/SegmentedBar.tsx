@@ -21,8 +21,7 @@ export interface Segment {
 /**
  * A bar of `total`, a segment for each part of it used, the rest free: what a
  * namespace holds of each pool out of what it may hold. The segments are named for
- * screen readers (`label`), the tint telling them apart only: the cell holding the
- * bar shows them in its hover card. A total of zero draws an empty bar.
+ * screen readers (`label`), the tint telling them apart only. A total of zero draws an empty bar.
  */
 export function SegmentedBar({
   segments,

@@ -103,7 +103,7 @@ export function ConfigValidationResult({result, onClose}) {
                     const {ink, Icon} = LEVELS[a.level] ?? LEVELS.warning;
                     return (
                         <li key={i} data-alert={a.level} className="flex gap-2">
-                            <span className={cn("mt-0.5 shrink-0", ink)} title={t(`configValidate.levels.${a.level}`, {defaultValue: a.level})}>
+                            <span className={cn("mt-0.5 shrink-0", ink)} role="img" aria-label={t(`configValidate.levels.${a.level}`, {defaultValue: a.level})}>
                                 <Icon aria-hidden="true" className="h-3.5 w-3.5"/>
                                 <span className="sr-only">{t(`configValidate.levels.${a.level}`, {defaultValue: a.level})}</span>
                             </span>

@@ -322,7 +322,6 @@ describe('EventLogger Component', () => {
             await i18n.changeLanguage('fr');
             try {
                 renderWithTheme(<EventLogger/>);
-                expect(screen.getByRole('button', {name: /Événements/})).toHaveAttribute('title', 'Journal des événements');
             } finally {
                 await act(() => i18n.changeLanguage('en'));
             }
@@ -685,7 +684,6 @@ describe('EventLogger Component', () => {
             await waitFor(() => expect(screen.getAllByText(/EXTRA_TYPE/i).length).toBeGreaterThan(0));
             const chip = screen.getByRole('button', {name: /EXTRA_TYPE \(\d+\)/i});
             expect(chip).toHaveAttribute('data-page-event', 'false');
-            expect(chip).toHaveAttribute('title', 'Additional event');
             act(() => fireEvent.click(chip));
             expect(chip).toHaveAttribute('aria-pressed', 'true');
             expect(chip).toHaveClass('bg-ink');
@@ -701,7 +699,6 @@ describe('EventLogger Component', () => {
             openDrawer();
             const chip = await screen.findByRole('button', {name: /PAGE_TYPE \(1\)/i});
             expect(chip).toHaveAttribute('data-page-event', 'true');
-            expect(chip).toHaveAttribute('title', 'Event of this page');
             act(() => fireEvent.click(chip));
             expect(chip).toHaveClass('bg-accent');
         });
@@ -1496,7 +1493,6 @@ describe('EventLogger Component', () => {
         test('trigger is an outlined button with the feed icon and the label', () => {
             renderWithTheme(<EventLogger title="Node Events" buttonLabel="Nodes Events"/>);
             const trigger = screen.getByRole('button', {name: 'Nodes Events'});
-            expect(trigger).toHaveAttribute('title', 'Node Events');
             expect(trigger).toHaveClass('rounded-(--radius-control)', 'bg-surface-raised', 'border-line');
             expect(trigger.querySelector('svg')).toBeInTheDocument();
         });

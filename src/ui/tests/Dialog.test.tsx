@@ -130,7 +130,6 @@ describe("Dialog", () => {
     const onClose = vi.fn();
     render(<Dialog open title="T" closeLabel="Dismiss" onClose={onClose} />);
     const close = screen.getByRole("button", { name: "Dismiss" });
-    expect(close).toHaveAttribute("title", "Dismiss");
     await user.click(close);
     expect(onClose).toHaveBeenCalledTimes(1);
   });

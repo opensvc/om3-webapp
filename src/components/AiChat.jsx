@@ -830,7 +830,6 @@ const AiChat = ({status}) => {
                                     <Input
                                         type="search"
                                         aria-label={t("ai.conversations.search")}
-                                        title={t("ai.conversations.searchHint")}
                                         placeholder={t("ai.conversations.search")}
                                         className="pl-7"
                                         value={search}
@@ -923,7 +922,6 @@ const AiChat = ({status}) => {
                                 <Input
                                     autoFocus
                                     aria-label={t("ai.dialog.titleLabel")}
-                                    title={t("ai.transcript.renameHint")}
                                     className="h-7 max-w-sm min-w-0 flex-1 font-semibold"
                                     value={title}
                                     onFocus={(event) => event.target.select()}
@@ -1065,7 +1063,7 @@ const AiChat = ({status}) => {
                                     <ClockIcon width={14} height={14} className="shrink-0 text-ink-muted"/>
                                     <span className="text-ink-muted">{t("ai.queue.label")}</span>
                                     {/* The text of the user, as typed. */}
-                                    <span title={chat.queued.text} className="min-w-0 flex-1 truncate">
+                                    <span className="min-w-0 flex-1 truncate">
                                         {chat.queued.text}
                                     </span>
                                     {!queueing && !busy && (

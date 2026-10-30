@@ -1,0 +1,837 @@
+import {useCallback, useEffect, useRef, useState} from 'react';
+import {AGENT_TOOLS, AiAgentError} from '../services/ai-agent.js';
+
+const emptyState = (scope) => ({
+    scope,
+    conversations: [],
+    conversation: null,
+    messages: [],
+    resumed: false,
+    historyReady: true,
+    historyCursor: '',
+    // The thread was given without its oldest turns, which selecting the
+    // conversation again reads.
+    partial: false,
+    pending: '',
+    error: '',
+    notice: '',
+    // The tool call the current conversation waits on, as the agent sent it.
+    confirmation: null,
+    // The feedback of the user per turn ID: {feedback, pending, error}.
+    ratings: {},
+});
+const errorMessage = (error) =>
+    error instanceof AiAgentError ? error.message : 'The AI request failed. It was not retried.';
+
+// An answer of the agent: one message of the webapp per turn, holding the
+// AG-UI messages of the turn (messageIds), which tell the agent the webapp is
+// in phase, and the text message last streamed into it (textId).
+// steps are the calls of its tools; runs, the runs of its turn, their start
+// and end on the clock of the agent; liveSince, the time on the clock of the
+// page the running one started at, for its live timer.
+const assistantMessage = (id, fields = {}) => ({
+    id,
+    role: 'assistant',
+    text: '',
+    steps: [],
+    runs: [],
+    liveSince: null,
+    status: 'running',
+    usage: null,
+    messageIds: [],
+    textId: '',
+    ...fields,
+});
+
+/**
+ * A step of an answer: one call of a tool, the form the agent will also serve
+ * with the history. startedAt and endedAt are milliseconds of the clock of
+ * the agent; status is running, pending (waiting for a decision), completed,
+ * failed (refused by the tool), rejected (by the user) or interrupted;
+ * result_excerpt is the start of its result, refusal the text of a refusal.
+ */
+export const newStep = (id, tool, fields = {}) => ({
+    id,
+    tool,
+    arguments: null,
+    startedAt: null,
+    endedAt: null,
+    status: 'running',
+    result_excerpt: '',
+    result_truncated: false,
+    refusal: '',
+    ...fields,
+});
+
+// The status a result gives its step: isError, which the agent gives with
+// every result; a result cut by the agent or by the compaction of the history
+// succeeded. Without isError, from a snapshot of results stored before it, or
+// an older agent, a result of an MCP tool without structured content is a
+// refusal, the tools of the agent giving none when they succeed.
+const resultStatus = (tool, result) => {
+    if (result.rejected) return 'rejected';
+    if (result.isError === true) return 'failed';
+    if (result.isError === false || result.omitted || result.structured) return 'completed';
+    return AGENT_TOOLS.has(tool) ? 'completed' : 'failed';
+};
+const historyMessages = (messages) =>
+    mergeTurns(
+        messages.map(({feedback, history, ...message}) =>
+            message.role === 'assistant'
+                ? assistantMessage(message.id, {
+                      ...message,
+                      status: 'completed',
+                      messageIds: [message.id],
+                      textId: message.id,
+                      // The steps of the turn, as the stream gave them: the call a
+                      // user edited shows the arguments it ran with.
+                      steps: (history?.steps || []).map(({id, tool, editedArgs, arguments: args, ...fields}) =>
+                          newStep(id, tool, {...fields, arguments: editedArgs ?? args, ...(editedArgs ? {editedArgs} : {})})
+                      ),
+                      stepsOmitted: history?.stepsOmitted || 0,
+                      runs: history?.runs || [],
+                      usage: history?.usage || null,
+                  })
+                : {...message, status: 'completed', steps: [], usage: null}
+        )
+    );
+
+// One message of the webapp per turn, as the stream shows it: the assistant
+// messages of a turn the history gives one by one join, their texts as
+// paragraphs, their AG-UI IDs all held, the steps, runs, tokens and feedback
+// of the last one.
+const mergeTurns = (messages) => {
+    const merged = [];
+    for (const message of messages) {
+        const last = merged.at(-1);
+        if (message.role === 'assistant' && last?.role === 'assistant' && last.turn_id && last.turn_id === message.turn_id) {
+            merged[merged.length - 1] = {
+                ...message,
+                text: [last.text, message.text].filter(Boolean).join('\n\n'),
+                messageIds: [...last.messageIds, ...message.messageIds],
+                steps: message.steps.length ? message.steps : last.steps,
+                stepsOmitted: message.stepsOmitted || last.stepsOmitted || 0,
+                runs: message.runs.length ? message.runs : last.runs,
+                usage: message.usage ?? last.usage,
+            };
+            continue;
+        }
+        merged.push(message);
+    }
+    return merged;
+};
+// The feedback the agent returned with the messages, per turn, without
+// replacing what the user changed since.
+const historyRatings = (messages, ratings = {}) => {
+    const result = {...ratings};
+    for (const message of messages)
+        if (message.feedback && !result[message.turn_id])
+            result[message.turn_id] = {feedback: message.feedback, pending: false, error: ''};
+    return result;
+};
+// The messages the webapp holds, by their AG-UI IDs, for the agent to tell
+// whether it is in phase.
+const heldMessages = (messages) =>
+    messages.flatMap((message) =>
+        message.role === 'user'
+            ? [{id: message.id, role: 'user'}]
+            : (message.messageIds || []).map((id) => ({id, role: 'assistant'}))
+    );
+// The turn a message of the agent belongs to: it goes by <turn ID>:<sequence>.
+const turnOf = (id) => /^([A-Za-z0-9_.~-]{1,128}):[1-9]\d{0,18}$/.exec(id)?.[1] || '';
+
+// Name the message after an AG-UI message of its turn.
+const holding = (message, id) =>
+    !id || message.messageIds.includes(id)
+        ? message
+        : {...message, messageIds: [...message.messageIds, id], turn_id: message.turn_id || turnOf(id) || undefined};
+
+// Apply one event of a run to the answer it streams. resumed is the call a
+// resumed run gives the result of first: its name, when the answer does not
+// hold it, and the arguments the user edited it with.
+const applyRunEvent = (message, event, resumed) => {
+    switch (event.type) {
+        case 'TEXT_MESSAGE_START':
+            return holding(message, event.messageId);
+        case 'TEXT_MESSAGE_CONTENT': {
+            // The answers of the model in a turn read as paragraphs of one message.
+            const separate = message.text && message.textId !== event.messageId;
+            return {...message, text: message.text + (separate ? '\n\n' : '') + event.delta, textId: event.messageId};
+        }
+        case 'RUN_STARTED':
+            return {...message, runs: [...message.runs, {startedAt: event.at ?? null, endedAt: null}], liveSince: Date.now()};
+        case 'TOOL_CALL_START': {
+            const next = holding(message, event.parentMessageId);
+            return {...next, steps: [...next.steps, newStep(event.toolCallId, event.toolCallName, {startedAt: event.at ?? null})]};
+        }
+        case 'TOOL_CALL_END':
+            return {
+                ...message,
+                steps: message.steps.map((step) => (step.id === event.toolCallId ? {...step, arguments: event.arguments} : step)),
+            };
+        case 'TOOL_CALL_RESULT': {
+            const runStart = message.runs.at(-1)?.startedAt ?? null;
+            // The stream gave the call as the model proposed it: it ran with
+            // the arguments the user edited.
+            const edited = resumed?.editedArgs;
+            const finish = (step) => {
+                const status = resultStatus(step.tool, event);
+                return {
+                    ...step,
+                    status,
+                    // A call the user confirmed runs in the run that resumes it.
+                    startedAt: step.status === 'pending' ? (runStart ?? step.startedAt) : step.startedAt,
+                    // A call the user rejected did not run: it has no end.
+                    endedAt: status === 'rejected' ? null : (event.at ?? step.endedAt),
+                    result_excerpt: event.excerpt ?? '',
+                    result_truncated: Boolean(event.truncated),
+                    refusal: status === 'failed' ? event.refusal || '' : '',
+                    ...(edited ? {arguments: edited, editedArgs: edited} : {}),
+                };
+            };
+            if (message.steps.some((step) => step.id === event.toolCallId))
+                return {...message, steps: message.steps.map((step) => (step.id === event.toolCallId ? finish(step) : step))};
+            return resumed?.name
+                ? {...message, steps: [...message.steps, finish(newStep(event.toolCallId, resumed.name, {startedAt: runStart, status: 'pending'}))]}
+                : message;
+        }
+        default:
+            return message;
+    }
+};
+
+// End the answer with the result of its run: a completed turn, named for its
+// feedback, or a call waiting for a decision. A turn resumed after a
+// confirmation counts the tokens of all its runs.
+const finishRun = (message, result) => {
+    const usage =
+        result.tokens === null ? message.usage : {total_tokens: (message.usage?.total_tokens || 0) + result.tokens};
+    // The run ends on the clock of the agent; the live timer stops.
+    const runs = message.runs.length
+        ? [...message.runs.slice(0, -1), {startedAt: message.runs.at(-1).startedAt ?? result.startedAt ?? null, endedAt: result.endedAt ?? null}]
+        : message.runs;
+    // The call a run ends on waits for the decision of the user.
+    return result.outcome === 'interrupt'
+        ? {
+              ...message,
+              status: 'awaiting_confirmation',
+              usage,
+              runs,
+              liveSince: null,
+              turn_id: message.turn_id || result.turnId,
+              steps: message.steps.map((step) => (step.status === 'running' ? {...step, status: 'pending'} : step)),
+          }
+        : {...message, status: 'completed', usage, runs, liveSince: null, turn_id: result.turnId || message.turn_id};
+};
+
+// The thread of a snapshot, as the webapp shows it: the prompts, and one
+// answer per turn with its texts and the calls of its tools.
+const snapshotThread = (messages) => {
+    const thread = [];
+    for (const message of messages) {
+        if (message.role === 'user') {
+            thread.push({id: message.id, role: 'user', text: message.content, status: 'completed', steps: [], usage: null});
+            continue;
+        }
+        if (message.role === 'tool') {
+            const index = thread.findLastIndex(
+                (item) => item.role === 'assistant' && item.steps.some((step) => step.id === message.toolCallId)
+            );
+            if (index >= 0)
+                thread[index] = applyRunEvent(thread[index], {type: 'TOOL_CALL_RESULT', ...message});
+            continue;
+        }
+        const turnId = turnOf(message.id);
+        const last = thread[thread.length - 1];
+        const answer =
+            last?.role === 'assistant' && turnId && last.turn_id === turnId
+                ? last
+                : assistantMessage(message.id, {status: 'completed', ...(turnId ? {turn_id: turnId} : {})});
+        if (answer !== last) thread.push(answer);
+        let next = holding(answer, message.id);
+        if (message.content)
+            next = applyRunEvent(next, {type: 'TEXT_MESSAGE_CONTENT', messageId: message.id, delta: message.content});
+        // A call without its result is the one the turn waits on.
+        next = {
+            ...next,
+            steps: [...next.steps, ...message.toolCalls.map((call) => newStep(call.id, call.name, {arguments: call.arguments, status: 'pending'}))],
+        };
+        thread[thread.length - 1] = next;
+    }
+    return thread;
+};
+
+// Show the thread a snapshot gives a webapp out of phase, such as after
+// another tab ran turns: it replaces the messages, the answer the run streams
+// following it, or going on with the answer so far of the turn it resumes.
+// The ratings are kept by turn.
+const applySnapshot = (previous, snapshot, answerId) => {
+    const thread = snapshotThread(snapshot.messages);
+    const running = previous.messages.find((message) => message.id === answerId);
+    const last = thread[thread.length - 1];
+    const messages =
+        running && running.turn_id && last?.role === 'assistant' && last.turn_id === running.turn_id
+            ? [...thread.slice(0, -1), {...last, id: running.id, status: running.status, usage: running.usage}]
+            : [...thread, ...(running ? [running] : [])];
+    return {
+        ...previous,
+        messages,
+        historyCursor: '',
+        partial: snapshot.omittedTurns > 0,
+        notice:
+            snapshot.omittedTurns > 0
+                ? 'Earlier messages of this conversation are not shown: select it again to read them.'
+                : previous.notice,
+    };
+};
+
+// Only metadata is loaded automatically. Creation and turns require explicit user actions.
+// The bound of a prompt, as the agent takes it.
+const MAX_QUEUED_BYTES = 32 * 1024;
+
+const useAiChat = ({client, ready, scope}) => {
+    const [state, setState] = useState(() => emptyState(scope));
+    // The queued message, {conversationId, text}, and its copy read after an
+    // await; release, the conversation whose run just ended normally.
+    const [queuedState, setQueuedState] = useState(null);
+    const queuedRef = useRef(null);
+    const setQueued = useCallback((value) => {
+        queuedRef.current = value;
+        setQueuedState(value);
+    }, []);
+    const [release, setRelease] = useState(null);
+    const epoch = useRef(0);
+    const active = useRef(null);
+    const nextId = useRef(0);
+    // Feedback requests run beside turns and are canceled with the scope.
+    const feedbackRequests = useRef(new Set());
+
+    const perform = useCallback(
+        async (kind, action) => {
+            if (!ready || !client || active.current) return undefined;
+            const operation = {controller: new AbortController(), epoch: epoch.current};
+            active.current = operation;
+            const current = () => operation.epoch === epoch.current && active.current === operation;
+            const update = (change) => {
+                if (current() && !operation.controller.signal.aborted)
+                    setState((previous) =>
+                        previous.scope === scope ? change(previous) : previous
+                    );
+            };
+            setState((previous) => ({
+                ...(previous.scope === scope ? previous : emptyState(scope)),
+                pending: kind,
+                error: '',
+                notice: '',
+            }));
+            try {
+                const result = await action({signal: operation.controller.signal, update});
+                return current() && !operation.controller.signal.aborted ? result : undefined;
+            } catch (error) {
+                if (current()) {
+                    const stopped =
+                        operation.controller.signal.aborted || error?.name === 'AbortError';
+                    setState((previous) => ({
+                        ...previous,
+                        error: stopped ? '' : errorMessage(error),
+                        notice: stopped
+                            ? 'Stopped. The turn was not retried. Actions already performed are not undone.'
+                            : '',
+                        messages: previous.messages.map((message) =>
+                            message.status !== 'running'
+                                ? message
+                                : {
+                                      ...message,
+                                      status: stopped ? 'stopped' : 'failed',
+                                      liveSince: null,
+                                      steps: message.steps.map((step) =>
+                                          ['running', 'pending'].includes(step.status)
+                                              ? {...step, status: 'interrupted'}
+                                              : step
+                                      ),
+                                  }
+                        ),
+                    }));
+                }
+                return undefined;
+            } finally {
+                if (current()) {
+                    active.current = null;
+                    setState((previous) => ({...previous, pending: ''}));
+                }
+            }
+        },
+        [client, ready, scope]
+    );
+
+    const refreshConversations = useCallback(
+        () =>
+            perform('loading', async ({signal, update}) => {
+                const conversations = await client.listConversations({signal});
+                update((previous) => ({
+                    ...previous,
+                    conversations,
+                    conversation:
+                        conversations.find((item) => item.id === previous.conversation?.id) ||
+                        previous.conversation,
+                }));
+            }),
+        [client, perform]
+    );
+
+    useEffect(() => {
+        epoch.current++;
+        setState(emptyState(scope));
+        // Another identity or cluster: the queue is lost, as it is kept in memory only.
+        setQueued(null);
+        setRelease(null);
+        if (ready) void refreshConversations();
+        return () => {
+            epoch.current++;
+            active.current?.controller.abort();
+            active.current = null;
+            for (const controller of feedbackRequests.current) controller.abort();
+            feedbackRequests.current.clear();
+        };
+    }, [ready, scope, refreshConversations]);
+
+    const createConversation = () =>
+        perform('creating', async ({signal, update}) => {
+            const conversation = await client.createConversation({signal});
+            update((previous) => ({
+                ...previous,
+                conversation,
+                conversations: [conversation, ...previous.conversations],
+                messages: [],
+                resumed: false,
+                historyReady: true,
+                historyCursor: '',
+                partial: false,
+                confirmation: null,
+                ratings: {},
+            }));
+            return conversation;
+        });
+
+    const resumeConversation = (id) => {
+        if (state.scope === scope && state.conversation?.id === id && !state.partial) return;
+        return perform('resuming', async ({signal, update}) => {
+            update((previous) => ({
+                ...previous,
+                conversation: null,
+                messages: [],
+                resumed: false,
+                historyReady: false,
+                historyCursor: '',
+                partial: false,
+                confirmation: null,
+                ratings: {},
+            }));
+            const {conversation, confirmation} = await client.getConversationState(id, {signal});
+            if (signal.aborted) return;
+            const page = await client.getMessages(id, {signal});
+            update((previous) => ({
+                ...previous,
+                conversation,
+                messages: historyMessages(page.messages),
+                ratings: historyRatings(page.messages),
+                resumed: true,
+                historyReady: true,
+                historyCursor: page.next_cursor,
+                // A confirmation left waiting is shown again after a reload.
+                confirmation: confirmation ? {...confirmation, conversationId: conversation.id, assistantId: null} : null,
+            }));
+            return conversation;
+        });
+    };
+
+    const loadOlderMessages = () => {
+        if (
+            state.scope !== scope ||
+            !state.conversation ||
+            !state.historyReady ||
+            !state.historyCursor
+        )
+            return;
+        return perform('history', async ({signal, update}) => {
+            const page = await client.getMessages(state.conversation.id, {
+                before: state.historyCursor,
+                signal,
+            });
+            update((previous) => {
+                // Every AG-UI ID held: an answer merged goes by its last one.
+                const ids = new Set(heldMessages(previous.messages).map((message) => message.id));
+                return {
+                    ...previous,
+                    // A turn the pages cut in two joins again.
+                    messages: mergeTurns([
+                        ...historyMessages(page.messages.filter((message) => !ids.has(message.id))),
+                        ...previous.messages,
+                    ]),
+                    historyCursor: page.next_cursor,
+                    ratings: historyRatings(page.messages, previous.ratings),
+                };
+            });
+            return true;
+        });
+    };
+
+    const renameConversation = (title) => {
+        if (state.scope !== scope || !state.conversation) return;
+        return perform('renaming', async ({signal, update}) => {
+            const conversation = await client.renameConversation(state.conversation.id, title, {
+                signal,
+            });
+            update((previous) => ({
+                ...previous,
+                conversation,
+                conversations: previous.conversations.map((item) =>
+                    item.id === conversation.id ? conversation : item
+                ),
+            }));
+            return conversation;
+        });
+    };
+
+    // Delete a conversation, the current one by default; another leaves the
+    // conversation shown as it is.
+    const deleteConversation = (id = state.conversation?.id) => {
+        if (state.scope !== scope || !id) return;
+        return perform('deleting', async ({signal, update}) => {
+            await client.deleteConversation(id, {signal});
+            // A message queued for it goes with it.
+            if (queuedRef.current?.conversationId === id) setQueued(null);
+            update((previous) => previous.conversation?.id !== id ? {
+                ...previous,
+                conversations: previous.conversations.filter((item) => item.id !== id),
+            } : ({
+                ...previous,
+                conversation: null,
+                messages: [],
+                resumed: false,
+                conversations: previous.conversations.filter((item) => item.id !== id),
+                historyReady: true,
+                historyCursor: '',
+                partial: false,
+                confirmation: null,
+                ratings: {},
+            }));
+            return true;
+        });
+    };
+
+    // Delete every conversation of the user, as the list gives them, page
+    // after page: the agent deletes one at a time. Those deleted leave the
+    // history as they go, so a failure midway shows what is left.
+    const deleteAllConversations = () => {
+        if (state.scope !== scope) return;
+        return perform('deleting', async ({signal, update}) => {
+            const deleted = new Set();
+            const forget = () =>
+                update((previous) => {
+                    const gone = previous.conversation && deleted.has(previous.conversation.id);
+                    return {
+                        ...previous,
+                        conversations: previous.conversations.filter((item) => !deleted.has(item.id)),
+                        ...(gone ? {
+                            conversation: null,
+                            messages: [],
+                            resumed: false,
+                            historyReady: true,
+                            historyCursor: '',
+                            partial: false,
+                            confirmation: null,
+                            ratings: {},
+                        } : {}),
+                    };
+                });
+            try {
+                // A bound on the pages: a list that does not shrink stops.
+                for (let page = 0; page < 100; page += 1) {
+                    const conversations = (await client.listConversations({signal})).filter((item) => !deleted.has(item.id));
+                    if (!conversations.length) break;
+                    for (const item of conversations) {
+                        await client.deleteConversation(item.id, {signal});
+                        deleted.add(item.id);
+                        if (queuedRef.current?.conversationId === item.id) setQueued(null);
+                    }
+                    forget();
+                }
+            } finally {
+                forget();
+            }
+            return deleted.size;
+        });
+    };
+
+    // Give, replace (feedback) or withdraw (null) the feedback of the user on
+    // the turn of an answer of the current conversation.
+    const rateTurn = async (turnId, feedback) => {
+        const conversationId = state.scope === scope ? state.conversation?.id : null;
+        if (!ready || !client || !conversationId || typeof turnId !== 'string' || state.ratings[turnId]?.pending) return false;
+        const requestEpoch = epoch.current;
+        const controller = new AbortController();
+        feedbackRequests.current.add(controller);
+        const setRating = (change) =>
+            setState((previous) =>
+                previous.scope === scope && previous.conversation?.id === conversationId && epoch.current === requestEpoch
+                    ? {...previous, ratings: {...previous.ratings, [turnId]: change(previous.ratings[turnId])}}
+                    : previous
+            );
+        setRating((rating) => ({feedback: rating?.feedback || null, pending: true, error: ''}));
+        try {
+            const stored = feedback
+                ? await client.setFeedback(conversationId, turnId, feedback, {signal: controller.signal})
+                : (await client.deleteFeedback(conversationId, turnId, {signal: controller.signal}), null);
+            setRating(() => ({feedback: stored, pending: false, error: ''}));
+            return true;
+        } catch (error) {
+            if (!controller.signal.aborted && error?.name !== 'AbortError')
+                setRating((rating) => ({feedback: rating?.feedback || null, pending: false, error: errorMessage(error)}));
+            return false;
+        } finally {
+            feedbackRequests.current.delete(controller);
+        }
+    };
+
+    // Stream the events of a run into the answer it belongs to; a snapshot
+    // replaces the thread first. resumed applies to the first result of a
+    // resumed run, the one of the confirmed call.
+    const runEvents = (answerId, update, resumed) => {
+        let pending = resumed;
+        return (event) => {
+            const call = event.type === 'TOOL_CALL_RESULT' ? pending : undefined;
+            if (call) pending = undefined;
+            update((previous) =>
+                event.type === 'MESSAGES_SNAPSHOT'
+                    ? applySnapshot(previous, event, answerId)
+                    : {
+                          ...previous,
+                          messages: previous.messages.map((message) =>
+                              message.id === answerId ? applyRunEvent(message, event, call) : message
+                          ),
+                      }
+            );
+        };
+    };
+
+    // End the answer with the result of its run, and show the call it waits
+    // on for a decision.
+    const finish = (result, conversationId, answerId, update) =>
+        update((previous) => ({
+            ...previous,
+            messages: previous.messages.map((message) =>
+                message.id === answerId ? finishRun(message, result) : message
+            ),
+            confirmation:
+                result.outcome === 'interrupt'
+                    ? {...result.confirmation, conversationId, assistantId: answerId}
+                    : previous.confirmation,
+        }));
+
+    // Answer the tool call the conversation waits on with a run that resumes
+    // it, streamed into the answer of its turn, or a new one after a reload.
+    // editedArgs, with an approval of an editable call, are the arguments the
+    // user edited, a full replacement of those of the call.
+    const decide = (approved, editedArgs) => {
+        const confirmation = state.scope === scope ? state.confirmation : null;
+        if (!confirmation || typeof approved !== 'boolean' || (editedArgs !== undefined && (!approved || !confirmation.editable))) return;
+        const held = heldMessages(state.messages);
+        // The conversation whose run ended normally, which releases the queue.
+        let ended = null;
+        const releaseAfter = (outcome) => {
+            if (outcome && ended) setRelease({conversationId: ended});
+            return outcome;
+        };
+        return perform('confirming', async ({signal, update}) => {
+            let answerId = confirmation.assistantId;
+            const exists = state.messages.some((message) => message.id === answerId);
+            if (!exists) answerId = `local:${++nextId.current}`;
+            update((previous) => ({
+                ...previous,
+                confirmation: null,
+                messages: exists
+                    ? previous.messages.map((message) =>
+                          message.id === answerId ? {...message, status: 'running'} : message
+                      )
+                    : [...previous.messages, assistantMessage(answerId, {turn_id: confirmation.turn_id})],
+            }));
+            let result;
+            try {
+                result = await client.run(
+                    confirmation.conversationId,
+                    {held, resume: {interruptId: confirmation.id, approved, ...(editedArgs ? {editedArgs} : {})}},
+                    {signal, onEvent: runEvents(answerId, update, {name: confirmation.tool.name, editedArgs})}
+                );
+            } catch (error) {
+                // The agent refused the edit: the action still waits, for the
+                // user to correct the form.
+                if (error?.code === 'invalid_edited_arguments')
+                    update((previous) => ({
+                        ...previous,
+                        confirmation,
+                        messages: exists
+                            ? previous.messages.map((message) =>
+                                  message.id === answerId ? {...message, status: 'awaiting_confirmation'} : message
+                              )
+                            : previous.messages.filter((message) => message.id !== answerId),
+                    }));
+                throw error;
+            }
+            finish(result, confirmation.conversationId, answerId, update);
+            if (result.outcome === 'success') ended = confirmation.conversationId;
+            return true;
+        }).then(releaseAfter);
+    };
+
+    const send = (prompt) => {
+        if (!state.historyReady || state.confirmation || typeof prompt !== 'string' || !prompt.trim()) return;
+        const current = state.scope === scope ? state.conversation : null;
+        // The conversation whose run ended normally, which releases the queue.
+        let ended = null;
+        const held = current ? heldMessages(state.messages) : [];
+        return perform('turn', async ({signal, update}) => {
+            // The prompt goes by the ID the webapp gives it, which the agent keeps.
+            const promptId = client.newId();
+            const answerId = `local:${++nextId.current}`;
+            // Keep the submitted prompt visible even if creating the conversation fails.
+            update((previous) => ({
+                ...previous,
+                messages: [
+                    ...previous.messages,
+                    {id: promptId, role: 'user', text: prompt},
+                    assistantMessage(answerId),
+                ],
+            }));
+            let conversation = current;
+            if (!conversation) {
+                conversation = await client.createConversation({signal});
+                update((previous) => ({
+                    ...previous,
+                    conversation,
+                    conversations: [conversation, ...previous.conversations],
+                    resumed: false,
+                }));
+            }
+            if (signal.aborted) return;
+            const result = await client.run(
+                conversation.id,
+                {prompt, promptId, held},
+                {signal, onEvent: runEvents(answerId, update)}
+            );
+            finish(result, conversation.id, answerId, update);
+            if (result.outcome === 'interrupt') return true;
+            ended = conversation.id;
+            // The agent titles a conversation after its first completed turn: read
+            // it back, so the list does not keep an untitled entry.
+            if (!conversation.title && !signal.aborted) {
+                try {
+                    const titled = await client.getConversation(conversation.id, {signal});
+                    update((previous) => ({
+                        ...previous,
+                        conversation:
+                            previous.conversation?.id === titled.id ? titled : previous.conversation,
+                        conversations: previous.conversations.map((item) =>
+                            item.id === titled.id ? titled : item
+                        ),
+                    }));
+                } catch {
+                    // The title is cosmetic: the turn itself succeeded.
+                }
+            }
+            return true;
+        }).then((outcome) => {
+            if (outcome && ended) setRelease({conversationId: ended});
+            return outcome;
+        });
+    };
+
+    // The message the user queued while a turn ran or a confirmation waited,
+    // in memory only: it goes once a run of its conversation ends normally,
+    // never after a stop, a failure or on a confirmation. One at most, the
+    // last one replacing it. Its text is the user's, sent as typed.
+    const queue = (text) => {
+        if (typeof text !== 'string' || !text.trim() || new TextEncoder().encode(text).length > MAX_QUEUED_BYTES) return false;
+        setQueued({conversationId: state.scope === scope ? state.conversation?.id ?? null : null, text});
+        return true;
+    };
+    const unqueue = () => setQueued(null);
+    // Take the queued text back, such as into the message box of the view
+    // the user goes to: it leaves the queue.
+    const takeQueued = () => {
+        const text = queuedRef.current?.text ?? null;
+        setQueued(null);
+        return text;
+    };
+
+    // Once the run that released it is over and rendered, send the queued
+    // message, from a state up to date, if it belongs to that conversation and
+    // nothing else waits. Should another operation start before this effect
+    // runs, the release waits for it, and the message goes once it is over.
+    useEffect(() => {
+        if (!release || state.pending || active.current) return;
+        setRelease(null);
+        const item = queuedRef.current;
+        const conversationId = state.scope === scope ? state.conversation?.id : null;
+        if (!item || state.confirmation || conversationId !== release.conversationId) return;
+        if (item.conversationId !== null && item.conversationId !== conversationId) return;
+        setQueued(null);
+        void send(item.text);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [release, state.pending]);
+
+    // Ask what the call waiting would do with the arguments the user edited:
+    // nothing runs, and the call waits again under a new confirmation, whose
+    // preview is of the edit. A refused edit leaves the confirmation as it was.
+    const previewAgain = (editedArgs) => {
+        const confirmation = state.scope === scope ? state.confirmation : null;
+        if (!confirmation?.editable || !editedArgs || typeof editedArgs !== 'object' || Array.isArray(editedArgs)) return;
+        const held = heldMessages(state.messages);
+        return perform('previewing', async ({signal, update}) => {
+            const result = await client.run(
+                confirmation.conversationId,
+                {held, resume: {interruptId: confirmation.id, preview: true, editedArgs, pending: {name: confirmation.tool.name, arguments: confirmation.arguments}}},
+                {signal, onEvent: () => {}}
+            );
+            if (result.outcome !== 'interrupt') return true;
+            update((previous) => ({
+                ...previous,
+                confirmation: {...result.confirmation, conversationId: confirmation.conversationId, assistantId: confirmation.assistantId},
+            }));
+            return true;
+        });
+    };
+
+    const stop = () => {
+        if (active.current) {
+            active.current.controller.abort();
+            setState((previous) => ({...previous, notice: 'Stopping…'}));
+        }
+    };
+
+    // Never render a transcript belonging to a previous session or target.
+    const visible = ready && state.scope === scope ? state : emptyState(scope);
+    return {
+        ...visible,
+        createConversation,
+        resumeConversation,
+        renameConversation,
+        deleteConversation,
+        deleteAllConversations,
+        refreshConversations,
+        loadOlderMessages,
+        send,
+        stop,
+        approve: (editedArgs) => decide(true, editedArgs),
+        queued: queuedState,
+        queue,
+        unqueue,
+        takeQueued,
+        previewAgain,
+        reject: () => decide(false),
+        rate: (turnId, feedback) => rateTurn(turnId, feedback),
+        unrate: (turnId) => rateTurn(turnId, null),
+    };
+};
+
+export default useAiChat;

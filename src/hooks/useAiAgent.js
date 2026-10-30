@@ -1,0 +1,32 @@
+import {useCallback, useEffect, useMemo, useRef} from 'react';
+import {useAuth} from '../context/AuthProvider.jsx';
+import {getAiAgentConfig} from '../config/ai-agent.js';
+import {createAiAgentClient} from '../services/ai-agent.js';
+
+// The caller supplies the cluster ID and the agent URL from useFetchDaemonStatus,
+// not a user entry. The agent routes by cluster, to its VIP: no node is sent.
+// It takes the OpenID tokens only: another session is not ready.
+const useAiAgent = ({clusterId, agentUrl} = {}) => {
+    const {accessToken, authChoice, user} = useAuth();
+    const config = useMemo(() => getAiAgentConfig(agentUrl), [agentUrl]);
+    const openid = authChoice === 'openid';
+    const ready = config.enabled && openid && Boolean(accessToken && clusterId);
+    const credentials = useRef();
+    credentials.current = ready ? {accessToken, clusterId} : null;
+    const getCredentials = useCallback(() => credentials.current, []);
+    const client = useMemo(
+        () => (config.enabled ? createAiAgentClient({baseUrl: config.url, getCredentials}) : null),
+        [config.url, config.enabled, getCredentials]
+    );
+
+    // Cancel on logout, identity/target change or unmount, but not on token renewal.
+    const hasToken = Boolean(accessToken);
+    useEffect(
+        () => () => client?.cancelAll(),
+        [client, authChoice, user, hasToken, clusterId]
+    );
+
+    return {enabled: config.enabled, openid, ready, configurationError: config.error, client};
+};
+
+export default useAiAgent;

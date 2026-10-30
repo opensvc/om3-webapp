@@ -25,7 +25,7 @@ vi.mock('../../app/record-history', async (importOriginal) => ({
     useRecordHistory: () => mockHistory,
 }));
 vi.mock('../NavBar', () => ({default: ({anchor}) => <div data-testid="navbar">NavBar{anchor}</div>}));
-vi.mock('../../hooks/useSidebarAlerts', () => ({default: () => ({})}));
+vi.mock('../../hooks/useSidebarAlerts', () => ({useSidebarState: () => ({}), useSidebarAlertsOf: () => ({})}));
 vi.mock('../ClusterView', () => ({default: () => <div data-testid="cluster">ClusterView</div>}));
 vi.mock('../NodesTable', () => ({default: () => <div data-testid="nodes">NodesTable</div>}));
 vi.mock('../Heartbeats', () => ({default: () => <div data-testid="heartbeats">Heartbeats</div>}));
@@ -47,6 +47,7 @@ vi.mock('../PeekPanel', () => ({PeekPanel: () => <div data-testid="peek-panel"/>
 vi.mock('../../app/PanelReopenKey', () => ({PanelReopenKey: () => <div data-testid="panel-reopen-key"/>}));
 vi.mock('../../app/ShortcutsHelp', () => ({ShortcutsHelp: () => <div data-testid="shortcuts-help"/>}));
 vi.mock('../WhoAmI', () => ({default: () => <div data-testid="whoami">WhoAmI</div>}));
+vi.mock('../AiChat', () => ({default: () => <div data-testid="ai-chat">AI Assistant</div>}));
 vi.mock('../SilentRenew.jsx', () => ({default: () => <div data-testid="silent-renew">SilentRenew</div>}));
 vi.mock('../AuthChoice.jsx', () => ({default: () => <div data-testid="auth-choice">AuthChoice</div>}));
 vi.mock('../OidcCallback', () => ({default: () => <div data-testid="auth-callback">OidcCallback</div>}));
@@ -1002,5 +1003,30 @@ describe('App Component', () => {
         } finally {
             mockHistory.entries = [];
         }
+    });
+
+    // --- AI assistant ---
+    // The page opens to a session whatever the cluster: it tells itself whether
+    // the cluster names an agent and the session is one the agent takes.
+    test('AI page is protected and requires an authenticated session', async () => {
+        renderApp(['/ai']);
+        expect(await screen.findByTestId('auth-choice')).toBeInTheDocument();
+        expect(screen.queryByTestId('ai-chat')).not.toBeInTheDocument();
+    });
+
+    test.each([
+        ['OpenID', setupOidcAuth],
+        ['Basic', setupBasicAuth],
+    ])('AI page opens to an existing %s session, with no build configuration', async (_name, setup) => {
+        setup();
+        renderApp(['/ai']);
+        expect(await screen.findByTestId('ai-chat')).toBeInTheDocument();
+    });
+
+    test('AI route rejects an expired Basic session', async () => {
+        setupBasicAuth(-3600);
+        renderApp(['/ai']);
+        expect(await screen.findByTestId('auth-choice')).toBeInTheDocument();
+        expect(screen.queryByTestId('ai-chat')).not.toBeInTheDocument();
     });
 });

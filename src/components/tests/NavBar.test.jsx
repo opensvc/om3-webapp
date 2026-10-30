@@ -90,6 +90,7 @@ function setupMocks(overrides = {}) {
         authChoice = 'local',
         authToken = 'test-token',
         clusterName = null,
+        agentUrl = '',
         loading = false,
         daemon = null,
         fetchNodes = mockFetchNodes,
@@ -107,6 +108,7 @@ function setupMocks(overrides = {}) {
     });
     mockUseFetchDaemonStatus.mockReturnValue({
         clusterName,
+        agentUrl,
         fetchNodes,
         loading,
         daemon,
@@ -358,5 +360,20 @@ describe('NavBar', () => {
         render(<MemoryRouter><NavBar showSidebarToggle/></MemoryRouter>);
         expect(screen.queryByRole('button', {name: /shortcuts/i})).not.toBeInTheDocument();
         expect(document.querySelector('[aria-keyshortcuts="?"]')).toBeNull();
+    });
+
+    // The cluster status names the agent of the cluster: the entry shows for it,
+    // to an OpenID session, the only one the agent takes.
+    test.each([
+        ['shows for a cluster with an agent, to an OpenID session', 'https://agent.example.com', 'openid', true],
+        ['is hidden for a cluster without agent', '', 'openid', false],
+        ['is hidden for a session not OpenID', 'https://agent.example.com', 'basic', false],
+        ['is hidden for an agent URL not HTTPS', 'http://agent.example.com', 'openid', false],
+    ])('the AI assistant entry of the top bar %s', (_name, agentUrl, authChoice, shown) => {
+        setupMocks({agentUrl, authChoice});
+        renderNavBar();
+        const link = screen.queryByRole('link', {name: 'Open the AI assistant'});
+        if (shown) expect(link).toHaveAttribute('href', '/ai');
+        else expect(link).not.toBeInTheDocument();
     });
 });

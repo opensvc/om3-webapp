@@ -20,7 +20,7 @@ export function StoppedMark({ stoppedAt, label }: { stoppedAt?: string | null; l
     ? t("ui.stateMarks.stoppedAt", { date: new Date(stoppedAt).toLocaleString(i18n.language) })
     : t("ui.stateMarks.stoppedTitle");
   return (
-    <span role="img" aria-label={label ?? t("ui.stateMarks.stopped")} title={title} className="inline-flex cursor-help text-ink-muted">
+    <span role="img" aria-label={label ?? t("ui.stateMarks.stopped")} title={title} className="inline-flex text-ink-muted">
       <PauseIcon className="h-3.5 w-3.5" />
     </span>
   );

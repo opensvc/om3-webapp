@@ -4,6 +4,7 @@ import {DIRECTION_OFFSET, meshLayout, meshLinks, meshNodes} from "../app/heartbe
 import {RelativeTime} from "../ui/components/RelativeTime";
 import {CARD as CARD_SURFACE} from "./HeartbeatSummary";
 import {RING_INK, StateRing} from "./StateRing";
+import {Dialog} from "../ui/components/Dialog";
 
 /** The tint of a line: the state of its links, in the oc3 state colours. */
 const STROKE = {up: "stroke-state-up", warn: "stroke-state-warn", down: "stroke-state-down", none: "stroke-line"};
@@ -57,7 +58,7 @@ export function Overall({links, hint}) {
                 <span className="text-ink-muted">{t("heartbeats.mesh.overall.operational")}</span>
                 <span className={`font-semibold ${RING_INK[state]}`}>{t(`heartbeats.mesh.overall.${state}`)}</span>
             </StateRing>
-            <p className="text-center text-ink-muted">{hint}</p>
+            {hint && <p className="text-center text-ink-muted">{hint}</p>}
         </div>
     );
 }
@@ -109,11 +110,17 @@ export function HeartbeatMesh({heartbeatStatus, onSelect, selected}) {
     };
 
     if (nodes.length === 0) return null;
-    const shown = hovered ?? pinned;
+    // The streams of what was clicked, in a dialog over the page; hovered, the drawing alone marks it.
+    const shown = pinned;
+    const close = () => {
+        if (pinned?.key) onSelect?.(null);
+        setPinned(null);
+    };
     const group = shown?.key ? layout.groups.find((g) => g.key === shown.key) : undefined;
     const nodeShown = shown?.node ? {name: shown.node, ...routinesOf(heartbeatStatus?.[shown.node])} : undefined;
     // The links the details list: those of the half, or all of the line.
     const listed = group ? (shown.side ? group[shown.side].links : group.links) : [];
+    // A half outlined: hovered, or kept.
     const bold = (g, side) => [hovered, pinned].some((s) => s?.key === g.key && (s.side === null || s.side === side));
     const marker = (state) => `${id.replace(/:/g, "")}-arrow-${state}`;
     const beating = (g) => g.links.filter((l) => l.state === "up").length;
@@ -164,6 +171,21 @@ export function HeartbeatMesh({heartbeatStatus, onSelect, selected}) {
                                 <path d="M 0 0 L 10 5 L 0 10 z" className={FILL[state]}/>
                             </marker>
                         ))}
+                        {/* The head of an outline: the arrow's shape, larger, sized in the units of the
+                            drawing (the arrow's head 14 of them wide, its tip 1.4 past the line), its tip
+                            a little further out, the arrow's head ringed by it. */}
+                        <marker
+                            id={marker("outline")}
+                            viewBox="0 0 10 10"
+                            refX="8"
+                            refY="5"
+                            markerWidth="20"
+                            markerHeight="20"
+                            markerUnits="userSpaceOnUse"
+                            orient="auto-start-reverse"
+                        >
+                            <path d="M 0 0 L 10 5 L 0 10 z" className="fill-accent"/>
+                        </marker>
                     </defs>
                     {layout.groups.map((g) => (
                         <g
@@ -188,6 +210,23 @@ export function HeartbeatMesh({heartbeatStatus, onSelect, selected}) {
                             role="button"
                             className="cursor-pointer outline-none"
                         >
+                            {/* The half hovered or kept outlined: a wide soft stroke under its arrow,
+                                its head too, the arrow itself as it is. */}
+                            {["tx", "rx"].filter((side) => bold(g, side)).map((side) => (
+                                // One shade for the band and its head, faded together: where they meet, no darker.
+                                <g key={`outline-${side}`} data-outline={side} className="opacity-35">
+                                    {/* The band, cut square at the base of the head, the head alone past it. */}
+                                    <path
+                                        d={g[side].outline}
+                                        fill="none"
+                                        strokeWidth={9}
+                                        strokeLinecap="butt"
+                                        className="stroke-accent"
+                                    />
+                                    {/* The head, at the very end of the line, as the arrow's: the line itself unseen. */}
+                                    <path d={g[side].path} fill="none" stroke="none" markerEnd={`url(#${marker("outline")})`}/>
+                                </g>
+                            ))}
                             {/* The tx of the sender, then the rx of the receiver, each its arrow. */}
                             {["tx", "rx"].map((side) => (
                                 <path
@@ -196,7 +235,7 @@ export function HeartbeatMesh({heartbeatStatus, onSelect, selected}) {
                                     data-state={g[side].state}
                                     d={g[side].path}
                                     fill="none"
-                                    strokeWidth={bold(g, side) ? 3.5 : 2}
+                                    strokeWidth={2}
                                     strokeDasharray={g[side].state === "none" ? "4 3" : undefined}
                                     markerEnd={`url(#${marker(g[side].state)})`}
                                     className={STROKE[g[side].state]}
@@ -216,8 +255,28 @@ export function HeartbeatMesh({heartbeatStatus, onSelect, selected}) {
                                     onMouseEnter={hover({key: g.key, side})}
                                     onMouseLeave={leave}
                                     onClick={() => pick(g, side)}
-                                />
+                                >
+                                    {/* What a click shows, said on hover. */}
+                                    <title>{t("heartbeats.mesh.clickHint", {count: g[side].links.length})}</title>
+                                </path>
                             ))}
+                        </g>
+                    ))}
+                    {/* The relays the heartbeats go through, in the centre the lines keep clear. */}
+                    {layout.relays.map((r) => (
+                        <g key={r.name} data-relay={r.name} data-state={r.state}>
+                            <title>{t("heartbeats.mesh.relayHint", {relay: r.name, hbs: r.hbs.join(", ")})}</title>
+                            <rect
+                                x={r.x - r.width / 2}
+                                y={r.y - r.height / 2}
+                                width={r.width}
+                                height={r.height}
+                                rx={r.height / 2}
+                                className={NODE_BOX[r.state]}
+                                strokeWidth={r.state === "up" ? 1.5 : 2}
+                                strokeDasharray="4 3"
+                            />
+                            <text x={r.x} y={r.y} dy="0.35em" textAnchor="middle" className="fill-ink-muted">{r.label}</text>
                         </g>
                     ))}
                     {nodes.map((name) => {
@@ -228,12 +287,31 @@ export function HeartbeatMesh({heartbeatStatus, onSelect, selected}) {
                                 key={name}
                                 data-node={name}
                                 data-state={routines.state}
-                                // Some routines stopped: which, in the details.
-                                onMouseEnter={routines.stopped.length > 0 ? hover({node: name}) : undefined}
-                                onMouseLeave={routines.stopped.length > 0 ? leave : undefined}
+                                // Some routines stopped: which, in a dialog when clicked.
+                                {...(routines.stopped.length > 0 ? {
+                                    role: "button",
+                                    tabIndex: 0,
+                                    "aria-label": t("heartbeats.mesh.nodeStopped", {node: name, count: routines.stopped.length}),
+                                    className: "cursor-pointer outline-none",
+                                    onMouseEnter: hover({node: name}),
+                                    onMouseLeave: leave,
+                                    onClick: (event) => {
+                                        event.stopPropagation();
+                                        setPinned({node: name});
+                                    },
+                                    onKeyDown: (event) => {
+                                        if (event.key !== "Enter" && event.key !== " ") return;
+                                        event.preventDefault();
+                                        setPinned({node: name});
+                                    },
+                                } : {})}
                             >
                                 {/* A pill as wide as the name: a node name can be long, a circle would not hold it. */}
-                                {routines.stopped.length === 0 && <title>{name}</title>}
+                                <title>
+                                    {routines.stopped.length === 0
+                                        ? name
+                                        : t("heartbeats.mesh.nodeClickHint", {node: name, count: routines.stopped.length})}
+                                </title>
                                 <rect
                                     x={p.x - p.width / 2}
                                     y={p.y - p.height / 2}
@@ -249,40 +327,48 @@ export function HeartbeatMesh({heartbeatStatus, onSelect, selected}) {
                     })}
                 </svg>
             </div>
-            {/* What the lines say, in the box under the drawing. */}
-            <p className="flex flex-wrap items-center gap-x-4 gap-y-1 px-2 pb-2 text-data text-ink-muted" data-legend="">
-                <span>{t("heartbeats.mesh.legend.direction")}</span>
-                {["up", "warn", "down"].map((state) => (
-                    <span key={state} className="inline-flex items-center gap-1.5" data-legend-state={state}>
-                        <svg aria-hidden="true" width="18" height="4" className="shrink-0">
-                            <line x1="0" y1="2" x2="18" y2="2" strokeWidth="2.5" className={STROKE[state]}/>
-                        </svg>
-                        {t(`heartbeats.mesh.legend.${state}`)}
-                    </span>
-                ))}
-            </p>
+            {/* What the lines say, in the box under the drawing; no line, nothing to say. */}
+            {layout.groups.length > 0 && (
+                <p className="flex flex-wrap items-center gap-x-4 gap-y-1 px-2 pb-2 text-data text-ink-muted" data-legend="">
+                    <span>{t("heartbeats.mesh.legend.direction")}</span>
+                    {["up", "warn", "down"].map((state) => (
+                        <span key={state} className="inline-flex items-center gap-1.5" data-legend-state={state}>
+                            <svg aria-hidden="true" width="18" height="4" className="shrink-0">
+                                <line x1="0" y1="2" x2="18" y2="2" strokeWidth="2.5" className={STROKE[state]}/>
+                            </svg>
+                            {t(`heartbeats.mesh.legend.${state}`)}
+                        </span>
+                    ))}
+                </p>
+            )}
             </div>
         </section>
-        {/* The streams of what is hovered, or else of what was clicked, a box of its own: a
-            card a link, the cards wrapping as the box is wide, the box as high as they make it. */}
-        <section aria-labelledby={`${id}-details`} className="min-w-0 space-y-2" data-details={group ? "line" : nodeShown ? "node" : ""}>
+        {/* All the streams at a glance, a box of its own, kept as it is whatever is hovered or clicked. */}
+        <section aria-labelledby={`${id}-details`} className="min-w-0 space-y-2" data-details="">
             <h2 id={`${id}-details`} className="font-semibold">{t("heartbeats.mesh.details")}</h2>
             <div className="rounded-(--radius-panel) border border-line bg-surface-raised p-2 text-data">
+                <Overall links={links}/>
+            </div>
+        </section>
+        {/* The streams of what was clicked: a card a link, or a card a routine stopped. */}
+        <Dialog
+            open={Boolean(group || nodeShown)}
+            onClose={close}
+            size="lg"
+            title={group
+                ? (shown.side
+                    ? (shown.side === "tx"
+                        ? t("heartbeats.mesh.half.tx", {node: group.from, peer: group.to})
+                        : t("heartbeats.mesh.half.rx", {node: group.to, peer: group.from}))
+                    : `${group.from} → ${group.to}`)
+                : nodeShown?.name ?? ""}
+        >
+            <div className="text-data" data-streams={group ? "line" : nodeShown ? "node" : ""}>
                 {group && (
                     <>
-                        <p className="mb-1.5 font-semibold">
-                            {/* A half, as its end sees it: the sender, outgoing to the receiver; the
-                                receiver, incoming from the sender. The whole line, from one to the other. */}
-                            {shown.side ? (
-                                <span data-card-side={shown.side}>
-                                    {shown.side === "tx"
-                                        ? t("heartbeats.mesh.half.tx", {node: group.from, peer: group.to})
-                                        : t("heartbeats.mesh.half.rx", {node: group.to, peer: group.from})}
-                                </span>
-                            ) : `${group.from} → ${group.to}`}
-                            <span className="ml-2 font-normal text-ink-muted">
-                                {t("heartbeats.mesh.beatingOf", {beating: listed.filter((l) => l.state === "up").length, count: listed.length})}
-                            </span>
+                        {/* The half or the line in the title; here how many of its links beat. */}
+                        <p className="mb-1.5 text-ink-muted" data-card-side={shown.side ?? undefined}>
+                            {t("heartbeats.mesh.beatingOf", {beating: listed.filter((l) => l.state === "up").length, count: listed.length})}
                         </p>
                         {listed.length === 0 && <p className="text-ink-muted">{t("heartbeats.mesh.noLink")}</p>}
                         {/* A card a link: its heartbeat, its side and node unless the title says
@@ -317,11 +403,8 @@ export function HeartbeatMesh({heartbeatStatus, onSelect, selected}) {
                 )}
                 {nodeShown && (
                     <>
-                        <p className="mb-1.5 font-semibold">
-                            {nodeShown.name}
-                            <span className="ml-2 font-normal text-ink-muted">
-                                {t("heartbeats.mesh.routinesStopped", {stopped: nodeShown.stopped.length, count: nodeShown.total})}
-                            </span>
+                        <p className="mb-1.5 text-ink-muted">
+                            {t("heartbeats.mesh.routinesStopped", {stopped: nodeShown.stopped.length, count: nodeShown.total})}
                         </p>
                         {/* A card a routine stopped: its stream, its type, its state. */}
                         <ul className={CARDS}>
@@ -337,10 +420,8 @@ export function HeartbeatMesh({heartbeatStatus, onSelect, selected}) {
                         </ul>
                     </>
                 )}
-                {/* Nothing hovered nor kept: all the streams, and how to see some. */}
-                {!group && !nodeShown && <Overall links={links} hint={t("heartbeats.mesh.detailsHint")}/>}
             </div>
-        </section>
+        </Dialog>
         </>
     );
 }

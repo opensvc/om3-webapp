@@ -24,6 +24,8 @@ import {BoltIcon, CloseIcon, PlusIcon} from "../ui/icons";
 import {EnrollNodeDialog} from "./EnrollNodeDialog";
 import {useGrants} from "../hooks/useGrants";
 import {NODE_LAYOUT_STEPS, commonVersion, nodeColumns, nodeLayout} from "../app/node-layout";
+import {rangeSelect, withShift} from "../app/range-select";
+
 
 const ZERO_DATE = "0001-01-01T00:00:00Z";
 
@@ -135,12 +137,16 @@ const NodesTable = () => {
 
     const closeSnackbar = () => setSnackbar((prev) => ({...prev, open: false}));
 
+    // A node ticked alone, or with Shift every one from the one ticked before, in the order shown.
+    const anchor = useRef(null);
     const handleSelectNode = (event, nodename) => {
-        if (event.target.checked) {
-            setSelectedNodes((prev) => [...prev, nodename]);
-        } else {
-            setSelectedNodes((prev) => prev.filter((node) => node !== nodename));
-        }
+        const checked = event.target.checked;
+        const shift = withShift(event);
+        setSelectedNodes((prev) => {
+            const next = rangeSelect(sortedNodes, prev, anchor.current, nodename, checked, shift);
+            anchor.current = next.anchor;
+            return next.selected;
+        });
     };
 
     const handleDialogConfirm = async (action) => {

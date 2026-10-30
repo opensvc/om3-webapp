@@ -162,11 +162,10 @@ export function MenuButton({
     }
     const rect = button.current?.getBoundingClientRect();
     if (rect === undefined) return;
-    const horizontal =
-      align === "end"
-        ? { right: document.documentElement.clientWidth - rect.right }
-        : { left: rect.left };
-    setPosition({ ...horizontal, ...verticalPlacement(rect, menu.current?.offsetHeight ?? 0) });
+    setPosition({
+      ...horizontalPlacement(rect, menu.current?.offsetWidth ?? 0, align, document.documentElement.clientWidth),
+      ...verticalPlacement(rect, menu.current?.offsetHeight ?? 0),
+    });
     function onMove(event: Event) {
       if (event.target instanceof Node && menu.current?.contains(event.target)) return;
       setOpen(false);
@@ -527,6 +526,27 @@ export function verticalPlacement(trigger: DOMRect, height: number): CSSProperti
   return below >= above
     ? { top: trigger.bottom + GAP, maxHeight: below, overflowY: "auto" }
     : { bottom: window.innerHeight - trigger.top + GAP, maxHeight: above, overflowY: "auto" };
+}
+
+/**
+ * Horizontal place of a menu of `width` opened from `trigger` in a window `room`
+ * wide: on the edge of the trigger `align` says, pushed back in when it would pass
+ * the other edge of the window (a trigger near the right edge, as an Actions button
+ * beside a rail), never past the left one.
+ */
+export function horizontalPlacement(
+  trigger: DOMRect,
+  width: number,
+  align: "start" | "end",
+  room: number,
+): CSSProperties {
+  if (align === "end") {
+    const right = room - trigger.right;
+    // Its left edge past the window: moved right, as far as the window lets it.
+    return { right: Math.max(WINDOW_MARGIN, Math.min(right, room - WINDOW_MARGIN - width)) };
+  }
+  // Its right edge past the window: moved left, its left edge kept in.
+  return { left: Math.max(WINDOW_MARGIN, Math.min(trigger.left, room - WINDOW_MARGIN - width)) };
 }
 
 /**

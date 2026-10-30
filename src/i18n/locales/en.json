@@ -563,7 +563,6 @@
       "routinesStopped_one": "{{stopped}} of {{count}} routine stopped",
       "routinesStopped_other": "{{stopped}} of {{count}} routines stopped",
       "details": "Streams",
-      "detailsHint": "Hover an arrow or a node for its details; click an arrow to keep them, the ground of the mesh to let them go.",
       "overall": {
         "operational": "streams operational",
         "up": "optimal",
@@ -574,7 +573,13 @@
         "up": "beating",
         "down": "failing",
         "stopped": "stopped"
-      }
+      },
+      "nodeStopped": "{{node}}: {{count}} routines stopped, open them",
+      "clickHint_one": "Click to see the stream",
+      "clickHint_other": "Click to see the {{count}} streams",
+      "nodeClickHint_one": "{{node}}: click to see the stopped routine",
+      "nodeClickHint_other": "{{node}}: click to see the {{count}} stopped routines",
+      "relayHint": "The relay {{relay}}: the heartbeats {{hbs}} go through it"
     },
     "actions": {
       "stop": "Stop",
@@ -683,34 +688,24 @@
       "trayLabel": "Configure"
     },
     "relays": {
-      "title": "Relays",
+      "title": "Relay",
       "refresh": "Refresh",
       "reading": "Reading the relays",
       "readError": "Could not read the relays: {{message}}",
-      "of": "{{section}} · timeout {{seconds}}s",
-      "unreached": "The relay could not be asked: {{message}}",
-      "slotsOf": "The nodes writing to {{relay}}",
-      "noSlot": "No node writes to this relay.",
-      "staleHint": "Its last write is older than the timeout of the heartbeat, {{seconds}}s.",
-      "served": "This node relays for",
-      "overall": {
-        "up": "every node writes",
-        "warn": "a node does not write",
-        "down": "not relaying"
-      },
-      "state": {
-        "up": "writing",
-        "stale": "stale",
-        "missing": "never wrote"
-      },
+      "served": "Slots held by {{node}}",
       "columns": {
         "state": "State",
         "addr": "Address",
         "written": "Last write",
         "cluster": "Cluster"
       },
-      "size_one": "Its message: {{count}} byte",
-      "size_other": "Its message: {{count}} bytes"
+      "notRelay": "This node is not a relay: no cluster writes its heartbeats to it. The usual case, a site having one relay cluster.",
+      "refused": "The relays are not shown to your grants.",
+      "servedStaleHint": "Not written for over {{seconds}}s, the default timeout of a heartbeat.",
+      "served_state": {
+        "active": "active",
+        "stale": "stale"
+      }
     }
   },
   "instance": {
@@ -1257,11 +1252,13 @@
         "stores": "stores",
         "cluster": "cluster",
         "glossary": "glossary",
-        "about": "About"
+        "about": "About",
+        "relay": "Relay"
       }
     },
     "sections": {
       "cluster": "Cluster",
+      "relay": "Relay",
       "objects": "Objects",
       "help": "Help"
     }
@@ -3113,6 +3110,12 @@
       },
       "cell": "{{node}} · {{metric}}: {{value}}, {{share}} % of the busiest node",
       "cellPending": "{{node}} · {{metric}}: waiting for a second reading"
+    },
+    "relay": {
+      "none": "Not a relay: the usual case.",
+      "unread": "Not shown to your grants.",
+      "active": "Active slots",
+      "stale": "Stale slots"
     }
   },
   "snapshots": {

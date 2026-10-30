@@ -2,6 +2,10 @@ import React, {useEffect, useMemo, useState} from "react";
 import {Link} from "react-router-dom";
 import {useTranslation} from "react-i18next";
 import {URL_CLUSTER_STATUS, URL_RESOURCES, URL_STORE} from "../config/apiPath.js";
+import {servedSlots, slotCounts} from "../app/heartbeat-relays";
+
+/** What the node answering holds as a relay: the slots of the clusters writing to it. */
+const URL_RELAY_STATUS = "/api/relay/status";
 import {clusterFacts} from "../app/cluster-facts";
 import {CopyButton} from "../ui/components/CopyButton";
 import {groupState, meshLinks} from "../app/heartbeat-mesh";
@@ -429,6 +433,8 @@ export default function ClusterView() {
     const {t, i18n} = useTranslation();
     const {objects, nodeStatus, heartbeatStatus, pools, networks, ready} = useMenuState();
     const stores = usePolled(URL_STORE);
+    const relay = usePolled(URL_RELAY_STATUS);
+    const relaySlots = slotCounts(servedSlots(relay.items ?? [], Date.now()));
     const clusterInfo = useClusterFacts();
     const resources = usePolled(URL_RESOURCES);
 
@@ -542,6 +548,28 @@ export default function ClusterView() {
                 {/* Its tree, as systemd-cgtop shows the cgroups: the usage tab of the cluster's panel. */}
                 <Card id="opensvc" icon="chart" title={t("clusterView.opensvc.title")} to={{search: "?peek=object:cluster&peektab=usage"}}>
                     <OpensvcUsage nodes={nodes.filter(([, s]) => s !== undefined).map(([node]) => node)}/>
+                </Card>
+
+                {/* The slots this node holds as a relay; not one, the usual case, said plainly. */}
+                <Card id="relay" icon="heartbeat" title={t("nav.sections.relay")} to="/relay">
+                    {relay.items === undefined ? (
+                        <p className="text-data text-ink-muted">{t("clusterView.reading")}</p>
+                    ) : relay.error ? (
+                        <p className="text-data text-ink-muted">{t("clusterView.relay.unread")}</p>
+                    ) : relaySlots.active + relaySlots.stale === 0 ? (
+                        <p className="text-data text-ink-muted">{t("clusterView.relay.none")}</p>
+                    ) : (
+                        <dl data-relay-slots="" className="grid grid-cols-2 gap-3">
+                            <div>
+                                <dt className="text-data text-ink-muted">{t("clusterView.relay.active")}</dt>
+                                <dd className="text-2xl font-semibold tabular-nums">{relaySlots.active}</dd>
+                            </div>
+                            <div>
+                                <dt className="text-data text-ink-muted">{t("clusterView.relay.stale")}</dt>
+                                <dd className={`text-2xl font-semibold tabular-nums ${relaySlots.stale > 0 ? "text-state-warn" : ""}`}>{relaySlots.stale}</dd>
+                            </div>
+                        </dl>
+                    )}
                 </Card>
 
                 <Card id="arbitrators" icon="cluster" title={t("clusterView.arbitrators.title")} count={arbitrators.length}>

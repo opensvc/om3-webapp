@@ -124,6 +124,8 @@ export interface Point {
  */
 export interface MeshHalf {
   path: string;
+  /** The same arc ending short of the head of its arrow: the band of its outline. */
+  outline: string;
   links: MeshLink[];
   state: GroupState | "none";
 }
@@ -157,11 +159,20 @@ export interface MeshNode extends Point {
   label: string;
 }
 
+/** A relay the heartbeats of the cluster go through, in the centre of the mesh. */
+export interface MeshRelay extends MeshNode {
+  name: string;
+  /** The heartbeats through it. */
+  hbs: string[];
+  state: GroupState;
+}
+
 export interface MeshLayout {
   width: number;
   height: number;
   nodes: Record<string, MeshNode>;
   groups: MeshGroup[];
+  relays: MeshRelay[];
 }
 
 /** The height of a node box, a pill holding its name on one line. */
@@ -176,16 +187,100 @@ const MIN_NODE_WIDTH = 64;
 export const MAX_LABEL = 28;
 /** The room between the two parallel lines of a pair of nodes, one each way. */
 export const DIRECTION_OFFSET = 12;
+/** The gap between the two halves of a line, along it: the lines kept off the centre, a short one. */
+export const SMALL_GAP = 14;
+/** How far a line bends at the least, a part of the length of its pair: every pair an arc. */
+export const MIN_BEND = 0.1;
+/** How far back from the end of a line the head of an outline starts: the band stops there. */
+export const OUTLINE_HEAD_BASE = 15;
+
 /**
- * The gap between the two halves of a line, on a ring of more than three nodes: a
- * part of the line. The lines across the ring meet at its centre; their tx arrows
- * end that far before it, spread on a circle around it rather than piled on it.
+ * The centre of the mesh kept clear, the lines curved around it: as wide as this part
+ * of the radius of the ring of the nodes, wider for the relays shown in it, never wider
+ * than CENTRE_MAX of the radius.
  */
-export const RING_GAP_RATIO = 0.3;
-/** The gap between the two halves of a line of two or three nodes, which do not cross. */
-export const SMALL_GAP = 24;
+export const CENTRE_CLEAR = 0.35;
+const CENTRE_MAX = 0.6;
+/** The room kept between the boxes of the relays, one over the other, and around them. */
+const RELAY_GAP = 8;
 
 const round = (n: number) => Math.round(n * 10) / 10;
+
+/** The relay a stream of type relay goes through, as its description says it: "→ user@host:port". */
+export function relayOf(link: MeshLink): string | undefined {
+  if (link.type !== "relay" || !link.desc) return undefined;
+  const at = link.desc.lastIndexOf("@");
+  return at >= 0 ? link.desc.slice(at + 1).trim() || undefined : undefined;
+}
+
+/** The relays of the links, by name: the heartbeats through each, its state as its links make it. */
+export function meshRelays(links: MeshLink[]): { name: string; hbs: string[]; state: GroupState }[] {
+  const by = new Map<string, MeshLink[]>();
+  for (const link of links) {
+    const relay = relayOf(link);
+    if (relay) by.set(relay, [...(by.get(relay) ?? []), link]);
+  }
+  return [...by.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([name, of]) => ({ name, hbs: [...new Set(of.map((l) => l.hb))].sort(), state: groupState(of) }));
+}
+
+/** An arc of a circle: its centre, its radius, from the angle `from` sweeping `sweep` radians (y down). */
+interface Arc {
+  centre: Point;
+  radius: number;
+  from: number;
+  sweep: number;
+}
+
+/** A point of an arc at t, its start at 0, its end at 1. */
+const arcPoint = (arc: Arc, t: number): Point => {
+  const angle = arc.from + arc.sweep * t;
+  return { x: arc.centre.x + arc.radius * Math.cos(angle), y: arc.centre.y + arc.radius * Math.sin(angle) };
+};
+
+/** The piece of an arc from t0 to t1, as a path ("M x y A r r 0 large sweep x y"). */
+function arcPath(arc: Arc, t0: number, t1: number): string {
+  const p = arcPoint(arc, t0);
+  const q = arcPoint(arc, t1);
+  const turn = arc.sweep * (t1 - t0);
+  const r = round(arc.radius);
+  return `M ${round(p.x)} ${round(p.y)} A ${r} ${r} 0 ${Math.abs(turn) > Math.PI ? 1 : 0} ${turn > 0 ? 1 : 0} ${round(q.x)} ${round(q.y)}`;
+}
+
+/** An angle brought within (-π, π]. */
+const wrap = (angle: number) => {
+  let a = angle % (2 * Math.PI);
+  if (a <= -Math.PI) a += 2 * Math.PI;
+  if (a > Math.PI) a -= 2 * Math.PI;
+  return a;
+};
+
+/** Whether a point is within the box of a node. */
+const inBox = (box: MeshNode, p: Point) => Math.abs(p.x - box.x) <= box.width / 2 && Math.abs(p.y - box.y) <= box.height / 2;
+
+/**
+ * Where an arc leaves a box from its start (`from` 0), or enters one at its end (from
+ * 1): the t of the first point out of the box, found on the way then refined.
+ */
+function boxExit(arc: Arc, box: MeshNode, start: boolean): number {
+  const at = (k: number) => (start ? k : 1 - k);
+  let inside = 0;
+  let outside = 1;
+  for (let k = 0; k <= 200; k += 1) {
+    if (!inBox(box, arcPoint(arc, at(k / 200)))) {
+      outside = k / 200;
+      inside = Math.max(0, (k - 1) / 200);
+      break;
+    }
+  }
+  for (let n = 0; n < 24; n += 1) {
+    const mid = (inside + outside) / 2;
+    if (inBox(box, arcPoint(arc, at(mid)))) inside = mid;
+    else outside = mid;
+  }
+  return at(outside);
+}
 
 /** The name a node box shows: whole, or cut to MAX_LABEL characters, the last an ellipsis. */
 export function nodeLabel(name: string): string {
@@ -198,25 +293,15 @@ export function nodeWidth(name: string): number {
 }
 
 /**
- * Where a ray leaves a box: from a point inside the box of a node, along a unit
- * direction, the distance to the first side it crosses.
- */
-function exitDistance(box: MeshNode, from: Point, along: Point): number {
-  const hw = box.width / 2;
-  const hh = box.height / 2;
-  const candidates: number[] = [];
-  if (along.x !== 0) candidates.push((Math.sign(along.x) * hw - (from.x - box.x)) / along.x);
-  if (along.y !== 0) candidates.push((Math.sign(along.y) * hh - (from.y - box.y)) / along.y);
-  const positive = candidates.filter((d) => d >= 0);
-  return positive.length > 0 ? Math.min(...positive) : 0;
-}
-
-/**
  * Where the nodes and the lines go, in a square. The nodes stand on a circle wide
- * enough for their boxes, two of them one over the other. Between two nodes, a line each way, straight
- * and parallel, one on each side of the line between their centres, so the two
- * directions never overlap; each line holds all the links of its direction, and
- * runs from the edge of the box of the sender to the edge of the box of the receiver.
+ * enough for their boxes, two of them one over the other; the relays the heartbeats go
+ * through in its centre. Between two nodes, a line each way, side by side on one arc of
+ * a circle through the two, bulging away from the centre as far as the room kept clear
+ * there asks, and a little at the least: the two directions the same arc a little
+ * wider and a little narrower, so they never overlap; across the centre, the two
+ * bulging apart around it. Each line holds all the links of its direction, and runs
+ * from the edge of the box of the sender to the edge of the box of the receiver, in
+ * two halves a short gap apart.
  */
 export function meshLayout(nodes: string[], links: MeshLink[]): MeshLayout {
   let width: number;
@@ -230,7 +315,8 @@ export function meshLayout(nodes: string[], links: MeshLink[]): MeshLayout {
   // A square, whatever the nodes: the mesh as high as wide beside the summary, which
   // takes the rest of the width.
   if (nodes.length <= 1) {
-    width = Math.max(240, widest + 80);
+    // A node alone at the size of the nodes of a ring: the room of two of them.
+    width = Math.max(480, widest + 80);
     height = width;
     if (nodes.length === 1) place(nodes[0], width / 2, height / 2);
   } else {
@@ -244,6 +330,29 @@ export function meshLayout(nodes: string[], links: MeshLink[]): MeshLayout {
       place(name, width / 2 + radius * Math.cos(angle), height / 2 + radius * Math.sin(angle));
     });
   }
+
+  // The relays in the centre, one over the other; the centre kept clear for them, and
+  // for the look of it when there is none.
+  const centre = { x: width / 2, y: height / 2 };
+  const ringRadius = nodes.length > 1 ? Math.hypot(boxes[nodes[0]].x - centre.x, boxes[nodes[0]].y - centre.y) : 0;
+  const found = meshRelays(links);
+  const relayBoxes = found.map((r) => ({ ...r, width: nodeWidth(r.name), height: NODE_HEIGHT, label: nodeLabel(r.name) }));
+  const stack = relayBoxes.length * NODE_HEIGHT + Math.max(0, relayBoxes.length - 1) * RELAY_GAP;
+  const relays: MeshRelay[] = relayBoxes.map((r, i) => ({
+    ...r,
+    x: centre.x,
+    y: centre.y - stack / 2 + NODE_HEIGHT / 2 + i * (NODE_HEIGHT + RELAY_GAP),
+  }));
+  // The room the relays take from the centre along a way: the half of their stack that
+  // way, a line bent sideways passing their width, one bent up or down their height.
+  const relayHalf = relays.length === 0 ? { x: 0, y: 0 } : {
+    x: Math.max(...relays.map((r) => r.width)) / 2 + RELAY_GAP * 2,
+    y: stack / 2 + RELAY_GAP * 2,
+  };
+  const clearAlong = (way: Point) => Math.min(
+    ringRadius * CENTRE_MAX,
+    Math.max(ringRadius * CENTRE_CLEAR, Math.abs(way.x) * relayHalf.x + Math.abs(way.y) * relayHalf.y),
+  );
 
   const byDirection = new Map<string, MeshLink[]>();
   for (const link of links) {
@@ -264,39 +373,60 @@ export function meshLayout(nodes: string[], links: MeshLink[]): MeshLayout {
     const pb = boxes[b];
     const length = Math.hypot(pb.x - pa.x, pb.y - pa.y) || 1;
     const normal = { x: -(pb.y - pa.y) / length, y: (pb.x - pa.x) / length };
-    // Half the room between the two lines on each side of the line of the centres.
+    // Half the room between the two lines of the pair, one each side of its arc.
     const offset = from === a ? -DIRECTION_OFFSET / 2 : DIRECTION_OFFSET / 2;
-    // Straight, parallel to the line of the centres, that far from it: from where it
-    // leaves the box of the sender to where it enters the box of the receiver.
-    const along = { x: (pt.x - pf.x) / length, y: (pt.y - pf.y) / length };
-    const back = { x: -along.x, y: -along.y };
-    const startFrom = { x: pf.x + normal.x * offset, y: pf.y + normal.y * offset };
-    const endFrom = { x: pt.x + normal.x * offset, y: pt.y + normal.y * offset };
-    const out = exitDistance(pf, startFrom, along);
-    const into = exitDistance(pt, endFrom, back);
-    const start = { x: startFrom.x + along.x * out, y: startFrom.y + along.y * out };
-    const end = { x: endFrom.x + back.x * into, y: endFrom.y + back.y * into };
-    const label = { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 };
-    // The two halves, the gap between them centred on the middle of the line.
-    const visible = Math.hypot(end.x - start.x, end.y - start.y);
-    const gap = Math.min(visible / 2, nodes.length > 3 ? visible * RING_GAP_RATIO : SMALL_GAP);
-    const at = (d: number) => ({ x: start.x + along.x * d, y: start.y + along.y * d });
-    const segment = (a: Point, b: Point) => `M ${round(a.x)} ${round(a.y)} L ${round(b.x)} ${round(b.y)}`;
+    // An arc of a circle through the two nodes, bulging away from the centre: the more as
+    // the pair passes near it, its apex as far from it as the room kept clear, and at the
+    // least by MIN_BEND of its length. The two directions on it side by side, the same
+    // arc a little wider and a little narrower; a pair across the centre, its two
+    // directions bulging apart, a lens around it.
+    const middle = { x: (pa.x + pb.x) / 2, y: (pa.y + pb.y) / 2 };
+    const away = { x: middle.x - centre.x, y: middle.y - centre.y };
+    const distance = Math.hypot(away.x, away.y);
+    const across = distance <= 1;
+    const side = across ? Math.sign(offset) : Math.sign(normal.x * away.x + normal.y * away.y) || 1;
+    const bulge = { x: normal.x * side, y: normal.y * side };
+    const sagitta = Math.max(length * MIN_BEND, clearAlong(bulge) - (across ? 0 : distance));
+    const radius = (length * length / 4 + sagitta * sagitta) / (2 * sagitta);
+    const circle = { x: middle.x + bulge.x * (sagitta - radius), y: middle.y + bulge.y * (sagitta - radius) };
+    const apex = { x: middle.x + bulge.x * sagitta, y: middle.y + bulge.y * sagitta };
+    // From the sender to the receiver, the way through the apex.
+    const angleOf = (p: Point) => Math.atan2(p.y - circle.y, p.x - circle.x);
+    const fromAngle = angleOf(pf);
+    let sweep = wrap(angleOf(pt) - fromAngle);
+    const toApex = wrap(angleOf(apex) - fromAngle);
+    if (!(toApex * sweep > 0 && Math.abs(toApex) < Math.abs(sweep))) sweep -= 2 * Math.PI * Math.sign(sweep);
+    const arc: Arc = { centre: circle, radius: radius + (across ? 0 : offset), from: fromAngle, sweep };
+    // From where it leaves the box of the sender to where it enters the box of the receiver.
+    const t0 = boxExit(arc, pf, true);
+    const t1 = boxExit(arc, pt, false);
+    const perT = Math.abs(sweep) * arc.radius;
+    const visible = (t1 - t0) * perT;
+    // The two halves, a short gap between them in the middle of the line.
+    const tm = (t0 + t1) / 2;
+    const gap = Math.min(visible / 2, SMALL_GAP) / perT / 2;
+    const head = OUTLINE_HEAD_BASE / perT;
+    const label = arcPoint(arc, tm);
     // By heartbeat, the sender's tx before the receiver's rx.
     const sorted = [...members].sort((l, m) => l.hb.localeCompare(m.hb) || (l.dir === "tx" ? -1 : 0) - (m.dir === "tx" ? -1 : 0));
-    const half = (of: MeshLink[], path: string): MeshHalf => ({ path, links: of, state: of.length > 0 ? groupState(of) : "none" });
+    const half = (of: MeshLink[], ta: number, tb: number): MeshHalf => ({
+      path: arcPath(arc, ta, tb),
+      outline: arcPath(arc, ta, Math.max(ta, tb - head)),
+      links: of,
+      state: of.length > 0 ? groupState(of) : "none",
+    });
     groups.push({
       key,
       from,
       to,
       links: sorted,
       state: groupState(members),
-      path: segment(start, end),
+      path: arcPath(arc, t0, t1),
       // A stream of no side sends, as meshLinks reads it.
-      tx: half(sorted.filter((l) => l.dir !== "rx"), segment(start, at((visible - gap) / 2))),
-      rx: half(sorted.filter((l) => l.dir === "rx"), segment(at((visible + gap) / 2), end)),
+      tx: half(sorted.filter((l) => l.dir !== "rx"), t0, tm - gap),
+      rx: half(sorted.filter((l) => l.dir === "rx"), tm + gap, t1),
       label: { x: round(label.x), y: round(label.y) },
     });
   }
-  return { width, height, nodes: boxes, groups };
+  return { width, height, nodes: boxes, groups, relays };
 }

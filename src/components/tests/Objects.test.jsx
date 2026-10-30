@@ -556,11 +556,22 @@ describe('Objects Component', () => {
         expect(unprovisionedNode.querySelector('[data-state]')).toHaveAttribute('data-state', 'na');
         expect(within(unprovisionedNode).getByRole('img', {name: 'Not provisioned'})).toHaveClass('text-state-down');
 
-        // A line before the first node column, the per-node columns past it.
-        expect(screen.getByRole('columnheader', {name: /node1/})).toHaveClass('border-l');
-        expect(screen.getByRole('columnheader', {name: /node2/})).not.toHaveClass('border-l');
-        expect(nodeCell(row1, 0)).toHaveClass('border-l');
-        expect(nodeCell(row1, 1)).not.toHaveClass('border-l');
+        // The per-node columns a table of their own past a gap: a tile a row, rounded at its ends, no frame.
+        expect(screen.getByRole('columnheader', {name: /node1/})).toHaveClass('before:rounded-l-(--radius-control)', 'text-ink-muted');
+        expect(screen.getByRole('columnheader', {name: /node2/})).toHaveClass('before:rounded-r-(--radius-control)');
+        expect(nodeCell(row1, 0)).toHaveClass('before:rounded-l-(--radius-control)');
+        expect(nodeCell(row1, 0)).not.toHaveClass('before:rounded-r-(--radius-control)');
+        expect(nodeCell(row1, 1)).toHaveClass('before:rounded-r-(--radius-control)');
+        expect(nodeCell(row1, 0)).not.toHaveClass('border-l');
+        expect(nodeCell(row1, 0).previousElementSibling).toHaveAttribute('aria-hidden', 'true');
+        // The lines of the namespaces as wide as the rows, the band of the nodes past the same gap.
+        const span = (row) => [...row.cells].reduce((sum, cell) => sum + cell.colSpan, 0);
+        const columns = span(within(screen.getByRole('table', {name: 'Objects'})).getAllByRole('row')[0]);
+        expect(span(row1)).toBe(columns);
+        for (const band of namespaceRows()) {
+            expect(span(band)).toBe(columns);
+            expect(band.cells[band.cells.length - 1].colSpan).toBe(2);
+        }
     });
 
     test('selection and select all', async () => {
@@ -578,6 +589,21 @@ describe('Objects Component', () => {
         fireEvent.click(selectAll);
         rowCheckboxes().forEach((c) => expect(c).not.toBeChecked());
         expect(screen.queryByText(/selected$/)).not.toBeInTheDocument();
+    });
+
+    test('a range: Shift-click ticks every row from the one ticked before, in the order shown; unticks it the same', async () => {
+        setup();
+        await waitForLoad();
+        const boxes = rowCheckboxes();
+        expect(boxes.length).toBeGreaterThan(3);
+        fireEvent.click(boxes[0]);
+        fireEvent.click(boxes[3], {shiftKey: true});
+        rowCheckboxes().forEach((c, i) => (i <= 3 ? expect(c).toBeChecked() : expect(c).not.toBeChecked()));
+        expect(screen.getByText('4 selected')).toBeInTheDocument();
+        // From the same anchor: unticked down to the second row, the first kept.
+        fireEvent.click(rowCheckboxes()[1], {shiftKey: true});
+        expect(rowCheckboxes().map((c) => c.checked).slice(0, 4)).toEqual([true, true, false, false]);
+        expect(screen.getByText('2 selected')).toBeInTheDocument();
     });
 
     test('select all selects the filtered objects only', async () => {

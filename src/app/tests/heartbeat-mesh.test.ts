@@ -1,5 +1,33 @@
 import { describe, expect, test } from "vitest";
-import { DIRECTION_OFFSET, MAX_LABEL, RING_GAP_RATIO, SMALL_GAP, groupState, meshLayout, meshLinks, meshNodes, nodeLabel, nodeWidth } from "../heartbeat-mesh";
+import { CENTRE_CLEAR, DIRECTION_OFFSET, MAX_LABEL, MIN_BEND, SMALL_GAP, groupState, meshLayout, meshLinks, meshNodes, nodeLabel, nodeWidth } from "../heartbeat-mesh";
+
+/** The circle of a line of the mesh, "M x y A r r 0 large sweep x y": its centre, radius, start angle and sweep. */
+const arcOf = (path: string) => {
+  const [x1, y1, r, , , large, sweep, x2, y2] = path.match(/-?\d+(\.\d+)?/g)!.map(Number);
+  const m = { x: (x1 + x2) / 2, y: (y1 + y2) / 2 };
+  const d = Math.hypot(x2 - x1, y2 - y1);
+  const h = Math.sqrt(Math.max(0, r * r - (d / 2) * (d / 2)));
+  const perp = { x: -(y2 - y1) / d, y: (x2 - x1) / d };
+  for (const k of [1, -1]) {
+    const c = { x: m.x + perp.x * h * k, y: m.y + perp.y * h * k };
+    const a1 = Math.atan2(y1 - c.y, x1 - c.x);
+    let delta = Math.atan2(y2 - c.y, x2 - c.x) - a1;
+    if (sweep === 1) while (delta <= 0) delta += 2 * Math.PI;
+    else while (delta >= 0) delta -= 2 * Math.PI;
+    if ((Math.abs(delta) > Math.PI) === (large === 1)) return { c, r, a1, delta, start: { x: x1, y: y1 }, end: { x: x2, y: y2 } };
+  }
+  throw new Error(`no circle for ${path}`);
+};
+/** A point of a line of the mesh at t. */
+const at = (path: string, t: number) => {
+  const { c, r, a1, delta } = arcOf(path);
+  return { x: c.x + r * Math.cos(a1 + delta * t), y: c.y + r * Math.sin(a1 + delta * t) };
+};
+/** The length of a line of the mesh. */
+const lengthOf = (path: string) => {
+  const { r, delta } = arcOf(path);
+  return r * Math.abs(delta);
+};
 
 /** Two nodes beating each other on hb#1, n2 receiving nothing from n1 on hb#2. */
 const STATUS = {
@@ -81,53 +109,87 @@ describe("meshLayout", () => {
     ]);
   });
 
-  test("the two directions run straight and parallel, one each side of the line between the nodes, each from its sender", () => {
+  test("two nodes across the centre: their two directions arc apart around it, each from its sender, its middle out of the room kept clear", () => {
     const layout = meshLayout(["n1", "n2"], meshLinks(STATUS));
     const [forward, backward] = layout.groups;
-    const ends = (path: string) => {
-      const [, x1, y1, x2, y2] = /^M (\S+) (\S+) L (\S+) (\S+)$/.exec(path)!.map(Number);
-      return { x1, y1, x2, y2 };
-    };
-    const f = ends(forward.path);
-    const b = ends(backward.path);
-    // Vertical like the line between the nodes: parallel to it and to each other.
-    expect(f.x1).toBeCloseTo(f.x2);
-    expect(b.x1).toBeCloseTo(b.x2);
-    // On opposite sides of the centres' line, the offset apart.
+    const f = arcOf(forward.path);
+    const b = arcOf(backward.path);
+    // Bulging apart: their middles one each side of the line of the nodes.
     const x = layout.nodes.n1.x;
-    expect(Math.sign(f.x1 - x)).toBe(-Math.sign(b.x1 - x));
-    expect(Math.abs(f.x1 - b.x1)).toBeCloseTo(DIRECTION_OFFSET);
+    expect(Math.sign(at(forward.path, 0.5).x - x)).toBe(-Math.sign(at(backward.path, 0.5).x - x));
     // Each from its sender: n1 to n2 downwards, n2 to n1 upwards.
-    expect(f.y1).toBeLessThan(f.y2);
-    expect(b.y1).toBeGreaterThan(b.y2);
+    expect(f.start.y).toBeLessThan(f.end.y);
+    expect(b.start.y).toBeGreaterThan(b.end.y);
+    const centre = { x: layout.width / 2, y: layout.height / 2 };
+    const radius = Math.abs(layout.nodes.n1.y - centre.y);
+    for (const g of layout.groups) {
+      const middle = at(g.path, 0.5);
+      expect(Math.hypot(middle.x - centre.x, middle.y - centre.y)).toBeGreaterThan(radius * CENTRE_CLEAR - DIRECTION_OFFSET);
+    }
   });
 
-  test("a line in two halves on it, a gap between them: the tx of the sender, the rx of the receiver", () => {
-    const ends = (path: string) => /^M (\S+) (\S+) L (\S+) (\S+)$/.exec(path)!.slice(1).map(Number);
-    const length = ([x1, y1, x2, y2]: number[]) => Math.hypot(x2 - x1, y2 - y1);
-    const check = (layout: ReturnType<typeof meshLayout>, gapOf: (visible: number) => number) => {
+  test("the four arrows of a pair on one arc: its two directions concentric, side by side, each its halves on its circle", () => {
+    const names = ["a", "b", "c", "d", "e", "f"];
+    const status = Object.fromEntries(names.map((n) => [n, { streams: [
+      { id: "hb#1.tx", state: "running", peers: Object.fromEntries(names.filter((m) => m !== n).map((m) => [m, { is_beating: true }])) },
+      { id: "hb#1.rx", state: "running", peers: Object.fromEntries(names.filter((m) => m !== n).map((m) => [m, { is_beating: true }])) },
+    ] }]));
+    const layout = meshLayout(names, meshLinks(status));
+    const byKey = Object.fromEntries(layout.groups.map((g) => [g.key, g]));
+    // Neighbours on the ring, and one between: concentric, DIRECTION_OFFSET apart.
+    for (const [x, y] of [["a", "b"], ["a", "c"]]) {
+      const one = arcOf(byKey[`${x} ${y}`].path);
+      const other = arcOf(byKey[`${y} ${x}`].path);
+      expect(Math.hypot(one.c.x - other.c.x, one.c.y - other.c.y)).toBeLessThan(0.5);
+      expect(Math.abs(one.r - other.r)).toBeCloseTo(DIRECTION_OFFSET, 0);
+    }
+    // Each half on the circle of its line.
+    for (const g of layout.groups) {
+      const whole = arcOf(g.path);
+      for (const half of [g.tx.path, g.rx.path]) {
+        const piece = arcOf(half);
+        expect(Math.hypot(piece.c.x - whole.c.x, piece.c.y - whole.c.y)).toBeLessThan(0.5);
+        expect(Math.abs(piece.r - whole.r)).toBeLessThan(0.2);
+      }
+    }
+  });
+
+  test("every pair an arc, neighbours on the ring too: bent at the least by a part of its length", () => {
+    const names = ["a", "b", "c"];
+    const status = Object.fromEntries(names.map((n) => [n, { streams: [{ id: "hb#1.tx", state: "running", peers: Object.fromEntries(names.filter((m) => m !== n).map((m) => [m, { is_beating: true }])) }] }]));
+    const layout = meshLayout(names, meshLinks(status));
+    for (const g of layout.groups) {
+      const { start, end } = arcOf(g.path);
+      const middle = at(g.path, 0.5);
+      const chord = Math.hypot(end.x - start.x, end.y - start.y);
+      const off = Math.abs((end.x - start.x) * (middle.y - start.y) - (end.y - start.y) * (middle.x - start.x)) / chord;
+      expect(off).toBeGreaterThan(chord * MIN_BEND * 0.5);
+    }
+  });
+
+  test("a line in two halves on it, a short gap between them: the tx of the sender, the rx of the receiver", () => {
+    const check = (layout: ReturnType<typeof meshLayout>) => {
       for (const g of layout.groups) {
-        const whole = ends(g.path);
-        const tx = ends(g.tx.path);
-        const rx = ends(g.rx.path);
+        const whole = arcOf(g.path);
+        const tx = arcOf(g.tx.path);
+        const rx = arcOf(g.rx.path);
         // From the sender's edge, to the receiver's edge, on the line.
-        expect(tx.slice(0, 2)).toEqual(whole.slice(0, 2));
-        expect(rx.slice(2)).toEqual(whole.slice(2));
-        const cross = (p: number[], x: number, y: number) => (p[2] - p[0]) * (y - p[1]) - (p[3] - p[1]) * (x - p[0]);
-        expect(Math.abs(cross(whole, tx[2], tx[3])) / length(whole)).toBeLessThan(0.2);
-        expect(Math.abs(cross(whole, rx[0], rx[1])) / length(whole)).toBeLessThan(0.2);
-        // The halves as long, the gap between them.
-        expect(length(tx)).toBeCloseTo(length(rx), 0);
-        expect(Math.hypot(rx[0] - tx[2], rx[1] - tx[3])).toBeCloseTo(gapOf(length(whole)), 0);
+        expect(tx.start).toEqual(whole.start);
+        expect(rx.end).toEqual(whole.end);
+        // The halves as long, the short gap between them.
+        expect(Math.abs(lengthOf(g.tx.path) - lengthOf(g.rx.path))).toBeLessThan(1);
+        expect(Math.hypot(rx.start.x - tx.end.x, rx.start.y - tx.end.y)).toBeCloseTo(SMALL_GAP, 0);
+        // The band of its outline: the same arc, ending short of the head.
+        expect(lengthOf(g.tx.outline)).toBeLessThan(lengthOf(g.tx.path));
+        expect(arcOf(g.tx.outline).start).toEqual(tx.start);
       }
     };
     const two = meshLayout(["n1", "n2"], meshLinks(STATUS));
-    check(two, () => SMALL_GAP);
+    check(two);
     const [forward] = two.groups;
     expect(forward.tx.links.map((l) => `${l.hb}.${l.dir}@${l.node}`)).toEqual(["hb#1.tx@n1"]);
     expect(forward.rx.links.map((l) => `${l.hb}.${l.dir}@${l.node}`)).toEqual(["hb#1.rx@n2", "hb#2.rx@n2"]);
     expect([forward.tx.state, forward.rx.state]).toEqual(["up", "warn"]);
-    // More than three nodes, the lines cross: the gap a part of the line, the arrows off the centre.
     const names = ["a", "b", "c", "d", "e", "f"];
     const ring = Object.fromEntries(names.map((n) => [n, {
       streams: [
@@ -135,13 +197,7 @@ describe("meshLayout", () => {
         { id: "hb#1.rx", state: "running", peers: Object.fromEntries(names.filter((m) => m !== n).map((m) => [m, { is_beating: true }])) },
       ],
     }]));
-    const six = meshLayout(names, meshLinks(ring));
-    check(six, (visible) => visible * RING_GAP_RATIO);
-    const centre = { x: six.width / 2, y: six.height / 2 };
-    for (const g of six.groups) {
-      const [, , x, y] = ends(g.tx.path);
-      expect(Math.hypot(x - centre.x, y - centre.y)).toBeGreaterThan(40);
-    }
+    check(meshLayout(names, meshLinks(ring)));
   });
 
   test("a line green when all its links beat, orange for a mix, red when none does", () => {
@@ -172,7 +228,7 @@ describe("meshLayout", () => {
       [right]: { streams: [] },
     };
     const layout = meshLayout([left, right], meshLinks(status));
-    const [, , y1, , y2] = /^M (\S+) (\S+) L (\S+) (\S+)$/.exec(layout.groups[0].path)!.map(Number);
+    const { start: { y: y1 }, end: { y: y2 } } = arcOf(layout.groups[0].path);
     const l = layout.nodes[left];
     const r = layout.nodes[right];
     // One over the other: from the bottom of the box of the sender to the top of the receiver's.
@@ -199,5 +255,29 @@ describe("meshLayout", () => {
     const centre = { x: layout.width / 2, y: layout.height / 2 };
     const distances = Object.values(layout.nodes).map((p) => Math.hypot(p.x - centre.x, p.y - centre.y));
     distances.forEach((d) => expect(d).toBeCloseTo(distances[0]));
+  });
+});
+
+describe("the relays in the centre", () => {
+  test("a stream of type relay: its relay from its description; a pill each in the centre, the colour of its streams", () => {
+    const status = {
+      n1: { streams: [{ id: "hb#2.tx", type: "relay", state: "running", peers: { n2: { is_beating: true, desc: "→ c1@relay3.example.com:3333" } } }] },
+      n2: { streams: [{ id: "hb#2.rx", type: "relay", state: "running", peers: { n1: { is_beating: false, desc: "← c1@relay3.example.com:3333" } } }] },
+    };
+    const layout = meshLayout(["n1", "n2"], meshLinks(status));
+    expect(layout.relays.map((r) => [r.name, r.hbs, r.state])).toEqual([["relay3.example.com:3333", ["hb#2"], "warn"]]);
+    expect(layout.relays[0].x).toBeCloseTo(layout.width / 2);
+    expect(layout.relays[0].y).toBeCloseTo(layout.height / 2);
+    // The lines kept off it: the middle of each curve outside its box.
+    const r = layout.relays[0];
+    for (const g of layout.groups) {
+      const m = at(g.path, 0.5);
+      expect(Math.abs(m.x - r.x) > r.width / 2 || Math.abs(m.y - r.y) > r.height / 2).toBe(true);
+    }
+  });
+
+  test("no relay heartbeat: none in the centre", () => {
+    const status = { n1: { streams: [{ id: "hb#1.tx", type: "unicast", state: "running", peers: { n2: { is_beating: true, desc: "→ 10.0.0.2:10011" } } }] }, n2: { streams: [] } };
+    expect(meshLayout(["n1", "n2"], meshLinks(status)).relays).toEqual([]);
   });
 });

@@ -3517,6 +3517,7 @@
     }
   },
   "legend": {
+    "hide": "Hide this help",
     "title": "Symbols",
     "toggle": "What the symbols mean",
     "groups": {

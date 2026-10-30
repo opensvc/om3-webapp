@@ -2,13 +2,15 @@ import type { CSSProperties, ReactNode } from "react";
 import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { cn } from "../ui/cn";
-import { AlertTriangleIcon, DrpIcon, HistoryIcon, InfoIcon, PlayIcon, PauseIcon, SnowflakeIcon, TargetIcon } from "../ui/icons";
+import { AlertTriangleIcon, CloseIcon, DrpIcon, HistoryIcon, InfoIcon, PlayIcon, PauseIcon, SnowflakeIcon, TargetIcon } from "../ui/icons";
+import { IconButton } from "../ui/components/Button";
 import { FrozenMark } from "../ui/components/FrozenMark";
 import { NotProvisionedMark } from "../ui/components/StateMarks";
 import { StateGlyph } from "../ui/components/StateGlyph";
 import type { ObjectState } from "../ui/components/StatusBadge";
 import { statusBadge } from "../ui/components/status";
 import { Cell, HeaderCell, HeaderRow, Row, Table } from "../ui/components/Table";
+import { SYMBOLS_HINT, hideIntro, useHiddenIntros, useIntrosEnabled } from "./page-intro";
 import { Term } from "./Term";
 import type { Board, BoardRow, Level, NoteFix, Span, Text, Tone } from "./statusboard";
 
@@ -576,6 +578,8 @@ export function StatusBoard({
   noteFix?: (fix: NoteFix) => ReactNode;
 }) {
   const { t } = useTranslation();
+  const hiddenHints = useHiddenIntros();
+  const hintsEnabled = useIntrosEnabled();
   const columns = board.nodes.length + 3;
   const field = (name: string) => board.fields.find((f) => f.name === name)?.value;
   const avail = field("avail")?.[0];
@@ -697,12 +701,22 @@ export function StatusBoard({
       </div>
 
       {/* What the symbols below mean, on demand: someone new to OpenSVC reads them here. */}
-      <details className="rounded-(--radius-panel) border border-line bg-surface-raised px-3 py-2" data-legend-toggle="">
-        <summary className="cursor-pointer text-ink-muted hover:text-ink">{t("legend.toggle")}</summary>
-        <div className="mt-2">
-          <SymbolLegend />
+      {/* A hint as the intros of the pages: closed, back with them from the user page. */}
+      {hintsEnabled && !hiddenHints.includes(SYMBOLS_HINT) && (
+        <div className="relative">
+          <details className="rounded-(--radius-panel) border border-line bg-surface-raised px-3 py-2" data-legend-toggle="">
+            <summary className="cursor-pointer pr-8 text-ink-muted hover:text-ink">{t("legend.toggle")}</summary>
+            <div className="mt-2">
+              <SymbolLegend />
+            </div>
+          </details>
+          <span className="absolute top-1.5 right-2">
+            <IconButton label={t("legend.hide")} size="sm" onClick={() => hideIntro(SYMBOLS_HINT)}>
+              <CloseIcon className="h-3.5 w-3.5" />
+            </IconButton>
+          </span>
         </div>
-      </details>
+      )}
 
       {toolbar}
 

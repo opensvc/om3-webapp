@@ -7,6 +7,7 @@ import {MemoryRouter} from 'react-router-dom';
 import useEventStore from '../../hooks/useEventStore.js';
 import {useMenuState} from '../../hooks/useSidebarAlerts';
 import {useActionTracker} from '../../app/action-tracker';
+import {setIntrosEnabled, showAllIntros} from '../../app/page-intro';
 
 /** What the actions tray holds, the latest first: action, subject, state, reason. */
 const tray = () => useActionTracker.getState().tracked.map((e) => [e.action, e.subject, e.state, e.error ?? null]);
@@ -95,6 +96,43 @@ describe('ObjectStatus', () => {
         fireEvent.click(toggle);
         expect(legend).toHaveAttribute('open');
         expect(within(legend).getByText('Down, as expected. For example, the standby node of a failover service.')).toBeInTheDocument();
+    });
+
+    describe('the symbols, a hint', () => {
+        const legend = () => screen.queryByText('What the symbols mean');
+
+        afterEach(() => {
+            act(() => {
+                setIntrosEnabled(true);
+                showAllIntros();
+            });
+        });
+
+        test('closed, it stays closed on another object, until the hints are reset', async () => {
+            answer(structuredClone(dns));
+            const {unmount} = render(<ObjectStatus path="system/svc/dns"/>);
+            await screen.findByRole('table');
+            fireEvent.click(screen.getByRole('button', {name: 'Hide this help'}));
+            expect(legend()).toBeNull();
+            unmount();
+
+            answer(structuredClone(dns));
+            render(<ObjectStatus path="system/svc/dns"/>);
+            await screen.findByRole('table');
+            expect(legend()).toBeNull();
+            act(() => showAllIntros());
+            expect(legend()).toBeInTheDocument();
+        });
+
+        test('off with the hints', async () => {
+            answer(structuredClone(dns));
+            render(<ObjectStatus path="system/svc/dns"/>);
+            await screen.findByRole('table');
+            act(() => setIntrosEnabled(false));
+            expect(legend()).toBeNull();
+            act(() => setIntrosEnabled(true));
+            expect(legend()).toBeInTheDocument();
+        });
     });
 
     test('the summary: a status a line, said in full in its tint, then an issue a line, the policies and the actions apart', async () => {

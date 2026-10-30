@@ -6,6 +6,8 @@ import {trackRefused, trackWrite} from "../app/action-tracker";
 import {opsQuery} from "../app/namespace-claims";
 import {
     SECTION_NAME,
+    boolOn,
+    boolWrite,
     editOps,
     editPreview,
     firstParagraph,
@@ -129,16 +131,16 @@ export function SectionWizard({section, rules, prefix, items, nodes, edit, valid
         setError(null);
         try {
             const patch = (query) => fetch(`${URL_CLUSTER}/config?${query}`, {method: "PATCH", headers: headers()});
-            let response;
-            if (changes) {
-                // Another type: the section of the former gone first, its keys meaning nothing to the new one.
-                if (changes.rewrite) {
-                    response = await patch(opsQuery({delete: [`${section}#${trimmedName}`]}));
-                }
-                if (!response || response.ok) response = await patch(opsQuery({set: changes.set, unset: changes.unset}));
-            } else {
-                response = await patch(opsQuery({set: sectionOps(section, trimmedName, type, own)}));
-            }
+            // One write: another type, the section of the former deleted in it, its keys meaning
+            // nothing to the new one. The daemon deletes, unsets then sets, all or nothing: a
+            // refused key leaves the section as it was, not gone.
+            const response = changes
+                ? await patch(opsQuery({
+                    delete: changes.rewrite ? [`${section}#${trimmedName}`] : [],
+                    set: changes.set,
+                    unset: changes.unset,
+                }))
+                : await patch(opsQuery({set: sectionOps(section, trimmedName, type, own)}));
             const ok = await trackWrite(response, write, async (r) => {
                 const detail = await getResponseErrorMessage(r);
                 setError(detail || `HTTP ${r.status}`);
@@ -194,7 +196,8 @@ export function SectionWizard({section, rules, prefix, items, nodes, edit, valid
         if (one.kind === "bool") {
             return (
                 <div key={key}>
-                    <Checkbox label={label} checked={values[key] === "true"} onChange={(event) => set(key, event.target.checked ? "true" : "")}/>
+                    <Checkbox label={label} checked={boolOn(values[key], one.keyword.default)}
+                              onChange={(event) => set(key, boolWrite(event.target.checked, one.keyword.default))}/>
                     {one.keyword.text && <p className="mt-1 text-data text-ink-muted">{firstParagraph(one.keyword.text)}</p>}
                 </div>
             );

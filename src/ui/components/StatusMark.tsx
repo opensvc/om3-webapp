@@ -15,7 +15,7 @@ const MARKS: Record<ObjectState, { ink: string }> = {
 /**
  * The glyph of a state without its label, where the column or the row already says
  * what it is about: a status column, a count beside it. The label stays for screen
- * readers and as a tooltip; `label` replaces it when the value is more precise
+ * readers; `label` replaces it when the value is more precise
  * ("running", "stale", "stdby up").
  */
 export function StatusMark({
@@ -35,7 +35,6 @@ export function StatusMark({
   const text = label ?? t(STATE_LABEL_KEYS[state]);
   return (
     <span
-      title={text}
       data-state={state}
       data-muted={muted || undefined}
       className={cn("inline-flex w-4 shrink-0 items-center justify-center", muted ? "text-ink-muted" : mark.ink, className)}

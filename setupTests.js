@@ -1,8 +1,9 @@
-import {vi, expect} from 'vitest';
+import {vi, expect, afterEach} from 'vitest';
 import {TextEncoder, TextDecoder} from 'util';
 import '@testing-library/jest-dom';
 // The webapp strings, in English: jsdom's navigator is en-US.
 import './src/i18n';
+import {clearEditDrafts} from './src/app/edit-drafts';
 import * as matchers from 'vitest-axe';
 
 expect.extend(matchers);
@@ -33,3 +34,6 @@ afterAll(() => {
 beforeEach(() => {
     vi.clearAllMocks();
 });
+
+// The edits the configuration editors keep while the page lives: none from one test to the next.
+afterEach(() => clearEditDrafts());

@@ -33,20 +33,8 @@ export const SIDEBAR_EVENTS_URL =
 
 const ZERO_TIME = "0001-01-01T00:00:00Z";
 
-/** Pools or networks used to their full size. */
-export function fullCount(items) {
-    return (items || []).filter(
-        (item) => typeof item?.size === "number" && item.size > 0 && item.used >= item.size
-    ).length;
-}
-
 /** Whether a node status says the node is frozen. */
 export const isFrozen = (status) => !!status?.frozen_at && status.frozen_at !== ZERO_TIME;
-
-/** Frozen nodes. */
-export function frozenCount(nodeStatus) {
-    return Object.values(nodeStatus || {}).filter(isFrozen).length;
-}
 
 const emptyState = () => ({objects: {}, nodeStatus: {}, heartbeatStatus: {}});
 
@@ -272,35 +260,6 @@ export function nodesAlert(nodeStatus) {
     };
 }
 
-/** Lines of the mouseover of the Nodes entry: count and frozen ones, in the current language. */
-export function nodesDetails(nodeStatus) {
-    return [
-        i18n.t("alerts.details.node", {count: Object.keys(nodeStatus || {}).length}),
-        i18n.t("alerts.details.frozen", {count: frozenCount(nodeStatus)}),
-    ];
-}
-
-/**
- * Lines of the mouseover of the Pools and Networks entries: count, full ones, top
- * usage, in the current language. `word` is the item kind: "pool" or "network".
- */
-export function usageDetails(items, word) {
-    const list = items || [];
-    const sized = list.filter((item) => typeof item?.size === "number" && item.size > 0);
-    const lines = [
-        i18n.t(`alerts.details.${word}`, {count: list.length}),
-        i18n.t("alerts.details.full", {count: fullCount(list)}),
-    ];
-    if (sized.length > 0) {
-        const top = sized.reduce((max, item) => (item.used / item.size > max.used / max.size ? item : max));
-        lines.push(i18n.t("alerts.details.highestUsage", {
-            name: top.name ?? "?",
-            percent: Math.round((top.used / top.size) * 100),
-        }));
-    }
-    return lines;
-}
-
 /** The objects of one kind, out of the objects by path. */
 const ofKind = (objects, kind) =>
     Object.fromEntries(Object.entries(objects || {}).filter(([path]) => kindOf(path) === kind));
@@ -326,12 +285,11 @@ export function useSidebarState({enabled = true} = {}) {
 /**
  * State of the sidebar entries, out of the state of `useSidebarState`. For each
  * entry id (`NAV_SECTIONS`), `alert`: what calls for attention, orange or red,
- * `null` when all is well (pools, networks and the lists of keys raise none); and
- * for some entries the `details` lines of their mouseover. All the objects raise
+ * `null` when all is well (the lists of keys raise none). All the objects raise
  * the alert of all of them; the services and the volumes, each of theirs only.
  */
-export function useSidebarAlertsOf({objects, nodeStatus, heartbeatStatus, pools, networks}) {
-    // The alerts and details are text: computed again when the language changes.
+export function useSidebarAlertsOf({objects, nodeStatus, heartbeatStatus}) {
+    // The alerts are text: computed again when the language changes.
     const {i18n: {language}} = useTranslation();
 
     return useMemo(() => ({
@@ -339,11 +297,9 @@ export function useSidebarAlertsOf({objects, nodeStatus, heartbeatStatus, pools,
         "objects-services": {alert: objectsAlert(ofKind(objects, "svc"))},
         "objects-volumes": {alert: objectsAlert(ofKind(objects, "vol"))},
         links: {alert: heartbeatAlert(heartbeatStatus)},
-        pools: {alert: null, details: usageDetails(pools, "pool")},
-        networks: {alert: null, details: usageDetails(networks, "network")},
-        nodes: {alert: nodesAlert(nodeStatus), details: nodesDetails(nodeStatus)},
+        nodes: {alert: nodesAlert(nodeStatus)},
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }), [objects, nodeStatus, heartbeatStatus, pools, networks, language]);
+    }), [objects, nodeStatus, heartbeatStatus, language]);
 }
 
 /** The state of the sidebar entries, read from a state of their own. */

@@ -608,6 +608,5 @@ describe('Pools Component', () => {
         expect(bar('none')).toBeNull();
 
         const overRow = screen.getByRole('row', {name: /^over /});
-        expect(within(overRow).getByText('120.0%').parentElement).toHaveAttribute('title', '120/100');
     });
 });

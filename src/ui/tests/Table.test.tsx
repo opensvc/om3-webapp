@@ -248,7 +248,7 @@ describe("StatusMark", () => {
     ["unknown", "text-state-unknown", "unknown"],
   ] as const)("marks %s with its drawn shape, tint and label", (state, ink, label) => {
     render(<StatusMark state={state} />);
-    const mark = screen.getByTitle(label);
+    const mark = screen.getByText(label).parentElement as HTMLElement;
     expect(mark).toHaveAttribute("data-state", state);
     expect(mark).toHaveClass(ink);
     expect(mark).toHaveTextContent(label);
@@ -257,8 +257,7 @@ describe("StatusMark", () => {
 
   test("takes a more precise label", () => {
     render(<StatusMark state="down" label="stale" />);
-    expect(screen.getByTitle("stale")).toHaveTextContent("stale");
-    expect(screen.getByTitle("stale").querySelector("svg")).toHaveAttribute("data-glyph", "down");
+        expect(screen.getByText("stale").parentElement?.querySelector("svg")).toHaveAttribute("data-glyph", "down");
   });
 });
 

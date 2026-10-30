@@ -15,6 +15,8 @@ const OLD = {
     node: 'n2', members: ['fs#1', 'fs#2', 'config', 'refs.json'], location: 's3://backups',
 };
 const NEW = {...OLD, id: '7c0e41d2-0000-4000-8000-000000000000', created_at: '2026-10-22T10:00:00Z', node: 'n1'};
+/** A snapshot as the daemon lists it: in the data of an item, the node asked in its meta. */
+const item = (data) => ({kind: 'SyncSnapshotItem', meta: {node: 'n1', object: PATH}, data});
 
 describe('ObjectSnapshots', () => {
     let requests;
@@ -25,7 +27,7 @@ describe('ObjectSnapshots', () => {
         localStorage.setItem('authToken', 'tok');
         requests = [];
         // The snapshots oldest first, as the daemon lists them.
-        answers = {snapshots: {status: 200, body: {kind: 'SyncSnapshotList', items: [OLD, NEW]}}, restore: {status: 200, body: {}}};
+        answers = {snapshots: {status: 200, body: {kind: 'SyncSnapshotList', items: [OLD, NEW].map(item)}}, restore: {status: 200, body: {}}};
         global.fetch = vi.fn(async (url, options = {}) => {
             const method = options.method ?? 'GET';
             requests.push(`${method} ${decodeURIComponent(url)}`);

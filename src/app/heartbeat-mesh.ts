@@ -155,7 +155,7 @@ export interface MeshGroup {
 export interface MeshNode extends Point {
   width: number;
   height: number;
-  /** The name, cut short past MAX_LABEL characters, the whole of it in a tooltip. */
+  /** The name, cut short past MAX_LABEL characters. */
   label: string;
 }
 

@@ -121,7 +121,7 @@ export default function HeartbeatRelays() {
                                     <Row key={`${slot.cluster} ${slot.node} ${slot.addr}`} data-served={`${slot.cluster}/${slot.node}`} data-state={slot.state}>
                                         <Cell>{slot.cluster}</Cell>
                                         <Cell className="font-medium">{slot.node}</Cell>
-                                        <Cell title={slot.state === "stale" ? t("heartbeats.relays.servedStaleHint", {seconds: 15}) : undefined}>
+                                        <Cell>
                                             <StatusBadge state={SERVED_MARK[slot.state]} label={t(`heartbeats.relays.served_state.${slot.state}`)} className="w-auto"/>
                                         </Cell>
                                         <Cell className="font-mono text-data text-ink-muted">{slot.addr}</Cell>

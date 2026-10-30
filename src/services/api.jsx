@@ -13,19 +13,55 @@ export class ApiError extends Error {
 /** The Authorization header of a request to the daemon, the token of the session. */
 export const authHeaders = () => ({Authorization: `Bearer ${localStorage.getItem("authToken") || ""}`});
 
+/** Of a whole page, a proxy's error say: not words to show, the status says more. */
+const HTML_PAGE = /^\s*<(!doctype\s+html|html)[\s>]/i;
+
 /**
- * The reason a refusal gives, in words: the detail of its problem, its title, its
- * error or its message; else what apiFetch said of it.
+ * The words of the body of a refusal, null when it has none. The daemon's problem, its
+ * detail or its title; the error or the message of the others; the values of any other
+ * object; a text, but for a page of HTML.
+ */
+function wordsOf(body) {
+    if (typeof body === "string") return body.trim() === "" || HTML_PAGE.test(body) ? null : body;
+    if (!body || typeof body !== "object") return null;
+    for (const key of ["detail", "title", "error", "message"]) {
+        if (typeof body[key] === "string" && body[key].trim() !== "") return body[key];
+    }
+    const values = Object.values(body).map((value) => (typeof value === "string" ? value : JSON.stringify(value)));
+    return values.length > 0 ? values.join(" | ") : null;
+}
+
+/**
+ * The reason a refusal gives, in words: those of its body; else what apiFetch said of it.
  */
 export function problemOf(err) {
-    const body = err?.body;
-    if (body && typeof body === "object") {
-        for (const key of ["detail", "title", "error", "message"]) {
-            if (typeof body[key] === "string" && body[key].trim() !== "") return body[key];
+    return wordsOf(err?.body) ?? err?.message ?? "";
+}
+
+/**
+ * The body of a response: JSON, else its text, null when empty or unreadable. Read as
+ * text first: a body is read only once, a failed response.json() would leave no text.
+ */
+async function readBody(response) {
+    if (typeof response.text !== "function") {
+        try {
+            return typeof response.json === "function" ? await response.json() : null;
+        } catch {
+            return null;
         }
     }
-    if (typeof body === "string" && body.trim() !== "") return body;
-    return err?.message ?? "";
+    let text;
+    try {
+        text = await response.text();
+    } catch {
+        return null;
+    }
+    if (!text) return null;
+    try {
+        return JSON.parse(text);
+    } catch {
+        return text;
+    }
 }
 
 export async function apiFetch(url, options = {}) {
@@ -48,57 +84,10 @@ export async function apiFetch(url, options = {}) {
         throw new ApiError(networkErr.message || 'Network error', {body: null});
     }
 
-    let parsedBody = null;
-
-    let contentType = null;
-    if (response.headers && typeof response.headers.get === 'function') {
-        contentType = response.headers.get('content-type');
-    }
-
-    try {
-        if (contentType && contentType.includes('application/json')) {
-            if (typeof response.json === 'function') {
-                parsedBody = await response.json();
-            }
-        }
-
-        if (parsedBody === null) {
-            if (typeof response.json === 'function') {
-                try {
-                    parsedBody = await response.json();
-                } catch (jsonError) {
-                    if (typeof response.text === 'function') {
-                        try {
-                            parsedBody = await response.text();
-                        } catch (textError) {
-                            parsedBody = null;
-                        }
-                    }
-                }
-            } else if (typeof response.text === 'function') {
-                try {
-                    parsedBody = await response.text();
-                } catch (textError) {
-                    parsedBody = null;
-                }
-            }
-        }
-    } catch (parseError) {
-        parsedBody = null;
-    }
+    const parsedBody = await readBody(response);
 
     if (!response.ok) {
-        let serverMessage = parsedBody;
-
-        if (parsedBody && typeof parsedBody === 'object') {
-            if (parsedBody.message && typeof parsedBody.message === 'string' && parsedBody.message.trim() !== '') {
-                serverMessage = parsedBody.message;
-            } else {
-                serverMessage = JSON.stringify(parsedBody);
-            }
-        }
-
-        const message = serverMessage ||
+        const message = wordsOf(parsedBody) ||
             response.statusText ||
             `Request failed with status ${response.status}`;
 
@@ -109,6 +98,10 @@ export async function apiFetch(url, options = {}) {
         });
     }
 
+    // JSON announced and not JSON: nothing the caller can use.
+    const contentType = typeof response.headers?.get === "function" ? response.headers.get("content-type") : null;
+    if (typeof parsedBody === "string" && contentType?.includes("application/json")) return null;
+
     return parsedBody;
 }
 
@@ -116,46 +109,7 @@ export async function getResponseErrorMessage(response) {
     if (!response) {
         return null;
     }
-
-    try {
-        let text = '';
-        if (typeof response.text === 'function') {
-            text = await response.text();
-        }
-
-        if (!text) {
-            return null;
-        }
-
-        try {
-            const json = JSON.parse(text);
-            if (json && typeof json === 'object') {
-                if (typeof json.message === 'string' && json.message.trim() !== '') {
-                    return json.message;
-                }
-                if (typeof json.error === 'string' && json.error.trim() !== '') {
-                    return json.error;
-                }
-                if (typeof json.detail === 'string' && json.detail.trim() !== '') {
-                    return json.detail;
-                }
-                if (typeof json.title === 'string' && json.title.trim() !== '') {
-                    return json.title;
-                }
-                // Keep plain text for object to avoid raw JSON display
-                if (json && Object.keys(json).length === 0) {
-                    return null;
-                }
-                return Object.keys(json).length > 0 ? Object.values(json).join(' | ') : null;
-            }
-        } catch (e) {
-            // not JSON
-        }
-
-        return text;
-    } catch (e) {
-        return null;
-    }
+    return wordsOf(await readBody(response));
 }
 
 export const fetchDaemonStatus = async (token, options = {}) => {

@@ -46,7 +46,7 @@ function StateMark({ state, label }: { state: TrackState; label: string }) {
     }
   })();
   return (
-    <span title={label} className="inline-flex h-4 w-4 shrink-0 items-center justify-center">
+    <span role="img" aria-label={label} className="inline-flex h-4 w-4 shrink-0 items-center justify-center">
       <span aria-hidden="true" className="inline-flex">
         {icon}
       </span>
@@ -66,7 +66,7 @@ function Step({ step, now }: { step: TrackStep; now: number }) {
       <span className="flex items-center gap-2">
         <StateMark state={step.state} label={t(`actionTray.states.${step.state}`)} />
         <span className="rounded-(--radius-control) bg-surface-sunken px-1 text-[0.75rem] text-ink-muted">{step.node}</span>
-        <span className="min-w-0 flex-1 truncate" title={step.title}>
+        <span className="min-w-0 flex-1 truncate">
           {step.title}
         </span>
         {took !== null && <span className="shrink-0 text-ink-muted tabular-nums">{formatDuration(took)}</span>}
@@ -133,7 +133,6 @@ function Entry({ entry, now }: { entry: Tracked; now: number }) {
         {entry.followedId !== undefined && (
           <button
             type="button"
-            title={t("actionTray.logs", { action, subject: entry.subject })}
             onClick={() => {
               setLogs(true);
             }}
@@ -145,7 +144,6 @@ function Entry({ entry, now }: { entry: Tracked; now: number }) {
         )}
         <button
           type="button"
-          title={t("actionTray.dismiss", { action, subject: entry.subject })}
           onClick={() => {
             dismiss(entry.id);
           }}
@@ -245,7 +243,6 @@ export function ActionTray() {
         {ended > 0 && (
           <button
             type="button"
-            title={t("actionTray.clear")}
             onClick={clearEnded}
             className="shrink-0 rounded-(--radius-control) border border-line p-1 text-ink-muted hover:bg-surface-sunken hover:text-ink"
           >

@@ -218,9 +218,6 @@
     }
   },
   "configWrite": {
-    "wait": {
-      "hint": "Wait until every live node of the object has the configuration (up to {{duration}}). A node that is down gets it when it comes back."
-    },
     "force": {
       "button": "Write anyway (--force)",
       "rootOnly": "Only root can write it anyway, with --force."
@@ -291,17 +288,6 @@
     }
   },
   "alerts": {
-    "details": {
-      "node_one": "{{count}} node",
-      "node_other": "{{count}} nodes",
-      "pool_one": "{{count}} pool",
-      "pool_other": "{{count}} pools",
-      "network_one": "{{count}} network",
-      "network_other": "{{count}} networks",
-      "frozen": "frozen: {{count}}",
-      "full": "full: {{count}}",
-      "highestUsage": "highest usage: {{name}} {{percent}}%"
-    },
     "objectsDown_one": "{{count}} object down",
     "objectsDown_other": "{{count}} objects down",
     "objectsWarn_one": "{{count}} object in warn",
@@ -330,6 +316,7 @@
       "openid": "OpenID",
       "login": "Login"
     },
+    "renewing": "Renewing the session",
     "authenticating": {
       "title": "Authentication",
       "loading": "Loading...",
@@ -532,8 +519,6 @@
       "routine": "Routine",
       "beating": "Beating",
       "id": "ID",
-      "show": "Show filters",
-      "hide": "Hide filters",
       "driver": "Driver",
       "clearAll": "Clear all filters"
     },
@@ -1413,6 +1398,16 @@
       "daysAgo": "{{count}}d ago"
     },
     "selectHint": "Select nodes to act on them, or open one",
+    "noMatch": "No node matches.",
+    "filters": {
+      "state": "State",
+      "frozen": "Frozen",
+      "frozenValues": {
+        "frozen": "frozen",
+        "thawed": "not frozen"
+      },
+      "label": "Label"
+    },
     "short": {
       "score": "score",
       "load": "load",
@@ -1462,8 +1457,10 @@
       "monitor": "Monitor",
       "health": "Health",
       "discovered": "Discovered properties",
-      "discoveredTag": "discovered",
-      "organisationTag": "organisation",
+      "discoveredTag": "reported by the node",
+      "discoveredUnset": "not reported",
+      "organisationTag": "set by you",
+      "organisationUnset": "not set",
       "globalExpect": "Global expect",
       "localExpect": "Local expect",
       "noExpect": "none",
@@ -1691,6 +1688,11 @@
     "designToText": "Edit as text"
   },
   "objects": {
+    "reason": {
+      "more_one": "+{{count}} more",
+      "more_other": "+{{count}} more",
+      "fix": "{{action}} {{name}}"
+    },
     "noInstanceStatus": "No status from {{node}}: the node is gone or not heard from",
     "flex": {
       "title": "Flex",
@@ -2068,6 +2070,7 @@
       "cluster": "the cluster, on all its nodes"
     },
     "selectInstance": "Select the instance on {{node}}",
+    "instanceOn": "Instance on {{node}}",
     "selectResource": "Select {{rid}} on all its nodes",
     "selectCell": "Select {{rid}} on {{node}}",
     "openCell": "Open {{rid}} on {{node}}",
@@ -2306,7 +2309,8 @@
       "unknownObject": "the object is not known",
       "alreadyFrozen": "already frozen",
       "alreadyUnfrozen": "not frozen",
-      "clusterInSelection": "left out: the cluster is acted on alone"
+      "clusterInSelection": "left out: the cluster is acted on alone",
+      "notForKind": "left out: a {{kind}} does not take this action"
     },
     "monitor": "{{node}}: the monitor is {{state}}",
     "subjects": {
@@ -2477,7 +2481,8 @@
       "none": "No other sec in the namespace.",
       "signedBy": "Signed by {{ca}}, written as the ca of the sec.",
       "selfSigned": "No ca: self-signed.",
-      "reading": "Reading the ca of the sec…"
+      "reading": "Reading the ca of the sec…",
+      "unread": "The ca of the sec could not be read: the certificate is not created until what signs it is known."
     }
   },
   "actionMenus": {
@@ -2768,7 +2773,6 @@
     "loadError": "The resources could not be read: {{message}}",
     "filter": "Filter the resources",
     "group": "Driver",
-    "all": "All",
     "count": "{{shown}} / {{total}}",
     "refresh": "Refresh",
     "empty": "No resource reported.",
@@ -2794,8 +2798,6 @@
       "encap": "encapsulated"
     },
     "rail": "Filters",
-    "chosen_one": "{{count}} chosen",
-    "chosen_other": "{{count}} chosen",
     "selection": {
       "all": "Select all the resources",
       "one": "Select {{rid}} of {{path}} on {{node}}",
@@ -3290,7 +3292,7 @@
   },
   "glossary": {
     "title": "Glossary",
-    "intro": "The words of OpenSVC used in this webapp, said plainly. A dotted underline on a label means its definition is a hover or a focus away.",
+    "intro": "The words of OpenSVC used in this webapp, said plainly. A label showing the help cursor gives its definition: stay on it a moment, or click it.",
     "search": "Search the glossary",
     "noMatch": "No term matches.",
     "more": "More in the Glossary of the menu.",
@@ -3515,6 +3517,7 @@
     }
   },
   "legend": {
+    "hide": "Hide this help",
     "title": "Symbols",
     "toggle": "What the symbols mean",
     "groups": {

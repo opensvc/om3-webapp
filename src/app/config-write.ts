@@ -1,12 +1,10 @@
-import { useCallback, useState } from "react";
-
 /*
  * What a configuration write asks of the daemon besides the configuration, as
  * om config update --wait --force does:
  *
- * - wait: the answer held until the configuration has reached every live node
- *   of the object, the nodes down getting it when they come back. A wait that
- *   expires is answered 408: the configuration is written all the same, the
+ * - wait, always: the answer held until the configuration has reached every live
+ *   node of the object, the nodes down getting it when they come back. A wait
+ *   that expires is answered 408: the configuration is written all the same, the
  *   nodes it has not reached named. Not to be written again.
  * - force: root writes what the daemon refuses otherwise: a change a resource up
  *   would leak by, as a new mount point or the removal of its section (403), a
@@ -53,39 +51,16 @@ export function forceLifts(problem: Problem, { creating = false } = {}): "root" 
   return null;
 }
 
-/** The query parameters of a write: its wait, its force. */
-export function writeParams({ wait, force }: { wait: boolean; force?: boolean }): URLSearchParams {
+/** The query parameters of a write: its wait, always, and its force. */
+export function writeParams({ force }: { force?: boolean } = {}): URLSearchParams {
   const params = new URLSearchParams();
-  if (wait) params.append("wait", CONFIG_WAIT);
+  params.append("wait", CONFIG_WAIT);
   if (force) params.append("force", "true");
   return params;
 }
 
 /** `url` with the parameters of the write appended to its own. */
-export function withWriteParams(url: string, write: { wait: boolean; force?: boolean }): string {
+export function withWriteParams(url: string, write: { force?: boolean } = {}): string {
   const extra = writeParams(write).toString();
-  if (extra === "") return url;
   return `${url}${url.includes("?") ? "&" : "?"}${extra}`;
-}
-
-const WAIT_KEY = "om3.config.wait";
-
-/** Whether the writes wait for the configuration to reach the nodes: yes unless said otherwise, kept for this browser. */
-export function useConfigWait(): [boolean, (wait: boolean) => void] {
-  const [wait, setWaitState] = useState(() => {
-    try {
-      return localStorage.getItem(WAIT_KEY) !== "false";
-    } catch {
-      return true;
-    }
-  });
-  const setWait = useCallback((value: boolean) => {
-    setWaitState(value);
-    try {
-      localStorage.setItem(WAIT_KEY, String(value));
-    } catch {
-      // Not kept: asked again next time.
-    }
-  }, []);
-  return [wait, setWait];
 }

@@ -5,7 +5,7 @@ import type { HistoryGroup, HistoryGrouping } from "./panel-history";
 
 /**
  * The switch between the two groupings of the records shown recently: by time, by
- * kind. Two pressed-or-not buttons, an icon each, named by their tooltip.
+ * kind. Two pressed-or-not buttons, an icon each.
  */
 export function GroupingSwitch({
   value,
@@ -30,7 +30,6 @@ export function GroupingSwitch({
           key={option}
           type="button"
           aria-pressed={value === option}
-          title={t(`panelHistory.grouping.${option}`)}
           onClick={() => {
             onChange(option);
           }}

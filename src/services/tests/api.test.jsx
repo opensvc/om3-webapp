@@ -1,4 +1,4 @@
-import {fetchDaemonStatus, getResponseErrorMessage} from "../api";
+import {fetchDaemonStatus, getResponseErrorMessage, problemOf} from "../api";
 import {URL_CLUSTER_STATUS} from "../../config/apiPath";
 
 global.fetch = jest.fn();
@@ -75,7 +75,7 @@ describe("fetchDaemonStatus", () => {
 
         await expect(fetchDaemonStatus(token)).rejects.toMatchObject({
             name: 'ApiError',
-            message: '{"error":"Server error","details":"Something went wrong"}',
+            message: "Server error",
             status: 500,
             statusText: "Internal Server Error",
             body: mockErrorBody
@@ -273,9 +273,9 @@ describe("fetchDaemonStatus", () => {
 
         await expect(fetchDaemonStatus(token)).rejects.toMatchObject({
             name: 'ApiError',
-            message: errorString,
+            message: "String error message",
             status: 400,
-            body: errorString
+            body: {message: "String error message"}
         });
     });
 
@@ -315,7 +315,7 @@ describe("fetchDaemonStatus", () => {
 
         await expect(fetchDaemonStatus(token)).rejects.toMatchObject({
             name: 'ApiError',
-            message: JSON.stringify(mockErrorBody),
+            message: "Error without message field",
             status: 400,
             body: mockErrorBody
         });
@@ -360,6 +360,56 @@ describe("fetchDaemonStatus", () => {
             body: null
         });
         jest.useRealTimers();
+    });
+
+    // Bodies as a real fetch gives them: read once only.
+    const refusedWith = (body, {status = 500, statusText = "Internal Server Error", contentType = "text/plain"} = {}) => {
+        fetch.mockResolvedValueOnce(new Response(body, {status, statusText, headers: {"content-type": contentType}}));
+        return fetchDaemonStatus(token);
+    };
+
+    test("a plain text refusal keeps its text", async () => {
+        await expect(refusedWith("no route to host")).rejects.toMatchObject({
+            message: "no route to host",
+            status: 500,
+            body: "no route to host",
+        });
+    });
+
+    test("a text refusal announced as JSON keeps its text", async () => {
+        await expect(refusedWith("upstream gone", {contentType: "application/json"})).rejects.toMatchObject({
+            message: "upstream gone",
+            body: "upstream gone",
+        });
+    });
+
+    test("an HTML page: its status said, the page kept in the body", async () => {
+        const page = "<!DOCTYPE html>\n<html><body><h1>502</h1></body></html>";
+        const err = await refusedWith(page, {status: 502, statusText: "Bad Gateway", contentType: "text/html"}).catch((e) => e);
+        expect(err).toMatchObject({message: "Bad Gateway", status: 502, body: page});
+        expect(problemOf(err)).toBe("Bad Gateway");
+    });
+
+    test.each([
+        [{detail: "object not found: ns/svc/x", status: 404, title: "Not found"}, "object not found: ns/svc/x"],
+        [{status: 401, title: "Unauthorized"}, "Unauthorized"],
+        [{message: "Not Found"}, "Not Found"],
+    ])("the words of a problem of the daemon, not its JSON: %j", async (body, words) => {
+        const err = await refusedWith(JSON.stringify(body), {status: 404, statusText: "Not Found", contentType: "application/json"}).catch((e) => e);
+        expect(err).toMatchObject({message: words, body});
+        expect(problemOf(err)).toBe(words);
+    });
+
+    test("an empty refusal says its status", async () => {
+        await expect(refusedWith("", {status: 503, statusText: "Service Unavailable"})).rejects.toMatchObject({
+            message: "Service Unavailable",
+            body: null,
+        });
+    });
+
+    test("a text answered with success is returned", async () => {
+        fetch.mockResolvedValueOnce(new Response("pong", {status: 200, headers: {"content-type": "text/plain"}}));
+        await expect(fetchDaemonStatus(token)).resolves.toBe("pong");
     });
 
     test("handles response without json and text methods", async () => {
@@ -439,6 +489,16 @@ describe("getResponseErrorMessage", () => {
         };
         const result = await getResponseErrorMessage(response);
         expect(result).toBe("bar | qux");
+    });
+
+    test("the detail of a problem of the daemon, before its title", async () => {
+        const response = {text: async () => JSON.stringify({detail: "object not found", status: 404, title: "Not found"})};
+        expect(await getResponseErrorMessage(response)).toBe("object not found");
+    });
+
+    test("no page of HTML as a message", async () => {
+        const response = {text: async () => "<html><body>Bad Gateway</body></html>"};
+        expect(await getResponseErrorMessage(response)).toBeNull();
     });
 
     test("returns text when response is not JSON", async () => {

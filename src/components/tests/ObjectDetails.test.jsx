@@ -561,14 +561,14 @@ describe('ObjectDetail Component', () => {
         state.objectInstanceStatus['root/svc/svc1'].node1.frozen_at = '2023-01-01T12:00:00Z';
         setStoreState(state);
         renderSvc();
-        await waitFor(() => expect(screen.getByTitle('Object status: warn')).toHaveAttribute('data-state', 'warn'));
+        await waitFor(() => expect(document.querySelector('[data-state="warn"]')).toBeInTheDocument());
         expect(screen.getByText('node1', {exact: true})).toBeInTheDocument();
         const node1 = screen.getByRole('group', {name: 'Instance on node node1'});
         expect(node1.querySelector('[data-state]')).toHaveAttribute('data-state', 'unknown');
-        expect(within(node1).getByTitle('frozen')).toBeInTheDocument();
+        expect(within(node1).getByText('frozen')).toBeInTheDocument();
         const node2 = screen.getByRole('group', {name: 'Instance on node node2'});
         expect(node2.querySelector('[data-state]')).toHaveAttribute('data-state', 'down');
-        expect(within(node2).queryByTitle('frozen')).not.toBeInTheDocument();
+        expect(within(node2).queryByText('frozen')).not.toBeInTheDocument();
     });
 
     test('getObjectStatus handles missing global_expect (none)', async () => {

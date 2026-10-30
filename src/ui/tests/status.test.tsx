@@ -95,9 +95,9 @@ describe("FrozenMark", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  test("frozen, a snowflake doubled by a text and a tooltip", () => {
+  test("frozen, a snowflake doubled by a text", () => {
     const { container } = render(<FrozenMark frozen />);
-    const mark = screen.getByTitle("frozen");
+    const mark = screen.getByText("frozen").parentElement as HTMLElement;
     expect(mark).toHaveTextContent("frozen");
     expect(mark.querySelector("svg")).toHaveAttribute("aria-hidden", "true");
     expect(container.querySelector(".sr-only")).toHaveTextContent("frozen");

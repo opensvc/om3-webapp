@@ -8,7 +8,6 @@ export function ProductTag() {
   const { t } = useTranslation();
   return (
     <span
-      title={t("ui.productTag.title")}
       className="rounded-(--radius-control) bg-accent-soft px-1.5 py-px text-data font-semibold text-accent"
     >
       {/* Name of this frontend, set apart from the collector one (oc3) that looks the same. */}

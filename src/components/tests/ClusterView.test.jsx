@@ -128,10 +128,8 @@ describe('ClusterView', () => {
         const cell = (node, metric) => byNode.querySelector(`[data-node=${node}] [data-metric=${metric}]`);
         expect(cell('n1', 'memory')).toHaveAttribute('data-level', '0.50');
         expect(cell('n2', 'memory')).toHaveAttribute('data-level', '1.00');
-        expect(cell('n1', 'memory')).toHaveAttribute('title', expect.stringMatching(/^n1 · Memory: 1(\.0)? GiB, 50 % of the busiest node$/));
         // The cpu waiting for a second reading: no shade, said so.
         expect(cell('n1', 'cpu')).not.toHaveAttribute('data-level');
-        expect(cell('n1', 'cpu')).toHaveAttribute('title', 'n1 · CPU: waiting for a second reading');
         // Its tree: the usage tab of the panel of the cluster.
         expect(within(card('opensvc')).getByRole('link', {name: 'Open OpenSVC usage'})).toHaveAttribute('href', '/?peek=object:cluster&peektab=usage');
     });
@@ -237,7 +235,7 @@ describe('ClusterView', () => {
         expect(card('nodes').querySelector('[data-node=n2]')).toHaveClass('text-state-warn');
         expect(card('nodes').querySelector('[data-node=n3]')).toHaveAttribute('data-state', 'dropped');
         expect(card('nodes').querySelector('[data-node=n3]')).toHaveClass('text-state-down');
-        expect(within(card('nodes').querySelector('[data-node=n1]')).getByTitle(/frozen/i)).toBeInTheDocument();
+        expect(within(card('nodes').querySelector('[data-node=n1]')).getByText(/frozen/i)).toBeInTheDocument();
     });
 
     test('the links, each heartbeat listed: red when none of its links beats, orange when some do not, plain when all do', () => {
@@ -257,7 +255,6 @@ describe('ClusterView', () => {
         const badge = (i) => within(items[i]).getByRole('link');
         expect(badge(0)).toHaveClass('text-state-warn');
         expect(badge(0)).toHaveTextContent(/^hb#1degraded$/);
-        expect(badge(0)).toHaveAttribute('title', '1 of 2 links beating');
         expect(badge(0)).toHaveAttribute('href', '/heartbeats?view=data&id=hb%231');
         expect(badge(1)).toHaveClass('text-state-down');
         expect(badge(1)).toHaveTextContent(/^hb#2critical$/);
@@ -283,7 +280,6 @@ describe('ClusterView', () => {
         expect(labels(ring)).toEqual(['not reached 2', 'up 1']);
         const item = card('arbitrators').querySelector('[data-arbitrator=arb1]');
         expect(item).toHaveClass('text-state-warn');
-        expect(item).toHaveAttribute('title', 'https://arb1:1215\n1 of 3 nodes reach it');
         expect(within(card('arbitrators')).queryByRole('alert')).toBeNull();
     });
 

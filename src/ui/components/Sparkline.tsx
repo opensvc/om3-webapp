@@ -30,7 +30,6 @@ export function Sparkline({
       viewBox={`0 0 ${width} ${height}`}
       className="shrink-0 text-series-1"
     >
-      <title>{label}</title>
       {values.length > 1 && (
         <polyline points={points} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
       )}

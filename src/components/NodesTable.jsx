@@ -1,4 +1,5 @@
 import React, {useEffect, useLayoutEffect, useRef, useState, useMemo} from "react";
+import {useSearchParams} from "react-router-dom";
 import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus.jsx";
 import {retainEventReception} from "../eventSourceManager";
 import useEventStore from "../hooks/useEventStore.js";
@@ -12,7 +13,7 @@ import {URL_NODE_INFO} from "../config/apiPath.js";
 import {nodeActionRequest, nodeMenuItems} from "../app/node-actions";
 import {useTranslation} from "react-i18next";
 import {NodeActionDialog} from "./NodeActionDialog";
-import {Table, HeaderRow, HeaderCell, SortHeaderCell} from "../ui/components/Table";
+import {Table, HeaderRow, HeaderCell, SortHeaderCell, EmptyRow, LIST_RAIL_QUERY} from "../ui/components/Table";
 import {Checkbox} from "../ui/components/Field";
 import {Button, IconButton} from "../ui/components/Button";
 import {MenuButton} from "../ui/components/MenuButton";
@@ -24,8 +25,10 @@ import {BoltIcon, CloseIcon, PlusIcon} from "../ui/icons";
 import {EnrollNodeDialog} from "./EnrollNodeDialog";
 import {useGrants} from "../hooks/useGrants";
 import {NODE_LAYOUT_STEPS, commonVersion, nodeColumns, nodeLayout} from "../app/node-layout";
+import {useMediaQuery} from "../ui/lib/media";
+import {facetCounts, matches, toggled} from "../app/facets";
+import {FilterRail, FilterToolbar} from "./FilterRail";
 import {rangeSelect, withShift} from "../app/range-select";
-
 
 const ZERO_DATE = "0001-01-01T00:00:00Z";
 
@@ -39,6 +42,20 @@ export const labelsText = (labels) => Object.entries(labels ?? {})
     .join(" ");
 
 const isNodeFrozen = (status) => !!status?.frozen_at && status?.frozen_at !== ZERO_DATE;
+
+/**
+ * The filters of the nodes, by their key in the address, as on the other lists: the
+ * state of its monitor, frozen or not, its env, the version of its agent, its labels
+ * ("key=value", a node kept by any of them). Several values of each kept at once.
+ */
+const NODE_FILTERS = ["state", "frozen", "env", "version", "label"];
+const nodeValues = ({monitor, status, info}) => ({
+    state: [monitor?.state || "unknown"],
+    frozen: [isNodeFrozen(status) ? "frozen" : "thawed"],
+    env: info?.env ? [info.env] : [],
+    version: status?.agent ? [status.agent] : [],
+    label: labelsText(info?.labels).split(" ").filter(Boolean),
+});
 
 
 /** Feedback tones, from the severities of the snackbar it replaces. */
@@ -63,6 +80,24 @@ const NodesTable = () => {
     const [pendingAction, setPendingAction] = useState(null);
     const [sortColumn, setSortColumn] = useState("name");
     const [sortDirection, setSortDirection] = useState("asc");
+    const hasRail = useMediaQuery(LIST_RAIL_QUERY);
+    // The name searched; the values kept of each filter, from the address first, then
+    // written back as they change, the other parameters kept: a panel open, say.
+    const [search, setSearch] = useState("");
+    const [params, setParams] = useSearchParams();
+    const [filters, setFilters] = useState(() => Object.fromEntries(NODE_FILTERS.map((key) => [
+        key, (params.get(key) ?? "").split(",").filter(Boolean),
+    ])));
+    useEffect(() => {
+        setParams((prev) => {
+            const next = new URLSearchParams(prev);
+            for (const key of NODE_FILTERS) {
+                if (filters[key].length > 0) next.set(key, filters[key].join(","));
+                else next.delete(key);
+            }
+            return next.toString() === prev.toString() ? prev : next;
+        }, {replace: true});
+    }, [filters, setParams]);
 
     // The node whose panel is open, and its tab, in the URL as on the other views.
     const panel = usePanelSearch();
@@ -143,7 +178,7 @@ const NodesTable = () => {
         const checked = event.target.checked;
         const shift = withShift(event);
         setSelectedNodes((prev) => {
-            const next = rangeSelect(sortedNodes, prev, anchor.current, nodename, checked, shift);
+            const next = rangeSelect(shownNodes, prev, anchor.current, nodename, checked, shift);
             anchor.current = next.anchor;
             return next.selected;
         });
@@ -244,6 +279,41 @@ const NodesTable = () => {
         });
     }, [clusterNodes, nodeStatus, nodeStats, nodeMonitor, nodeInfo, sortColumn, sortDirection]);
 
+    // The nodes the name searched and the filters keep; each value of the filters
+    // counted under the others, in the rail or the popovers.
+    const valuesOf = (node) => nodeValues({monitor: nodeMonitor[node], status: nodeStatus[node], info: nodeInfo[node]});
+    const counts = facetCounts(sortedNodes, {
+        match: (node) => matches(search, node),
+        facets: Object.fromEntries(NODE_FILTERS.map((key) => [key, {selected: filters[key], valuesOf: (node) => valuesOf(node)[key]}])),
+    });
+    const shownNodes = sortedNodes.filter((node) => matches(search, node) && NODE_FILTERS.every((key) => (
+        filters[key].length === 0 || valuesOf(node)[key].some((value) => filters[key].includes(value))
+    )));
+    const facet = (key, label, text = (value) => value) => {
+        const values = [...new Set(sortedNodes.flatMap((node) => valuesOf(node)[key]))].sort();
+        return {
+            label,
+            options: [...values, ...filters[key].filter((value) => !values.includes(value))].map((value) => ({value, text: text(value)})),
+            selected: filters[key],
+            counts: counts[key],
+            onToggle: (value) => setFilters((prev) => ({...prev, [key]: toggled(prev[key], value)})),
+            onClear: () => setFilters((prev) => ({...prev, [key]: []})),
+        };
+    };
+    const facets = [
+        facet("state", t("nodes.filters.state"), (value) => (value === "unknown" ? t("common.unknown") : value)),
+        facet("frozen", t("nodes.filters.frozen"), (value) => t(`nodes.filters.frozenValues.${value}`)),
+        facet("env", t("nodes.columns.env")),
+        facet("version", t("nodes.columns.version")),
+        facet("label", t("nodes.filters.label")),
+    ];
+    // A node a filter hides leaves the selection, as on the other lists.
+    const shownKey = shownNodes.join(",");
+    useEffect(() => {
+        const kept = new Set(shownKey.split(","));
+        setSelectedNodes((prev) => (prev.every((node) => kept.has(node)) ? prev : prev.filter((node) => kept.has(node))));
+    }, [shownKey]);
+
     const handleSort = (column) => {
         if (sortColumn === column) {
             setSortDirection(sortDirection === "asc" ? "desc" : "asc");
@@ -284,115 +354,143 @@ const NodesTable = () => {
         [nodeStatus, daemon?.nodename],
     );
 
-    return (
-        <div ref={page} className="p-4 space-y-3">
+    // A node added, and the actions on the nodes selected: over the table, or at the head of the rail.
+    const tools = (align) => (
+        <>
+            {/* A node added: the accent of what creates, apart from the actions on the selection. */}
+            {mayEnroll && (
+                <Button
+                    size="sm"
+                    variant="create"
+                    icon={<PlusIcon className="h-4 w-4"/>}
+                    onClick={() => setEnrollOpen(true)}
+                >
+                    {t("enroll.button")}
+                </Button>
+            )}
             {/* The actions on the nodes selected; on one node, its panel's. Nothing selected,
                 how to select, in the place of the actions. */}
-            <div className="flex min-h-7 flex-wrap items-center justify-end gap-3">
-                {/* A node added: the accent of what creates, apart from the actions on the selection. */}
-                {mayEnroll && (
-                    <Button
-                        size="sm"
-                        variant="create"
-                        className="mr-auto"
-                        icon={<PlusIcon className="h-4 w-4"/>}
-                        title={t("enroll.buttonTitle")}
-                        onClick={() => setEnrollOpen(true)}
-                    >
-                        {t("enroll.button")}
-                    </Button>
-                )}
-                {selectedNodes.length > 0 ? (
-                    <>
-                        <span className="whitespace-nowrap text-ink-muted">{t("common.selected", {count: selectedNodes.length})}</span>
-                        <MenuButton
-                            // The actions: a solid pill.
-                            prominent
-                            icon={<BoltIcon className="h-3.5 w-3.5"/>}
-                            label={t("nodes.bulkActions")}
-                            align="end"
-                            // The node, its inventory, its daemon: a column each in a wide window.
-                            columns={2}
-                            filterable
-                            filterLabel={t("actionMenus.filter")}
-                            filterEmpty={t("actionMenus.noMatch")}
-                            items={nodeMenuItems({
-                                t,
-                                nodes: selectedNodes,
-                                apiNode: daemon?.nodename,
-                                renderIcon: ({icon, color}) => <span aria-hidden="true" className={color === "red" ? DANGER_ICON : ICON}>{icon}</span>,
-                                onSelect: handleAction,
-                            })}
-                        />
-                    </>
-                ) : (
-                    <span className="text-ink-muted">{t("nodes.selectHint")}</span>
-                )}
-            </div>
-
-            {snackbar.open && (
-                <Alert
-                    tone={TONES[snackbar.severity] ?? "info"}
-                    action={
-                        <IconButton label={t("common.close")} onClick={closeSnackbar}>
-                            <CloseIcon className="h-4 w-4"/>
-                        </IconButton>
-                    }
-                >
-                    {snackbar.message}
-                </Alert>
-            )}
-
-            {nodeCount === 0 ? (
-                <div className="flex justify-center py-8">
-                    <Spinner label={t("nodes.loading")}/>
-                </div>
+            {selectedNodes.length > 0 ? (
+                <>
+                    <span className="whitespace-nowrap text-ink-muted">{t("common.selected", {count: selectedNodes.length})}</span>
+                    <MenuButton
+                        // The actions: a solid pill.
+                        prominent
+                        icon={<BoltIcon className="h-3.5 w-3.5"/>}
+                        label={t("nodes.bulkActions")}
+                        align={align}
+                        // The node, its inventory, its daemon: a column each in a wide window.
+                        columns={2}
+                        filterable
+                        filterLabel={t("actionMenus.filter")}
+                        filterEmpty={t("actionMenus.noMatch")}
+                        items={nodeMenuItems({
+                            t,
+                            nodes: selectedNodes,
+                            apiNode: daemon?.nodename,
+                            renderIcon: ({icon, color}) => <span aria-hidden="true" className={color === "red" ? DANGER_ICON : ICON}>{icon}</span>,
+                            onSelect: handleAction,
+                        })}
+                    />
+                </>
             ) : (
-                // Visible overflow, the panel as wide as the table: the row menus are not clipped,
-                // the header sticks to the top of the page scroll, which scrolls sideways if need be.
-                <Table ref={frame} sticky className="max-h-[calc(100dvh-12rem)]">
-                    <thead>
-                    <HeaderRow>
-                        <HeaderCell className="w-8">
-                            <Checkbox
-                                aria-label={t("nodes.selectAll")}
-                                checked={selectedNodes.length === nodeCount}
-                                onChange={(e) =>
-                                    setSelectedNodes(e.target.checked ? Object.keys(nodeStatus) : [])
-                                }
-                            />
-                        </HeaderCell>
-                        {columns.map(({key, labelKey}) => (
-                            <SortHeaderCell
-                                key={key}
-                                label={t(labelKey)}
-                                active={sortColumn === key}
-                                direction={sortDirection}
-                                onSort={() => handleSort(key)}
+                <span className="text-ink-muted">{t("nodes.selectHint")}</span>
+            )}
+        </>
+    );
+
+    return (
+        <div ref={page} className="flex gap-6 p-4">
+            <div className="min-w-0 flex-1 space-y-3">
+                {/* Wide, the tools at the head of the rail and the filters in it; narrower, over the table. */}
+                {!hasRail && (
+                    <div className="flex min-h-7 flex-wrap items-center gap-3">
+                        <FilterToolbar
+                            facets={facets}
+                            search={search}
+                            onSearch={(e) => setSearch(e.target.value)}
+                            searchLabel={t("common.name")}
+                        />
+                        <div className="ml-auto flex flex-wrap items-center gap-3">{tools("end")}</div>
+                    </div>
+                )}
+
+                {snackbar.open && (
+                    <Alert
+                        tone={TONES[snackbar.severity] ?? "info"}
+                        action={
+                            <IconButton label={t("common.close")} onClick={closeSnackbar}>
+                                <CloseIcon className="h-4 w-4"/>
+                            </IconButton>
+                        }
+                    >
+                        {snackbar.message}
+                    </Alert>
+                )}
+
+                {nodeCount === 0 ? (
+                    <div className="flex justify-center py-8">
+                        <Spinner label={t("nodes.loading")}/>
+                    </div>
+                ) : (
+                    // Visible overflow, the panel as wide as the table: the row menus are not clipped,
+                    // the header sticks to the top of the page scroll, which scrolls sideways if need be.
+                    <Table ref={frame} sticky className="max-h-[calc(100dvh-12rem)]">
+                        <thead>
+                        <HeaderRow>
+                            <HeaderCell className="w-8">
+                                <Checkbox
+                                    aria-label={t("nodes.selectAll")}
+                                    checked={shownNodes.length > 0 && selectedNodes.length === shownNodes.length}
+                                    onChange={(e) =>
+                                        // All, every node the filters keep.
+                                        setSelectedNodes(e.target.checked ? shownNodes : [])
+                                    }
+                                />
+                            </HeaderCell>
+                            {columns.map(({key, labelKey}) => (
+                                <SortHeaderCell
+                                    key={key}
+                                    label={t(labelKey)}
+                                    active={sortColumn === key}
+                                    direction={sortDirection}
+                                    onSort={() => handleSort(key)}
+                                />
+                            ))}
+                        </HeaderRow>
+                        </thead>
+                        <tbody>
+                        {shownNodes.map((nodename) => (
+                            <NodeRow
+                                key={nodename}
+                                nodename={nodename}
+                                stats={nodeStats[nodename]}
+                                status={nodeStatus[nodename]}
+                                monitor={nodeMonitor[nodename]}
+                                info={nodeInfo[nodename]}
+                                isSelected={selectedNodes.includes(nodename)}
+                                daemonNodename={daemon.nodename}
+                                onSelect={handleSelectNode}
+                                onOpen={handleOpenNode}
+                                isOpen={panel.sel === nodename}
+                                layout={layout}
+                                commonVersion={version}
                             />
                         ))}
-                    </HeaderRow>
-                    </thead>
-                    <tbody>
-                    {sortedNodes.map((nodename) => (
-                        <NodeRow
-                            key={nodename}
-                            nodename={nodename}
-                            stats={nodeStats[nodename]}
-                            status={nodeStatus[nodename]}
-                            monitor={nodeMonitor[nodename]}
-                            info={nodeInfo[nodename]}
-                            isSelected={selectedNodes.includes(nodename)}
-                            daemonNodename={daemon.nodename}
-                            onSelect={handleSelectNode}
-                            onOpen={handleOpenNode}
-                            isOpen={panel.sel === nodename}
-                            layout={layout}
-                            commonVersion={version}
-                        />
-                    ))}
-                    </tbody>
-                </Table>
+                        {shownNodes.length === 0 && <EmptyRow colSpan={columns.length + 1}>{t("nodes.noMatch")}</EmptyRow>}
+                        </tbody>
+                    </Table>
+                )}
+            </div>
+            {hasRail && (
+                <FilterRail
+                    label={t("objects.filters.rail")}
+                    head={<div className="flex flex-wrap items-center gap-x-3 gap-y-2">{tools("start")}</div>}
+                    search={search}
+                    onSearch={(e) => setSearch(e.target.value)}
+                    searchLabel={t("common.name")}
+                    facets={facets}
+                />
             )}
 
             <EnrollNodeDialog open={enrollOpen} onClose={() => setEnrollOpen(false)}/>

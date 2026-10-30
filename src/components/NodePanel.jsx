@@ -44,6 +44,8 @@ import {useGrants} from "../hooks/useGrants";
 import {propertyKeyword, useOrgEdit} from "./NodeOrgEdit";
 import {NodeLabels} from "./NodeLabels";
 import {RawDataButton} from "./JsonCode";
+import {matches} from "../app/facets";
+import {useEditDraft} from "../app/edit-drafts";
 
 /*
  * The record panel of a cluster node, as oc3 gives its nodes one: its state and
@@ -187,10 +189,8 @@ export function FilterField({label, value, onChange}) {
     );
 }
 
-export const matches = (filter, ...values) => {
-    const q = filter.trim().toLowerCase();
-    return q === "" || values.some((v) => String(v ?? "").toLowerCase().includes(q));
-};
+// The words searched, as on the lists (app/facets): here too for the panels using it.
+export {matches};
 
 /**
  * The actions on the node, in the title bar of its panel as oc3 places them: the
@@ -302,10 +302,9 @@ function NodeStatusTab({node, onOrchestrationLogs}) {
     const orchestrationId = monitor?.orchestration_id;
     const orchestration = orchestrationId && !/^0{8}-0{4}-0{4}-0{4}-0{12}$/.test(orchestrationId) ? (
         <span className="inline-flex flex-wrap items-baseline gap-x-1.5">
-            {/* Its logs a click away, its full id hovered. */}
+            {/* Its logs a click away. */}
             <button
                 type="button"
-                title={orchestrationId}
                 aria-label={t("nodePanel.status.orchestrationLogs", {id: orchestrationId})}
                 onClick={() => onOrchestrationLogs?.(orchestrationId)}
                 className="font-mono text-accent hover:underline"
@@ -396,12 +395,26 @@ function NodeStatusTab({node, onOrchestrationLogs}) {
             </span>
         );
     };
+    // A section with no value to show, folded into one line: its title, "not set", its pencil.
+    // Unfolded while the organisation is edited, for its fields; the first field of the one
+    // whose pencil was clicked then focused.
+    const isUnset = (p) => p.value === "" || p.value === undefined || p.value === null;
+    const [focusGroup, setFocusGroup] = useState(null);
+    useEffect(() => {
+        if (!org.editing || focusGroup === null) return;
+        document.querySelector(`[aria-labelledby="${focusGroup}"] input`)?.focus();
+        setFocusGroup(null);
+    }, [org.editing, focusGroup]);
+    const editOrganisation = (sectionId) => {
+        org.start(organisationItems);
+        setFocusGroup(sectionId);
+    };
     const valueOf = (p) => {
         if (p.error) return <span className="text-ink-muted">{p.error}</span>;
-        if (p.value === "" || p.value === undefined || p.value === null) return <span className="text-ink-muted">{none}</span>;
+        if (isUnset(p)) return <span className="text-ink-muted">{none}</span>;
         // The memory in bytes, readable.
         if (p.name === "mem_bytes" && Number(p.value) > 0) return formatBytes(Number(p.value));
-        // The last boot, as an age: its date hovered.
+        // The last boot, as an age.
         if (p.name === "last_boot") return <RelativeTime value={String(p.value)} locale={i18n.language}/>;
         return String(p.value);
     };
@@ -438,34 +451,58 @@ function NodeStatusTab({node, onOrchestrationLogs}) {
                     <Section id={`node-properties-${node}`} title={t("nodePanel.status.discovered")}>
                         <Loaded resource={properties}>{null}</Loaded>
                     </Section>
-                ) : groups.map(({family, group, items}) => (
-                    <Section
-                        key={`${family}-${group}`}
-                        id={`node-${family}-${group}-${node}`}
-                        title={t(`nodePanel.properties.${group}`)}
-                        tools={(
-                            <>
-                                <span className="text-data text-ink-muted">{t(`nodePanel.status.${family}Tag`)}</span>
-                                {/* Root edits the properties of the organisation, from any of their blocks: all of them at once. */}
-                                {mayConfigure && !org.editing && family === "organisation" && (
-                                    <IconButton size="sm" label={t("nodePanel.orgEdit.edit")} onClick={() => org.start(organisationItems)}>
-                                        <PencilIcon className="h-3 w-3"/>
-                                    </IconButton>
+                ) : ["discovered", "organisation"].flatMap((family) => {
+                    const own = groups.filter((g) => g.family === family);
+                    const editing = org.editing && family === "organisation";
+                    const editable = mayConfigure && !org.editing && family === "organisation";
+                    const sectionId = (group) => `node-${family}-${group}-${node}`;
+                    const pencil = (group) => editable && (
+                        <IconButton size="sm" label={t("nodePanel.orgEdit.edit")} onClick={() => editOrganisation(sectionId(group))}>
+                            <PencilIcon className="h-3 w-3"/>
+                        </IconButton>
+                    );
+                    const folded = editing ? [] : own.filter((g) => g.items.every(isUnset));
+                    const shown = own.filter((g) => !folded.includes(g));
+                    return [
+                        ...shown.map(({group, items}) => (
+                            <Section
+                                key={`${family}-${group}`}
+                                id={sectionId(group)}
+                                title={t(`nodePanel.properties.${group}`)}
+                                tools={(
+                                    <>
+                                        <span className="text-data text-ink-muted">{t(`nodePanel.status.${family}Tag`)}</span>
+                                        {/* Root edits the properties of the organisation, from any of their blocks: all of them at once. */}
+                                        {pencil(group)}
+                                    </>
                                 )}
-                            </>
-                        )}
-                    >
-                        <Facts facts={items.map((p) => (org.editing && family === "organisation"
-                            // Edited, the keyword written under its label.
-                            ? [p.name, (
-                                <span className="block">
-                                    {labelOf(p)}
-                                    <span className="block font-mono text-data text-ink-muted/70">{propertyKeyword(p.name)}</span>
-                                </span>
-                            ), orgField(p)]
-                            : [p.name, labelOf(p), valueOf(p)]))}/>
-                    </Section>
-                ))}
+                            >
+                                <Facts facts={items.map((p) => (editing
+                                    // Edited, the keyword written under its label.
+                                    ? [p.name, (
+                                        <span className="block">
+                                            {labelOf(p)}
+                                            <span className="block font-mono text-data text-ink-muted/70">{propertyKeyword(p.name)}</span>
+                                        </span>
+                                    ), orgField(p)]
+                                    : [p.name, labelOf(p), valueOf(p)]))}/>
+                            </Section>
+                        )),
+                        // The sections with nothing to show, a line each, together after the others of their family.
+                        ...(folded.length === 0 ? [] : [(
+                            <div key={`${family}-folded`} data-folded={family} className="space-y-1">
+                                {folded.map(({group}) => (
+                                    <section key={group} aria-labelledby={sectionId(group)} className="flex flex-wrap items-center gap-x-1.5">
+                                        <h3 id={sectionId(group)} className="font-semibold">{t(`nodePanel.properties.${group}`)}</h3>
+                                        <span aria-hidden="true" className="-ml-1.5">:</span>
+                                        <span className="text-ink-muted">{t(`nodePanel.status.${family}Unset`)}</span>
+                                        {pencil(group)}
+                                    </section>
+                                ))}
+                            </div>
+                        )]),
+                    ];
+                })}
             </div>
             {editing !== null && (
                 <MinAvailDialog
@@ -772,7 +809,8 @@ function NodeConfig({node}) {
     const [showSecrets, setShowSecrets] = useState(false);
     const secondsLeft = useAutoHide(showSecrets, () => setShowSecrets(false));
     const file = useNodeResource(node, `config/file?redact-secrets=${!showSecrets}`, {text: true});
-    const [edit, setEdit] = useState(null);
+    // The edit in progress, kept when a tab of the panel is left: found again on coming back.
+    const [edit, setEdit] = useEditDraft(`node\u0000${node}`);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState(null);
     const [evalOpen, setEvalOpen] = useState(false);
@@ -1010,7 +1048,7 @@ function NodeDrivers({node}) {
         <div className="space-y-6">
             <div className="flex flex-wrap items-center gap-2">
                 <Button size="sm" icon={scanning ? <Spinner label={t("nodePanel.drivers.scanning")}/> : <RefreshIcon className="h-3.5 w-3.5"/>}
-                        onClick={rescan} disabled={scanning} title={t("nodePanel.drivers.rescanHint")}>
+                        onClick={rescan} disabled={scanning}>
                     {scanning ? t("nodePanel.drivers.scanning") : t("nodePanel.drivers.rescan")}
                 </Button>
                 <FilterField label={t("nodePanel.drivers.filter")} value={filter} onChange={setFilter}/>
@@ -1048,7 +1086,7 @@ function NodeDrivers({node}) {
                                             label: t("nodePanel.drivers.columns.usable"),
                                             render: (r) => (r.usable
                                                 ? <span className="text-state-up">{t("nodePanel.drivers.usable")}</span>
-                                                : <span className="text-ink-muted" title={driverCap(r.id)}>{t("nodePanel.drivers.unusable")}</span>),
+                                                : <span className="text-ink-muted">{t("nodePanel.drivers.unusable")}</span>),
                                         },
                                         {key: "features", label: t("nodePanel.drivers.columns.features"), className: "font-mono text-data text-ink-muted", render: (r) => r.features.join(" ")},
                                     ]}

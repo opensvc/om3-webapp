@@ -149,7 +149,6 @@ export function NodeLabels({node, mayEdit}) {
                 <span
                     key={key}
                     data-label={key}
-                    title={own ? undefined : t("nodeLabels.fromCluster")}
                     className={`${BADGE} ${own ? "border-line text-ink" : "border-dashed border-line text-ink-muted"}`}
                 >
                     <span className="font-medium">{key}</span>

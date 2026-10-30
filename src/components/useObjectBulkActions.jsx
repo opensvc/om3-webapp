@@ -31,14 +31,18 @@ const actionIcon = ({icon, color}) => (
 const selectObjectStatus = (state) => state.objectStatus;
 const selectRemoveObject = (state) => state.removeObject;
 
-const isCluster = (objectName) => parseObjectPath(objectName).kind === "ccfg";
-
 /**
- * The objects an action on a selection goes to. The cluster object is acted on as
- * the cluster, on all the nodes: only when it is the whole selection, never swept
- * along with other objects by a select all.
+ * The objects acted on alone, never swept along with others by a select all or the
+ * tick of a namespace: the cluster object, acted on as the cluster, on all the nodes;
+ * a namespace configuration, its row not shown, its namespace's panel acting on it.
  */
-const actedOn = (objects) => objects.length > 1 ? objects.filter((obj) => !isCluster(obj)) : objects;
+const isAlone = (objectName) => ["ccfg", "nscfg"].includes(parseObjectPath(objectName).kind);
+
+/** The objects an action on a selection goes to: those acted on alone only when they are the whole of it. */
+const actedOn = (objects) => objects.length > 1 ? objects.filter((obj) => !isAlone(obj)) : objects;
+
+/** Whether an object takes the action: its kind does (a vol no switch, a cfg no start). */
+const takes = (objectName, action) => isActionAllowedForSelection(action, [objectName]);
 
 /** The frozen state an action gives an object at once, before the daemon says it. */
 const updateFrozenStatusOptimistic = (objectName, newFrozenValue) => {
@@ -94,9 +98,14 @@ export function useObjectBulkActions({selectedObjects, onDone}) {
         // What comes of each object, accepted, refused or left alone, the actions tray says.
         const objectsToProcess = pendingAction?.target ? [pendingAction.target] : selectedObjects;
         const refuse = (objectName, reason) => trackRefused({action, subject: objectName, reason});
-        const targets = actedOn(objectsToProcess);
-        objectsToProcess.filter((obj) => !targets.includes(obj))
+        const selected = actedOn(objectsToProcess);
+        objectsToProcess.filter((obj) => !selected.includes(obj))
             .forEach((obj) => refuse(obj, t("actionTray.reasons.clusterInSelection")));
+        // Of a mixed selection, those of a kind the action is not for are left out, said so:
+        // the menu offers an action some of them take, never sent to the others.
+        const targets = selected.filter((obj) => takes(obj, action));
+        selected.filter((obj) => !targets.includes(obj))
+            .forEach((obj) => refuse(obj, t("actionTray.reasons.notForKind", {kind: parseObjectPath(obj).kind})));
         const promises = targets.map(async (objectName) => {
             const rawObj = objectStatus[objectName];
             if (!rawObj) {
@@ -181,7 +190,9 @@ export function useObjectBulkActions({selectedObjects, onDone}) {
         </Alert>
     ) : null;
 
-    const dialogNames = useMemo(() => actedOn(selectedObjects), [selectedObjects]);
+    // The objects the action goes to: those of a kind taking it, the others left out.
+    const dialogNames = useMemo(() => actedOn(selectedObjects)
+        .filter((obj) => !pendingAction || takes(obj, pendingAction.action)), [selectedObjects, pendingAction]);
     // The nodes of the objects acted on, for the options naming one (switch --to): a
     // node not one of an object's, the daemon refuses the action on that one.
     const dialogNodes = useMemo(() => {

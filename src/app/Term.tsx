@@ -4,27 +4,26 @@ import { HoverCard } from "../ui/components/HoverCard";
 import { isGlossaryKey } from "./glossary";
 
 /**
- * A word of OpenSVC in a label, said on demand: underlined with dots, its
- * definition from the glossary in a card while hovered or focused, the keyboard
- * reaching it too. `term`, its glossary key; `children`, the label as shown, the
- * term's name when none. A key the glossary does not hold, the label alone.
- * `focusable` false in a button, a sort's say: said on hover only, the focus not
- * nested in the button's.
+ * A word of OpenSVC in a label: a help cursor over it, its entry of the glossary in a
+ * card once the pointer has stayed a moment, or at once when clicked. `term`, its
+ * glossary key; `children`, the label as shown, the term's name when none. A key the
+ * glossary does not hold, the label alone. `inert` in a button, a sort's say: the
+ * click is the button's, the card shown by the hover alone.
  */
 export function Term({
   term,
-  focusable = true,
+  inert = false,
   children,
 }: {
   term: string;
-  focusable?: boolean;
+  inert?: boolean;
   children?: ReactNode;
 }) {
   const { t } = useTranslation();
   if (!isGlossaryKey(term)) return <>{children ?? term}</>;
   return (
     <HoverCard
-      focusable={focusable}
+      inert={inert}
       card={
         <span className="block space-y-1" data-term-card={term}>
           <span className="block font-medium text-ink">{t(`glossary.terms.${term}.term`)}</span>
@@ -33,7 +32,7 @@ export function Term({
         </span>
       }
     >
-      <span data-term={term} className="cursor-help underline decoration-ink-muted decoration-dotted underline-offset-2">
+      <span data-term={term} className="cursor-help">
         {children ?? t(`glossary.terms.${term}.term`)}
       </span>
     </HoverCard>

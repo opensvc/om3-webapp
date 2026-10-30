@@ -81,7 +81,6 @@ describe("IconButton", () => {
       </IconButton>,
     );
     const button = screen.getByRole("button", { name: "Close" });
-    expect(button).toHaveAttribute("title", "Close");
     expect(button).toHaveAttribute("type", "button");
   });
 

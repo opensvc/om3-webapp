@@ -33,7 +33,7 @@ import {
 } from "../app/object-design";
 import {Dialog} from "../ui/components/Dialog";
 import {Button, IconButton} from "../ui/components/Button";
-import {Checkbox, Input, Select} from "../ui/components/Field";
+import {Checkbox, Input, Select, Textarea} from "../ui/components/Field";
 import {Spinner} from "../ui/components/Spinner";
 import {CloseIcon, InfoIcon, PlusIcon, SearchIcon} from "../ui/icons";
 import {KeywordFacts} from "./ConfigText";
@@ -173,6 +173,20 @@ function ValueInput({keyword, value, onChange, label, suggestions = [], picks = 
             </Select>
         );
     }
+    // A value on several lines (a command, a script), as the file holds it: a field of one
+    // line would drop its line breaks, gluing them together at the first key typed.
+    if (value.includes("\n")) {
+        return (
+            <Textarea
+                aria-label={label}
+                className="w-full font-mono text-data"
+                rows={Math.min(value.split("\n").length, 8)}
+                value={value}
+                onChange={(e) => onChange(e.target.value)}
+                spellCheck={false}
+            />
+        );
+    }
     const example = !keyword?.default && !keyword?.defaultText && value === "" ? keyword?.example ?? "" : "";
     // The picks matching the text; all of them while it is one of them, or empty.
     const typed = value.trim().toLowerCase();
@@ -232,7 +246,6 @@ function ValueInput({keyword, value, onChange, label, suggestions = [], picks = 
                 <button
                     type="button"
                     aria-label={t("objectDesigner.useExample", {value: example})}
-                    title={t("objectDesigner.useExampleHint")}
                     onClick={() => onChange(example)}
                     className="absolute top-1/2 right-1 -translate-y-1/2 rounded-(--radius-control) border border-line px-1.5 text-data text-ink-muted hover:border-accent hover:text-accent"
                 >
@@ -350,7 +363,7 @@ function KeywordPicker({keywords, onAdd, grantsTold = true}) {
                                 <span className="font-mono">{k.option}</span>
                                 {/* The grant it needs: for any value, or for some only (a uri of the server, of an install). */}
                                 {grantsTold && k.grant && (
-                                    <span className="ml-1.5 text-data text-state-warn" title={k.grantDoc || undefined}>
+                                    <span className="ml-1.5 text-data text-state-warn">
                                         {k.grantAlways === false ? t("objectDesigner.grantSome", {grant: k.grant}) : k.grant}
                                     </span>
                                 )}
@@ -382,18 +395,15 @@ function KeywordPicker({keywords, onAdd, grantsTold = true}) {
 function AddResource({kind, keywordsUrl, onAdd, onCancel, hideRoot = false}) {
     const {t} = useTranslation();
     const [drivers, setDrivers] = useState(null);
-    // What each feature of a driver means, told on hover.
-    const [featureDocs, setFeatureDocs] = useState({});
     const [group, setGroup] = useState("");
     const [typed, setTyped] = useState("");
     const [error, setError] = useState(null);
     const [checking, setChecking] = useState(false);
     useEffect(() => {
         let live = true;
-        readDrivers(kind).then(({drivers: items, features}) => {
+        readDrivers(kind).then(({drivers: items}) => {
             if (!live) return;
             setDrivers(items);
-            setFeatureDocs(features);
         }, () => live && setDrivers([]));
         return () => {
             live = false;
@@ -462,7 +472,7 @@ function AddResource({kind, keywordsUrl, onAdd, onCancel, hideRoot = false}) {
                                         {(driver.features ?? []).length > 0 && (
                                             <span className="flex flex-wrap gap-1 pt-0.5" data-features="">
                                                 {driver.features.map((f) => (
-                                                    <span key={f} title={featureDocs[f] || undefined} className="rounded-(--radius-control) border border-line px-1 text-data text-ink-muted">
+                                                    <span key={f} className="rounded-(--radius-control) border border-line px-1 text-data text-ink-muted">
                                                         {f}
                                                     </span>
                                                 ))}
@@ -477,7 +487,6 @@ function AddResource({kind, keywordsUrl, onAdd, onCancel, hideRoot = false}) {
                                                     key={alt.name}
                                                     type="button"
                                                     disabled={checking}
-                                                    title={alt.doc || undefined}
                                                     onClick={() => add(alt.name)}
                                                     className="font-mono text-accent underline-offset-2 hover:underline"
                                                 >
@@ -698,7 +707,7 @@ export function ObjectDesigner({kind, namespace = "", sections, onChange, keywor
                                     >
                                         <span className="truncate font-mono">{s.name}</span>
                                         {s.type && <span className="truncate text-data text-ink-muted">{s.type}</span>}
-                                        {incomplete && <span className="ml-auto text-state-warn" title={t("objectDesigner.incomplete")} aria-label={t("objectDesigner.incomplete")}>•</span>}
+                                        {incomplete && <span className="ml-auto text-state-warn" aria-label={t("objectDesigner.incomplete")}>•</span>}
                                     </button>
                                     {s.group && (
                                         <IconButton size="sm" label={t("objectDesigner.removeSection", {section: s.name})} onClick={() => removeSection(s.name)}>
@@ -770,7 +779,6 @@ export function ObjectDesigner({kind, namespace = "", sections, onChange, keywor
                                                     type="button"
                                                     onClick={() => setHelp(help === `${section.name}.${entry.key}` ? null : `${section.name}.${entry.key}`)}
                                                     className={`truncate text-left font-mono text-data hover:text-accent ${empty ? "text-state-warn" : ""}`}
-                                                    title={t("objectDesigner.readDoc", {keyword: entry.key})}
                                                 >
                                                     {entry.key}{isRequired && <span aria-label={t("objectDesigner.required")}> *</span>}
                                                 </button>
@@ -822,7 +830,6 @@ export function ObjectDesigner({kind, namespace = "", sections, onChange, keywor
                                         type="button"
                                         data-popular={k.option}
                                         aria-label={t("objectDesigner.addKeyword", {keyword: k.option})}
-                                        title={firstLine(k.text ?? "")}
                                         onClick={() => addEntry(k.option)}
                                         className="inline-flex h-7 items-center gap-1 rounded-(--radius-control) border border-dashed border-line px-2 font-mono text-data text-ink-muted hover:border-accent hover:text-accent"
                                     >

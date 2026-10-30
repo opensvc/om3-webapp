@@ -174,8 +174,7 @@ describe('ConfigSection Component', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
-        // The writes not waiting for the nodes (--wait), but in the tests of the wait.
-        mockLocalStorage.getItem.mockImplementation((key) => (key === 'om3.config.wait' ? 'false' : 'mock-token'));
+        mockLocalStorage.getItem.mockImplementation(() => 'mock-token');
         mockUseParams.mockReturnValue({objectName: 'root/cfg/cfg1'});
         global.fetch = vi.fn(defaultFetchMock);
         clearKeywordsCache();
@@ -367,6 +366,20 @@ describe('ConfigSection Component', () => {
         }
     });
 
+    test('an edit in progress, inline: kept when the editor is unmounted, a tab of its panel left', async () => {
+        const first = renderConfig({inline: true});
+        const edit = await screen.findByRole('button', {name: 'Edit configuration file'});
+        await act(() => user.click(edit));
+        const editor = await screen.findByRole('textbox', {name: 'Configuration file'});
+        fireEvent.change(editor, {target: {value: '[DEFAULT]\nnodes = n1\n'}});
+        first.unmount();
+        renderConfig({inline: true});
+        expect(await screen.findByRole('textbox', {name: 'Configuration file'})).toHaveValue('[DEFAULT]\nnodes = n1\n');
+        // Cancelled, forgotten.
+        await act(() => user.click(screen.getByRole('button', {name: 'Cancel'})));
+        expect(screen.queryByRole('textbox', {name: 'Configuration file'})).toBeNull();
+    });
+
     describe('no configuration yet', () => {
         const posts = () => global.fetch.mock.calls.filter(([, options]) => options?.method === 'POST');
 
@@ -383,7 +396,7 @@ describe('ConfigSection Component', () => {
             await act(() => user.click(screen.getByRole('button', {name: 'Save'})));
             await waitFor(() => expect(posts()).toHaveLength(1));
             const [url, options] = posts()[0];
-            expect(url).toBe(`${URL_OBJECT}/dev/nscfg/namespace/config/file`);
+            expect(url).toBe(`${URL_OBJECT}/dev/nscfg/namespace/config/file?wait=30s`);
             expect(options.body).toMatch(/^\[DEFAULT\]\nid = [0-9a-f-]{36}\n\n\[claim#1\]\ntype = memory\nlimit = 4g\n$/);
             await waitFor(() => expect(tray()).toEqual([['Create the configuration', 'dev/nscfg/namespace', 'succeeded', null]]));
         });
@@ -400,7 +413,7 @@ describe('ConfigSection Component', () => {
             await act(() => user.click(within(dialog).getByRole('button', {name: 'Apply 1 change'})));
             await waitFor(() => expect(posts()).toHaveLength(1));
             const [url, options] = posts()[0];
-            expect(url).toBe(`${URL_OBJECT}/dev/nscfg/namespace/config/file?set=orchestrate=no`);
+            expect(url).toBe(`${URL_OBJECT}/dev/nscfg/namespace/config/file?set=orchestrate=no&wait=30s`);
             expect(options.body).toMatch(/^\[DEFAULT\]\nid = /);
             expect(global.fetch.mock.calls.some(([, o]) => o?.method === 'PATCH')).toBe(false);
             await waitFor(() => expect(tray()).toEqual([['Create the configuration', 'dev/nscfg/namespace', 'succeeded', null]]));
@@ -463,7 +476,7 @@ describe('ConfigSection Component', () => {
 
             await waitFor(() => expect(configPuts()).toHaveLength(1));
             const [url, options] = configPuts()[0];
-            expect(url).toBe(`${URL_OBJECT}/root/cfg/cfg1/config/file`);
+            expect(url).toBe(`${URL_OBJECT}/root/cfg/cfg1/config/file?wait=30s`);
             expect(options.body).toBe('[DEFAULT]\nnodes = node1\nsecret = s3cr3t');
             expect(options.headers.Authorization).toBe('Bearer mock-token');
             await waitFor(() => expect(tray()).toEqual([['Update the configuration', 'root/cfg/cfg1', 'succeeded', null]]));
@@ -825,7 +838,7 @@ describe('ConfigSection Component', () => {
             fireEvent.change(orchestrate, {target: {value: 'no'}});
             expect(within(within(dialog).getByRole('region', {name: 'Changes'})).getByText('Set orchestrate = no')).toBeInTheDocument();
             await act(() => user.click(within(dialog).getByRole('button', {name: 'Apply 1 change'})));
-            await waitFor(() => expect(patches()).toEqual([`${URL_OBJECT}/root/cfg/cfg1/config?set=orchestrate=no`]));
+            await waitFor(() => expect(patches()).toEqual([`${URL_OBJECT}/root/cfg/cfg1/config?set=orchestrate=no&wait=30s`]));
             await waitFor(() => expect(getDialogByTitle('Configuration design')).toBeUndefined());
             expect(tray()[0]).toEqual(['Set orchestrate = no', 'root/cfg/cfg1', 'succeeded', null]);
         });
@@ -836,7 +849,7 @@ describe('ConfigSection Component', () => {
             await act(() => user.click(within(dialog).getByRole('button', {name: 'Remove nodes'})));
             await act(() => user.click(within(dialog).getByRole('button', {name: 'Remove fs#1'})));
             await act(() => user.click(within(dialog).getByRole('button', {name: 'Apply 2 changes'})));
-            await waitFor(() => expect(patches()).toEqual([`${URL_OBJECT}/root/cfg/cfg1/config?unset=nodes&delete=fs#1`]));
+            await waitFor(() => expect(patches()).toEqual([`${URL_OBJECT}/root/cfg/cfg1/config?unset=nodes&delete=fs#1&wait=30s`]));
         });
 
         test('cancelled, nothing written; opened again, read again from the file', async () => {
@@ -849,6 +862,31 @@ describe('ConfigSection Component', () => {
             dialog = await openDesigner(user);
             await waitFor(() => expect(within(dialog).getByRole('textbox', {name: 'Value of orchestrate'})).toHaveValue('ha'));
             expect(configFileGets().length).toBeGreaterThan(reads);
+        });
+
+        test('changes designed: a stray Escape keeps them, the dialog open; Cancel discards them', async () => {
+            renderConfig();
+            const dialog = await openDesigner(user);
+            fireEvent.change(within(dialog).getByRole('textbox', {name: 'Value of orchestrate'}), {target: {value: 'no'}});
+            fireEvent.keyDown(within(dialog).getByRole('textbox', {name: 'Value of orchestrate'}), {key: 'Escape'});
+            expect(getDialogByTitle('Configuration design')).toBe(dialog);
+            expect(within(dialog).getByRole('textbox', {name: 'Value of orchestrate'})).toHaveValue('no');
+            await act(() => user.click(within(dialog).getByRole('button', {name: 'Cancel'})));
+            expect(screen.queryByRole('navigation', {name: 'Sections'})).toBeNull();
+            expect(patches()).toEqual([]);
+        });
+
+        test('a value on several lines: edited in a field of several lines, its line breaks kept', async () => {
+            global.fetch.mockImplementation((url, options) => (url.includes('/config/file')
+                ? Promise.resolve({ok: true, status: 200, text: () => Promise.resolve('[DEFAULT]\nnodes = *\n\n[task#1]\ncommand = echo a\n    echo b\n')})
+                : defaultFetchMock(url, options)));
+            renderConfig();
+            const dialog = await openDesigner(user);
+            const sections = within(dialog).getByRole('navigation', {name: 'Sections'});
+            await act(() => user.click(within(sections).getAllByRole('button', {name: /task#1/})[0]));
+            const command = await within(dialog).findByRole('textbox', {name: 'Value of command'});
+            expect(command.tagName).toBe('TEXTAREA');
+            expect(command.value).toContain('\n');
         });
 
         test('a file that can not be read: said', async () => {

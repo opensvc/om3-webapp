@@ -127,7 +127,6 @@ describe("SlideOver", () => {
       </SlideOver>,
     );
     const close = screen.getByRole("button", { name: "Close panel" });
-    expect(close).toHaveAttribute("title", "Close panel");
     await user.click(close);
     expect(onClose).toHaveBeenCalledTimes(1);
     await user.keyboard("{Escape}");

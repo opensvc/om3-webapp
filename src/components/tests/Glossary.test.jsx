@@ -3,8 +3,9 @@ import {act, fireEvent, render, screen, within} from '@testing-library/react';
 import {MemoryRouter} from 'react-router-dom';
 import {Glossary} from '../Glossary';
 import {PageIntro} from '../PageIntro';
-import {Term} from '../../app/Term';
 import {hideIntro, reloadHiddenIntros, setIntrosEnabled} from '../../app/page-intro';
+import {Term} from '../../app/Term';
+import {HOVER_CARD_DELAY_MS} from '../../ui/components/HoverCard';
 
 const renderAt = (url, ui) => render(<MemoryRouter initialEntries={[url]}>{ui}</MemoryRouter>);
 
@@ -14,26 +15,110 @@ beforeEach(() => {
 });
 
 describe('Term', () => {
-    test('a word of OpenSVC underlined, its definition in a card hovered or focused', () => {
+    const card = () => document.querySelector('[data-term-card]');
+    const toggle = () => screen.getByRole('button', {name: 'Avail'});
+
+    beforeEach(() => {
+        vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    const wait = (ms) => act(() => {
+        vi.advanceTimersByTime(ms);
+    });
+
+    test('a help cursor at once, no underline; its entry once the pointer has stayed, gone with it', () => {
         render(<Term term="avail">Avail</Term>);
         const word = screen.getByText('Avail');
         expect(word).toHaveAttribute('data-term', 'avail');
-        expect(document.querySelector('[data-term-card]')).toBeNull();
-        fireEvent.focus(word.parentElement);
-        const card = document.querySelector('[data-term-card="avail"]');
-        expect(card).toHaveTextContent(/^Avail/);
-        expect(card.textContent.length).toBeGreaterThan(40);
-        // Reached by the keyboard, described by the card while it shows.
-        expect(word.parentElement).toHaveAttribute('tabindex', '0');
-        expect(word.parentElement).toHaveAccessibleDescription(/^Avail Is it running\? Only the resources it needs count\./);
-        fireEvent.blur(word.parentElement);
-        expect(document.querySelector('[data-term-card]')).toBeNull();
+        expect(word).toHaveClass('cursor-help');
+        expect(word.className).not.toMatch(/underline/);
+
+        fireEvent.mouseEnter(toggle());
+        wait(HOVER_CARD_DELAY_MS - 1);
+        expect(card()).toBeNull();
+        wait(1);
+        expect(card()).toHaveTextContent(/^Avail/);
+        expect(card().textContent.length).toBeGreaterThan(40);
+        expect(toggle()).toHaveAccessibleDescription(/^Avail Is it running\? Only the resources it needs count\./);
+        fireEvent.mouseLeave(toggle());
+        expect(card()).toBeNull();
     });
 
-    test('its name when no label; a key the glossary does not hold, the label alone', () => {
-        const {unmount} = render(<Term term="frozen"/>);
-        expect(screen.getByText('Frozen')).toHaveAttribute('data-term', 'frozen');
-        unmount();
+    test('a pointer passing by shows nothing', () => {
+        render(<Term term="avail">Avail</Term>);
+        fireEvent.mouseEnter(toggle());
+        wait(HOVER_CARD_DELAY_MS / 2);
+        fireEvent.mouseLeave(toggle());
+        wait(HOVER_CARD_DELAY_MS);
+        expect(card()).toBeNull();
+    });
+
+    test('a click shows it at once and keeps it, the pointer gone; a click again closes it', () => {
+        render(<Term term="avail">Avail</Term>);
+        fireEvent.mouseEnter(toggle());
+        fireEvent.click(toggle());
+        expect(card()).not.toBeNull();
+        expect(toggle()).toHaveAttribute('aria-expanded', 'true');
+        fireEvent.mouseLeave(toggle());
+        wait(HOVER_CARD_DELAY_MS);
+        expect(card()).not.toBeNull();
+        fireEvent.click(toggle());
+        expect(card()).toBeNull();
+    });
+
+    test('shown by the hover, a click keeps it', () => {
+        render(<Term term="avail">Avail</Term>);
+        fireEvent.mouseEnter(toggle());
+        wait(HOVER_CARD_DELAY_MS);
+        fireEvent.click(toggle());
+        fireEvent.mouseLeave(toggle());
+        expect(card()).not.toBeNull();
+    });
+
+    test.each(['Enter', ' '])('from the keyboard: %j opens it, Escape closes it', (key) => {
+        render(<Term term="avail">Avail</Term>);
+        expect(toggle()).toHaveAttribute('tabindex', '0');
+        fireEvent.keyDown(toggle(), {key});
+        expect(card()).not.toBeNull();
+        fireEvent.keyDown(toggle(), {key: 'Escape'});
+        expect(card()).toBeNull();
+    });
+
+    test('closed when the focus leaves or the page scrolls', () => {
+        render(<Term term="avail">Avail</Term>);
+        fireEvent.click(toggle());
+        fireEvent.blur(toggle());
+        expect(card()).toBeNull();
+        fireEvent.click(toggle());
+        fireEvent.scroll(window);
+        expect(card()).toBeNull();
+    });
+
+    test('its click does not reach the row it sits in', () => {
+        const onRow = vi.fn();
+        render(<div onClick={onRow}><Term term="avail">Avail</Term></div>);
+        fireEvent.click(toggle());
+        expect(onRow).not.toHaveBeenCalled();
+    });
+
+    test('in a button, the hover alone: the click is the button\'s, the card gone with it', () => {
+        const onSort = vi.fn();
+        render(<button type="button" onClick={onSort}><Term term="avail" inert>Avail</Term></button>);
+        const word = screen.getByText('Avail');
+        expect(word.parentElement).not.toHaveAttribute('tabindex');
+        fireEvent.mouseEnter(word.parentElement);
+        wait(HOVER_CARD_DELAY_MS);
+        expect(card()).not.toBeNull();
+        fireEvent.click(word);
+        expect(onSort).toHaveBeenCalledTimes(1);
+        expect(card()).toBeNull();
+    });
+
+    test('a key the glossary does not hold: the label alone', () => {
         render(<Term term="nope">Plain</Term>);
         expect(screen.getByText('Plain')).not.toHaveAttribute('data-term');
     });
@@ -86,7 +171,6 @@ describe('Glossary', () => {
             .toEqual(['Status', 'Marks on an instance', 'Flags on a resource']);
         const frozen = symbols.querySelector('[data-legend="marks-frozen"]');
         // Said beside it: no tooltip of its own, as on the board, where the card of the cell says it.
-        expect(within(frozen).getByRole('img', {name: 'frozen'})).not.toHaveAttribute('title');
         expect(frozen.nextElementSibling).toHaveTextContent('Frozen: the cluster will not start, stop or move it automatically.');
         expect(symbols.querySelector('[data-legend="states-downQuiet"] [data-state="down"]')).toHaveClass('text-ink-muted');
         expect(symbols.querySelector('[data-legend="flags-M"]')).toHaveTextContent('M');

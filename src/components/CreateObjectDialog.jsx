@@ -14,7 +14,7 @@ import useEventStore from "../hooks/useEventStore.js";
 import {parseObjectPath} from "../utils/objectUtils.jsx";
 import {postAction, refusalReason} from "./objectActions";
 import {trackRefused, trackWrite} from "../app/action-tracker";
-import {PROBLEM_TITLE_HELD, forceLifts, readProblem, useConfigWait, withWriteParams} from "../app/config-write";
+import {PROBLEM_TITLE_HELD, forceLifts, readProblem, withWriteParams} from "../app/config-write";
 import {useGrants} from "../hooks/useGrants";
 import {ForceRefusal} from "./ConfigWriteControls";
 import {ObjectDesigner} from "./ObjectDesigner";
@@ -268,8 +268,6 @@ const CreateObjectDialog = ({open, onClose, defaultKind = "svc", defaultNamespac
     useEffect(() => {
         if (error === null) setLifts(null);
     }, [error]);
-    // The creation waits for the configuration to reach the nodes (om --wait), as kept.
-    const [wait] = useConfigWait();
     const grants = useGrants();
     const isRoot = Object.prototype.hasOwnProperty.call(grants, "root");
     // The namespaces the user may create in: every one known for root, else those it administers.
@@ -283,6 +281,8 @@ const CreateObjectDialog = ({open, onClose, defaultKind = "svc", defaultNamespac
     const nameRef = useRef(null);
     // The object whose copy is read: picked again meanwhile, an answer is not the one asked.
     const copying = useRef("");
+    // The design an opening starts from: another one, the user designed it.
+    const designAtStart = useRef(null);
 
     // Each opening starts over, on the kind of the list it was opened from.
     useEffect(() => {
@@ -294,7 +294,9 @@ const CreateObjectDialog = ({open, onClose, defaultKind = "svc", defaultNamespac
         setCopyFrom("");
         setFileName("");
         setConfig("");
-        setDesign(designStart(RUNNING_KINDS.includes(defaultKind)));
+        const start = designStart(RUNNING_KINDS.includes(defaultKind));
+        designAtStart.current = start;
+        setDesign(start);
         setStep("what");
         copying.current = "";
         setLoadingSource(false);
@@ -395,7 +397,7 @@ const CreateObjectDialog = ({open, onClose, defaultKind = "svc", defaultNamespac
         const {namespace: ns, kind: k, name: n} = parseObjectPath(path);
         const creation = {action: "create", label: t("actionTray.writes.objectCreate"), subject: path, path};
         try {
-            const response = await fetch(withWriteParams(`${URL_OBJECT}/${ns}/${k}/${n}/config/file`, {wait, force}), {
+            const response = await fetch(withWriteParams(`${URL_OBJECT}/${ns}/${k}/${n}/config/file`, {force}), {
                 method: "POST",
                 headers: {
                     Authorization: `Bearer ${localStorage.getItem("authToken") || ""}`,
@@ -441,10 +443,13 @@ const CreateObjectDialog = ({open, onClose, defaultKind = "svc", defaultNamespac
 
     // A cfg or a sec has no second step: created at the first.
     const last = datastore || step === "how";
+    // Something typed, picked or designed: not lost to a stray Escape or click beside the dialog.
+    const dirty = name.trim() !== "" || config !== "" || copyFrom !== "" || fileName !== "" || design !== designAtStart.current;
     return (
         <Dialog
             open={open}
             onClose={submitting ? () => {} : onClose}
+            dirty={dirty}
             title={t("createObject.title")}
             size={step === "how" && source === "design" ? "xl" : "lg"}
             initialFocus={nameRef}

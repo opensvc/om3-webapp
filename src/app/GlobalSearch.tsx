@@ -297,7 +297,6 @@ function SearchPalette({
             onClick={() => {
               onClose(true);
             }}
-            title={t("search.close")}
             className="flex h-7 w-7 shrink-0 items-center justify-center rounded-(--radius-control) border border-line text-ink-muted hover:bg-surface-sunken hover:text-ink"
           >
             <CloseIcon />
@@ -345,7 +344,6 @@ function SearchPalette({
                   <GroupingSwitch value={grouping.value} onChange={grouping.set} />
                   <button
                     type="button"
-                    title={t("panelHistory.clear")}
                     onClick={() => {
                       recent.clear();
                       input.current?.focus();
@@ -511,7 +509,6 @@ function RecentRow({
         type="button"
         // The keyboard removes it with Delete: the cross is for the pointer.
         tabIndex={-1}
-        title={t("panelHistory.remove", { name: entry.label })}
         onClick={(event) => {
           event.stopPropagation();
           onRemove();

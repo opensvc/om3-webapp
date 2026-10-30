@@ -4,8 +4,12 @@ import { useSyncExternalStore } from "react";
  * The introduction of each page, a sentence or two under the header saying what the
  * page is about to someone who does not know OpenSVC (`pageIntro.<page>` in the
  * catalog). Hidden page by page on demand, for the browser; shown again all at once
- * from the Glossary page.
+ * from the Glossary page. The legend of the status board closes as they do, a hint
+ * among them (`SYMBOLS_HINT`).
  */
+
+/** The name of the legend of the status board among the hints hidden. */
+export const SYMBOLS_HINT = "status-board-symbols";
 
 /** The page an address shows, by its path and, for the objects, its list; null for none with an intro. */
 export function introPage(pathname: string, search: string): string | null {

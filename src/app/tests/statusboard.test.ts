@@ -185,6 +185,42 @@ describe("status board", () => {
     );
   });
 
+  test("a note offers the action it asks for, on its instances or on the object", () => {
+    const fixOf = (board: Board, subject: string) => board.notes.find((g) => g.heads[0]?.subject === subject)?.fix;
+    // Failed on both nodes: one note, its clear on both instances.
+    expect(fixOf(buildBoard({ path: "system/svc/dns", object: dns as ObjectData }), "monitor")).toEqual({
+      action: "clear",
+      nodes: ["dev3n1", "dev3n2"],
+    });
+    const instance = (status: Record<string, string>) => ({
+      config: { resources: {} },
+      monitor: { state: "idle", updated_at: "2026-10-12T10:00:00Z" },
+      status: { avail: "down", overall: "down", provisioned: "true", ...status },
+    });
+    const at = "2026-10-12T10:00:00Z";
+    const object = (topology: string, avail: string): ObjectData => ({
+      avail,
+      overall: "down",
+      topology,
+      instances: {
+        n1: instance({ frozen_at: at, stopped_at: at, provisioned: "false" }),
+        n2: instance({ frozen_at: at, stopped_at: at, provisioned: "false" }),
+        n3: instance({ stopped_at: at }),
+      },
+    });
+    // Some instances: those; all of them: the object.
+    const flex = buildBoard({ path: "ns1/svc/web", object: object("flex", "down") });
+    expect(fixOf(flex, "frozen")).toEqual({ action: "unfreeze", nodes: ["n1", "n2"] });
+    expect(fixOf(flex, "provisioned")).toEqual({ action: "provision", nodes: ["n1", "n2"] });
+    expect(fixOf(flex, "stopped")).toEqual({ action: "start", nodes: [] });
+    // A failover object starts by its orchestration, down; up, its stopped instances stay so.
+    const failover = buildBoard({ path: "ns1/svc/web", object: object("failover", "down") });
+    expect(fixOf(failover, "stopped")).toEqual({ action: "start", nodes: [] });
+    expect(fixOf(buildBoard({ path: "ns1/svc/web", object: object("failover", "up") }), "stopped")).toBeUndefined();
+    // Nothing to do about the others.
+    expect(fixOf(flex, "monitor")).toBeUndefined();
+  });
+
   test("resources run in order, by subset, the encapsulated ones under their container", () => {
     vi.useFakeTimers({ now: new Date("2026-10-12T12:00:00Z") });
     const res = (type: string, label: string, extra = {}) => ({ type, label, status: "up", ...extra });

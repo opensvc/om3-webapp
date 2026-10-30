@@ -15,7 +15,7 @@ export function Switch({
   checked: boolean;
   /** Name of the property, for the accessible label. */
   label: string;
-  /** Label of the current state, announced and shown as a tooltip. */
+  /** Label of the current state, announced. */
   stateLabel: string;
   disabled?: boolean;
   onChange?: (checked: boolean) => void;
@@ -26,7 +26,6 @@ export function Switch({
       role="switch"
       aria-checked={checked}
       aria-label={`${label} : ${stateLabel}`}
-      title={stateLabel}
       disabled={disabled}
       onClick={() => {
         onChange?.(!checked);

@@ -79,8 +79,11 @@ function renderView(url = "/objects?kind=svc") {
 }
 
 describe("record panels", () => {
-  test("a badge opens its record over the view, the filters kept, on its first tab", () => {
+  test("a name opens its record over the view, the filters kept, on its first tab", () => {
     renderView();
+    // A name as text, underlined hovered: no pill, a pill being a count filtering a page.
+    expect(screen.getByRole("button", { name: "lo" })).toHaveClass("hover:underline");
+    expect(screen.getByRole("button", { name: "lo" })).not.toHaveClass("rounded-full", "border");
     fireEvent.click(screen.getByRole("button", { name: "lo" }));
     expect(screen.getByTestId("search")).toHaveTextContent("?kind=svc&peek=network:lo");
     const panel = screen.getByRole("dialog", { name: "lo" });

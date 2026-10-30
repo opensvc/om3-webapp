@@ -265,7 +265,6 @@ const FeedRow = React.memo(({log, isOpen, onToggle}) => {
                 role="button"
                 tabIndex={0}
                 aria-expanded={isOpen}
-                title={isOpen ? t("events.hideData") : t("events.showData")}
                 onClick={onToggle}
                 onKeyDown={(event) => {
                     if (event.key !== "Enter" && event.key !== " ") return;
@@ -799,7 +798,6 @@ const EventDrawerContent = ({
                                         type="button"
                                         aria-pressed={isSelected}
                                         data-page-event={isPageEvent}
-                                        title={isPageEvent ? t("events.pageEvent") : t("events.additionalEvent")}
                                         onClick={() => toggleEventTypeFilter(eventType)}
                                         className={cn(
                                             "inline-flex h-6 items-center rounded-full border px-2 font-medium whitespace-nowrap max-md:h-8",
@@ -1024,7 +1022,6 @@ const EventLogger = React.memo(({
             {!drawerOpen && !anyPanelOpen && (
                 <button
                     type="button"
-                    title={title}
                     onClick={() => setDrawerOpen(true)}
                     className="fixed right-4 bottom-4 z-[1200] inline-flex h-8 items-center gap-1.5 rounded-(--radius-control) border border-line bg-surface-raised px-3 font-medium text-ink shadow hover:bg-surface-sunken max-md:h-9"
                 >
@@ -1042,7 +1039,6 @@ const EventLogger = React.memo(({
                         role="separator"
                         aria-orientation="horizontal"
                         aria-label={t("events.resizeHandle")}
-                        title={t("events.dragToResize")}
                         data-resizing={isResizing}
                         onMouseDown={handleResizeStart}
                         onTouchStart={handleResizeStart}

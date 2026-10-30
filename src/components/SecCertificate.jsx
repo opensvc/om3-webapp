@@ -118,9 +118,11 @@ export function SecCertificate({path, keyNames, disabled, onWritten}) {
     const [confirm, setConfirm] = useState(null);
     const [understood, setUnderstood] = useState(false);
     useEffect(() => setUnderstood(false), [confirm]);
-    // The ca of the sec as read (null while read, undefined unread), and as chosen.
+    // The ca of the sec as read (null while read, undefined unread), and as chosen;
+    // `caReads`, counting the reads asked, a failed one asked again.
     const [currentCa, setCurrentCa] = useState(null);
     const [ca, setCa] = useState("");
+    const [caReads, setCaReads] = useState(0);
     const hasCertificate = keyNames.includes("certificate");
     const hasPrivateKey = keyNames.includes("private_key");
 
@@ -148,11 +150,13 @@ export function SecCertificate({path, keyNames, disabled, onWritten}) {
         return () => {
             live = false;
         };
-    }, [confirm?.action, path]);
+    }, [confirm?.action, path, caReads]);
 
     /** The ca chosen written in the sec, when it changed: false if refused. */
     const writeCa = async () => {
-        if (currentCa !== undefined && ca === currentCa) return true;
+        // Unread, what signs it is not known: nothing written on a guess, no ca unset.
+        if (currentCa === undefined) return false;
+        if (ca === currentCa) return true;
         const info = ca
             ? {action: "config", label: t("actionTray.writes.set", {keyword: "ca", value: ca}), subject: path, path}
             : {action: "config", label: t("actionTray.writes.unset", {keyword: "ca"}), subject: path, path};
@@ -227,6 +231,8 @@ export function SecCertificate({path, keyNames, disabled, onWritten}) {
     const pending = confirm?.action;
     const harmful = pending === "force";
     const reading = pending === "create" && currentCa === null;
+    // Its ca not read: no creation, which would sign it as the choice shown, a guess.
+    const unread = pending === "create" && currentCa === undefined;
 
     return (
         <>
@@ -252,7 +258,7 @@ export function SecCertificate({path, keyNames, disabled, onWritten}) {
                             <Button variant="secondary" onClick={() => setConfirm(null)}>{t("common.cancel")}</Button>
                             <Button
                                 variant={pending === "create" ? "create" : "change"}
-                                disabled={(harmful && !understood) || reading}
+                                disabled={(harmful && !understood) || reading || unread}
                                 onClick={() => run(pending)}
                             >
                                 {t(`secCertificate.${pending}.label`)}
@@ -265,7 +271,13 @@ export function SecCertificate({path, keyNames, disabled, onWritten}) {
                         <p>{t(`secCertificate.${pending}.description`)}</p>
                         {pending === "create" && (reading
                             ? <Spinner label={t("secCertificate.ca.reading")}/>
-                            : <CaChoice ca={ca} onChange={setCa} secs={secs}/>)}
+                            : unread
+                                ? (
+                                    <Alert action={<Button size="sm" onClick={() => setCaReads((n) => n + 1)}>{t("common.retry")}</Button>}>
+                                        {t("secCertificate.ca.unread")}
+                                    </Alert>
+                                )
+                                : <CaChoice ca={ca} onChange={setCa} secs={secs}/>)}
                         {pending === "create" && hasCertificate && (
                             <Alert tone="warning">
                                 {t(hasPrivateKey ? "secCertificate.create.replaceKeepKey" : "secCertificate.create.replace")}

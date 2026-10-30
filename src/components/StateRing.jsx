@@ -71,7 +71,6 @@ function LabelLink({to, title, children}) {
             }}
             className="outline-none focus-visible:[&_text]:underline"
         >
-            <title>{title}</title>
             {children}
         </a>
     );

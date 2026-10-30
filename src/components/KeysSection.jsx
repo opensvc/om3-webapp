@@ -21,8 +21,7 @@ import {hasPemCertificate} from "../utils/x509";
 import CertificateDetails from "./CertificateDetails";
 import {SecCertificate} from "./SecCertificate";
 import {Trans, useTranslation} from "react-i18next";
-import {readProblem, useConfigWait, withWriteParams} from "../app/config-write";
-import {WaitChoice} from "./ConfigWriteControls";
+import {readProblem, withWriteParams} from "../app/config-write";
 
 const getAuthToken = () => {
     const token = localStorage.getItem("authToken");
@@ -146,6 +145,7 @@ const KeyFormDialog = ({
                            initialLoading = false,
                            maxSize = null,
                            onRemove,
+                           error = null,
                        }) => {
     const {t, i18n} = useTranslation();
     const [name, setName] = useState(initialName);
@@ -328,6 +328,8 @@ const KeyFormDialog = ({
                         </p>
                         {sizeLine}
                     </div>
+                    {/* Refused, said here: the form kept as typed, to fix and send again. */}
+                    {error && <Alert>{error}</Alert>}
                     <input
                         ref={browse}
                         type="file"
@@ -374,6 +376,8 @@ const KeysSection = ({decodedObjectName, openSnackbar, refreshKey}) => {
 
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
     const [createDialogOpen, setCreateDialogOpen] = useState(false);
+    // Why the daemon refused the key written: the form stays open, as typed.
+    const [keyFormError, setKeyFormError] = useState(null);
     const [updateDialogOpen, setUpdateDialogOpen] = useState(false);
     const [viewDialogOpen, setViewDialogOpen] = useState(false);
     // The keys to delete once confirmed: the one of a line or of its dialog, or the keys checked.
@@ -404,7 +408,6 @@ const KeysSection = ({decodedObjectName, openSnackbar, refreshKey}) => {
     const [updateContentLoading, setUpdateContentLoading] = useState(false);
     // The key renamed (om <path> key rename): its name, the one typed, and why the daemon refused it.
     const [rename, setRename] = useState(null);
-    const [wait, setWait] = useConfigWait();
     const titleId = useId();
 
     const fetchKeys = useCallback(async () => {
@@ -520,6 +523,17 @@ const KeysSection = ({decodedObjectName, openSnackbar, refreshKey}) => {
         }
     };
 
+    /**
+     * What came of a key written, said in the actions tray; refused, said in its form
+     * too, which stays open: a pasted certificate or secret is not lost to a refusal.
+     */
+    const writeKey = async (response, write) => {
+        let refused = null;
+        const done = await trackWrite(response, write, async (r) => (refused = await keyRefusal(r)));
+        setKeyFormError(done ? null : refused);
+        return done;
+    };
+
     const handleCreateKey = async ({name, contentBlob}) => {
         const token = getAuthToken();
         if (!token) {
@@ -541,12 +555,15 @@ const KeysSection = ({decodedObjectName, openSnackbar, refreshKey}) => {
                 },
                 body: contentBlob,
             });
-            if (await trackWrite(response, write, keyRefusal)) await fetchKeys();
+            if (await writeKey(response, write)) {
+                setCreateDialogOpen(false);
+                await fetchKeys();
+            }
         } catch (err) {
             trackRefused({...write, reason: err.message});
+            setKeyFormError(err.message);
         } finally {
             setActionLoading(false);
-            setCreateDialogOpen(false);
         }
     };
 
@@ -571,12 +588,15 @@ const KeysSection = ({decodedObjectName, openSnackbar, refreshKey}) => {
                 },
                 body: contentBlob,
             });
-            if (await trackWrite(response, write, keyRefusal)) await fetchKeys();
+            if (await writeKey(response, write)) {
+                setUpdateDialogOpen(false);
+                await fetchKeys();
+            }
         } catch (err) {
             trackRefused({...write, reason: err.message});
+            setKeyFormError(err.message);
         } finally {
             setActionLoading(false);
-            setUpdateDialogOpen(false);
         }
     };
 
@@ -597,7 +617,7 @@ const KeysSection = ({decodedObjectName, openSnackbar, refreshKey}) => {
         setActionLoading(true);
         setRename((r) => ({...r, error: null}));
         try {
-            const response = await fetch(withWriteParams(`${buildObjectUrl(decodedObjectName)}/data`, {wait}), {
+            const response = await fetch(withWriteParams(`${buildObjectUrl(decodedObjectName)}/data`), {
                 method: "PATCH",
                 headers: {Authorization: `Bearer ${token}`, "Content-Type": "application/json"},
                 body: JSON.stringify([{action: "rename", name: from, to}]),
@@ -649,6 +669,7 @@ const KeysSection = ({decodedObjectName, openSnackbar, refreshKey}) => {
     const openUpdateDialog = async (keyName) => {
         const request = ++updateRequest.current;
         setUpdateInitialName(keyName);
+        setKeyFormError(null);
         setUpdateDialogOpen(true);
         setUpdateInitialContent("");
         setUpdateHidden(null);
@@ -737,7 +758,10 @@ const KeysSection = ({decodedObjectName, openSnackbar, refreshKey}) => {
                     label={t("keys.add")}
                     text={t("common.add")}
                     solid
-                    onClick={() => setCreateDialogOpen(true)}
+                    onClick={() => {
+                        setKeyFormError(null);
+                        setCreateDialogOpen(true);
+                    }}
                     disabled={actionLoading}
                 >
                     <PlusIcon/>
@@ -785,7 +809,6 @@ const KeysSection = ({decodedObjectName, openSnackbar, refreshKey}) => {
                         <Row
                             key={key.name}
                             onActivate={actionLoading ? undefined : () => handleViewKey(key.name)}
-                            title={t("keys.view.action", {key: key.name})}
                             selected={pickedKeys.includes(key.name)}
                         >
                             <Cell className="w-8">
@@ -957,9 +980,6 @@ const KeysSection = ({decodedObjectName, openSnackbar, refreshKey}) => {
                         title={t("keys.rename.title", {key: rename.from})}
                         footer={
                             <>
-                                <div className="mr-auto self-center">
-                                    <WaitChoice compact wait={wait} onChange={setWait} disabled={actionLoading}/>
-                                </div>
                                 <Button onClick={() => setRename(null)} disabled={actionLoading}>{t("common.cancel")}</Button>
                                 <Button
                                     onClick={handleRenameKey}
@@ -1007,6 +1027,7 @@ const KeysSection = ({decodedObjectName, openSnackbar, refreshKey}) => {
                 title={t("keys.form.createTitle")}
                 loading={actionLoading}
                 maxSize={maxKeySize}
+                error={keyFormError}
             />
 
             <KeyFormDialog
@@ -1019,6 +1040,7 @@ const KeysSection = ({decodedObjectName, openSnackbar, refreshKey}) => {
                 hidden={updateHidden}
                 title={t("keys.form.updateTitle")}
                 loading={actionLoading}
+                error={keyFormError}
                 maxSize={maxKeySize}
                 initialLoading={updateContentLoading}
                 onRemove={() => {

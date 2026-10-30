@@ -31,8 +31,6 @@ describe('CreateObjectDialog', () => {
         clearDesignerCache();
         grants.current = {root: null};
         localStorage.setItem('authToken', 'tok');
-        // The creation not waiting for the nodes (--wait), as kept.
-        localStorage.setItem('om3.config.wait', 'false');
         requests = [];
         answers = {};
         global.fetch = vi.fn((url, options = {}) => {
@@ -81,6 +79,18 @@ describe('CreateObjectDialog', () => {
         expect(screen.queryByRole('alert')).toBeNull();
         fireEvent.click(cancel);
         expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
+    test('untouched, closed by Escape; something typed, kept open by a stray Escape, Cancel closing it', () => {
+        const onClose = vi.fn();
+        open({defaultKind: 'svc', onClose});
+        fireEvent.keyDown(screen.getByRole('dialog'), {key: 'Escape'});
+        expect(onClose).toHaveBeenCalledTimes(1);
+        type('Name', 'web2');
+        fireEvent.keyDown(screen.getByRole('dialog'), {key: 'Escape'});
+        expect(onClose).toHaveBeenCalledTimes(1);
+        fireEvent.click(screen.getByRole('button', {name: 'Cancel'}));
+        expect(onClose).toHaveBeenCalledTimes(2);
     });
 
     test('opens on the kind and namespace it is given, a card each picked, the name focused; no wait to choose', () => {
@@ -140,7 +150,7 @@ describe('CreateObjectDialog', () => {
         await waitFor(() => expect(onCreated).toHaveBeenCalledWith('ns1/svc/db'));
         expect(useActionTracker.getState().tracked.map((e) => [e.label, e.subject, e.state])).toEqual([['Create', 'ns1/svc/db', 'succeeded']]);
         const [post] = posts();
-        expect(post.url).toBe('/api/object/path/ns1/svc/db/config/file');
+        expect(post.url).toBe('/api/object/path/ns1/svc/db/config/file?wait=30s');
         expect(post.body).toMatch(/^\[DEFAULT\]\nid = [0-9a-f-]{36}\n$/);
     });
 
@@ -151,7 +161,7 @@ describe('CreateObjectDialog', () => {
         next();
         create();
         await waitFor(() => expect(onCreated).toHaveBeenCalledWith('db'));
-        expect(posts()[0].url).toBe('/api/object/path/root/svc/db/config/file');
+        expect(posts()[0].url).toBe('/api/object/path/root/svc/db/config/file?wait=30s');
     });
 
     test('a cfg or a sec, a datastore: created at the first step, empty, its keys added next', async () => {
@@ -161,7 +171,7 @@ describe('CreateObjectDialog', () => {
         type('Name', 'tls');
         create();
         await waitFor(() => expect(onCreated).toHaveBeenCalledWith('ns1/sec/tls'));
-        expect(posts()[0].url).toBe('/api/object/path/ns1/sec/tls/config/file');
+        expect(posts()[0].url).toBe('/api/object/path/ns1/sec/tls/config/file?wait=30s');
         expect(posts()[0].body).toMatch(/^\[DEFAULT\]\nid = [0-9a-f-]+\n$/);
     });
 
@@ -441,7 +451,6 @@ describe('CreateObjectDialog', () => {
                 'lxcprovisionstartstop',
             ]);
             // A feature told on hover.
-            expect(within(types).getAllByText('start')[0]).toHaveAttribute('title', 'The start brings the resource up.');
             fireEvent.click(within(types).getByRole('button', {name: 'podman'}));
             expect(await screen.findByRole('heading', {name: /\[container#1\] container\.podman/})).toBeInTheDocument();
             // Podman provisions nothing: no box to take its provision on.
@@ -656,7 +665,7 @@ describe('CreateObjectDialog', () => {
     });
 
     test('a refusal of the daemon is said in the dialog', async () => {
-        answers['POST /api/object/path/ns1/svc/db/config/file'] = {status: 400, text: JSON.stringify({detail: 'bad keyword'})};
+        answers['POST /api/object/path/ns1/svc/db/config/file?wait=30s'] = {status: 400, text: JSON.stringify({detail: 'bad keyword'})};
         open({defaultNamespace: 'ns1'});
         type('Name', 'db');
         next();

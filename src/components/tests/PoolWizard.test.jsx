@@ -47,6 +47,28 @@ describe('PoolWizard', () => {
         ]);
     });
 
+    test('a boolean whose default is true: shown checked, unchecked written false, checked again left to its default', async () => {
+        const onSaved = vi.fn();
+        render(<PoolWizard pools={[]} nodes={['n1']} onClose={() => {}} onSaved={onSaved}/>);
+        fireEvent.change(await screen.findByRole('textbox', {name: 'Name'}), {target: {value: 'arr'}});
+        fireEvent.click(screen.getByRole('radio', {name: 'pure'}));
+        fireEvent.click(screen.getByRole('button', {name: 'Next'}));
+        fireEvent.change(screen.getByRole('textbox', {name: 'array (required)'}), {target: {value: 'a1'}});
+        fireEvent.change(screen.getByRole('textbox', {name: 'diskgroup (required)'}), {target: {value: 'dg1'}});
+        const deleteNow = screen.getByRole('checkbox', {name: 'delete_now'});
+        // Not written, its default true: checked.
+        expect(deleteNow).toBeChecked();
+        fireEvent.click(deleteNow);
+        expect(deleteNow).not.toBeChecked();
+        fireEvent.click(screen.getByRole('button', {name: 'Next'}));
+        expect(screen.getByTestId('pool-preview')).toHaveTextContent('delete_now = false');
+        fireEvent.click(screen.getByRole('button', {name: 'Add the pool'}));
+        await waitFor(() => expect(onSaved).toHaveBeenCalledWith('arr'));
+        expect(requests.filter((r) => r.method === 'PATCH').map((r) => decodeURIComponent(r.url))).toEqual([
+            expect.stringContaining('set=pool#arr.delete_now=false'),
+        ]);
+    });
+
     test('a type a node cannot run, said by it from the capabilities of each node, not held back', async () => {
         const caps = {n1: ['drivers.pool.directory', 'drivers.pool.vg'], n2: ['drivers.pool.directory']};
         global.fetch.mockImplementation(async (url) => {

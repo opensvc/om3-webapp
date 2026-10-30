@@ -172,7 +172,6 @@ export function ConfigText({text, keywordsUrl, label, lineNumbers = false}) {
                             <button
                                 type="button"
                                 aria-label={t("config.keywordHelp.open", {keyword: nameOf(l)})}
-                                title={t("config.keywordHelp.open", {keyword: nameOf(l)})}
                                 onClick={() => setOpen(index)}
                                 className="cursor-pointer rounded-sm underline decoration-line-strong decoration-dotted underline-offset-2 hover:text-accent hover:decoration-accent focus-visible:outline-2 focus-visible:outline-accent"
                             >

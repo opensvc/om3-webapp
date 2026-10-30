@@ -100,13 +100,13 @@ const HeaderSection = ({
             <div className="flex items-center gap-3">
                 {!inHeader && orchestration}
                 {hasStatus && (
-                    <span data-state={badge.state} title={t("objects.header.statusTitle", {status: avail || t("objects.header.unknown")})} className="inline-flex">
+                    <span data-state={badge.state} className="inline-flex">
                         <StatusBadge state={badge.state} label={badge.label ?? (avail || undefined)} className="w-auto"/>
                     </span>
                 )}
                 <FrozenMark frozen={frozen === 'frozen'}/>
                 {hasStatus && isNotProvisioned && (
-                    <NotProvisionedMark label={t("objects.header.notProvisionedLabel")} title={t("objects.header.notProvisionedTitle")}/>
+                    <NotProvisionedMark label={t("objects.header.notProvisionedLabel")}/>
                 )}
                 {!inHeader && menu}
             </div>

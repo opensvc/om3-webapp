@@ -149,7 +149,6 @@ describe('KeysSection', () => {
         expect(screen.getByRole('rowheader', {name: 'k'})).toHaveClass('text-left');
         expect(screen.queryByRole('button', {name: 'View key k'})).not.toBeInTheDocument();
         const row = screen.getByRole('rowheader', {name: 'k'}).closest('tr');
-        expect(row).toHaveAttribute('title', 'View key k');
         // Edited and removed from its dialog and the selection: no tool on the line.
         expect(within(row).queryByRole('button')).toBeNull();
         // Solid: "Add" in a wide window, the plus alone in a narrow one; named in full.
@@ -859,6 +858,31 @@ describe('KeysSection', () => {
         const dialog = await openDialog('create');
         expect(await within(dialog).findByText('0 bytes of up to 1 MB')).toBeInTheDocument();
         resetMaxKeySize();
+    });
+
+    test('a key refused: its form kept open as typed, the reason said in it and in the tray; sent again, closed', async () => {
+        let refuse = true;
+        mockFetch({keys: [], methods: {POST: () => Promise.resolve(refuse
+            ? new Response(JSON.stringify({detail: 'key exists'}), {status: 409, headers: {'Content-Type': 'application/json'}})
+            : {ok: true})}});
+        await renderAndWait('root/cfg/cfg1', 0);
+        const dialog = await openDialog('create');
+        await act(async () => {
+            await user.type(within(dialog).getByRole('textbox', {name: /Key Name/i}), 'cert');
+            await user.type(within(dialog).getByRole('textbox', {name: 'Key Content'}), 'BEGIN CERTIFICATE');
+        });
+        await act(async () => {
+            await user.click(within(dialog).getByRole('button', {name: /Create/i}));
+        });
+        await waitFor(() => expect(within(dialog).getByText(/key exists/)).toBeInTheDocument());
+        expect(screen.getByRole('dialog')).toBe(dialog);
+        expect(within(dialog).getByRole('textbox', {name: 'Key Content'})).toHaveValue('BEGIN CERTIFICATE');
+        expect(tray()[0]).toEqual([expect.any(String), expect.any(String), 'refused', expect.stringMatching(/key exists/)]);
+        refuse = false;
+        await act(async () => {
+            await user.click(within(dialog).getByRole('button', {name: /Create/i}));
+        });
+        await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     });
 
     test('dialog resets after create', async () => {

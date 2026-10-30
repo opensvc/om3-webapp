@@ -106,7 +106,7 @@ describe('the message queued while the agent answers', () => {
         expect(screen.getByText(/your message will be sent once it ends/)).toBeInTheDocument();
         type('Second');
         expect(fireEvent.keyDown(box(), {key: 'Enter'})).toBe(false);
-        expect(within(queued()).getByText('Second')).toHaveAttribute('title', 'Second');
+        expect(within(queued()).getByText('Second')).toHaveTextContent('Second');
         expect(box()).toHaveValue('');
         expect(box()).toHaveFocus();
         expect(screen.getByRole('button', {name: 'Queue'})).toBeDisabled();

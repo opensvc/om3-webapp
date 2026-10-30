@@ -65,8 +65,8 @@ export const NAV_SECTIONS = [
 
 /**
  * The alert of an entry, when something calls for attention: a round badge over
- * the right end of its link, orange or red, what it is about in its tooltip and
- * for screen readers. None while all is well: the menu counts nothing.
+ * the right end of its link, orange or red, what it is about for screen
+ * readers. None while all is well: the menu counts nothing.
  */
 function AlertBadge({id, alert}) {
     return (
@@ -131,7 +131,7 @@ const LEVELS = ["warn", "down"];
 
 /**
  * The alert of the folded menu, on its button: the worst of the alerts of its
- * entries, all of them said in its tooltip. None while all is well.
+ * entries, all of them said for screen readers. None while all is well.
  */
 export function menuAlert(alerts) {
     const raised = Object.values(alerts ?? {}).map((entry) => entry?.alert).filter(Boolean);
@@ -188,8 +188,6 @@ function NavSection({section, alerts, onNavigate}) {
                         <NavLink
                             to={to}
                             onClick={onNavigate}
-                            // Mouseover details of the entries that have some.
-                            title={alerts[id]?.details?.join("\n")}
                             className={({isActive}) => cn(LINK, isActive && CURRENT)}
                         >
                             {t(labelKey)}

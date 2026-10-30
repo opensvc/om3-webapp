@@ -70,7 +70,6 @@ describe("Switch", () => {
     render(<Switch checked label="Frozen" stateLabel="yes" />);
     const toggle = screen.getByRole("switch", { name: "Frozen : yes" });
     expect(toggle).toHaveAttribute("aria-checked", "true");
-    expect(toggle).toHaveAttribute("title", "yes");
   });
 
   test("calls onChange with the opposite value", async () => {

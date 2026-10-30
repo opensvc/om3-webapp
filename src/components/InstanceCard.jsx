@@ -54,7 +54,6 @@ const InstanceCard = ({
     const canView = typeof onViewInstance === 'function';
     const isSelected = selectedNodes.includes(node);
 
-    const stoppedAt = nodeData?.stopped_at;
 
     const handleCardClick = (e) => {
         if (e.target.closest('button') || e.target.closest('input') || e.target.closest('.no-click')) {
@@ -84,7 +83,6 @@ const InstanceCard = ({
                 <button
                     type="button"
                     onClick={() => onViewInstance(node)}
-                    title={t("instance.card.viewResources")}
                     className="truncate font-medium text-ink hover:underline"
                 >
                     {node}
@@ -97,7 +95,7 @@ const InstanceCard = ({
                     {t("instance.card.viewResourcesHint")}
                 </span>
             )}
-            {isStopped && <StoppedMark stoppedAt={stoppedAt} label={t("instance.card.stopped", {node})}/>}
+            {isStopped && <StoppedMark label={t("instance.card.stopped", {node})}/>}
             {/* A breached RPO says more than the freeze: it takes its place. */}
             {isLagging ? (
                 <RpoBreachedMark label={t("instance.card.lagging", {node})}/>
@@ -105,7 +103,7 @@ const InstanceCard = ({
                 <FrozenMark frozen={frozen === "frozen"}/>
             )}
             {isInstanceNotProvisioned && (
-                <NotProvisionedMark label={t("instance.card.notProvisioned", {node})} title={t("instance.notProvisionedTitle")}/>
+                <NotProvisionedMark label={t("instance.card.notProvisioned", {node})}/>
             )}
             {state && <span className="truncate text-ink-muted">{state}</span>}
 

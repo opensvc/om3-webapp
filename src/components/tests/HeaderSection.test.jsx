@@ -85,7 +85,7 @@ describe('HeaderSection Component', () => {
         expect(screen.getByRole('heading', {level: 1, name: 'root/svc/svc1'})).toBeInTheDocument();
         expect(status()).toHaveAttribute('data-state', 'up');
         expect(status()).toHaveTextContent('up');
-        expect(screen.getByTitle('frozen')).toBeInTheDocument();
+        expect(screen.getByText('frozen')).toBeInTheDocument();
         expect(screen.getByText('placed@node1')).toBeInTheDocument();
         expect(screen.queryByRole('img', {name: 'Object is not provisioned'})).not.toBeInTheDocument();
     });
@@ -101,7 +101,7 @@ describe('HeaderSection Component', () => {
 
         expect(screen.getByText('root/svc/svc1')).toBeInTheDocument();
         expect(status()).toHaveAttribute('data-state', 'warn');
-        expect(screen.queryByTitle('frozen')).not.toBeInTheDocument();
+        expect(screen.queryByText('frozen')).not.toBeInTheDocument();
         expect(screen.queryByText('placed@node1')).not.toBeInTheDocument();
     });
 
@@ -126,7 +126,7 @@ describe('HeaderSection Component', () => {
         expect(screen.getByText('root/svc/svc1')).toBeInTheDocument();
         expect(screen.getAllByRole('img', {name: 'Object is not provisioned'})).toHaveLength(1);
         expect(status()).toHaveAttribute('data-state', 'up');
-        expect(screen.getByTitle('frozen')).toBeInTheDocument();
+        expect(screen.getByText('frozen')).toBeInTheDocument();
     });
 
     test('disables menu button when actionInProgress is true', () => {

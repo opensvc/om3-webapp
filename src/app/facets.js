@@ -29,3 +29,9 @@ export function facetCounts(items, {match = () => true, facets}) {
 
 /** A value chosen in a facet, or no longer: the list of the values chosen, toggled. */
 export const toggled = (selected, value) => (selected.includes(value) ? selected.filter((v) => v !== value) : [...selected, value]);
+
+/** Whether the words searched are in one of the values, any case; no words, every item. */
+export const matches = (filter, ...values) => {
+    const q = filter.trim().toLowerCase();
+    return q === "" || values.some((v) => String(v ?? "").toLowerCase().includes(q));
+};

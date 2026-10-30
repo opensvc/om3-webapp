@@ -1,7 +1,7 @@
 import React from 'react';
 import {render, screen, fireEvent, waitFor} from '@testing-library/react';
 import {vi, describe, test, expect, beforeEach} from 'vitest';
-import Login, {decodeToken, refreshToken} from '../Login';
+import Login, {decodeToken, hasRefreshToken, refreshToken} from '../Login';
 import {SetAccessToken, SetAuthChoice, useAuthDispatch} from '../../context/AuthProvider.jsx';
 import {URL_TOKEN} from '../../config/apiPath';
 
@@ -155,6 +155,9 @@ describe('Login Component', () => {
         expect(localStorage.getItem('tokenExpiration')).toBeDefined();
         expect(localStorage.getItem('refreshTokenExpiration')).toBeDefined();
         expect(mockDispatch).toHaveBeenCalledWith({type: SetAccessToken, data: accessToken});
+        // Told before the token: its refresh is scheduled for a password session.
+        expect(localStorage.getItem('authChoice')).toBe('basic');
+        expect(mockDispatch.mock.calls.map(([action]) => action.type)).toEqual([SetAuthChoice, SetAccessToken]);
         expect(mockNavigate).toHaveBeenCalledWith('/');
     });
 
@@ -259,25 +262,37 @@ describe('Login Component', () => {
         expect(console.error).toHaveBeenCalledWith('Refresh token expired');
     });
 
-    test('refreshToken handles failed server response', async () => {
+    test.each([400, 401, 403])('refreshToken refused (HTTP %i): the session ended, the refresh token gone at once', async (status) => {
         localStorage.setItem('refreshToken', 'mock.token');
         localStorage.setItem('refreshTokenExpiration', (Date.now() + 3600000).toString());
-        fetch.mockResolvedValueOnce({ok: false});
+        fetch.mockResolvedValueOnce({ok: false, status});
 
         const result = await refreshToken(mockDispatch);
         expect(result).toBeNull();
         expect(mockDispatch).toHaveBeenCalledWith({type: SetAccessToken, data: null});
+        expect(localStorage.getItem('refreshToken')).toBeNull();
     });
 
-    test('refreshToken handles network error', async () => {
+    test.each([500, 502, 503, 504])('refreshToken failed, not refused (HTTP %i): the session kept, the refresh token too', async (status) => {
+        localStorage.setItem('refreshToken', 'mock.token');
+        localStorage.setItem('refreshTokenExpiration', (Date.now() + 3600000).toString());
+        fetch.mockResolvedValueOnce({ok: false, status});
+
+        const result = await refreshToken(mockDispatch);
+        expect(result).toBeNull();
+        expect(mockDispatch).not.toHaveBeenCalled();
+        expect(localStorage.getItem('refreshToken')).toBe('mock.token');
+    });
+
+    test('refreshToken with no answer, the network down: the session kept, the refresh token too', async () => {
         localStorage.setItem('refreshToken', 'mock.token');
         localStorage.setItem('refreshTokenExpiration', (Date.now() + 3600000).toString());
         fetch.mockRejectedValueOnce(new Error('Network error'));
 
         const result = await refreshToken(mockDispatch);
         expect(result).toBeNull();
-        expect(mockDispatch).toHaveBeenCalledWith({type: SetAccessToken, data: null});
-        expect(console.error).toHaveBeenCalledWith('Error refreshing token:', expect.any(Error));
+        expect(mockDispatch).not.toHaveBeenCalled();
+        expect(localStorage.getItem('refreshToken')).toBe('mock.token');
     });
 
     test('handles successful token refresh', async () => {
@@ -441,5 +456,20 @@ describe('Login Component', () => {
         expect(localStorage.getItem('refreshTokenExpiration')).toBeNull();
 
         removeItemSpy.mockRestore();
+    });
+});
+
+describe('hasRefreshToken', () => {
+    beforeEach(() => localStorage.clear());
+
+    test('a refresh token held and not expired: the session can be renewed; none, or expired, it cannot', () => {
+        expect(hasRefreshToken()).toBe(false);
+        localStorage.setItem('refreshToken', 'r');
+        // No expiration known: tried, the daemon says.
+        expect(hasRefreshToken()).toBe(true);
+        localStorage.setItem('refreshTokenExpiration', String(Date.now() + 60000));
+        expect(hasRefreshToken()).toBe(true);
+        localStorage.setItem('refreshTokenExpiration', String(Date.now() - 1000));
+        expect(hasRefreshToken()).toBe(false);
     });
 });

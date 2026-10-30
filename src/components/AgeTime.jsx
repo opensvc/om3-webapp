@@ -28,11 +28,11 @@ export const formatAge = (dateString, t, language) => {
     return date.toLocaleDateString(language);
 };
 
-/** A time in a table: its age, the full date and time on hover, a dash when there is none. */
+/** A time in a table: its age, a dash when there is none. */
 export const AgeTime = ({value}) => {
     const {t, i18n} = useTranslation();
     if (!value || value === ZERO_DATE) {
         return "-";
     }
-    return <span title={new Date(value).toLocaleString(i18n.language)}>{formatAge(value, t, i18n.language)}</span>;
+    return <span>{formatAge(value, t, i18n.language)}</span>;
 };

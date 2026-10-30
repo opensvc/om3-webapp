@@ -14,10 +14,9 @@ describe("hasTimestamp", () => {
 });
 
 describe("StoppedMark", () => {
-  test("names the state and gives the stop date as its tooltip", () => {
-    render(<StoppedMark stoppedAt="2026-10-05T10:00:00Z" label="Instance on node n1 is stopped" />);
+  test("names the state", () => {
+    render(<StoppedMark label="Instance on node n1 is stopped" />);
     const mark = screen.getByRole("img", { name: "Instance on node n1 is stopped" });
-    expect(mark.getAttribute("title")).toMatch(/^stopped at /);
     expect(mark).toHaveClass("text-ink-muted");
     expect(mark.querySelector("svg")).not.toBeNull();
   });
@@ -31,7 +30,6 @@ describe("StoppedMark", () => {
 
   test("says stopped without a date when it has none", () => {
     render(<StoppedMark />);
-    expect(screen.getByRole("img", { name: "Stopped" })).toHaveAttribute("title", "stopped");
   });
 });
 
@@ -39,7 +37,6 @@ describe("RpoBreachedMark", () => {
   test("is a warn mark named after the breach", () => {
     render(<RpoBreachedMark label="Instance on node n1 is lagging" />);
     const mark = screen.getByRole("img", { name: "Instance on node n1 is lagging" });
-    expect(mark).toHaveAttribute("title", "RPO breached");
     expect(mark).toHaveClass("text-state-warn");
   });
 });
@@ -50,7 +47,6 @@ describe("NotProvisionedMark", () => {
     const mark = screen.getByRole("img", { name: "Instance on node n1 is not provisioned" });
     expect(mark).toHaveTextContent(/^P$/);
     expect(mark).toHaveClass("border-state-down", "text-state-down");
-    expect(mark).toHaveAttribute("title", "not provisioned");
   });
 
   test("decorative, hidden from assistive technologies", () => {

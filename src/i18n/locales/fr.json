@@ -218,9 +218,6 @@
     }
   },
   "configWrite": {
-    "wait": {
-      "hint": "Attendre que chaque nœud actif de l'objet ait la configuration (jusqu'à {{duration}}). Un nœud arrêté la reçoit à son retour."
-    },
     "force": {
       "button": "Écrire quand même (--force)",
       "rootOnly": "Seul root peut l'écrire quand même, avec --force."
@@ -291,17 +288,6 @@
     }
   },
   "alerts": {
-    "details": {
-      "node_one": "{{count}} nœud",
-      "node_other": "{{count}} nœuds",
-      "pool_one": "{{count}} pool",
-      "pool_other": "{{count}} pools",
-      "network_one": "{{count}} réseau",
-      "network_other": "{{count}} réseaux",
-      "frozen": "gelés : {{count}}",
-      "full": "pleins : {{count}}",
-      "highestUsage": "usage le plus élevé : {{name}} {{percent}} %"
-    },
     "objectsDown_one": "{{count}} objet down",
     "objectsDown_other": "{{count}} objets down",
     "objectsWarn_one": "{{count}} objet en warn",
@@ -330,6 +316,7 @@
       "openid": "OpenID",
       "login": "Se connecter"
     },
+    "renewing": "Renouvellement de la session",
     "authenticating": {
       "title": "Authentification",
       "loading": "Chargement...",
@@ -532,8 +519,6 @@
       "routine": "Routine",
       "beating": "Battement",
       "id": "ID",
-      "show": "Afficher les filtres",
-      "hide": "Masquer les filtres",
       "driver": "Pilote",
       "clearAll": "Effacer tous les filtres"
     },
@@ -1413,6 +1398,16 @@
       "daysAgo": "il y a {{count}} j"
     },
     "selectHint": "Sélectionnez des nœuds pour agir dessus, ou ouvrez-en un",
+    "noMatch": "Aucun nœud ne correspond.",
+    "filters": {
+      "state": "État",
+      "frozen": "Gelé",
+      "frozenValues": {
+        "frozen": "gelé",
+        "thawed": "non gelé"
+      },
+      "label": "Étiquette"
+    },
     "short": {
       "score": "score",
       "load": "charge",
@@ -1462,8 +1457,10 @@
       "monitor": "Moniteur",
       "health": "Santé",
       "discovered": "Propriétés découvertes",
-      "discoveredTag": "découvert",
-      "organisationTag": "organisation",
+      "discoveredTag": "signalé par le nœud",
+      "discoveredUnset": "non signalé",
+      "organisationTag": "défini par vous",
+      "organisationUnset": "non défini",
       "globalExpect": "Attente globale",
       "localExpect": "Attente locale",
       "noExpect": "aucune",
@@ -1691,6 +1688,11 @@
     "designToText": "Modifier en texte"
   },
   "objects": {
+    "reason": {
+      "more_one": "+{{count}} autre",
+      "more_other": "+{{count}} autres",
+      "fix": "{{action}} {{name}}"
+    },
     "noInstanceStatus": "Aucun état de {{node}} : le nœud est perdu ou ne répond pas",
     "flex": {
       "title": "Flex",
@@ -2068,6 +2070,7 @@
       "cluster": "le cluster, sur tous ses nœuds"
     },
     "selectInstance": "Sélectionner l'instance sur {{node}}",
+    "instanceOn": "Instance sur {{node}}",
     "selectResource": "Sélectionner {{rid}} sur tous ses nœuds",
     "selectCell": "Sélectionner {{rid}} sur {{node}}",
     "openCell": "Ouvrir {{rid}} sur {{node}}",
@@ -2306,7 +2309,8 @@
       "unknownObject": "l'objet est inconnu",
       "alreadyFrozen": "déjà gelé",
       "alreadyUnfrozen": "pas gelé",
-      "clusterInSelection": "écarté : le cluster ne se manipule que seul"
+      "clusterInSelection": "écarté : le cluster ne se manipule que seul",
+      "notForKind": "écarté : un {{kind}} ne prend pas cette action"
     },
     "monitor": "{{node}} : le moniteur est {{state}}",
     "subjects": {
@@ -2477,7 +2481,8 @@
       "none": "Pas d'autre sec dans le namespace.",
       "signedBy": "Signé par {{ca}}, écrit comme ca du sec.",
       "selfSigned": "Pas de ca : auto-signé.",
-      "reading": "Lecture du ca du sec…"
+      "reading": "Lecture du ca du sec…",
+      "unread": "Le ca du sec n'a pas pu être lu : le certificat n'est pas créé tant qu'on ne sait pas ce qui le signe."
     }
   },
   "actionMenus": {
@@ -2768,7 +2773,6 @@
     "loadError": "Les ressources n’ont pas pu être lues : {{message}}",
     "filter": "Filtrer les ressources",
     "group": "Pilote",
-    "all": "Tous",
     "count": "{{shown}} / {{total}}",
     "refresh": "Rafraîchir",
     "empty": "Aucune ressource signalée.",
@@ -2794,8 +2798,6 @@
       "encap": "encapsulée"
     },
     "rail": "Filtres",
-    "chosen_one": "{{count}} choisi",
-    "chosen_other": "{{count}} choisis",
     "selection": {
       "all": "Sélectionner toutes les ressources",
       "one": "Sélectionner {{rid}} de {{path}} sur {{node}}",
@@ -3290,7 +3292,7 @@
   },
   "glossary": {
     "title": "Glossaire",
-    "intro": "Les mots d'OpenSVC utilisés dans cette webapp, dits simplement. Un libellé souligné en pointillés donne sa définition au survol ou au focus.",
+    "intro": "Les mots d'OpenSVC utilisés dans cette webapp, dits simplement. Un libellé qui montre le curseur d'aide donne sa définition : restez dessus un instant, ou cliquez.",
     "search": "Chercher dans le glossaire",
     "noMatch": "Aucun terme ne correspond.",
     "more": "Plus dans le Glossaire du menu.",
@@ -3515,6 +3517,7 @@
     }
   },
   "legend": {
+    "hide": "Masquer cette aide",
     "title": "Symboles",
     "toggle": "Ce que veulent dire les symboles",
     "groups": {

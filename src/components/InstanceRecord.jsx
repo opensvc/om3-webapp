@@ -32,6 +32,7 @@ import {Checkbox} from "../ui/components/Field";
 import {BoltIcon, CloseIcon} from "../ui/icons";
 import {INSTANCE_ACTIONS, RESOURCE_ACTIONS, actionLabel} from "../constants/actions";
 import {actionDescription, explainedMenu} from "../app/action-menu";
+import {SymbolHelp} from "../app/SymbolHelp";
 import {Term} from "../app/Term";
 
 const ZERO_TIME = "0001-01-01T00:00:00Z";
@@ -125,14 +126,22 @@ const Fact = ({label, children}) => (
     </>
 );
 
+/** The P of what is not provisioned, said on demand. */
+const NotProvisionedHelp = () => {
+    const {t} = useTranslation();
+    return <SymbolHelp meaning={t("ui.stateMarks.notProvisioned")}><NotProvisionedMark/></SymbolHelp>;
+};
+
 /** A status in a word, after its mark, and the P of a resource not provisioned. */
 const StatusWord = ({status, notProvisioned = false}) => {
     const {t} = useTranslation();
     return (
         <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
-            <StatusMark state={toObjectState(status)} label={status || t("instance.unknown")}/>
+            <SymbolHelp meaning={t("statusBoard.details.status", {status: status || t("instance.unknown")})}>
+                <StatusMark state={toObjectState(status)} label={status || t("instance.unknown")}/>
+            </SymbolHelp>
             {status || "-"}
-            {notProvisioned && <NotProvisionedMark/>}
+            {notProvisioned && <NotProvisionedHelp/>}
         </span>
     );
 };
@@ -220,13 +229,13 @@ export function InstanceStatus({path, node}) {
                     <Fact label={<Term term="provisioned">{t("instance.panel.provisioned")}</Term>}>
                         <span className="inline-flex items-center gap-1.5">
                             {String(status.provisioned ?? "-")}
-                            {notProvisioned && <NotProvisionedMark/>}
+                            {notProvisioned && <NotProvisionedHelp/>}
                         </span>
                     </Fact>
                     <Fact label={<Term term="frozen">{t("instance.panel.frozen")}</Term>}>
                         <span className="inline-flex items-center gap-1.5">
                             {frozen ? t("instance.panel.yes") : t("instance.panel.no")}
-                            <FrozenMark frozen={frozen}/>
+                            {frozen ? <SymbolHelp meaning={t("ui.frozen")}><FrozenMark frozen/></SymbolHelp> : <FrozenMark frozen={false}/>}
                         </span>
                     </Fact>
                     <Fact label={<Term term="monitor">{t("instance.panel.monitor")}</Term>}>{monitor.state || "-"}</Fact>

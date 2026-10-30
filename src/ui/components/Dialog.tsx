@@ -13,7 +13,8 @@ const WIDTHS = { sm: "max-w-md", md: "max-w-xl", lg: "max-w-3xl", xl: "max-w-6xl
 /**
  * Modal dialog, after the oc3 impersonation dialog: a raised panel over a light
  * veil, its title and a close cross in a header strip. Escape, the cross or a
- * click on the veil close it; the focus goes to the first control (or to
+ * click on the veil close it; `dirty`, holding what the user typed, the cross or
+ * its Cancel alone, never a stray Escape or click beside it; the focus goes to the first control (or to
  * `initialFocus`), stays inside while it is open, and goes back where it was.
  *
  * Rendered in `document.body`: an ancestor that clips or scrolls cannot cut it.
@@ -27,6 +28,7 @@ export function Dialog({
   initialFocus,
   footer,
   children,
+  dirty = false,
 }: {
   open: boolean;
   title: ReactNode;
@@ -37,6 +39,8 @@ export function Dialog({
   initialFocus?: RefObject<HTMLElement | null>;
   /** Actions at the foot of the dialog, right aligned. */
   footer?: ReactNode;
+  /** Holding changes not saved: closed by its cross or its buttons only. */
+  dirty?: boolean;
   children?: ReactNode;
 }) {
   const id = useId();
@@ -64,7 +68,7 @@ export function Dialog({
       // A side panel listens for Escape too: it stays open under the dialog.
       event.stopPropagation();
       event.preventDefault();
-      onClose();
+      if (!dirty) onClose();
       return;
     }
     if (event.key !== "Tab") return;
@@ -89,7 +93,7 @@ export function Dialog({
       data-testid="dialog-backdrop"
       className="fixed inset-0 z-[1300] flex items-start justify-center bg-ink/20 px-4 pt-[15vh]"
       onPointerDown={(event) => {
-        if (event.target === event.currentTarget) onClose();
+        if (event.target === event.currentTarget && !dirty) onClose();
       }}
     >
       <div
@@ -111,7 +115,6 @@ export function Dialog({
           <button
             type="button"
             onClick={onClose}
-            title={close}
             className="ml-auto flex h-7 w-7 items-center justify-center rounded-(--radius-control) border border-line text-ink-muted hover:text-ink"
           >
             <CloseIcon />

@@ -89,14 +89,10 @@ describe('a key renamed', () => {
         expect(tray()).toEqual([['Rename key a to c', 'refused', expect.stringContaining('a: key already exists: c')]]);
     });
 
-    test('without the wait, when unchecked', async () => {
+    test('the wait always: no choice to leave it out', async () => {
         const user = userEvent.setup();
         const dialog = await openRename(user, 'a');
-        await act(() => user.click(within(dialog).getByRole('checkbox', {name: '--wait'})));
-        fireEvent.change(within(dialog).getByRole('textbox', {name: 'New name'}), {target: {value: 'c'}});
-        await act(() => user.click(within(dialog).getByRole('button', {name: 'Rename'})));
-        await waitFor(() => expect(patches()).toHaveLength(1));
-        expect(patches()[0].url).toBe(`${OBJ}/data`);
+        expect(within(dialog).queryByRole('checkbox', {name: '--wait'})).toBeNull();
     });
 
     test('an update keeps the name of its key: renamed from the view only', async () => {

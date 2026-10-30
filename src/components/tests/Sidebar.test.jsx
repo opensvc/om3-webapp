@@ -79,20 +79,10 @@ describe('Sidebar', () => {
         expect(link.querySelector('svg')).toBeNull();
     });
 
-    test('shows the details of an entry on mouseover', () => {
-        mockPills.current = {nodes: {alert: null, details: ['2 nodes', 'frozen: 1']}};
-        renderSidebar();
-        expect(screen.getByRole('link', {name: 'Nodes'})).toHaveAttribute('title', '2 nodes\nfrozen: 1');
-    });
-
-    test('counts nothing: no badge while all is well, the details still on mouseover', () => {
-        mockPills.current = {
-            'objects-any': {alert: null},
-            pools: {alert: null, details: ['1 pool', 'full: 0']},
-        };
+    test('counts nothing: no badge while all is well, no tooltip on the entries', () => {
+        mockPills.current = {'objects-any': {alert: null}, nodes: {alert: null}};
         renderSidebar();
         expect(screen.queryByTestId(/^alert-/)).toBeNull();
-        expect(screen.getByRole('link', {name: 'Pools'})).toHaveAttribute('title', '1 pool\nfull: 0');
     });
 
     test.each([
@@ -107,7 +97,6 @@ describe('Sidebar', () => {
         const badge = screen.getByTestId(`alert-${id}`);
         expect(badge).toHaveAttribute('data-level', level);
         expect(badge).toHaveClass(tint, 'rounded-full');
-        expect(badge).toHaveAttribute('title', text);
         expect(screen.getByRole('img', {name: text})).toBe(badge);
         // A badge, no count: its "!" is out of the accessible name.
         expect(badge).toHaveTextContent('!');

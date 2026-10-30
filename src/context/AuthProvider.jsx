@@ -1,7 +1,8 @@
 import React, {createContext, useCallback, useContext, useEffect, useReducer, useRef} from 'react';
-import {decodeToken as decodeTokenFromLogin, refreshToken as doRefreshToken} from '../components/Login';
+import {decodeToken as decodeTokenFromLogin, hasRefreshToken, refreshToken as doRefreshToken} from '../components/Login';
 import {updateEventSourceToken} from '../eventSourceManager';
 import logger from '../utils/logger.js';
+import {clearEditDrafts} from '../app/edit-drafts';
 
 const getLocalStorage = () => (typeof window !== 'undefined' && typeof window.localStorage !== 'undefined' ? window.localStorage : null);
 
@@ -36,12 +37,17 @@ const authReducer = (state, action) => {
         case Login:
             return {...state, user: action.data, isAuthenticated: true};
         case Logout: {
+            // The configuration edits kept in progress hold the files in clear: not left to the next user.
+            clearEditDrafts();
             const browserStorage = getLocalStorage();
             browserStorage?.removeItem('authToken');
             browserStorage?.removeItem('tokenExpiration');
             browserStorage?.removeItem('refreshToken');
             browserStorage?.removeItem('refreshTokenExpiration');
-            return {...state, user: null, isAuthenticated: false, accessToken: null};
+            // The way in goes with the session: an "openid" left would have the next
+            // password session taken for an OpenID one, and never refreshed.
+            browserStorage?.removeItem('authChoice');
+            return {...state, user: null, isAuthenticated: false, accessToken: null, authChoice: null};
         }
         case SetAccessToken: {
             const browserStorage = getLocalStorage();
@@ -66,6 +72,12 @@ const authReducer = (state, action) => {
     }
 };
 
+/**
+ * The delays before a renewal is tried again, its refresh token kept: the network or
+ * the daemon failed, not the token. The last one repeated while the token is valid.
+ */
+const RETRY_DELAYS_MS = [5000, 10000, 20000, 30000, 60000];
+
 const AuthContext = createContext(null);
 const AuthDispatchContext = createContext(null);
 
@@ -83,12 +95,14 @@ export const AuthProvider = ({children}) => {
         if (!payload?.exp) return;
 
         const expirationTime = payload.exp * 1000;
-        const refreshTime = expirationTime - Date.now() - 5000;
+        // Expired already, a tab reopened after a while: renewed at once with the refresh
+        // token, if one is held and valid; ended only without one.
+        const refreshTime = Math.max(expirationTime - Date.now() - 5000, hasRefreshToken() ? 0 : -1);
 
-        if (refreshTime > 0) {
+        if (refreshTime >= 0) {
             logger.info('Token refresh scheduled in', Math.round(refreshTime / 1000), 'seconds');
 
-            refreshTimeout.current = setTimeout(async () => {
+            const renew = async (attempt) => {
                 const latestToken = localStorage.getItem('authToken');
                 if (latestToken && latestToken !== token) {
                     logger.debug('Refresh skipped, token already updated by another tab');
@@ -102,6 +116,20 @@ export const AuthProvider = ({children}) => {
                             channel.current.postMessage({type: 'tokenUpdated', data: newToken});
                         }
                         scheduleRefresh(newToken);
+                        return;
+                    }
+                    // Refused, the tokens are cleared: the session ended. Failed otherwise (the
+                    // network, the daemon restarting), the refresh token kept: tried again.
+                    if (hasRefreshToken()) {
+                        const delay = RETRY_DELAYS_MS[Math.min(attempt, RETRY_DELAYS_MS.length - 1)];
+                        logger.info('Token refresh tried again in', Math.round(delay / 1000), 'seconds');
+                        refreshTimeout.current = setTimeout(() => void renew(attempt + 1), delay);
+                    } else if (Date.now() >= expirationTime) {
+                        // The refresh token expired meanwhile, the access token too: nothing to renew it with.
+                        dispatch({type: Logout});
+                        if (typeof BroadcastChannel !== 'undefined' && channel.current) {
+                            channel.current.postMessage({type: 'logout'});
+                        }
                     }
                 } catch (err) {
                     logger.error('Token refresh error:', err);
@@ -110,9 +138,10 @@ export const AuthProvider = ({children}) => {
                         channel.current.postMessage({type: 'logout'});
                     }
                 }
-            }, refreshTime);
+            };
+            refreshTimeout.current = setTimeout(() => void renew(0), refreshTime);
         } else {
-            logger.warn('Token already expired or too close to expiration, no refresh scheduled');
+            logger.warn('Token expired and no refresh token to renew it: session ended');
             dispatch({type: Logout});
             if (typeof BroadcastChannel !== 'undefined' && channel.current) {
                 channel.current.postMessage({type: 'logout'});

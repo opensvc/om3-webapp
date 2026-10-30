@@ -50,7 +50,7 @@ export type RowKind =
   | "label"
   | "blank";
 
-/** A note as a cell or a row shows it on hover: the nodes empty in a cell, said there. */
+/** A note as a cell or a row holds it: the nodes empty in a cell, said there. */
 export interface RowNote {
   marker: string;
   level: Level;
@@ -87,10 +87,20 @@ export interface NoteHead {
   nodes: string;
 }
 
+/**
+ * The action a note asks for, to offer in the note: on the instances of `nodes`, or
+ * on the object, none named.
+ */
+export interface NoteFix {
+  action: "clear" | "start" | "unfreeze" | "provision";
+  nodes: string[];
+}
+
 export interface NoteGroup {
   level: Level;
   heads: NoteHead[];
   text: string;
+  fix?: NoteFix;
 }
 
 export type FactName = "topology" | "orchestrate" | "placement";
@@ -310,6 +320,7 @@ interface Note {
   text: string;
   /** A note a resource logged, which the cells point to. */
   fromResource: boolean;
+  fix?: NoteFix;
 }
 
 /** A piece of a cell standing for the markers of notes, numbered once the notes are. */
@@ -627,9 +638,14 @@ export function buildBoard(digest: Digest): Board {
   }
 
   // The notes about the object and its instances, which no resource marker points to.
-  const add = (level: Level, subject: string, about: string[], text: string) => {
-    notes.push({ id: notes.length, marker: "", level, subject, nodes: about, text, fromResource: false });
+  const add = (level: Level, subject: string, about: string[], text: string, fix?: NoteFix) => {
+    notes.push({ id: notes.length, marker: "", level, subject, nodes: about, text, fromResource: false, ...(fix ? { fix } : {}) });
   };
+  /** The action on the instances of these nodes, on the object when they are all of them. */
+  const fixOn = (action: NoteFix["action"], about: string[]): NoteFix => ({
+    action,
+    nodes: about.length === nodes.length && nodes.length > 1 ? [] : about,
+  });
   if (excess > 0) {
     add(
       "error",
@@ -659,23 +675,30 @@ export function buildBoard(digest: Digest): Board {
   if (noMonitor.length > 0)
     add("warn", "monitor", noMonitor, "no instance monitor: the daemon is down, or has not started monitoring the instance");
   for (const node of nodesWith((s) => (s.monitor?.state ?? "").endsWith("failed"))) {
-    add("error", "monitor", [node], `${stateOf(node).monitor?.state ?? ""}: the orchestration gave up, clear the instance to retry`);
+    add("error", "monitor", [node], `${stateOf(node).monitor?.state ?? ""}: the orchestration gave up, clear the instance to retry`, {
+      action: "clear",
+      nodes: [node],
+    });
   }
   const frozen = nodesWith(isFrozen);
-  if (frozen.length > 0) add("info", "frozen", frozen, "the daemon takes no initiative on the instance");
+  if (frozen.length > 0) add("info", "frozen", frozen, "the daemon takes no initiative on the instance", fixOn("unfreeze", frozen));
   const nodeFrozen = nodes.filter((n) => frozenNodes.has(n) && states[n] !== undefined);
   if (nodeFrozen.length > 0)
     add("info", "node frozen", nodeFrozen, "the daemon takes no initiative on the instances of the node");
   const stopped = nodesWith(isStopped);
-  if (stopped.length > 0) add("info", "stopped", stopped, "stopped on purpose: the daemon does not start it back");
+  // Started where the topology allows it: a failover object by its orchestration,
+  // down, its stopped instance left alone while another runs it.
+  const startFix =
+    obj.topology === "flex" ? fixOn("start", stopped) : obj.avail !== "up" ? { action: "start" as const, nodes: [] } : undefined;
+  if (stopped.length > 0) add("info", "stopped", stopped, "stopped on purpose: the daemon does not start it back", startFix);
   const unprovisioned = nodesWith((s) => isActor(s) && isUnprovisioned(s));
-  if (unprovisioned.length > 0) add("error", "provisioned", unprovisioned, "the instance is not provisioned, or partly");
+  if (unprovisioned.length > 0) add("error", "provisioned", unprovisioned, "the instance is not provisioned, or partly", fixOn("provision", unprovisioned));
 
   // The notes by level, errors first; the same text at the same level shares a
   // group, and a group with a resource note gets a marker, which its cells show.
   const rank: Record<Level, number> = { error: 0, warn: 1, info: 2 };
   const sorted = notes.map((n, i) => ({ n, i })).sort((a, b) => rank[a.n.level] - rank[b.n.level] || a.i - b.i).map((x) => x.n);
-  const groups: { level: Level; text: string; notes: Note[] }[] = [];
+  const groups: { level: Level; text: string; notes: Note[]; fix?: NoteFix }[] = [];
   const byText = new Map<string, (typeof groups)[number]>();
   for (const n of sorted) {
     const key = `${n.level}\0${n.text}`;
@@ -686,6 +709,14 @@ export function buildBoard(digest: Digest): Board {
       groups.push(g);
     }
     g.notes.push(n);
+    // One action for the group, on the nodes of all its notes; on the object if one asks so.
+    if (n.fix !== undefined) {
+      const f: NoteFix | undefined = g.fix;
+      g.fix =
+        f === undefined || f.action !== n.fix.action
+          ? n.fix
+          : { action: f.action, nodes: f.nodes.length === 0 || n.fix.nodes.length === 0 ? [] : [...new Set([...f.nodes, ...n.fix.nodes])] };
+    }
   }
   let numbered = 0;
   for (const g of groups) {
@@ -759,6 +790,7 @@ export function buildBoard(digest: Digest): Board {
     notes: listed.map((g) => ({
       level: g.level,
       text: g.text,
+      ...(g.fix ? { fix: g.fix } : {}),
       heads: g.notes.map((n, i) => ({
         // The first head of an entry has its marker, or a dot for a note no cell points to.
         marker: i === 0 ? (n.marker === "" ? "·" : n.marker) : "",

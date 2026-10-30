@@ -18,6 +18,8 @@ const ALLOWED_ACTIONS_BY_KIND = {
     // all the nodes (`om cluster freeze`), not an object's (see actionUrl).
     ccfg: ["abort", "freeze", "unfreeze"],
     cfg: ["abort", "delete"],
+    // A namespace configuration holds the claims of its namespace: deleted, nothing run.
+    nscfg: ["abort", "delete"],
     vol: ["abort", "delete", "freeze", "provision", "purge", "unfreeze", "unprovision"],
     sec: ["abort", "delete"],
     usr: ["abort", "delete"],

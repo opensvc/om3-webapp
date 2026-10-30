@@ -12,7 +12,7 @@ import {
     useAuthDispatch,
 } from '../AuthProvider';
 import {updateEventSourceToken} from '../../eventSourceManager';
-import {decodeToken, refreshToken} from '../../components/Login';
+import {decodeToken, hasRefreshToken, refreshToken} from '../../components/Login';
 import logger from '../../utils/logger.js';
 
 // ── Mocks ──────────────────────────────────────────────────────────────
@@ -22,6 +22,8 @@ vi.mock('../../eventSourceManager', () => ({
 vi.mock('../../components/Login', () => ({
     decodeToken: vi.fn(),
     refreshToken: vi.fn(),
+    // No refresh token held, unless a test says so.
+    hasRefreshToken: vi.fn(() => false),
 }));
 vi.mock('../../utils/logger.js', () => ({
     default: {
@@ -113,6 +115,7 @@ const actions = [
     {testId: 'setAuthInfo', type: SetAuthInfo, data: {provider: 'openid'}},
     {testId: 'setAuthChoice', type: SetAuthChoice, data: 'sso'},
     {testId: 'setAuthChoiceOpenid', type: SetAuthChoice, data: 'openid'},
+    {testId: 'setAuthChoiceBasic', type: SetAuthChoice, data: 'basic'},
     {testId: 'unknownAction', type: 'UNKNOWN_ACTION', data: 'invalid'},
 ];
 
@@ -138,6 +141,7 @@ const ErrorTest = ({hook}) => {
 let broadcastInstance;
 beforeEach(() => {
     vi.clearAllMocks();
+    hasRefreshToken.mockReturnValue(false);
     localStorage.clear();
     vi.useFakeTimers();
     tokenExpiredCallbackRef.current = null;
@@ -407,13 +411,72 @@ describe('AuthProvider', () => {
             expect(refreshToken).not.toHaveBeenCalled();
         });
 
-        test('does not schedule refresh for expired token and logs out', () => {
+        test('an expired token and no refresh token: the session ended, no refresh asked', () => {
             decodeToken.mockReturnValue({exp: Math.floor(Date.now() / 1000) - 10});
             renderProvider();
             setValidToken();
-            expect(logger.warn).toHaveBeenCalledWith('Token already expired or too close to expiration, no refresh scheduled');
+            expect(logger.warn).toHaveBeenCalledWith('Token expired and no refresh token to renew it: session ended');
             expect(getText('isAuthenticated')).toBe('false');
             expect(refreshToken).not.toHaveBeenCalled();
+        });
+
+        test('an expired token, a tab reopened after a while: renewed at once with the refresh token, the session kept', async () => {
+            hasRefreshToken.mockReturnValue(true);
+            decodeToken.mockReturnValue({exp: Math.floor(Date.now() / 1000) - 3600});
+            renderProvider();
+            setValidToken();
+            expect(logger.warn).not.toHaveBeenCalledWith('Token expired and no refresh token to renew it: session ended');
+            await act(async () => {
+                vi.advanceTimersByTime(0);
+                await Promise.resolve();
+            });
+            expect(refreshToken).toHaveBeenCalledTimes(1);
+            expect(broadcastInstance._messages).not.toContainEqual({type: 'logout'});
+            expect(broadcastInstance._messages).toContainEqual({type: 'tokenUpdated', data: 'new-token'});
+        });
+
+        test('a refresh failed, the daemon or the network down: tried again later, the session kept, renewed once it answers', async () => {
+            hasRefreshToken.mockReturnValue(true);
+            refreshToken.mockResolvedValueOnce(null).mockResolvedValueOnce(null).mockResolvedValueOnce('new-token');
+            decodeToken.mockReturnValue({exp: Math.floor(Date.now() / 1000) + 10});
+            renderProvider();
+            setValidToken();
+            const advance = async (ms) => act(async () => {
+                vi.advanceTimersByTime(ms);
+                await Promise.resolve();
+                await Promise.resolve();
+            });
+            await advance(5100);
+            expect(refreshToken).toHaveBeenCalledTimes(1);
+            expect(logger.info).toHaveBeenCalledWith('Token refresh tried again in', 5, 'seconds');
+            expect(getText('isAuthenticated')).toBe('true');
+            await advance(5000);
+            expect(refreshToken).toHaveBeenCalledTimes(2);
+            expect(logger.info).toHaveBeenCalledWith('Token refresh tried again in', 10, 'seconds');
+            await advance(10000);
+            expect(refreshToken).toHaveBeenCalledTimes(3);
+            expect(broadcastInstance._messages).toContainEqual({type: 'tokenUpdated', data: 'new-token'});
+            expect(broadcastInstance._messages).not.toContainEqual({type: 'logout'});
+        });
+
+        test('a refresh refused, its refresh token gone: not tried again', async () => {
+            // Refused, the refresh token cleared: none held after it.
+            hasRefreshToken.mockReturnValueOnce(true).mockReturnValue(false);
+            refreshToken.mockResolvedValue(null);
+            decodeToken.mockReturnValue({exp: Math.floor(Date.now() / 1000) + 10});
+            renderProvider();
+            setValidToken();
+            await act(async () => {
+                vi.advanceTimersByTime(5100);
+                await Promise.resolve();
+            });
+            expect(refreshToken).toHaveBeenCalledTimes(1);
+            await act(async () => {
+                vi.advanceTimersByTime(120000);
+                await Promise.resolve();
+            });
+            expect(refreshToken).toHaveBeenCalledTimes(1);
+            expect(logger.info).not.toHaveBeenCalledWith('Token refresh tried again in', expect.any(Number), 'seconds');
         });
 
         test('does not schedule refresh when authChoice is openid', () => {
@@ -422,6 +485,25 @@ describe('AuthProvider', () => {
             setValidToken();
             expect(logger.info).not.toHaveBeenCalledWith('Token refresh scheduled in', expect.any(Number), 'seconds');
             expect(refreshToken).not.toHaveBeenCalled();
+        });
+
+        test('an OpenID session logged out: its way in forgotten, the next password session refreshed', () => {
+            localStorage.setItem('authChoice', 'openid');
+            renderProvider();
+            click('logout');
+            expect(getText('authChoice')).toBe('null');
+            expect(localStorage.getItem('authChoice')).toBeNull();
+            setValidToken();
+            expect(logger.info).toHaveBeenCalledWith('Token refresh scheduled in', expect.any(Number), 'seconds');
+        });
+
+        test('an OpenID session ended without a logout, a renewal refused: the password session after it refreshed', () => {
+            localStorage.setItem('authChoice', 'openid');
+            renderProvider();
+            click('setAccessTokenNull');
+            click('setAuthChoiceBasic');
+            setValidToken();
+            expect(logger.info).toHaveBeenCalledWith('Token refresh scheduled in', expect.any(Number), 'seconds');
         });
 
         test('does not schedule refresh for null token', () => {

@@ -364,7 +364,6 @@ export function SlideOver({
           <button
             type="button"
             onClick={onClose}
-            title={closeLabel}
             className="flex h-7 w-7 items-center justify-center rounded-(--radius-control) border border-line text-ink-muted hover:text-ink"
           >
             <CloseIcon />
@@ -386,7 +385,6 @@ export function SlideOver({
           aria-label={resizeLabel}
           aria-valuenow={width ?? DEFAULT_WIDTH[size]}
           aria-valuemin={MIN_WIDTH}
-          title={resizeLabel}
           tabIndex={0}
           onPointerDown={onHandlePointerDown}
           onPointerMove={onHandlePointerMove}

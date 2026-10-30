@@ -195,6 +195,23 @@ describe('InstanceStatus', () => {
         expect(screen.getByTestId('search')).toHaveTextContent('peek=resource%3Aprod%2Fsvc%2Fweb%3Aapp%231');
     });
 
+    test('the symbols said on demand: a click on the mark of a resource says its status', () => {
+        useEventStore.setState({objectInstanceStatus: {'ns1/svc/db': {node1: {
+            avail: 'down', overall: 'down', provisioned: 'false', frozen_at: '2026-10-05T10:00:00Z',
+            resources: {'fs#1': {status: 'up', type: 'fs.flag', provisioned: {state: 'false'}}},
+        }}}});
+        inRouter(<InstanceStatus path="ns1/svc/db" node="node1"/>);
+        const row = screen.getByRole('button', {name: 'fs#1'}).closest('tr');
+        const cell = within(row).getAllByRole('cell')[2];
+        const help = within(cell).getAllByRole('button');
+        expect(help).toHaveLength(2);
+        fireEvent.click(help[0]);
+        expect(document.querySelector('[data-symbol-card]')).toHaveTextContent('Status: up');
+        fireEvent.click(help[0]);
+        fireEvent.click(help[1]);
+        expect(document.querySelector('[data-symbol-card]')).toHaveTextContent(/not provisioned/i);
+    });
+
     test('the datastores its resources use, once each, a badge each opening its object', () => {
         inRouter(<InstanceStatus path="prod/svc/web" node="n1"/>);
         const fact = screen.getByText('Datastores', {selector: 'dt'}).nextElementSibling;

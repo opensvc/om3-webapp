@@ -142,7 +142,7 @@ export function NamespaceObjects({namespace, list}) {
                                 />
                             </Cell>
                             {/* The name alone: the namespace is the panel's, the kind the tab's. */}
-                            <Cell className="whitespace-nowrap" title={path}>
+                            <Cell className="whitespace-nowrap">
                             <CrossLink kind="object" id={path}>{parseObjectPath(path).name}</CrossLink>
                         </Cell>
                             {keys ? <KeyCells objectName={path}/> : (

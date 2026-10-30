@@ -160,7 +160,6 @@ const NavBar = ({sidebarOpen = false, onToggleSidebar, showSidebarToggle = false
                     aria-expanded={sidebarOpen}
                     aria-controls="app-sidebar"
                     aria-label={sidebarOpen ? t("nav.hideMenu") : t("nav.showMenu")}
-                    title={sidebarOpen ? t("nav.hideMenu") : t("nav.showMenu")}
                     className={cn(HEADER_BUTTON, "relative")}
                 >
                     <SidebarIcon open={sidebarOpen} width={18} height={18}/>
@@ -215,7 +214,6 @@ const NavBar = ({sidebarOpen = false, onToggleSidebar, showSidebarToggle = false
             <div className="ml-auto flex shrink-0 items-center gap-2">
                 {!online && (
                     <span
-                        title={t("nav.offlineTitle")}
                         className="inline-flex items-center gap-1 rounded-(--radius-control) bg-state-down-soft px-2 py-0.5 text-data font-semibold text-state-down"
                     >
                         <StateGlyph state="down" className="h-2 w-2"/>
@@ -232,12 +230,12 @@ const NavBar = ({sidebarOpen = false, onToggleSidebar, showSidebarToggle = false
                 )}
 
                 {aiEnabled && (
-                    <Link to="/ai" aria-label="Open the AI assistant" title="Open the AI assistant" className={HEADER_BUTTON}>
+                    <Link to="/ai" aria-label="Open the AI assistant" className={HEADER_BUTTON}>
                         <ChatIcon width={16} height={16}/>
                     </Link>
                 )}
 
-                <Link to="/whoami" aria-label={t("nav.viewUser")} title={t("nav.viewUser")} className={HEADER_BUTTON}>
+                <Link to="/whoami" aria-label={t("nav.viewUser")} className={HEADER_BUTTON}>
                     <UserIcon width={16} height={16}/>
                 </Link>
             </div>

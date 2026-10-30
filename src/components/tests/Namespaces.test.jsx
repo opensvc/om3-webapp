@@ -140,22 +140,6 @@ const cell = (name, column) => {
     return within(row(name)).getAllByRole('cell')[headers.indexOf(column)];
 };
 const loaded = () => waitFor(() => expect(within(cell('prod', 'Pools')).getByRole('img')).toBeInTheDocument());
-/**
- * The hover card of a cell, opened from the keyboard: its figures, label then value,
- * and its notes; closed again once read, unless `keepOpen`.
- */
-const cardOf = (element, {keepOpen = false} = {}) => {
-    fireEvent.focus(element);
-    const card = screen.getByRole('tooltip');
-    const read = {
-        card,
-        figures: Object.fromEntries([...card.querySelectorAll('dt')].map((dt) => [dt.textContent, dt.nextElementSibling.textContent])),
-        notes: [...card.querySelectorAll('li')].map((li) => li.textContent),
-    };
-    if (!keepOpen) fireEvent.blur(element);
-    return read;
-};
-
 describe('Namespaces', () => {
     test('the columns: name, services, volumes, secrets, configs, pools, networks, cpu, memory', async () => {
         renderNamespaces();
@@ -200,18 +184,10 @@ describe('Namespaces', () => {
         renderNamespaces();
         await loaded();
         // default: 10 GiB of a 20 GiB claim; shm, claimed of by nothing: 1 GiB of its 4 GiB.
-        // The bar alone in the cell, its figures in the card.
+        // The bar alone in the cell.
         expect(cell('prod', 'Pools').textContent).toBe('');
         const bar = within(cell('prod', 'Pools')).getByRole('img');
         expect(bar).toHaveAccessibleName('Pools: default: 10 GiB of 20 GiB claimed (50%), shm: 1 GiB of 4 GiB, no claim (25%)');
-        // The figures behind it in its hover card, reached from the keyboard too.
-        const target = cell('prod', 'Pools').querySelector('[tabindex="0"]');
-        const {card, figures, notes} = cardOf(target, {keepOpen: true});
-        expect(figures).toEqual({Share: '46%', Free: '13 GiB', Used: '11 GiB', Total: '24 GiB'});
-        expect(notes).toEqual(['default: 10 GiB of 20 GiB claimed (50%)', 'shm: 1 GiB of 4 GiB, no claim (25%)']);
-        expect(target).toHaveAttribute('aria-describedby', card.id);
-        fireEvent.blur(target);
-        expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
         expect([...bar.querySelectorAll('[data-segment]')].map((s) => [s.dataset.segment, s.style.width]))
             .toEqual([['default', `${(10 / 24) * 100}%`], ['shm', `${(1 / 24) * 100}%`]]);
         expect(cell('dev', 'Pools')).toHaveTextContent('–');
@@ -231,7 +207,6 @@ describe('Namespaces', () => {
         await loaded();
         expect(cell('prod', 'Networks').textContent).toBe('');
         expect(within(cell('prod', 'Networks')).getByRole('img')).toHaveAccessibleName('Networks: default: 2 of 10 claimed (20%)');
-        expect(cardOf(cell('prod', 'Networks').querySelector('[tabindex="0"]')).figures).toEqual({Share: '20%', Free: '8', Used: '2', Total: '10'});
         expect(cell('dev', 'Networks')).toHaveTextContent('–');
     });
 
@@ -241,7 +216,6 @@ describe('Namespaces', () => {
         await loaded();
         // The memory on the first reading; a cpu rate needs a second one.
         await waitFor(() => expect(cell('prod', 'Memory')).toHaveTextContent('25% of 4 GiB'));
-        expect(cardOf(cell('prod', 'Memory').querySelector('[tabindex="0"]')).figures).toEqual({Used: '1 GiB', Cap: '4 GiB', Free: '3 GiB'});
         expect(cell('prod', 'CPU')).toHaveTextContent('– of 8 cpu');
         // The rate shows on the second reading, a couple of seconds after the first.
         await act(async () => {
@@ -257,9 +231,6 @@ describe('Namespaces', () => {
         expect(cell('dev', 'Memory')).toHaveTextContent('– used');
         // No cpu cap: the cpu it uses now, however little, not a share of nothing.
         expect(cell('dev', 'CPU')).toHaveTextContent(/^\d+(\.\d+)? [mµ]?cpu$/);
-        expect(cardOf(cell('dev', 'CPU').querySelector('[tabindex="0"]')).figures).toEqual({
-            Used: cell('dev', 'CPU').textContent, Cap: 'no claim',
-        });
     });
 
     test('a row opens the panel of its namespace, on its usage, without leaving the list', async () => {

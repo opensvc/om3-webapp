@@ -64,8 +64,6 @@ describe('HeartbeatSummary', () => {
         ]);
         expect(routines.querySelector('[data-card]').textContent).not.toMatch(/[↑↓]|\b[rt]x\b|unicast|started|\d\/\d/);
         expect(routines.querySelector('[data-card] [data-gauge]')).toBeNull();
-        expect(routines.querySelector('[data-card="n2 hb#2.tx"]').title).toBe('n2 hb#2 tx · disk · stopped · 0/1 beating');
-        expect(routines.querySelector('[data-card="n1 hb#1.tx"]').title).toBe('n1 hb#1 tx · unicast · started · 1/1 beating');
         // The pie as big as a character, beside the name; in as many columns as a half holds.
         const card = routines.querySelector('[data-card]');
         expect(card.querySelector('[data-pie]')).toHaveClass('size-[1em]');
@@ -124,7 +122,6 @@ describe('HeartbeatSummary', () => {
         expect(hint.parentElement).toHaveClass('@container', 'justify-between');
         const icon = within(routines).getByRole('img', {name: 'Click a routine to stop it, or to start it.'});
         expect(icon).toHaveClass('@md:hidden');
-        expect(icon).toHaveAttribute('title', 'Click a routine to stop it, or to start it.');
         // The card itself, its action as its routine runs or not: no button of its own, no selection.
         const stop = within(routines.querySelector('[data-card="n1 hb#1.tx"]')).getByRole('button', {name: 'Stop n1 hb#1 tx'});
         const start = within(routines.querySelector('[data-card="n2 hb#2.tx"]')).getByRole('button', {name: 'Start n2 hb#2 tx'});

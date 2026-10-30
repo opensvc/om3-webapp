@@ -5,7 +5,7 @@ import App from '../App';
 import {vi} from 'vitest';
 import logger from '../../utils/logger.js';
 import oidcConfiguration from '../../config/oidcConfiguration.js';
-import {decodeToken} from '../Login';
+import {decodeToken, hasRefreshToken, refreshToken} from '../Login';
 import {__setMockRecreateUserManager, __setMockIsInitialized} from '../../context/OidcAuthContext.tsx';
 
 // --- Mocks ---
@@ -56,6 +56,8 @@ vi.mock('../Login', () => ({
     default: () => <div data-testid="login">Login</div>,
     decodeToken: vi.fn(),
     refreshToken: vi.fn(),
+    // No refresh token held, unless a test says so.
+    hasRefreshToken: vi.fn(() => false),
 }));
 vi.mock('../../hooks/AuthInfo.jsx', () => ({
     default: vi.fn(() => ({
@@ -170,6 +172,7 @@ describe('App Component', () => {
     beforeEach(() => {
         vi.useRealTimers();
         mockAuthDispatch.mockClear();
+        hasRefreshToken.mockReturnValue(false);
         mockLocalStorage.getItem.mockClear().mockReturnValue(null);
         mockLocalStorage.setItem.mockClear().mockImplementation(() => {
         });
@@ -311,6 +314,16 @@ describe('App Component', () => {
         expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('authToken');
         expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('tokenExpiration');
         expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('authChoice');
+    });
+
+    test('ProtectedRoute: an expired token, a refresh token held: the session renewed, the page waiting, not the sign-in', async () => {
+        setupBasicAuth(-3600);
+        hasRefreshToken.mockReturnValue(true);
+        renderApp(['/objects']);
+        expect(await screen.findByRole('status', {name: 'Renewing the session'})).toBeInTheDocument();
+        expect(screen.queryByTestId('auth-choice')).not.toBeInTheDocument();
+        expect(mockLocalStorage.removeItem).not.toHaveBeenCalledWith('authToken');
+        expect(mockLocalStorage.removeItem).not.toHaveBeenCalledWith('authChoice');
     });
 
     test('ProtectedRoute: the heartbeats shown signed in, the sign-in asked without a token', async () => {
@@ -816,6 +829,29 @@ describe('App Component', () => {
         expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('authToken');
         expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('tokenExpiration');
         expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('authChoice');
+    });
+
+    test('resume with an expired token, a refresh token held: renewed with it, no sign-in asked, nothing cleared', async () => {
+        setupBasicAuth(3600);
+        decodeToken.mockReturnValue({exp: Math.floor(Date.now() / 1000) + 3600});
+        renderApp(['/objects']);
+        await screen.findByTestId('objects');
+        const expiredToken = makeTokenWithExp(-3600);
+        mockLocalStorage.getItem.mockImplementation((k) =>
+            k === 'authToken' ? expiredToken : k === 'authChoice' ? 'basic' : null
+        );
+        decodeToken.mockReturnValue({exp: Math.floor(Date.now() / 1000) - 3600});
+        hasRefreshToken.mockReturnValue(true);
+        mockNavigate.mockClear();
+        mockLocalStorage.removeItem.mockClear();
+        refreshToken.mockClear();
+        act(() => window.dispatchEvent(new Event('focus')));
+        await act(async () => {
+            await new Promise(r => setTimeout(r, 600));
+        });
+        expect(refreshToken).toHaveBeenCalledWith(mockAuthDispatch);
+        expect(mockNavigate).not.toHaveBeenCalledWith('/auth-choice', {replace: true});
+        expect(mockLocalStorage.removeItem).not.toHaveBeenCalledWith('authToken');
     });
 
     test('cleanup clears debounce timer on unmount', async () => {

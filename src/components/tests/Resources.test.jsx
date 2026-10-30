@@ -100,18 +100,23 @@ describe('Resources', () => {
         expect(screen.getByTestId('search')).toHaveTextContent('peek=object:ns1/svc/web');
     });
 
+    // A value of a filter toggled in its popover, as several may be kept at once.
+    const pick = (filter, value) => fireEvent.click(within(screen.getByRole('group', {name: filter})).getByRole('checkbox', {name: value}));
+
     test('filtered by status, node, driver and words, the count said', async () => {
         renderView();
         await waitFor(() => expect(rows()).toHaveLength(4));
-        fireEvent.change(screen.getByRole('combobox', {name: 'Status'}), {target: {value: 'up'}});
+        // Each value of a popover counted, as in the rail.
+        expect(within(screen.getByRole('group', {name: 'Status'})).getByRole('checkbox', {name: 'up'}).closest('span.flex')).toHaveTextContent(/up2$/);
+        pick('Status', 'up');
         expect(rows().map((r) => r[2])).toEqual(['container#1', 'fs#1']);
-        fireEvent.change(screen.getByRole('combobox', {name: 'Driver'}), {target: {value: 'fs'}});
+        pick('Driver', 'fs');
         expect(rows().map((r) => `${r[1]} ${r[2]}`)).toEqual(['n1 fs#1']);
         expect(screen.getByText('1 / 4')).toBeInTheDocument();
-        fireEvent.change(screen.getByRole('combobox', {name: 'Status'}), {target: {value: ''}});
-        fireEvent.change(screen.getByRole('combobox', {name: 'Node'}), {target: {value: 'n2'}});
+        pick('Status', 'up');
+        pick('Node', 'n2');
         expect(rows().map((r) => `${r[1]} ${r[2]}`)).toEqual(['n2 fs#1']);
-        fireEvent.change(screen.getByRole('combobox', {name: 'Driver'}), {target: {value: ''}});
+        pick('Driver', 'fs');
         fireEvent.change(screen.getByRole('searchbox', {name: 'Filter the resources'}), {target: {value: 'dns'}});
         expect(rows().map((r) => r[2])).toEqual(['ip#0']);
         fireEvent.change(screen.getByRole('searchbox', {name: 'Filter the resources'}), {target: {value: 'nothing'}});
@@ -124,7 +129,7 @@ describe('Resources', () => {
             renderView();
             await waitFor(() => expect(rows()).toHaveLength(4));
             const rail = screen.getByRole('complementary', {name: 'Filters'});
-            expect(screen.queryByRole('combobox', {name: 'Status'})).not.toBeInTheDocument();
+            expect(screen.queryByRole('group', {name: 'Status'})).not.toBeInTheDocument();
             const facet = (name) => within(rail).getByRole('region', {name});
             // The text of a value and its count, not that of its mark.
             const values = (name) => within(facet(name)).getAllByRole('button')
@@ -153,13 +158,13 @@ describe('Resources', () => {
         renderView();
         await waitFor(() => expect(rows()).toHaveLength(4));
         expect(screen.getByText('Select resources to act on them')).toBeInTheDocument();
-        fireEvent.change(screen.getByRole('combobox', {name: 'Node'}), {target: {value: 'n1'}});
+        pick('Node', 'n1');
         fireEvent.click(screen.getByRole('checkbox', {name: 'Select all the resources'}));
         expect(screen.getByText('2 selected')).toBeInTheDocument();
         // A filter hiding some: they leave the selection.
-        fireEvent.change(screen.getByRole('combobox', {name: 'Driver'}), {target: {value: 'fs'}});
+        pick('Driver', 'fs');
         expect(screen.getByText('1 selected')).toBeInTheDocument();
-        fireEvent.change(screen.getByRole('combobox', {name: 'Driver'}), {target: {value: ''}});
+        pick('Driver', 'fs');
         fireEvent.click(screen.getByRole('checkbox', {name: 'Select container#1 of ns1/svc/web on n1'}));
         expect(screen.getByText('2 selected')).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', {name: 'Actions on the resources selected'}));
@@ -252,7 +257,7 @@ describe('Resources', () => {
         render(<MemoryRouter initialEntries={['/resources?status=up,warn&node=n1']}><Resources/><Search/></MemoryRouter>);
         await waitFor(() => expect(rows()).toHaveLength(2));
         expect(rows().map((r) => `${r[1]} ${r[2]}`)).toEqual(['n1 container#1', 'n1 fs#1']);
-        fireEvent.change(screen.getByRole('combobox', {name: 'Node'}), {target: {value: ''}});
+        pick('Node', 'n1');
         await waitFor(() => expect(screen.getByTestId('search')).toHaveTextContent(/^\?status=up,warn$/));
         expect(rows()).toHaveLength(3);
     });
@@ -277,7 +282,6 @@ describe('Resources', () => {
                 await waitFor(() => expect(rows()).toHaveLength(4));
                 expect(headers()).toEqual(['Object', 'Resource', 'Status']);
                 expect(rows()[0]).toEqual(['ns1/svc/webn1', 'container#1container.docker', 'upup']);
-                expect(within(table()).getAllByTitle('Type')[0]).toHaveTextContent('container.docker');
                 // The node, by the object, still opens the instance.
                 fireEvent.click(within(within(table()).getAllByRole('row')[3]).getByRole('button', {name: 'n2'}));
                 expect(screen.getByTestId('search')).toHaveTextContent('peek=instance:ns1/svc/web@n2');
@@ -291,7 +295,6 @@ describe('Resources', () => {
             renderView();
             await waitFor(() => expect(rows()).toHaveLength(4));
             expect(headers()).toEqual(['Object', 'Node', 'Resource', 'Type', 'Status', 'Flags', 'Label']);
-            expect(within(table()).queryByTitle('Type')).toBeNull();
         });
     });
 });

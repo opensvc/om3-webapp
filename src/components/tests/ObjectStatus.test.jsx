@@ -7,6 +7,8 @@ import {MemoryRouter} from 'react-router-dom';
 import useEventStore from '../../hooks/useEventStore.js';
 import {useMenuState} from '../../hooks/useSidebarAlerts';
 import {useActionTracker} from '../../app/action-tracker';
+import {setIntrosEnabled, showAllIntros} from '../../app/page-intro';
+import {HOVER_CARD_DELAY_MS} from '../../ui/components/HoverCard';
 
 /** What the actions tray holds, the latest first: action, subject, state, reason. */
 const tray = () => useActionTracker.getState().tracked.map((e) => [e.action, e.subject, e.state, e.error ?? null]);
@@ -97,6 +99,88 @@ describe('ObjectStatus', () => {
         expect(within(legend).getByText('Down, as expected. For example, the standby node of a failover service.')).toBeInTheDocument();
     });
 
+    describe('the symbols said on demand', () => {
+        const cardText = () => document.querySelector('[data-symbol-card]')?.textContent;
+        const glyph = () => document.querySelector('tbody [data-state]').closest('[role="button"], button');
+
+        test('a status in a cell: a help cursor, its meaning on a click, gone with a click again', async () => {
+            answer(structuredClone(dns));
+            render(<ObjectStatus path="system/svc/dns"/>);
+            await screen.findByRole('table');
+            const help = glyph();
+            expect(help).toHaveAttribute('role', 'button');
+            expect(help.firstElementChild).toHaveClass('cursor-help');
+            expect(cardText()).toBeUndefined();
+            fireEvent.click(help);
+            expect(cardText()).toMatch(/^Status: /);
+            fireEvent.click(help);
+            expect(cardText()).toBeUndefined();
+        });
+
+        test('in the value that opens a resource: the hover alone, the click still opening it', async () => {
+            const openCell = vi.fn();
+            answer(structuredClone(dns));
+            render(<ObjectStatus path="system/svc/dns" openCell={openCell}/>);
+            await screen.findByRole('table');
+            const value = screen.getByRole('button', {name: 'Open volume#1 on dev3n2'});
+            const symbol = value.querySelector('[data-state]').closest('.cursor-help').parentElement;
+            expect(within(value).queryByRole('button')).toBeNull();
+            expect(symbol).not.toHaveAttribute('tabindex');
+
+            vi.useFakeTimers();
+            try {
+                fireEvent.mouseEnter(symbol);
+                expect(cardText()).toBeUndefined();
+                act(() => {
+                    vi.advanceTimersByTime(HOVER_CARD_DELAY_MS);
+                });
+                expect(cardText()).toMatch(/^Status: /);
+                fireEvent.click(symbol);
+            } finally {
+                vi.useRealTimers();
+            }
+            expect(cardText()).toBeUndefined();
+            expect(openCell).toHaveBeenCalledWith('volume#1', 'dev3n2');
+        });
+    });
+
+    describe('the symbols, a hint', () => {
+        const legend = () => screen.queryByText('What the symbols mean');
+
+        afterEach(() => {
+            act(() => {
+                setIntrosEnabled(true);
+                showAllIntros();
+            });
+        });
+
+        test('closed, it stays closed on another object, until the hints are reset', async () => {
+            answer(structuredClone(dns));
+            const {unmount} = render(<ObjectStatus path="system/svc/dns"/>);
+            await screen.findByRole('table');
+            fireEvent.click(screen.getByRole('button', {name: 'Hide this help'}));
+            expect(legend()).toBeNull();
+            unmount();
+
+            answer(structuredClone(dns));
+            render(<ObjectStatus path="system/svc/dns"/>);
+            await screen.findByRole('table');
+            expect(legend()).toBeNull();
+            act(() => showAllIntros());
+            expect(legend()).toBeInTheDocument();
+        });
+
+        test('off with the hints', async () => {
+            answer(structuredClone(dns));
+            render(<ObjectStatus path="system/svc/dns"/>);
+            await screen.findByRole('table');
+            act(() => setIntrosEnabled(false));
+            expect(legend()).toBeNull();
+            act(() => setIntrosEnabled(true));
+            expect(legend()).toBeInTheDocument();
+        });
+    });
+
     test('the summary: a status a line, said in full in its tint, then an issue a line, the policies and the actions apart', async () => {
         const broken = structuredClone(dns);
         broken.provisioned = 'false';
@@ -113,9 +197,6 @@ describe('ObjectStatus', () => {
         // One a line: label and value pairs of a two-column list.
         expect(screen.getByText('Avail').closest('dt')).toBeInTheDocument();
         expect(screen.getByText('Overall').closest('dt')).toBeInTheDocument();
-        // Words of OpenSVC: their definition on demand.
-        expect(screen.getByText('Avail')).toHaveAttribute('data-term', 'avail');
-        expect(screen.getByText('Overall')).toHaveAttribute('data-term', 'overall');
         expect(screen.getByRole('list', {name: 'Issues'})).toHaveTextContent('not provisioned');
         expect(screen.getByRole('list', {name: 'Issues'})).toHaveClass('flex-col');
         // Beside the summary, not under it: a state coming or going (frozen) moves nothing below.
@@ -125,10 +206,12 @@ describe('ObjectStatus', () => {
         // Out of a panel, the policies and the actions stand over the summary.
         const policies = screen.getByLabelText('Policies');
         expect(policies).toHaveTextContent('Topology: flexOrchestrate: haPlacement: nodes order');
-        // Each policy a tag of its value alone, no icon, named in its tooltip.
-        expect([...policies.querySelectorAll('[data-policy]')].map((tag) => [tag.dataset.policy, tag.title]))
-            .toEqual([['topology', 'Topology: flex'], ['orchestrate', 'Orchestrate: ha'], ['placement', 'Placement: nodes order']]);
+        // Each policy its value alone, no icon.
         expect(policies.querySelectorAll('[data-policy] svg')).toHaveLength(0);
+        // All of them in one badge, as in the lists, a dot apart, no pill.
+        expect(policies).toHaveClass('border', 'border-line-strong', 'rounded-sm', 'text-ink-muted');
+        expect(policies).not.toHaveClass('rounded-full');
+        expect(policies.querySelectorAll('[data-policy]')).toHaveLength(3);
         expect(screen.getByRole('button', {name: 'Actions'})).toBeInTheDocument();
     });
 
@@ -690,6 +773,34 @@ describe('ObjectStatus', () => {
             await waitFor(() => expect(posted).toEqual(['POST /api/node/name/dev3n1/instance/path/system/svc/dns/clear']));
         });
 
+        test('the note of a failed instance clears it, from a button of its own', async () => {
+            await ready();
+            const note = screen.getByText(/the orchestration gave up/).closest('li');
+            fireEvent.click(within(note).getByRole('button', {name: 'Clear'}));
+            expect(posted).toEqual([]);
+            confirm('clear');
+            await waitFor(() => expect(posted).toEqual([
+                'POST /api/node/name/dev3n1/instance/path/system/svc/dns/clear',
+                'POST /api/node/name/dev3n2/instance/path/system/svc/dns/clear',
+            ]));
+            // A note asking for nothing has no button.
+            expect(within(screen.getByText('system/vol/dns avail down').closest('li')).queryByRole('button')).not.toBeInTheDocument();
+        });
+
+        test('the note of a frozen instance unfreezes it; a failed one cleared, no clear offered', async () => {
+            const frozen = structuredClone(dns);
+            frozen.instances.dev3n2.status.frozen_at = '2026-10-12T10:00:00Z';
+            frozen.instances.dev3n1.monitor.state = 'idle';
+            frozen.instances.dev3n2.monitor.state = 'idle';
+            await ready(frozen);
+            expect(screen.queryByRole('button', {name: 'Clear'})).not.toBeInTheDocument();
+            fireEvent.click(within(screen.getByText(/takes no initiative/).closest('li')).getByRole('button', {name: 'Unfreeze'}));
+            confirm('unfreeze');
+            await waitFor(() => expect(posted).toEqual([
+                expect.stringMatching(/^POST \/api\/node\/name\/dev3n2\/instance\/path\/system\/svc\/dns\/action\/unfreeze/),
+            ]));
+        });
+
         test('an instance not failed has nothing to clear; freeze and unfreeze both offered', async () => {
             const idle = structuredClone(dns);
             idle.instances.dev3n2.monitor.state = 'idle';
@@ -794,41 +905,4 @@ describe('ObjectStatus', () => {
         });
     });
 
-    describe('notes on hover', () => {
-        test('a cell says what it shows, then the notes of its resource on its node', async () => {
-            answer(dns);
-            render(<ObjectStatus path="system/svc/dns"/>);
-            await screen.findByRole('table');
-            const cell = within(screen.getByRole('rowheader', {name: /volume#1$/}).closest('tr')).getAllByRole('cell')[2];
-            const target = cell.querySelector(':scope > span');
-            expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
-            fireEvent.mouseOver(target);
-            expect(screen.getByRole('tooltip')).toHaveTextContent('Status: down');
-            expect(screen.getByRole('tooltip')).toHaveTextContent('system/vol/dns avail down');
-            fireEvent.mouseOut(target);
-            expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
-            // A cell with nothing to explain, and no note: a monitor state.
-            fireEvent.mouseOver(within(screen.getByRole('rowheader', {name: 'Monitor'}).closest('tr')).getAllByText('start failed')[0]);
-            expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
-        });
-
-        test('an instance cell shows the notes about the instance of its node', async () => {
-            answer(dns);
-            render(<ObjectStatus path="system/svc/dns"/>);
-            await screen.findByRole('table');
-            const cell = within(screen.getByRole('rowheader', {name: 'State'}).closest('tr')).getAllByRole('cell')[3];
-            fireEvent.mouseOver(cell.firstElementChild);
-            expect(screen.getByRole('tooltip')).toHaveTextContent('Status: down');
-            expect(screen.getByRole('tooltip')).toHaveTextContent('start failed: the orchestration gave up, clear the instance to retry');
-        });
-
-        test('a resource name shows its notes on every node', async () => {
-            answer(dns);
-            render(<ObjectStatus path="system/svc/dns"/>);
-            await screen.findByRole('table');
-            fireEvent.mouseOver(within(screen.getByRole('rowheader', {name: /volume#1$/})).getByText('volume#1'));
-            expect(screen.getByRole('tooltip')).toHaveTextContent('all nodes');
-            expect(screen.getByRole('tooltip')).toHaveTextContent('system/vol/dns avail down');
-        });
-    });
 });

@@ -9,7 +9,9 @@ import { usePlaceCard } from "../ui/components/card-place";
  * to show none, and said at once in a card as the hover cards are; the pointer
  * gone, it is put back, for the screen readers and the next hover. One listener
  * for the whole page, the components writing `title` as before. A touch shows
- * nothing: no hover there.
+ * nothing: no hover there. Titles nested (a mark in a button), the innermost said
+ * and those around it set aside too: the browser would show the next one up, late
+ * and in its own style, beside the card.
  */
 
 /** Where a title hovered is kept, the browser seeing none meanwhile. */
@@ -24,14 +26,28 @@ interface Shown {
 
 /** The element hovered whose title the card says, its title set aside. */
 let hovered: Element | null = null;
+/** The elements whose titles are set aside: the one hovered, those around it. */
+let aside: Element[] = [];
 
-/** Puts back the title of the element hovered, the card gone. */
+/** Sets aside the titles of an element and of those around it, the browser showing none. */
+function setAside(element: Element) {
+  for (let e: Element | null = element; e !== null; e = e.parentElement) {
+    if (!e.hasAttribute("title")) continue;
+    e.setAttribute(ASIDE, e.getAttribute("title") ?? "");
+    e.removeAttribute("title");
+    aside.push(e);
+  }
+}
+
+/** Puts back the titles set aside, the card gone. */
 function restore() {
-  if (hovered === null) return;
-  const text = hovered.getAttribute(ASIDE);
-  hovered.removeAttribute(ASIDE);
-  // Unless the page wrote a title of its own meanwhile, the newer one kept.
-  if (text !== null && !hovered.hasAttribute("title")) hovered.setAttribute("title", text);
+  for (const e of aside) {
+    const text = e.getAttribute(ASIDE);
+    e.removeAttribute(ASIDE);
+    // Unless the page wrote a title of its own meanwhile, the newer one kept.
+    if (text !== null && !e.hasAttribute("title")) e.setAttribute("title", text);
+  }
+  aside = [];
   hovered = null;
 }
 
@@ -59,8 +75,7 @@ export function InstantTitles() {
       const text = target?.getAttribute("title")?.trim();
       if (!target || !text) return;
       hovered = target;
-      target.setAttribute(ASIDE, target.getAttribute("title") ?? "");
-      target.removeAttribute("title");
+      setAside(target);
       setShown({ text, ...placeUnder(target) });
     };
     const onOut = (event: PointerEvent) => {

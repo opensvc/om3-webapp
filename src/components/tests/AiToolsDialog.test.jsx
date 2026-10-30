@@ -6,7 +6,11 @@ import AiToolsDialog from '../AiToolsDialog.jsx';
 import {AiAgentError} from '../../services/ai-agent.js';
 
 const tools = [
-    {name: 'stop_instance', title: 'Stop instance', summary: 'Stop the instance of one object on one node.', readOnly: false, needsConfirmation: true},
+    {
+        name: 'stop_instance', title: 'Stop instance', summary: 'Stop the instance of one object on one node.',
+        description: 'Stop the instance of one object on one node.\nThe other nodes keep theirs.',
+        arguments: {path: 'the exact object path', node: 'the exact node name'}, readOnly: false, needsConfirmation: true,
+    },
     {name: 'get_node_status', title: 'Get node status', summary: 'Read the status of one node.', readOnly: true, needsConfirmation: false},
     {name: 'get_cluster_status', title: 'Get cluster status snapshot', summary: 'Read a snapshot of the cluster.', readOnly: true, needsConfirmation: false},
     {name: 'freeze_object', title: 'Freeze object', summary: 'Freeze an object.', readOnly: false, needsConfirmation: false},
@@ -22,6 +26,16 @@ describe('what the assistant can do', () => {
         expect(within(group('Read')).getAllByRole('listitem').map((item) => item.querySelector('code').textContent)).toEqual(['get_cluster_status', 'get_node_status']);
         expect(within(group('Act, after your confirmation')).getByText('Stop instance')).toBeInTheDocument();
         expect(within(group('Act')).getByText('Freeze object')).toBeInTheDocument();
+        // A tool with more to tell unfolds in place: the rest of its
+        // description and its arguments, several at once; the others do not.
+        const stop = within(dialog).getByText('stop_instance').closest('details');
+        expect(stop).not.toHaveAttribute('open');
+        fireEvent.click(within(stop).getByText('Stop instance'));
+        expect(stop).toHaveAttribute('open');
+        expect(within(stop).getByText('The other nodes keep theirs.')).toBeInTheDocument();
+        expect(within(stop).getAllByRole('term').map((term) => term.textContent)).toEqual(['node', 'path']);
+        expect(within(stop).getByText('the exact node name')).toBeInTheDocument();
+        expect(within(dialog).getByText('freeze_object').closest('details')).toBeNull();
         expect((await axe(dialog)).violations).toHaveLength(0);
         fireEvent.change(within(dialog).getByRole('searchbox', {name: 'Filter the tools'}), {target: {value: 'NODE status'}});
         expect(within(dialog).getByText('1 tool')).toBeInTheDocument();

@@ -3642,6 +3642,7 @@
       "filter": "Filter the tools",
       "count_one": "{{count}} tool",
       "count_other": "{{count}} tools",
+      "arguments": "Arguments",
       "groups": {
         "read": "Read",
         "confirmed": "Act, after your confirmation",
@@ -3740,6 +3741,7 @@
     "confirm": {
       "destructive": "Destructive action to confirm",
       "action": "Action to confirm",
+      "tool": "Tool:",
       "noArguments": "No arguments.",
       "arguments": "Arguments of the call",
       "expires": "Expires at {{time}}. Nothing runs without your approval.",

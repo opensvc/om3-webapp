@@ -43,6 +43,7 @@ describe('the confirmation card', () => {
             getMessages: vi.fn().mockResolvedValue({messages: [], next_cursor: ''}),
             newId: vi.fn(() => 'prompt-1'),
             run: vi.fn(),
+            listTools: vi.fn().mockResolvedValue([]),
         };
     });
     const ask = async (prompt) => {
@@ -183,5 +184,35 @@ describe('the confirmation card', () => {
         expect(within(card).getByText('Stop instance')).toBeInTheDocument();
         expect(within(card).queryByText(/The daemon may still refuse/)).not.toBeInTheDocument();
         expect(within(card).getByText('dev5n1')).toHaveProperty('tagName', 'CODE');
+    });
+
+    test('tells on hover what the tool does and what each argument is, from the tools of the agent', async () => {
+        mocks.client.listTools.mockResolvedValue([{
+            name: 'stop_instance', title: 'Stop instance', summary: 'Stop the instance on one node.', readOnly: false, needsConfirmation: true,
+            description: 'Stop the instance on one node.\n**Not** the object.', arguments: {node: 'the exact node name'},
+        }]);
+        const card = await reload(pendingConfirmation());
+        // From the MCP: a title attribute, plain text, never markup.
+        await waitFor(() => expect(within(card).getByText('stop_instance')).toHaveAttribute('title', 'Stop the instance on one node.\n**Not** the object.'));
+        expect(within(card).getByText('node')).toHaveAttribute('title', 'the exact node name');
+        expect(within(card).getByText('path')).not.toHaveAttribute('title');
+        expect(mocks.client.listTools).toHaveBeenCalledTimes(1);
+        expect((await axe(card)).violations).toHaveLength(0);
+    });
+
+    test('shows the card without hover text when the tools of the agent cannot be read', async () => {
+        mocks.client.listTools.mockRejectedValue(new Error('tools_unavailable'));
+        const card = await reload(pendingConfirmation());
+        await waitFor(() => expect(mocks.client.listTools).toHaveBeenCalled());
+        expect(within(card).getByText('stop_instance')).not.toHaveAttribute('title');
+        expect(within(card).getByRole('button', {name: 'Approve'})).toBeInTheDocument();
+    });
+
+    test('names the tool called, labeled and in bold, apart from its title', async () => {
+        const card = await reload(pendingConfirmation());
+        expect(within(card).getByText(/Tool:/)).toBeInTheDocument();
+        const name = within(card).getByText('stop_instance');
+        expect(name).toHaveProperty('tagName', 'CODE');
+        expect(name).toHaveClass('font-semibold');
     });
 });

@@ -3,6 +3,7 @@ import {useTranslation} from "react-i18next";
 import {useAuth} from "../context/AuthProvider.jsx";
 import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus.jsx";
 import useAiAgent from "../hooks/useAiAgent.js";
+import useAiToolDocs from "../hooks/useAiToolDocs.js";
 import useAiChat from "../hooks/useAiChat.js";
 import {isFrozen, objectAttention} from "../hooks/useSidebarAlerts.js";
 import AiMarkdown from "./AiMarkdown.jsx";
@@ -440,11 +441,14 @@ function ArgumentValue({value, type}) {
  * when the MCP told it, what the call would do. After an edit, the preview is
  * asked again for the edited arguments, nothing running.
  */
-function ConfirmationCard({confirmation, busy, previewing, queued, onApprove, onReject, onPreview}) {
+function ConfirmationCard({confirmation, doc, busy, previewing, queued, onApprove, onReject, onPreview}) {
     const {t, i18n} = useTranslation();
     const expires = new Date(confirmation.expires_at).toLocaleTimeString();
     const entries = Object.entries(confirmation.arguments);
     const argumentTypes = confirmation.argument_types || {};
+    // What the tool and its arguments do, from the catalog of the agent.
+    const toolDescription = doc?.description || "";
+    const argumentDescriptions = doc?.arguments || {};
     const preview = confirmation.preview || null;
     // A call the user may edit is shown in a form built from the input schema
     // of its tool, the arguments the model proposed filled in.
@@ -494,8 +498,15 @@ function ConfirmationCard({confirmation, busy, previewing, queued, onApprove, on
             </p>
             {preview && <p className="font-medium [overflow-wrap:anywhere]">{previewSentence(preview.summary, t, i18n)}</p>}
             <p className="[overflow-wrap:anywhere]">
-                <span className={preview ? "text-data text-ink-muted" : "font-medium"}>{confirmation.tool.title}</span>{" "}
-                <code className="text-data text-ink-muted">{confirmation.tool.name}</code>
+                <span className={preview ? "text-data text-ink-muted" : "font-medium"}>{confirmation.tool.title}</span>
+                <span className="text-data text-ink-muted"> · {t("ai.confirm.tool")} </span>
+                {/* What the tool does, as the model read it, on hover. */}
+                <code
+                    className={toolDescription ? "cursor-help text-data font-semibold underline decoration-dotted underline-offset-2" : "text-data font-semibold"}
+                    title={toolDescription || undefined}
+                >
+                    {confirmation.tool.name}
+                </code>
             </p>
             {preview && <PreviewDetails preview={preview} path={path}/>}
             {confirmation.preview_error && (
@@ -525,7 +536,12 @@ function ConfirmationCard({confirmation, busy, previewing, queued, onApprove, on
                     <dl className="mt-1 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3">
                         {entries.map(([name, value]) => (
                             <div key={name} className="contents">
-                                <dt className="font-medium">{name}</dt>
+                                <dt
+                                    className={Object.hasOwn(argumentDescriptions, name) ? "cursor-help font-medium underline decoration-dotted underline-offset-2" : "font-medium"}
+                                    title={Object.hasOwn(argumentDescriptions, name) ? argumentDescriptions[name] : undefined}
+                                >
+                                    {name}
+                                </dt>
                                 <dd className="min-w-0 [overflow-wrap:anywhere]">
                                     <ArgumentValue
                                         value={value}
@@ -594,6 +610,7 @@ const AiChat = ({status}) => {
     // A conversation belongs to an identity on a cluster: changing either resets the view.
     const scope = JSON.stringify([auth.authChoice, auth.user, clusterId]);
     const chat = useAiChat({client, ready, scope});
+    const toolDocs = useAiToolDocs(client, ready && Boolean(chat.confirmation));
     const [conversationsOpen, toggleConversations, {fold: foldConversations}] = useConversationsOpen();
     const [search, setSearch] = useState("");
     const [draft, setDraft] = useState("");
@@ -1041,6 +1058,7 @@ const AiChat = ({status}) => {
                                 // A new confirmation, such as a preview asked again, takes a card of its own.
                                 key={chat.confirmation.id}
                                 confirmation={chat.confirmation}
+                                doc={toolDocs?.get(chat.confirmation.tool.name)}
                                 busy={busy}
                                 previewing={chat.pending === "previewing"}
                                 queued={Boolean(chat.queued)}

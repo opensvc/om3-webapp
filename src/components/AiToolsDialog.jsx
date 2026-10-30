@@ -12,6 +12,54 @@ const GROUPS = [
     ["act", (tool) => !tool.readOnly && !tool.needsConfirmation],
 ];
 
+// The description past its summary, the first sentence the list shows
+// already; the whole description when it does not start with it.
+const restOf = (tool) => {
+    const description = tool.description || "";
+    const summary = (tool.summary || "").replace(/…$/, "");
+    return (description.startsWith(summary) ? description.slice(summary.length) : description).trim();
+};
+
+// A tool of the list: its title, its name and its summary; one with more to
+// tell unfolds in place, the rest of its description and its arguments, so
+// that several read side by side and nothing is hidden.
+function ToolItem({tool}) {
+    const {t} = useTranslation();
+    const rest = restOf(tool);
+    const args = Object.entries(tool.arguments || {}).sort(([a], [b]) => a.localeCompare(b));
+    const heading = (
+        <>
+            <span className="font-medium text-ink">{tool.title}</span>{" "}
+            <code className="text-ink-muted">{tool.name}</code>
+            {tool.summary && <span className="block text-ink-muted [overflow-wrap:anywhere]">{tool.summary}</span>}
+        </>
+    );
+    if (!rest && args.length === 0) return <li>{heading}</li>;
+    return (
+        <li>
+            <details>
+                <summary className="cursor-pointer">{heading}</summary>
+                <div className="mt-1 space-y-1 border-l-2 border-line pl-3">
+                    {rest && <p className="whitespace-pre-line [overflow-wrap:anywhere]">{rest}</p>}
+                    {args.length > 0 && (
+                        <>
+                            <p className="font-medium">{t("ai.tools.arguments")}</p>
+                            <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-0.5">
+                                {args.map(([name, description]) => (
+                                    <div key={name} className="contents">
+                                        <dt><code>{name}</code></dt>
+                                        <dd className="min-w-0 text-ink-muted [overflow-wrap:anywhere]">{description}</dd>
+                                    </div>
+                                ))}
+                            </dl>
+                        </>
+                    )}
+                </div>
+            </details>
+        </li>
+    );
+}
+
 const fold = (text) => text.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
 
 /**
@@ -70,11 +118,7 @@ export default function AiToolsDialog({open, client, onClose}) {
                                 <h3 id={`ai-tools-${key}`} className="font-semibold">{t(`ai.tools.groups.${key}`)}</h3>
                                 <ul className="mt-1 space-y-1.5">
                                     {tools.map((tool) => (
-                                        <li key={tool.name}>
-                                            <span className="font-medium text-ink">{tool.title}</span>{" "}
-                                            <code className="text-ink-muted">{tool.name}</code>
-                                            {tool.summary && <p className="text-ink-muted [overflow-wrap:anywhere]">{tool.summary}</p>}
-                                        </li>
+                                        <ToolItem key={tool.name} tool={tool}/>
                                     ))}
                                 </ul>
                             </section>

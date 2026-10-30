@@ -221,10 +221,14 @@ describe('AI agent conversations client', () => {
         const tool = {name: 'stop_instance', title: 'Stop instance', summary: 'Stop the instance.', read_only: false, needs_confirmation: true};
 
         it('reads them as the caller, on the om3 backend', async () => {
-            fetchMock.mockResolvedValue(Response.json({tools: [tool, {...tool, name: 'get_node_status', title: '', read_only: true, needs_confirmation: false}]}));
+            const documented = {...tool, description: 'Stop the instance.\nOn one node.', arguments: {node: 'the exact node'}};
+            fetchMock.mockResolvedValue(Response.json({tools: [documented, {...tool, name: 'get_node_status', title: '', read_only: true, needs_confirmation: false}]}));
             expect(await client.listTools()).toEqual([
-                {name: 'stop_instance', title: 'Stop instance', summary: 'Stop the instance.', readOnly: false, needsConfirmation: true},
-                {name: 'get_node_status', title: 'get_node_status', summary: 'Stop the instance.', readOnly: true, needsConfirmation: false},
+                {
+                    name: 'stop_instance', title: 'Stop instance', summary: 'Stop the instance.',
+                    description: 'Stop the instance.\nOn one node.', arguments: {node: 'the exact node'}, readOnly: false, needsConfirmation: true,
+                },
+                {name: 'get_node_status', title: 'get_node_status', summary: 'Stop the instance.', description: '', arguments: {}, readOnly: true, needsConfirmation: false},
             ]);
             const [url, options] = fetchMock.mock.calls[0];
             expect(url).toBe(`${baseUrl}/v1/om3/tools`);
@@ -242,6 +246,11 @@ describe('AI agent conversations client', () => {
             ['a name twice', {tools: [tool, tool]}],
             ['a summary past its bound', {tools: [{...tool, summary: 'x'.repeat(601)}]}],
             ['a flag that is no boolean', {tools: [{...tool, read_only: 'false'}]}],
+            ['a description that is no text', {tools: [{...tool, description: 42}]}],
+            ['a description past its bound', {tools: [{...tool, description: 'x'.repeat(8193)}]}],
+            ['arguments that are no object', {tools: [{...tool, arguments: ['node']}]}],
+            ['an argument description that is no text', {tools: [{...tool, arguments: {node: 1}}]}],
+            ['an argument description past its bound', {tools: [{...tool, arguments: {node: 'x'.repeat(2049)}}]}],
         ])('refuses %s', async (_, body) => {
             fetchMock.mockResolvedValue(Response.json(body));
             await expect(client.listTools()).rejects.toMatchObject({code: 'invalid_response'});

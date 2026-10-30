@@ -163,10 +163,20 @@ const parseHistorySteps = (message) => {
 };
 
 // The tools the assistant may call, as the agent lists them: at most
-// MAX_TOOLS, a title and a summary of bounded length each.
+// MAX_TOOLS, a title and a summary of bounded length each, and the
+// description of the tool and of its arguments, as the model reads them:
+// plain text from the MCP, never markup.
 const MAX_TOOLS = 512;
 const MAX_TOOL_TITLE_CHARACTERS = 256;
 const MAX_TOOL_SUMMARY_CHARACTERS = 600;
+const MAX_TOOL_DESCRIPTION_CHARACTERS = 8192;
+const MAX_TOOL_ARGUMENTS = 64;
+const MAX_ARGUMENT_DESCRIPTION_CHARACTERS = 2048;
+const validToolArguments = (value) =>
+    value === undefined ||
+    (isPlainObject(value) &&
+        Object.keys(value).length <= MAX_TOOL_ARGUMENTS &&
+        Object.entries(value).every(([name, text]) => isLabel(name) && isText(text, MAX_ARGUMENT_DESCRIPTION_CHARACTERS)));
 const parseTools = (result) => {
     if (!isPlainObject(result) || !Array.isArray(result.tools) || result.tools.length > MAX_TOOLS) throw protocolError();
     const names = new Set();
@@ -177,12 +187,22 @@ const parseTools = (result) => {
             names.has(tool.name) ||
             !isText(tool.title, MAX_TOOL_TITLE_CHARACTERS) ||
             !isText(tool.summary, MAX_TOOL_SUMMARY_CHARACTERS) ||
+            (tool.description !== undefined && !isText(tool.description, MAX_TOOL_DESCRIPTION_CHARACTERS)) ||
+            !validToolArguments(tool.arguments) ||
             typeof tool.read_only !== 'boolean' ||
             typeof tool.needs_confirmation !== 'boolean'
         )
             throw protocolError();
         names.add(tool.name);
-        return {name: tool.name, title: tool.title || tool.name, summary: tool.summary, readOnly: tool.read_only, needsConfirmation: tool.needs_confirmation};
+        return {
+            name: tool.name,
+            title: tool.title || tool.name,
+            summary: tool.summary,
+            description: tool.description || '',
+            arguments: {...(tool.arguments || {})},
+            readOnly: tool.read_only,
+            needsConfirmation: tool.needs_confirmation,
+        };
     });
 };
 const TOOLS_MESSAGES = (status, code) =>

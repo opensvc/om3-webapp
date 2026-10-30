@@ -124,9 +124,10 @@ describe('ObjectStatus', () => {
         expect(policies).toHaveTextContent('Topology: flexOrchestrate: haPlacement: nodes order');
         // Each policy its value alone, no icon.
         expect(policies.querySelectorAll('[data-policy] svg')).toHaveLength(0);
-        // Muted text, a dot apart, no pill.
-        expect(policies.querySelector('[data-policy]')).toHaveClass('text-ink-muted');
-        expect(policies.querySelector('[data-policy]')).not.toHaveClass('rounded-full');
+        // All of them in one badge, as in the lists, a dot apart, no pill.
+        expect(policies).toHaveClass('border', 'border-line-strong', 'rounded-sm', 'text-ink-muted');
+        expect(policies).not.toHaveClass('rounded-full');
+        expect(policies.querySelectorAll('[data-policy]')).toHaveLength(3);
         expect(screen.getByRole('button', {name: 'Actions'})).toBeInTheDocument();
     });
 

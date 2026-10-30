@@ -21,7 +21,9 @@ import {Spinner} from "../ui/components/Spinner";
 import {BoltIcon, CloseIcon} from "../ui/icons";
 import {INSTANCE_ACTIONS, OBJECT_ACTIONS, RESOURCE_ACTIONS, actionLabel, objectActionsFor} from "../constants/actions";
 import {OrchestrationBadge, orchestrationOf} from "./OrchestrationBadge";
+import {cn} from "../ui/cn";
 import {PolicyTag} from "../ui/components/PolicyTag";
+import {BADGE} from "./ObjectCells";
 import ActionDialogManager from "./ActionDialogManager";
 import ConsoleTerminal from "./ConsoleTerminal.jsx";
 import {CLEAR_ACTION, noteFixAction, postAction, resourceActions, syncVariant} from "./objectActions";
@@ -414,9 +416,10 @@ const ObjectStatus = ({path, onOrchestrationLogs, linkNode, linkResource, openCe
         ...(parents.length > 0 ? [{label: t("statusBoard.parents"), value: <RelationLinks relations={parents}/>}] : []),
     ];
 
-    // The policies of the object over its status board, its actions at the right of the title of its panel.
+    // The policies of the object over its status board, in one badge as in the lists; its actions at the
+    // right of the title of its panel.
     const policies = board.facts.length > 0 ? (
-        <span className="flex flex-wrap gap-x-1" aria-label={t("statusBoard.policies")}>
+        <span className={cn(BADGE, "w-fit gap-1 whitespace-nowrap")} data-policies="" aria-label={t("statusBoard.policies")}>
             {board.facts.map((f) => <PolicyTag key={f.name} name={f.name} value={f.value}/>)}
         </span>
     ) : null;

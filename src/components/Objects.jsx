@@ -241,7 +241,21 @@ const RowButton = ({icon, label, onClick, create = false}) => {
     return <IconButton size="sm" label={label} tone={create ? "create" : undefined} onClick={click} onKeyDown={stopPropagation}>{icon}</IconButton>;
 };
 
-const NamespaceRow = ({namespace, colSpan, selectedCount, total, onToggle, onOpen, mayConfigure, onCreate, narrow}) => {
+/*
+ * The instances of the objects, a column a node, set apart as a table of their own
+ * after the status they detail: a gap before them the ground of the table, its row
+ * lines hidden, whatever row is selected or hovered; then the nodes, a tinted tile a
+ * row, its corners rounded where the rows part, their titles the smaller. A collapsed
+ * table rounds no cell: the tile is a layer under the content of the cells.
+ */
+const NODE_GAP = "w-3 min-w-3 p-0 border-b border-surface-raised bg-surface-raised";
+const NODE_TINT = "relative isolate border-b border-b-surface-raised before:absolute before:inset-y-px before:inset-x-0 before:-z-10 before:bg-ink/[0.08]";
+const nodeEdge = (i, count) => cn(
+    i === 0 && "before:rounded-l-(--radius-control)",
+    i === count - 1 && "before:rounded-r-(--radius-control)",
+);
+
+const NamespaceRow = ({namespace, colSpan, nodeCount = 0, selectedCount, total, onToggle, onOpen, mayConfigure, onCreate, narrow}) => {
     const {t} = useTranslation();
     const box = useRef(null);
     const exists = useEventStore((s) => s.objectStatus?.[nscfgPath(namespace)] !== undefined);
@@ -289,7 +303,7 @@ const NamespaceRow = ({namespace, colSpan, selectedCount, total, onToggle, onOpe
                     </span>
                 ) : <span className="group-hover/band:underline">{namespace}</span>}
             </th>
-            <td colSpan={colSpan - 1} className="px-2 py-1">
+            <td colSpan={colSpan - 1 - (nodeCount > 0 ? nodeCount + 1 : 0)} className="px-2 py-1">
                 <span className="flex items-center justify-end gap-1 whitespace-nowrap">
                     {(exists || mayConfigure) && (
                         <RowButton
@@ -306,6 +320,12 @@ const NamespaceRow = ({namespace, colSpan, selectedCount, total, onToggle, onOpe
                     />
                 </span>
             </td>
+            {nodeCount > 0 && (
+                <>
+                    <td aria-hidden="true" className={NODE_GAP}/>
+                    <td colSpan={nodeCount} className={cn(NODE_TINT, nodeEdge(0, 1))}/>
+                </>
+            )}
         </tr>
     );
 };
@@ -368,10 +388,11 @@ const TableRowComponent = React.memo(({
                     />
                 </Cell>
             )}
-            {/* A line before the instances: the columns past it are per node. */}
+            {/* The instances, a table of their own after the status they detail. */}
+            {!namesOnly && isWideScreen && allNodes.length > 0 && <td aria-hidden="true" className={NODE_GAP}/>}
             {!namesOnly && isWideScreen &&
                 allNodes.map((node, i) => (
-                    <Cell key={node} className={i === 0 ? "whitespace-nowrap border-l border-line" : "whitespace-nowrap"}>
+                    <Cell key={node} data-node-cell={node} className={cn("whitespace-nowrap", NODE_TINT, nodeEdge(i, allNodes.length))}>
                         <NodeStatus objectName={objectName} node={node}/>
                     </Cell>
                 ))}
@@ -968,7 +989,9 @@ const Objects = () => {
 
     // Narrow, the orchestrate is a badge by the path: no column for it.
     const propertyColumns = isMobile ? NARROW_PROPERTY_COLUMNS : PROPERTY_COLUMNS;
-    const columnCount = namesOnly ? 4 : 3 + propertyColumns.length + (isWideScreen ? allNodes.length : 0);
+    // The nodes past a gap of their own: a column more.
+    const nodeColumns = !namesOnly && isWideScreen ? allNodes.length : 0;
+    const columnCount = namesOnly ? 4 : 3 + propertyColumns.length + (nodeColumns > 0 ? nodeColumns + 1 : 0);
 
     return (
         <div className="flex h-full gap-6 p-4">
@@ -1084,10 +1107,11 @@ const Objects = () => {
                                     onSort={() => sortBy("status")}
                                 />
                             )}
+                            {!namesOnly && isWideScreen && allNodes.length > 0 && <th aria-hidden="true" className={NODE_GAP}/>}
                             {!namesOnly && isWideScreen && allNodes.map((node, i) => (
                                 <SortHeaderCell
                                     key={node}
-                                    className={i === 0 ? "border-l border-line" : undefined}
+                                    className={cn("text-data text-ink-muted", NODE_TINT, nodeEdge(i, allNodes.length))}
                                     label={node}
                                     active={sortColumn === `node:${node}`}
                                     direction={sortDirection}
@@ -1108,6 +1132,7 @@ const Objects = () => {
                                         <NamespaceRow
                                             namespace={ns}
                                             colSpan={columnCount - 1}
+                                            nodeCount={nodeColumns}
                                             total={members.length}
                                             selectedCount={members.filter((name) => selectedObjects.includes(name)).length}
                                             onToggle={handleSelectNamespace}

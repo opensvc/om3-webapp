@@ -1084,8 +1084,10 @@ describe("Heartbeats Component", () => {
         mockHeartbeatStore(TWO_NODES());
         const {container} = renderWithRouter(<Heartbeats/>, {overview: true});
         fireEvent.click(container.querySelector('[data-group="n1 n2"] [data-hover="tx"]'));
-        // Its details kept in the Streams box only.
-        expect(screen.getByRole("region", {name: "Streams"})).toHaveTextContent("Seen from n1, outgoing to n2");
+        // Its streams in a dialog, the Streams box kept as it is.
+        expect(screen.getByRole("dialog", {name: "Seen from n1, outgoing to n2"})).toBeInTheDocument();
+        expect(screen.getByRole("region", {name: "Streams"}).querySelector("[data-overall]")).not.toBeNull();
+        fireEvent.keyDown(screen.getByRole("dialog"), {key: "Escape"});
         expect(screen.queryByRole("group", {name: "Selection"})).toBeNull();
         showTab("Data");
         expect(getDataRows()).toHaveLength(4);

@@ -563,7 +563,6 @@
       "routinesStopped_one": "{{stopped}} routine sur {{count}} arrêtée",
       "routinesStopped_other": "{{stopped}} routines sur {{count}} arrêtées",
       "details": "Flux",
-      "detailsHint": "Survolez une flèche ou un nœud pour ses détails ; cliquez une flèche pour les garder, le fond du maillage pour les relâcher.",
       "overall": {
         "operational": "flux opérationnels",
         "up": "optimal",
@@ -574,7 +573,13 @@
         "up": "battent",
         "down": "en échec",
         "stopped": "arrêtés"
-      }
+      },
+      "nodeStopped": "{{node}} : {{count}} routines arrêtées, les ouvrir",
+      "clickHint_one": "Cliquer pour voir le flux",
+      "clickHint_other": "Cliquer pour voir les {{count}} flux",
+      "nodeClickHint_one": "{{node}} : cliquer pour voir la routine arrêtée",
+      "nodeClickHint_other": "{{node}} : cliquer pour voir les {{count}} routines arrêtées",
+      "relayHint": "Le relais {{relay}} : les heartbeats {{hbs}} passent par lui"
     },
     "actions": {
       "stop": "Arrêter",

@@ -563,7 +563,6 @@
       "routinesStopped_one": "{{stopped}} of {{count}} routine stopped",
       "routinesStopped_other": "{{stopped}} of {{count}} routines stopped",
       "details": "Streams",
-      "detailsHint": "Hover an arrow or a node for its details; click an arrow to keep them, the ground of the mesh to let them go.",
       "overall": {
         "operational": "streams operational",
         "up": "optimal",
@@ -574,7 +573,13 @@
         "up": "beating",
         "down": "failing",
         "stopped": "stopped"
-      }
+      },
+      "nodeStopped": "{{node}}: {{count}} routines stopped, open them",
+      "clickHint_one": "Click to see the stream",
+      "clickHint_other": "Click to see the {{count}} streams",
+      "nodeClickHint_one": "{{node}}: click to see the stopped routine",
+      "nodeClickHint_other": "{{node}}: click to see the {{count}} stopped routines",
+      "relayHint": "The relay {{relay}}: the heartbeats {{hbs}} go through it"
     },
     "actions": {
       "stop": "Stop",

@@ -33,6 +33,7 @@ import {ALL_LIST, OBJECT_LISTS, OBJECTS_TABS, listOfKind} from "../utils/objectL
 import {AlertTriangleIcon, BoltIcon, GearIcon, InfoIcon, PlusIcon} from "../ui/icons";
 import {cachedReason, needsReason} from "../app/object-reason";
 import {menuColumns, menuFilter} from "../app/action-menu";
+import {Term} from "../app/Term";
 import {SymbolLegend} from "../app/StatusBoard";
 import {Dialog} from "../ui/components/Dialog";
 import ActionDialogManager from "./ActionDialogManager";
@@ -146,8 +147,8 @@ const NodeStatus = React.memo(({objectName, node}) => {
  * to place (cfg, sec, usr) have no orchestrate nor topology.
  */
 export const PROPERTY_COLUMNS = [
-    {key: "orchestrate", labelKey: "objects.columns.orchestrate", value: (status) => status?.orchestrate},
-    {key: "topology", labelKey: "objects.columns.topology", value: (status) => status?.topology},
+    {key: "orchestrate", labelKey: "objects.columns.orchestrate", term: "orchestrate", value: (status) => status?.orchestrate},
+    {key: "topology", labelKey: "objects.columns.topology", term: "topology", value: (status) => status?.topology},
 ];
 
 /**
@@ -1107,10 +1108,11 @@ const Objects = () => {
                                         <HeaderCell className="text-right">{t("objects.columns.keysSize")}</HeaderCell>
                                     </>
                                 )}
-                                {!namesOnly && propertyColumns.map(({key, labelKey}) => (
+                                {!namesOnly && propertyColumns.map(({key, labelKey, term}) => (
                                     <SortHeaderCell
                                         key={key}
-                                        label={t(labelKey)}
+                                        // In the button of the sort, the click is the sort's: the term said on hover alone.
+                                        label={term ? <Term term={term} inert>{t(labelKey)}</Term> : t(labelKey)}
                                         active={sortColumn === key}
                                         direction={sortDirection}
                                         onSort={() => sortBy(key)}

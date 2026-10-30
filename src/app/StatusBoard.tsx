@@ -9,8 +9,17 @@ import { StateGlyph } from "../ui/components/StateGlyph";
 import type { ObjectState } from "../ui/components/StatusBadge";
 import { statusBadge } from "../ui/components/status";
 import { Cell, HeaderCell, HeaderRow, Row, Table } from "../ui/components/Table";
+import { Term } from "./Term";
 import type { Board, BoardRow, Level, NoteFix, Span, Text, Tone } from "./statusboard";
 
+
+/** The rows of the board named by a word of the glossary, its key by the kind of row. */
+const ROW_TERMS: Partial<Record<string, string>> = {
+  monitor: "monitor",
+  expect: "expect",
+  provisioned: "provisioned",
+  orchestration: "orchestration",
+};
 
 /** The inks of the webapp for om's colors. */
 const TONES: Record<Tone, string> = {
@@ -451,7 +460,7 @@ function NodeBlocks({
                 {detailRows.map((r) => (
                   <Fragment key={r.kind}>
                     <dt className="text-ink-muted">
-                      {t(`statusBoard.rows.${r.kind}`)}
+                      {ROW_TERMS[r.kind] ? <Term term={ROW_TERMS[r.kind] as string}>{t(`statusBoard.rows.${r.kind}`)}</Term> : t(`statusBoard.rows.${r.kind}`)}
                     </dt>
                     <dd>
                       <span className="inline-flex">
@@ -645,13 +654,13 @@ export function StatusBoard({
         <dl className="grid w-max grid-cols-[auto_auto] items-center gap-x-3 gap-y-1">
           {avail !== undefined && (
             <>
-              <dt className="text-ink-muted">{t("statusBoard.avail")}</dt>
+              <dt className="text-ink-muted"><Term term="avail">{t("statusBoard.avail")}</Term></dt>
               <dd><SummaryStatus status={avail.status} /></dd>
             </>
           )}
           {overall !== undefined && (
             <>
-              <dt className="text-ink-muted">{t("statusBoard.overall")}</dt>
+              <dt className="text-ink-muted"><Term term="overall">{t("statusBoard.overall")}</Term></dt>
               <dd><SummaryStatus status={overall.status} /></dd>
             </>
           )}
@@ -764,6 +773,9 @@ export function StatusBoard({
                   : r.kind === "instance"
                     ? t("statusBoard.rows.state")
                     : t(`statusBoard.rows.${r.kind}`);
+            // A row named by a word of OpenSVC: its definition on demand.
+            const rowTerm = ROW_TERMS[r.kind];
+            const shownName = rowTerm ? <Term term={rowTerm}>{name}</Term> : name;
             const pickRow = selection !== undefined && r.kind === "resource";
             const nodesOfRow = pickRow ? rowNodes(board, r) : [];
             const rowState = rowSelectState(r);
@@ -796,7 +808,7 @@ export function StatusBoard({
                     )}
                     <span className="flex w-full">
                       <span className="flex w-full items-center gap-1">
-                        {r.kind === "resource" && linkResource ? linkResource(r.name) : name}
+                        {r.kind === "resource" && linkResource ? linkResource(r.name) : shownName}
                       </span>
                     </span>
                   </span>

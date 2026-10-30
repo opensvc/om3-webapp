@@ -3292,7 +3292,7 @@
   },
   "glossary": {
     "title": "Glossary",
-    "intro": "The words of OpenSVC used in this webapp, said plainly.",
+    "intro": "The words of OpenSVC used in this webapp, said plainly. A label showing the help cursor gives its definition: stay on it a moment, or click it.",
     "search": "Search the glossary",
     "noMatch": "No term matches.",
     "more": "More in the Glossary of the menu.",

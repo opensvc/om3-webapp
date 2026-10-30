@@ -192,7 +192,6 @@ describe('App Component', () => {
 
     afterEach(() => {
         vi.useRealTimers();
-        vi.unstubAllEnvs();
     });
 
     // --- Routing ---
@@ -1007,40 +1006,27 @@ describe('App Component', () => {
     });
 
     // --- AI assistant ---
+    // The page opens to a session whatever the cluster: it tells itself whether
+    // the cluster names an agent and the session is one the agent takes.
     test('AI page is protected and requires an authenticated session', async () => {
-        vi.stubEnv('VITE_AI_AGENT_URL', 'https://agent.example.com');
         renderApp(['/ai']);
         expect(await screen.findByTestId('auth-choice')).toBeInTheDocument();
         expect(screen.queryByTestId('ai-chat')).not.toBeInTheDocument();
     });
 
-    test('configured AI page is accessible with the existing OpenID session', async () => {
-        vi.stubEnv('VITE_AI_AGENT_URL', 'https://agent.example.com');
-        setupOidcAuth();
+    test.each([
+        ['OpenID', setupOidcAuth],
+        ['Basic', setupBasicAuth],
+    ])('AI page opens to an existing %s session, with no build configuration', async (_name, setup) => {
+        setup();
         renderApp(['/ai']);
         expect(await screen.findByTestId('ai-chat')).toBeInTheDocument();
     });
 
-    test('configured AI page is accessible with the existing Basic session', async () => {
-        vi.stubEnv('VITE_AI_AGENT_URL', 'https://agent.example.com');
-        setupBasicAuth();
-        renderApp(['/ai']);
-        expect(await screen.findByTestId('ai-chat')).toBeInTheDocument();
-    });
-
-    test('configured AI route rejects an expired Basic session', async () => {
-        vi.stubEnv('VITE_AI_AGENT_URL', 'https://agent.example.com');
+    test('AI route rejects an expired Basic session', async () => {
         setupBasicAuth(-3600);
         renderApp(['/ai']);
         expect(await screen.findByTestId('auth-choice')).toBeInTheDocument();
-        expect(screen.queryByTestId('ai-chat')).not.toBeInTheDocument();
-    });
-
-    test('unconfigured AI route redirects to the home view', async () => {
-        vi.stubEnv('VITE_AI_AGENT_URL', '');
-        setupBasicAuth();
-        renderApp(['/ai']);
-        expect(await screen.findByTestId('cluster')).toBeInTheDocument();
         expect(screen.queryByTestId('ai-chat')).not.toBeInTheDocument();
     });
 });

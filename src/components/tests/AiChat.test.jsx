@@ -28,7 +28,8 @@ vi.mock('../../hooks/useAiAgent.js', () => ({
     default: () => ({
         client: mocks.client,
         enabled: mocks.enabled,
-        ready: mocks.enabled && Boolean(mocks.auth.accessToken && mocks.clusterId),
+        openid: mocks.auth.authChoice === 'openid',
+        ready: mocks.enabled && mocks.auth.authChoice === 'openid' && Boolean(mocks.auth.accessToken && mocks.clusterId),
         configurationError: null,
     }),
 }));
@@ -142,7 +143,8 @@ describe('AI chatbot page', () => {
         expect(mocks.client.createConversation).not.toHaveBeenCalled();
         expect(mocks.client.run).not.toHaveBeenCalled();
     });
-    test.each(['openid', 'basic', null])(
+    // The agent takes the OpenID sessions only: the others are told why, apart.
+    test.each(['openid'])(
         'renders the chat and sends a turn for %s login',
         async (authChoice) => {
             mocks.auth.authChoice = authChoice;
@@ -187,7 +189,7 @@ describe('AI chatbot page', () => {
         expect(signal.aborted).toBe(true);
         expect(mocks.client.run).toHaveBeenCalledTimes(1);
     });
-    test.each(['openid', 'basic'])(
+    test.each(['openid'])(
         'restores and pages saved messages for %s without running a turn',
         async (authChoice) => {
             mocks.auth.authChoice = authChoice;
@@ -370,7 +372,7 @@ describe('AI chatbot page', () => {
         expect(screen.queryByRole('button', {name: 'Previous diagnostic'})).not.toBeInTheDocument();
         expect(screen.getByRole('button', {name: 'Rename the conversation'})).toBeInTheDocument();
     });
-    test.each(['openid', 'basic'])(
+    test.each(['openid'])(
         'aborts and hides the transcript on %s logout',
         async (authChoice) => {
             mocks.auth.authChoice = authChoice;
@@ -399,7 +401,7 @@ describe('AI chatbot page', () => {
             expect(mocks.client.run).toHaveBeenCalledTimes(1);
         }
     );
-    test.each(['openid', 'basic'])(
+    test.each(['openid'])(
         'does not cancel or replay a turn when the %s token renews',
         async (authChoice) => {
             mocks.auth.authChoice = authChoice;
@@ -427,15 +429,21 @@ describe('AI chatbot page', () => {
             await screen.findByText(/Incomplete response — stopped/);
         }
     );
-    test.each(['disabled', 'missing-token', 'missing-target'])(
-        'does not contact the agent when %s',
-        async (reason) => {
+    test.each([
+        ['disabled', /No AI agent is configured on this cluster/],
+        ['missing-token', /An authenticated session is required/],
+        ['missing-target', /Loading cluster information|Waiting for the cluster ID/],
+        ['not-openid', /needs a single sign-on session/],
+    ])(
+        'does not contact the agent when %s, and tells why',
+        async (reason, why) => {
             if (reason === 'disabled') mocks.enabled = false;
             if (reason === 'missing-token') mocks.auth.accessToken = null;
             if (reason === 'missing-target') mocks.clusterId = '';
+            if (reason === 'not-openid') mocks.auth.authChoice = 'basic';
             render(<AiChat />);
-            // Information strips are announced politely, as a status.
-            expect(screen.getByRole('status')).toBeInTheDocument();
+            // Information strips are announced politely, as a status: one, saying why.
+            expect(screen.getByRole('status')).toHaveTextContent(why);
             expect(screen.queryByRole('textbox', {name: 'Message'})).not.toBeInTheDocument();
             expect(mocks.client.listConversations).not.toHaveBeenCalled();
             expect(mocks.client.createConversation).not.toHaveBeenCalled();

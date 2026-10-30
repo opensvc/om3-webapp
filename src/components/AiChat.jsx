@@ -588,8 +588,9 @@ function ConfirmationCard({confirmation, busy, previewing, queued, onApprove, on
 const AiChat = ({status}) => {
     const {t} = useTranslation();
     const auth = useAuth();
-    const {clusterId, clusterName, loading, error: statusError, fetchNodes} = useFetchDaemonStatus();
-    const {enabled, ready, configurationError, client} = useAiAgent({clusterId});
+    // The cluster status names the cluster and the agent of its configuration.
+    const {clusterId, agentUrl, clusterName, loading, error: statusError, fetchNodes} = useFetchDaemonStatus();
+    const {enabled, openid, ready, configurationError, client} = useAiAgent({clusterId, agentUrl});
     // A conversation belongs to an identity on a cluster: changing either resets the view.
     const scope = JSON.stringify([auth.authChoice, auth.user, clusterId]);
     const chat = useAiChat({client, ready, scope});
@@ -638,9 +639,10 @@ const AiChat = ({status}) => {
     const starters =
         chat.historyReady && !busy && !waiting && !chat.messages.length ? starterQuestions(status, t) : [];
 
+    // The agent URL is read with the cluster status: it is fetched first.
     useEffect(() => {
-        if (enabled && auth.accessToken) void fetchNodes(auth.accessToken);
-    }, [enabled, auth.authChoice, auth.accessToken, fetchNodes]);
+        if (auth.accessToken) void fetchNodes(auth.accessToken);
+    }, [auth.authChoice, auth.accessToken, fetchNodes]);
 
     // Another conversation on display, or another identity or cluster: the
     // message box starts from the message queued, given back, or empty. The
@@ -766,9 +768,14 @@ const AiChat = ({status}) => {
                 )}
             </div>
 
-            {!enabled && <Alert tone="info">{configurationError || t("ai.notConfigured")}</Alert>}
-            {enabled && !auth.accessToken && <Alert tone="info">{t("ai.authRequired")}</Alert>}
-            {enabled && auth.accessToken && !ready && (
+            {/* Why the assistant is not there: no session, one the agent does not take,
+                the cluster status not read yet, or a cluster without agent. */}
+            {!auth.accessToken && <Alert tone="info">{t("ai.authRequired")}</Alert>}
+            {auth.accessToken && !openid && <Alert tone="info">{t("ai.openidRequired")}</Alert>}
+            {auth.accessToken && openid && clusterId && !enabled && (
+                <Alert tone="info">{configurationError || t("ai.notConfigured")}</Alert>
+            )}
+            {auth.accessToken && openid && !clusterId && (
                 <Alert
                     tone={statusError ? "error" : "info"}
                     action={

@@ -3592,7 +3592,8 @@
   "ai": {
     "title": "Assistant IA",
     "cluster": "Cluster",
-    "notConfigured": "L'agent IA n'est pas configuré pour cette webapp.",
+    "notConfigured": "Aucun agent IA n'est configuré sur ce cluster : un administrateur règle ai.agent_url dans la configuration du cluster.",
+    "openidRequired": "L'assistant demande une session d'authentification unique : connectez-vous avec le fournisseur d'identité.",
     "authRequired": "Une session authentifiée est nécessaire pour utiliser l'assistant IA.",
     "refreshStatus": "Actualiser l'état",
     "loadingCluster": "Chargement des informations du cluster…",

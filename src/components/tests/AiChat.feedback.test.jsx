@@ -9,7 +9,7 @@ vi.mock('../../hooks/useFetchDaemonStatus.jsx', () => ({
     default: () => ({clusterId: 'cluster-id', clusterName: 'Lab cluster', fetchNodes: vi.fn(), loading: false, error: ''}),
 }));
 vi.mock('../../hooks/useAiAgent.js', () => ({
-    default: () => ({client: mocks.client, enabled: true, ready: true, configurationError: null}),
+    default: () => ({client: mocks.client, enabled: true, openid: true, ready: true, configurationError: null}),
 }));
 
 const existing = {id: 'existing', title: 'Previous diagnostic'};

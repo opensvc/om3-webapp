@@ -13,6 +13,9 @@ const useFetchDaemonStatus = () => {
     const [clusterName, setClusterName] = useState("");
     // Routing must never be enabled by a daemon status cached in localStorage.
     const [clusterId, setClusterId] = useState("");
+    // The ai.agent_url of the cluster configuration, the AI agent the
+    // assistant calls: from a fresh status only, as the cluster ID.
+    const [agentUrl, setAgentUrl] = useState("");
     const requestRef = useRef(0);
 
     // Load cached data on mount
@@ -46,6 +49,7 @@ const useFetchDaemonStatus = () => {
         const requestId = ++requestRef.current;
         if (!token) {
             setClusterId("");
+            setAgentUrl("");
             setLoading(false);
             setError("Token is required to fetch daemon status");
             return;
@@ -70,6 +74,7 @@ const useFetchDaemonStatus = () => {
             });
             setClusterName(result.cluster.config.name || "Cluster");
             setClusterId(typeof result.cluster.config.id === "string" ? result.cluster.config.id : "");
+            setAgentUrl(typeof result.cluster.config.ai?.agent_url === "string" ? result.cluster.config.ai.agent_url : "");
             cacheRef.current = nodesArray;
             // Cache in localStorage
             try {
@@ -83,6 +88,7 @@ const useFetchDaemonStatus = () => {
         } catch (err) {
             if (requestId !== requestRef.current) return;
             setClusterId("");
+            setAgentUrl("");
             logger.error("Error while fetching daemon statuses:", err);
             setError("Failed to retrieve daemon statuses.");
             // Clear cached data on error
@@ -112,6 +118,7 @@ const useFetchDaemonStatus = () => {
         clusterStats,
         clusterName,
         clusterId,
+        agentUrl,
         error,
         loading,
         fetchNodes: refreshDaemonStatus,

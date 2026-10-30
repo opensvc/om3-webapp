@@ -31,13 +31,14 @@ const crumb = (part, index, path) => ({
 const NavBar = ({sidebarOpen = false, onToggleSidebar, showSidebarToggle = false, menuAlert = null}) => {
     const auth = useAuth();
     const location = useLocation();
-    const {clusterName, fetchNodes, loading} = useFetchDaemonStatus();
+    const {clusterName, agentUrl, fetchNodes, loading} = useFetchDaemonStatus();
     const [breadcrumb, setBreadcrumb] = useState([]);
     const [storedClusterName, setStoredClusterName] = useState(null);
     const online = useOnlineStatus();
     const {t} = useTranslation();
-    // Built once: the AI entry depends on the build configuration only.
-    const aiEnabled = getAiAgentConfig().enabled;
+    // The assistant, for a cluster whose configuration names an agent, to an
+    // OpenID session: the agent takes no other.
+    const aiEnabled = getAiAgentConfig(agentUrl).enabled && auth?.authChoice === 'openid';
 
     const getPathBreadcrumbs = useCallback(() => {
         const pathParts = location.pathname.split("/").filter(Boolean);

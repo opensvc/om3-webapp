@@ -1,4 +1,5 @@
-// This is deployment configuration, never a URL supplied by a token or prompt.
+// The origin of the agent is the ai.agent_url of the cluster configuration, read
+// from the cluster status: never a URL supplied by a token or prompt.
 export const parseAiAgentUrl = (value) => {
     if (!value?.trim()) return '';
     try {
@@ -16,11 +17,11 @@ export const parseAiAgentUrl = (value) => {
         }
         return url.origin;
     } catch {
-        throw new Error('VITE_AI_AGENT_URL must be an HTTPS origin without credentials or a path.');
+        throw new Error('The ai.agent_url of the cluster must be an HTTPS origin without credentials or a path.');
     }
 };
 
-export const getAiAgentConfig = (value = import.meta.env.VITE_AI_AGENT_URL) => {
+export const getAiAgentConfig = (value) => {
     try {
         const url = parseAiAgentUrl(value);
         return {url, enabled: Boolean(url), error: null};

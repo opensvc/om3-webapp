@@ -90,6 +90,7 @@ function setupMocks(overrides = {}) {
         authChoice = 'local',
         authToken = 'test-token',
         clusterName = null,
+        agentUrl = '',
         loading = false,
         daemon = null,
         fetchNodes = mockFetchNodes,
@@ -107,6 +108,7 @@ function setupMocks(overrides = {}) {
     });
     mockUseFetchDaemonStatus.mockReturnValue({
         clusterName,
+        agentUrl,
         fetchNodes,
         loading,
         daemon,
@@ -133,7 +135,6 @@ describe('NavBar', () => {
 
     afterEach(() => {
         vi.useRealTimers?.();
-        vi.unstubAllEnvs();
     });
 
     test('the cluster tag left out of the bar short of room, below 1200px as the menu folds; the product name in the About page, not the bar', () => {
@@ -361,15 +362,18 @@ describe('NavBar', () => {
         expect(document.querySelector('[aria-keyshortcuts="?"]')).toBeNull();
     });
 
-    test('configured AI assistant is reached from the top bar', () => {
-        vi.stubEnv('VITE_AI_AGENT_URL', 'https://agent.example.com');
+    // The cluster status names the agent of the cluster: the entry shows for it,
+    // to an OpenID session, the only one the agent takes.
+    test.each([
+        ['shows for a cluster with an agent, to an OpenID session', 'https://agent.example.com', 'openid', true],
+        ['is hidden for a cluster without agent', '', 'openid', false],
+        ['is hidden for a session not OpenID', 'https://agent.example.com', 'basic', false],
+        ['is hidden for an agent URL not HTTPS', 'http://agent.example.com', 'openid', false],
+    ])('the AI assistant entry of the top bar %s', (_name, agentUrl, authChoice, shown) => {
+        setupMocks({agentUrl, authChoice});
         renderNavBar();
-        expect(screen.getByRole('link', {name: 'Open the AI assistant'})).toHaveAttribute('href', '/ai');
-    });
-
-    test('AI assistant is hidden from the top bar when not configured', () => {
-        vi.stubEnv('VITE_AI_AGENT_URL', '');
-        renderNavBar();
-        expect(screen.queryByRole('link', {name: 'Open the AI assistant'})).not.toBeInTheDocument();
+        const link = screen.queryByRole('link', {name: 'Open the AI assistant'});
+        if (shown) expect(link).toHaveAttribute('href', '/ai');
+        else expect(link).not.toBeInTheDocument();
     });
 });

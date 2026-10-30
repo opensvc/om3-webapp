@@ -8,6 +8,7 @@ import useEventStore from '../../hooks/useEventStore.js';
 import {useMenuState} from '../../hooks/useSidebarAlerts';
 import {useActionTracker} from '../../app/action-tracker';
 import {setIntrosEnabled, showAllIntros} from '../../app/page-intro';
+import {HOVER_CARD_DELAY_MS} from '../../ui/components/HoverCard';
 
 /** What the actions tray holds, the latest first: action, subject, state, reason. */
 const tray = () => useActionTracker.getState().tracked.map((e) => [e.action, e.subject, e.state, e.error ?? null]);
@@ -96,6 +97,51 @@ describe('ObjectStatus', () => {
         fireEvent.click(toggle);
         expect(legend).toHaveAttribute('open');
         expect(within(legend).getByText('Down, as expected. For example, the standby node of a failover service.')).toBeInTheDocument();
+    });
+
+    describe('the symbols said on demand', () => {
+        const cardText = () => document.querySelector('[data-symbol-card]')?.textContent;
+        const glyph = () => document.querySelector('tbody [data-state]').closest('[role="button"], button');
+
+        test('a status in a cell: a help cursor, its meaning on a click, gone with a click again', async () => {
+            answer(structuredClone(dns));
+            render(<ObjectStatus path="system/svc/dns"/>);
+            await screen.findByRole('table');
+            const help = glyph();
+            expect(help).toHaveAttribute('role', 'button');
+            expect(help.firstElementChild).toHaveClass('cursor-help');
+            expect(cardText()).toBeUndefined();
+            fireEvent.click(help);
+            expect(cardText()).toMatch(/^Status: /);
+            fireEvent.click(help);
+            expect(cardText()).toBeUndefined();
+        });
+
+        test('in the value that opens a resource: the hover alone, the click still opening it', async () => {
+            const openCell = vi.fn();
+            answer(structuredClone(dns));
+            render(<ObjectStatus path="system/svc/dns" openCell={openCell}/>);
+            await screen.findByRole('table');
+            const value = screen.getByRole('button', {name: 'Open volume#1 on dev3n2'});
+            const symbol = value.querySelector('[data-state]').closest('.cursor-help').parentElement;
+            expect(within(value).queryByRole('button')).toBeNull();
+            expect(symbol).not.toHaveAttribute('tabindex');
+
+            vi.useFakeTimers();
+            try {
+                fireEvent.mouseEnter(symbol);
+                expect(cardText()).toBeUndefined();
+                act(() => {
+                    vi.advanceTimersByTime(HOVER_CARD_DELAY_MS);
+                });
+                expect(cardText()).toMatch(/^Status: /);
+                fireEvent.click(symbol);
+            } finally {
+                vi.useRealTimers();
+            }
+            expect(cardText()).toBeUndefined();
+            expect(openCell).toHaveBeenCalledWith('volume#1', 'dev3n2');
+        });
     });
 
     describe('the symbols, a hint', () => {

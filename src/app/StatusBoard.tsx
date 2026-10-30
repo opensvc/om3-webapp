@@ -11,6 +11,7 @@ import type { ObjectState } from "../ui/components/StatusBadge";
 import { statusBadge } from "../ui/components/status";
 import { Cell, HeaderCell, HeaderRow, Row, Table } from "../ui/components/Table";
 import { SYMBOLS_HINT, hideIntro, useHiddenIntros, useIntrosEnabled } from "./page-intro";
+import { SymbolHelp } from "./SymbolHelp";
 import { Term } from "./Term";
 import type { Board, BoardRow, Level, NoteFix, Span, Text, Tone } from "./statusboard";
 
@@ -224,16 +225,34 @@ export function SymbolLegend() {
   );
 }
 
-/** What a cell holds: the status glyph, the marks, the flags, the markers of the notes. */
-function Pieces({ text, kind }: { text: Text; kind: BoardRow["kind"] }) {
+/**
+ * What a cell holds: the status glyph, the marks, the flags, the markers of the notes.
+ * The symbols said on demand; `inert` in a button, the click being the button's.
+ */
+function Pieces({ text, kind, inert = false }: { text: Text; kind: BoardRow["kind"]; inert?: boolean }) {
   const { t } = useTranslation();
   if (text.length === 0) return null;
   return (
     <span className="inline-flex items-center gap-1 whitespace-nowrap">
       {text.map((s, i) => {
-        if (s.status !== undefined) return <Status key={i} span={s} />;
-        if (s.mark !== undefined) return <Mark key={i} span={s} />;
-        if (s.flag) return <Flag key={i} span={s} />;
+        if (s.status !== undefined)
+          return (
+            <SymbolHelp key={i} inert={inert} meaning={t("statusBoard.details.status", { status: s.status === "n/a" ? "/" : s.status })}>
+              <Status span={s} />
+            </SymbolHelp>
+          );
+        if (s.mark !== undefined)
+          return (
+            <SymbolHelp key={i} inert={inert} meaning={t(`statusBoard.marks.${markKey(s)}`)}>
+              <Mark span={s} />
+            </SymbolHelp>
+          );
+        if (s.flag)
+          return (
+            <SymbolHelp key={i} inert={inert} meaning={flagMeaning(s, t)}>
+              <Flag span={s} />
+            </SymbolHelp>
+          );
         if (s.note)
           return (
             <sup key={i} className={cn("text-[0.75rem] font-medium", TONES[s.tone ?? "secondary"])}>
@@ -514,7 +533,7 @@ function NodeBlocks({
                               onClick={() => openCell(r.name, n.name)}
                               className="inline-flex min-h-5 min-w-9 cursor-pointer items-center justify-center gap-1 rounded-full border border-line bg-surface px-1.5 py-px hover:border-line-strong hover:bg-surface-sunken focus-visible:outline-2 focus-visible:outline-(--focus-ring)"
                             >
-                              <Pieces text={cell} kind="resource" />
+                              <Pieces text={cell} kind="resource" inert />
                             </button>
                           ) : (
                             <Pieces text={cell} kind="resource" />
@@ -873,7 +892,7 @@ export function StatusBoard({
                               onClick={() => openCell?.(r.name, node)}
                               className="inline-flex min-h-5 max-w-full min-w-9 cursor-pointer items-center justify-center gap-1 rounded-full border border-line bg-surface px-1.5 py-px text-left hover:border-line-strong hover:bg-surface-sunken focus-visible:outline-2 focus-visible:outline-(--focus-ring)"
                             >
-                              <Pieces text={c} kind={r.kind} />
+                              <Pieces text={c} kind={r.kind} inert />
                             </button>
                           ) : (
                             <Pieces text={c} kind={r.kind} />

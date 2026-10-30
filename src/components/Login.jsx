@@ -187,6 +187,9 @@ const Login = forwardRef((props, ref) => {
             if (refreshExp) localStorage.setItem('refreshTokenExpiration', refreshExp * 1000);
             else localStorage.removeItem('refreshTokenExpiration');
 
+            // A password session, whatever way the last one came in by and ended.
+            localStorage.setItem('authChoice', 'basic');
+            dispatch({type: SetAuthChoice, data: 'basic'});
             dispatch({type: SetAccessToken, data: data.access_token});
             setLoading(false);
             // Back to the page the sign-in was asked for, if any.

@@ -155,6 +155,9 @@ describe('Login Component', () => {
         expect(localStorage.getItem('tokenExpiration')).toBeDefined();
         expect(localStorage.getItem('refreshTokenExpiration')).toBeDefined();
         expect(mockDispatch).toHaveBeenCalledWith({type: SetAccessToken, data: accessToken});
+        // Told before the token: its refresh is scheduled for a password session.
+        expect(localStorage.getItem('authChoice')).toBe('basic');
+        expect(mockDispatch.mock.calls.map(([action]) => action.type)).toEqual([SetAuthChoice, SetAccessToken]);
         expect(mockNavigate).toHaveBeenCalledWith('/');
     });
 

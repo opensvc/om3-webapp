@@ -115,6 +115,7 @@ const actions = [
     {testId: 'setAuthInfo', type: SetAuthInfo, data: {provider: 'openid'}},
     {testId: 'setAuthChoice', type: SetAuthChoice, data: 'sso'},
     {testId: 'setAuthChoiceOpenid', type: SetAuthChoice, data: 'openid'},
+    {testId: 'setAuthChoiceBasic', type: SetAuthChoice, data: 'basic'},
     {testId: 'unknownAction', type: 'UNKNOWN_ACTION', data: 'invalid'},
 ];
 
@@ -484,6 +485,25 @@ describe('AuthProvider', () => {
             setValidToken();
             expect(logger.info).not.toHaveBeenCalledWith('Token refresh scheduled in', expect.any(Number), 'seconds');
             expect(refreshToken).not.toHaveBeenCalled();
+        });
+
+        test('an OpenID session logged out: its way in forgotten, the next password session refreshed', () => {
+            localStorage.setItem('authChoice', 'openid');
+            renderProvider();
+            click('logout');
+            expect(getText('authChoice')).toBe('null');
+            expect(localStorage.getItem('authChoice')).toBeNull();
+            setValidToken();
+            expect(logger.info).toHaveBeenCalledWith('Token refresh scheduled in', expect.any(Number), 'seconds');
+        });
+
+        test('an OpenID session ended without a logout, a renewal refused: the password session after it refreshed', () => {
+            localStorage.setItem('authChoice', 'openid');
+            renderProvider();
+            click('setAccessTokenNull');
+            click('setAuthChoiceBasic');
+            setValidToken();
+            expect(logger.info).toHaveBeenCalledWith('Token refresh scheduled in', expect.any(Number), 'seconds');
         });
 
         test('does not schedule refresh for null token', () => {

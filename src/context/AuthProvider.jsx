@@ -44,7 +44,10 @@ const authReducer = (state, action) => {
             browserStorage?.removeItem('tokenExpiration');
             browserStorage?.removeItem('refreshToken');
             browserStorage?.removeItem('refreshTokenExpiration');
-            return {...state, user: null, isAuthenticated: false, accessToken: null};
+            // The way in goes with the session: an "openid" left would have the next
+            // password session taken for an OpenID one, and never refreshed.
+            browserStorage?.removeItem('authChoice');
+            return {...state, user: null, isAuthenticated: false, accessToken: null, authChoice: null};
         }
         case SetAccessToken: {
             const browserStorage = getLocalStorage();

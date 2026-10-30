@@ -288,17 +288,6 @@
     }
   },
   "alerts": {
-    "details": {
-      "node_one": "{{count}} node",
-      "node_other": "{{count}} nodes",
-      "pool_one": "{{count}} pool",
-      "pool_other": "{{count}} pools",
-      "network_one": "{{count}} network",
-      "network_other": "{{count}} networks",
-      "frozen": "frozen: {{count}}",
-      "full": "full: {{count}}",
-      "highestUsage": "highest usage: {{name}} {{percent}}%"
-    },
     "objectsDown_one": "{{count}} object down",
     "objectsDown_other": "{{count}} objects down",
     "objectsWarn_one": "{{count}} object in warn",

@@ -2,14 +2,11 @@ import {renderHook, act} from '@testing-library/react';
 import {describe, test, expect, beforeEach, afterEach, vi} from 'vitest';
 import axios from 'axios';
 import useSidebarAlerts, {
-    fullCount,
-    frozenCount,
+    useMenuState,
     applySidebarEvent,
     objectsAlert,
     heartbeatAlert,
     nodesAlert,
-    nodesDetails,
-    usageDetails,
     SIDEBAR_EVENTS_URL,
     SIDEBAR_FLUSH_MS,
     SIDEBAR_RECONNECT_MS,
@@ -60,24 +57,6 @@ describe('objectsAlert', () => {
 
     test('a down object that is no actor, a cfg say, raises nothing red', () => {
         expect(objectsAlert({'ns1/cfg/c': {avail: 'down'}, cluster: {avail: 'down'}, 'ns1/': {avail: 'down'}})).toBeNull();
-    });
-});
-
-describe('alert counts', () => {
-    test('count the pools or networks used to their full size', () => {
-        expect(fullCount([{size: 10, used: 3}, {size: 10, used: 10}, {size: 4, used: 5}])).toBe(2);
-        expect(fullCount([{size: 10, used: 9}, {size: 0, used: 0}, {used: 4}])).toBe(0);
-        expect(fullCount(undefined)).toBe(0);
-    });
-
-    test('count the frozen nodes', () => {
-        expect(frozenCount({
-            n1: {frozen_at: '0001-01-01T00:00:00Z'},
-            n2: {frozen_at: '2026-10-05T10:00:00Z'},
-            n3: {frozen_at: '2026-10-05T11:00:00Z'},
-            n4: {},
-        })).toBe(2);
-        expect(frozenCount(undefined)).toBe(0);
     });
 });
 
@@ -147,25 +126,6 @@ describe('nodesAlert', () => {
     });
 });
 
-describe('mouseover details', () => {
-    test('count the nodes and the frozen ones', () => {
-        expect(nodesDetails({
-            n1: {frozen_at: '0001-01-01T00:00:00Z'},
-            n2: {frozen_at: '2026-10-05T10:00:00Z'},
-        })).toEqual(['2 nodes', 'frozen: 1']);
-        expect(nodesDetails({n1: {}})).toEqual(['1 node', 'frozen: 0']);
-    });
-
-    test('count the pools or networks, the full ones, and show the highest usage', () => {
-        expect(usageDetails([
-            {name: 'a', size: 10, used: 5},
-            {name: 'b', size: 4, used: 4},
-            {name: 'c'},
-        ], 'pool')).toEqual(['3 pools', 'full: 1', 'highest usage: b 100%']);
-        expect(usageDetails([], 'network')).toEqual(['0 networks', 'full: 0']);
-    });
-});
-
 describe('useSidebarAlerts', () => {
     const flush = async () => {
         await act(async () => {
@@ -212,7 +172,6 @@ describe('useSidebarAlerts', () => {
         });
         await flush();
         expect(result.current['objects-any'].alert).toBeNull();
-        expect(result.current.nodes.details).toEqual(['1 node', 'frozen: 1']);
         expect(result.current.nodes.alert).toEqual({level: 'down', text: '1 of 1 nodes overloaded'});
         expect(result.current.links.alert).toEqual({level: 'down', text: '1 of 1 heartbeat links down'});
 
@@ -292,10 +251,10 @@ describe('useSidebarAlerts', () => {
         await act(async () => {
             await Promise.resolve();
         });
-        // Pools and networks raise no alert: their details only.
-        expect(result.current.pools.alert).toBeNull();
-        expect(result.current.networks.alert).toBeNull();
-        expect(result.current.pools.details).toContain('full: 1');
+        // Pools and networks raise no alert: their lists go to the menu state.
+        expect(result.current.pools).toBeUndefined();
+        expect(result.current.networks).toBeUndefined();
+        expect(useMenuState.getState().pools).toEqual([{size: 10, used: 10}]);
         expect(axios.get).toHaveBeenCalledWith(URL_POOL, {headers: {Authorization: 'Bearer tok'}});
         expect(axios.get).toHaveBeenCalledWith(URL_NETWORK, {headers: {Authorization: 'Bearer tok'}});
         expect(axios.get).toHaveBeenCalledTimes(2);
@@ -305,19 +264,19 @@ describe('useSidebarAlerts', () => {
             vi.advanceTimersByTime(SIDEBAR_USAGE_REFRESH_MS);
         });
         expect(axios.get).toHaveBeenCalledTimes(4);
-        expect(result.current.pools.details).toContain('full: 0');
+        expect(useMenuState.getState().pools).toEqual([]);
     });
 
     test('keeps the last lists when a poll fails', async () => {
-        const {result} = renderHook(() => useSidebarAlerts());
+        renderHook(() => useSidebarAlerts());
         await act(async () => {
             await Promise.resolve();
         });
-        expect(result.current.pools.details).toContain('full: 1');
+        expect(useMenuState.getState().pools).toEqual([{size: 10, used: 10}]);
         axios.get.mockRejectedValue(new Error('down'));
         await act(async () => {
             vi.advanceTimersByTime(SIDEBAR_USAGE_REFRESH_MS);
         });
-        expect(result.current.pools.details).toContain('full: 1');
+        expect(useMenuState.getState().pools).toEqual([{size: 10, used: 10}]);
     });
 });

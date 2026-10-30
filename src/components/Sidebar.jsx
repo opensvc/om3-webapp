@@ -188,8 +188,6 @@ function NavSection({section, alerts, onNavigate}) {
                         <NavLink
                             to={to}
                             onClick={onNavigate}
-                            // Mouseover details of the entries that have some.
-                            title={alerts[id]?.details?.join("\n")}
                             className={({isActive}) => cn(LINK, isActive && CURRENT)}
                         >
                             {t(labelKey)}

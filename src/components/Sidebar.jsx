@@ -32,6 +32,14 @@ export const NAV_SECTIONS = [
         ],
     },
     {
+        // The relay this cluster is, when it is one: a site has one relay cluster, usually.
+        key: "relay",
+        labelKey: "nav.sections.relay",
+        id: "relay",
+        to: "/relay",
+        entries: [],
+    },
+    {
         key: "objects",
         labelKey: "nav.sections.objects",
         id: "objects-any",

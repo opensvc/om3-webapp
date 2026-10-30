@@ -687,30 +687,20 @@
       "refresh": "Rafraîchir",
       "reading": "Lecture des relais",
       "readError": "Impossible de lire les relais : {{message}}",
-      "of": "{{section}} · délai {{seconds}} s",
-      "unreached": "Le relais n'a pas pu être interrogé : {{message}}",
-      "slotsOf": "Les nœuds qui écrivent sur {{relay}}",
-      "noSlot": "Aucun nœud n'écrit sur ce relais.",
-      "staleHint": "Sa dernière écriture est plus ancienne que le délai du heartbeat, {{seconds}} s.",
-      "served": "Ce nœud relaie pour",
-      "overall": {
-        "up": "chaque nœud écrit",
-        "warn": "un nœud n'écrit pas",
-        "down": "ne relaie pas"
-      },
-      "state": {
-        "up": "écrit",
-        "stale": "en retard",
-        "missing": "n'a jamais écrit"
-      },
+      "served": "Emplacements tenus par {{node}}",
       "columns": {
         "state": "État",
         "addr": "Adresse",
         "written": "Dernière écriture",
         "cluster": "Cluster"
       },
-      "size_one": "Son message : {{count}} octet",
-      "size_other": "Son message : {{count}} octets"
+      "notRelay": "Ce nœud n'est pas un relais : aucun cluster n'y écrit ses heartbeats. Le cas habituel, un site ayant un cluster relais.",
+      "refused": "Les relais ne sont pas montrés à vos droits.",
+      "servedStaleHint": "Non écrit depuis plus de {{seconds}}s, le délai par défaut d’un heartbeat.",
+      "served_state": {
+        "active": "actif",
+        "stale": "périmé"
+      }
     }
   },
   "instance": {
@@ -1257,11 +1247,13 @@
         "stores": "magasins",
         "cluster": "cluster",
         "glossary": "glossaire",
-        "about": "À propos"
+        "about": "À propos",
+        "relay": "Relais"
       }
     },
     "sections": {
       "cluster": "Cluster",
+      "relay": "Relais",
       "objects": "Objets",
       "help": "Aide"
     }
@@ -3113,6 +3105,12 @@
       },
       "cell": "{{node}} · {{metric}} : {{value}}, {{share}} % du nœud le plus chargé",
       "cellPending": "{{node}} · {{metric}} : en attente d’une seconde lecture"
+    },
+    "relay": {
+      "none": "Pas un relais : le cas habituel.",
+      "unread": "Non montré à vos droits.",
+      "active": "Emplacements actifs",
+      "stale": "Emplacements périmés"
     }
   },
   "snapshots": {

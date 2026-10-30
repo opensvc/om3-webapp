@@ -25,12 +25,15 @@ const pgPage = (memory, usec, told = true) => [
 /** The labels beside the arcs of a ring, each its word and count. */
 const labels = (ring) => [...ring.querySelectorAll('[data-label] text')].map((text) => text.textContent);
 
+let relaySlots = [];
+
 describe('ClusterView', () => {
     let resourcesFail;
     let pgTold;
 
     beforeEach(() => {
         resourcesFail = false;
+        relaySlots = [];
         pgTold = true;
         resetPgUsage();
         clusterNodes.current = ['n1', 'n2', 'n3'];
@@ -65,6 +68,7 @@ describe('ClusterView', () => {
                     {ref: 'from test/sec/stores store#tar2', type: 'tar', url: 'sftp://x', share: ['test'], stats: {runs: 11, check_error: 'refused'}},
                 ]});
             }
+            if (u === '/api/relay/status') return json({items: relaySlots});
             if (u.startsWith('/api/cluster/status')) {
                 return json({cluster: {
                     config: {id: '82e47bfb-182f', ca_sec_paths: [`system/sec/ca-former-${new Date(Date.now() - 10 * 86400000).toISOString().slice(0, 10).replaceAll('-', '')}`]},
@@ -101,7 +105,7 @@ describe('ClusterView', () => {
         render(<ClusterView/>, {wrapper: MemoryRouter});
         const cards = screen.getByRole('group', {name: 'Summary of the cluster'});
         expect([...cards.querySelectorAll('[data-card]')].map((c) => c.getAttribute('data-card')))
-            .toEqual(['config', 'links', 'nodes', 'opensvc', 'arbitrators', 'objects', 'namespaces', 'networks', 'pools', 'stores', 'resources']);
+            .toEqual(['config', 'links', 'nodes', 'opensvc', 'relay', 'arbitrators', 'objects', 'namespaces', 'networks', 'pools', 'stores', 'resources']);
         expect(within(card('pools')).getByRole('link', {name: 'Open Pools'})).toHaveAttribute('href', '/pools');
         expect(within(card('links')).getByRole('link', {name: 'Open Links'})).toHaveAttribute('href', '/heartbeats');
         expect(card('objects')).toHaveTextContent(/Objects\s*7/);
@@ -167,6 +171,21 @@ describe('ClusterView', () => {
         pgTold = false;
         render(<ClusterView/>, {wrapper: MemoryRouter});
         await waitFor(() => expect(card('opensvc')).toHaveTextContent('The usage of the whole nodes is not shown to your grants.'));
+    });
+
+    test('the relay: the slots held, active and stale; not a relay, said plainly, nothing in warn', async () => {
+        relaySlots = [
+            {relay: '', cluster_name: 'prod', nodename: 'p1', updated_at: new Date(Date.now() - 2000).toISOString()},
+            {relay: '', cluster_name: 'prod', nodename: 'p2', updated_at: new Date(Date.now() - 90000).toISOString()},
+        ];
+        const {unmount} = render(<ClusterView/>, {wrapper: MemoryRouter});
+        await waitFor(() => expect(card('relay').querySelector('[data-relay-slots]')).toHaveTextContent('Active slots1Stale slots1'));
+        expect(within(card('relay')).getByRole('link', {name: 'Open Relay'})).toHaveAttribute('href', '/relay');
+        unmount();
+        relaySlots = [];
+        render(<ClusterView/>, {wrapper: MemoryRouter});
+        await waitFor(() => expect(card('relay')).toHaveTextContent('Not a relay: the usual case.'));
+        expect(card('relay').querySelector('.text-state-warn, .text-state-down')).toBeNull();
     });
 
     test('the cluster configuration, a card as the others, first: the cluster object opened over the overview; frozen, said', () => {

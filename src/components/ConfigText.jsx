@@ -4,7 +4,7 @@ import {getResponseErrorMessage} from "../services/api.jsx";
 import {Dialog} from "../ui/components/Dialog";
 import {Spinner} from "../ui/components/Spinner";
 import {CrossLink} from "../app/CrossLink";
-import {KEY_SOURCE, datastorePath, isKeyName} from "../app/key-source";
+import {KEY_SOURCE, datastorePath, isKeyName, resolveSelf} from "../app/key-source";
 import {sectionHeaders} from "../app/ini";
 import KeysSection from "./KeysSection";
 
@@ -111,10 +111,10 @@ function value(text, self, onKey) {
             {lead}{from}{gap1}
             {path ? <CrossLink kind="object" id={path} tab="keys">{store}</CrossLink> : references(store)}
             {gap2}{key}{gap3}
-            {path && isKeyName(name) ? (
+            {path && isKeyName(name, self) ? (
                 <button
                     type="button"
-                    onClick={() => onKey({path, name})}
+                    onClick={() => onKey({path, name: resolveSelf(name, self)})}
                     data-key-link=""
                     className="cursor-pointer rounded-sm text-accent underline decoration-dotted underline-offset-2 focus-visible:outline-2 focus-visible:outline-(--focus-ring)"
                 >

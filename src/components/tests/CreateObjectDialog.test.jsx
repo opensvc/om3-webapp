@@ -454,6 +454,59 @@ describe('CreateObjectDialog', () => {
             expect(screen.getByRole('textbox', {name: 'Value of topology'})).toHaveValue('flex');
         });
 
+        const GROUPED = {
+            items: [
+                {section: 'DEFAULT', option: 'nodes', group: 'placement'},
+                {section: 'DEFAULT', option: 'orchestrate', group: 'availability'},
+                {section: 'DEFAULT', option: 'comment'},
+                {section: 'DEFAULT', option: 'name', group: 'addressing'},
+                {section: 'DEFAULT', option: 'network', group: 'addressing'},
+                {section: 'DEFAULT', option: 'netmask', group: 'addressing'},
+            ],
+            groups: [
+                {id: 'other', driver: '', name: 'Other', order: 1000},
+                {id: 'availability', driver: '', name: 'Availability', order: 100},
+                {id: 'addressing', driver: 'ip.netns', name: 'Addressing', order: 10, strategies: [
+                    {id: 'static', name: 'Static address', text: 'The address name holds.', uses: ['name'], excludes: ['network'], when: []},
+                    {id: 'ipam', name: 'Address drawn from a network', text: 'Drawn from an om network.', uses: ['network'], excludes: ['name'], when: []},
+                ]},
+            ],
+        };
+        const keywordsShown = () => [...document.querySelectorAll('[data-keyword]')].map((e) => e.dataset.keyword);
+
+        test('the keywords to add under their groups, in the order of the daemon, those of no group known under other', async () => {
+            answers['GET /api/object/path/ns1/svc/db/config/keywords?driver=DEFAULT'] = {status: 200, text: JSON.stringify(GROUPED)};
+            await design();
+            fireEvent.click(screen.getByRole('button', {name: 'More'}));
+            expect([...document.querySelectorAll('[data-group]')].map((e) => e.textContent)).toEqual(['Addressing', 'Availability', 'Other']);
+            expect(keywordsShown()).toEqual(['netmask', 'orchestrate', 'comment', 'nodes']);
+        });
+
+        test('a strategy chosen first: its keywords then offered, never those it excludes; told by a keyword set', async () => {
+            answers['GET /api/object/path/ns1/svc/db/config/keywords?driver=DEFAULT'] = {status: 200, text: JSON.stringify(GROUPED)};
+            await design();
+            // No keyword of a strategy offered at once, before the choice.
+            expect(screen.queryByRole('button', {name: 'Add name'})).toBeNull();
+            expect(screen.queryByRole('button', {name: 'Add network'})).toBeNull();
+            fireEvent.click(screen.getByRole('button', {name: 'More'}));
+            const choice = screen.getByRole('group', {name: 'How to set Addressing'});
+            expect(screen.getByText('Choose one: its keywords are then offered.')).toBeInTheDocument();
+            expect(keywordsShown()).not.toContain('name');
+            expect(keywordsShown()).not.toContain('network');
+            fireEvent.click(within(choice).getByRole('button', {name: 'Address drawn from a network'}));
+            expect(within(choice).getByRole('button', {name: 'Address drawn from a network'})).toHaveAttribute('aria-pressed', 'true');
+            expect(screen.getByText('Drawn from an om network.')).toBeInTheDocument();
+            expect(keywordsShown()).toContain('network');
+            expect(keywordsShown()).not.toContain('name');
+            fireEvent.click(screen.getByRole('button', {name: 'Add network'}));
+            expect(screen.getByRole('textbox', {name: 'Value of network'})).toBeInTheDocument();
+            // The keyword set tells the strategy: said, no choice asked again.
+            fireEvent.click(screen.getByRole('button', {name: 'More'}));
+            expect(screen.getByText('Address drawn from a network, as the keywords set say.')).toBeInTheDocument();
+            expect(screen.queryByRole('group', {name: 'How to set Addressing'})).toBeNull();
+            expect(keywordsShown()).not.toContain('name');
+        });
+
         test('the keywords to add: the arrows move over those matching, Enter adds the one picked', async () => {
             KW('DEFAULT', [{section: 'DEFAULT', option: 'nodes'}, {section: 'DEFAULT', option: 'orchestrate'}, {section: 'DEFAULT', option: 'topology'}]);
             await design();

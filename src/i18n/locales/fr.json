@@ -516,12 +516,16 @@
       "noTrailingLineFeed": "Pas de saut de ligne final"
     },
     "installedFrom": "depuis <store>{{from}}</store> clé <key>{{key}}</key>",
+    "installedFromUrl": "depuis <url>{{from}}</url>",
     "openKey": "Afficher la clé {{key}}",
     "installed": {
       "badge": "installé",
       "refused": "{{name}} est installé depuis {{from}} clé {{key}} : modifiez plutôt la clé, la prochaine installation réécrira le fichier.",
       "deleteText": "Il est installé depuis {{from}} clé {{key}} : la prochaine installation le réécrira.",
-      "notEdited": "modifiez plutôt la clé, la prochaine installation réécrira le fichier"
+      "notEdited": "modifiez plutôt la clé, la prochaine installation réécrira le fichier",
+      "refusedUrl": "{{name}} est installé depuis {{from}} : modifiez plutôt l'url de la source, la prochaine installation récupérera le fichier.",
+      "deleteTextUrl": "Il est installé depuis {{from}} : la prochaine installation le récupérera à nouveau.",
+      "notEditedUrl": "modifiez plutôt l'url de la source, la prochaine installation récupérera le fichier"
     }
   },
   "console": {
@@ -3366,6 +3370,13 @@
   },
   "objectDesigner": {
     "byDefault": "par défaut : {{value}}",
+    "strategyChoose": "Choisissez-en une : ses mots-clés sont alors proposés.",
+    "strategyImplied": "{{strategy}}, d'après les mots-clés renseignés.",
+    "strategyBySelector": "{{strategy}}, choisie par un mot-clé de la configuration.",
+    "strategiesOf": "Comment renseigner {{group}}",
+    "strategyConflict": "{{group}} : stratégies en conflit, {{strategies}}. Gardez les mots-clés de l'une.",
+    "strategyBy": "{{strategy}} par {{keywords}}",
+    "strategyAnd": " et ",
     "findKeyword": "Chercher un mot-clé",
     "keywords": "Mots-clés à ajouter",
     "noKeyword": "Aucun mot-clé ne correspond.",

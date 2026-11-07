@@ -30,6 +30,148 @@ export interface DesignKeyword {
   provisioning?: boolean;
   /** Needed by the provision, which fails without it (a size to create a volume of). */
   provisioningRequired?: boolean;
+  /** The id of the group it belongs to, among the groups of the answer it came with. */
+  group?: string;
+}
+
+/** A way to set a group of keywords, exclusive of the other ways of the group. */
+export interface KeywordStrategy {
+  id: string;
+  name?: string;
+  text?: string;
+  /** The options of the keywords it sets. */
+  uses?: string[];
+  /** The options of the keywords it leaves unset, another strategy's. */
+  excludes?: string[];
+  /** The conditions on a selector keyword choosing it; none when the keywords set tell. */
+  when?: unknown[];
+}
+
+/** A group of keywords, as the daemon sorts them: of a driver, or "" for every resource. */
+export interface KeywordGroup {
+  id: string;
+  driver?: string;
+  name?: string;
+  text?: string;
+  order?: number;
+  strategies?: KeywordStrategy[];
+}
+
+/** The groups each list of keywords came with: the list read as the designer keeps it. */
+const KEYWORD_GROUPS = new WeakMap<object, KeywordGroup[]>();
+
+/**
+ * The keywords of an answer of GET .../config/keywords, its groups kept beside them:
+ * `keywordGroupsOf` the list gives them back. An older daemon tells none.
+ */
+export function keywordItems(answer: { items?: DesignKeyword[]; groups?: KeywordGroup[] } | null | undefined): DesignKeyword[] {
+  const items = answer?.items ?? [];
+  if (Array.isArray(answer?.groups)) KEYWORD_GROUPS.set(items, answer.groups);
+  return items;
+}
+
+export const keywordGroupsOf = (items: DesignKeyword[]): KeywordGroup[] => KEYWORD_GROUPS.get(items) ?? [];
+
+/** The keywords of a group, under it. A group of none, a list from an older daemon: one, untitled. */
+export interface GroupedKeywords {
+  group?: KeywordGroup;
+  keywords: DesignKeyword[];
+}
+
+const OTHER_GROUP: KeywordGroup = { id: "other", name: "Other", order: 1000 };
+
+/**
+ * Keywords under their groups, in the order the daemon gives the groups, a driver's
+ * before the ones every resource has at the same order; a keyword of no group known
+ * under "other". The groups with none of the keywords left out.
+ */
+export function groupKeywords(keywords: DesignKeyword[], groups: KeywordGroup[]): GroupedKeywords[] {
+  if (groups.length === 0) return keywords.length === 0 ? [] : [{ keywords }];
+  const sorted = [...groups].sort((a, b) => (a.order ?? 1000) - (b.order ?? 1000) || Number(Boolean(b.driver)) - Number(Boolean(a.driver)));
+  const buckets = new Map<string, GroupedKeywords>();
+  for (const group of sorted) if (!buckets.has(group.id)) buckets.set(group.id, { group, keywords: [] });
+  for (const keyword of keywords) {
+    let bucket = keyword.group === undefined ? undefined : buckets.get(keyword.group);
+    if (bucket === undefined) {
+      bucket = buckets.get(OTHER_GROUP.id);
+      if (bucket === undefined) {
+        bucket = { group: OTHER_GROUP, keywords: [] };
+        buckets.set(OTHER_GROUP.id, bucket);
+      }
+    }
+    bucket.keywords.push(keyword);
+  }
+  return [...buckets.values()].filter((b) => b.keywords.length > 0);
+}
+
+/** The value a design sets for an option: the section's, else its DEFAULT's. */
+export type DesignLookup = (option: string) => string | undefined;
+
+export function designLookup(section: DesignSection, sections: DesignSection[]): DesignLookup {
+  const of = (s: DesignSection | undefined, option: string) => s?.entries.find((e) => e.key.split("@")[0] === option)?.value;
+  const defaults = sections.find((s) => s.name === "DEFAULT");
+  return (option) => of(section, option) ?? of(defaults, option);
+}
+
+/** Whether a condition of `when` holds: "option=value" or "option!=value", or the {Key, Op, Value} of om. */
+function conditionHolds(condition: unknown, lookup: DesignLookup): boolean {
+  let option: string | undefined;
+  let op = "=";
+  let value = "";
+  if (typeof condition === "string") {
+    const m = /^([^!=]+?)(!=|=)(.*)$/.exec(condition);
+    if (m === null) return false;
+    [, option, op, value] = m;
+  } else if (condition !== null && typeof condition === "object") {
+    const c = condition as { Key?: unknown; Op?: unknown; Value?: unknown };
+    const key = c.Key;
+    option = typeof key === "string" ? key.split(".").pop() : (key as { Option?: string; option?: string } | undefined)?.Option ?? (key as { option?: string } | undefined)?.option;
+    op = typeof c.Op === "string" ? c.Op : "=";
+    value = typeof c.Value === "string" ? c.Value : "";
+  }
+  if (!option) return false;
+  const set = lookup(option.trim()) ?? "";
+  if (op === "!=") return set !== value;
+  if (op === "=") return set === value;
+  return false;
+}
+
+/**
+ * The strategy of a group a section follows, as the daemon tells it: the one its
+ * selector keyword chooses (`when`), else the one whose keywords it sets. Undefined
+ * while none is told, the choice still to make.
+ */
+export function impliedStrategy(group: KeywordGroup, section: DesignSection, lookup: DesignLookup): KeywordStrategy | undefined {
+  const strategies = group.strategies ?? [];
+  if (strategies.some((s) => (s.when ?? []).length > 0)) {
+    return strategies.find((s) => (s.when ?? []).length > 0 && (s.when ?? []).every((c) => conditionHolds(c, lookup)));
+  }
+  const set = new Set(section.entries.map((e) => e.key.split("@")[0]));
+  return strategies.find((s) => (s.uses ?? []).some((o) => set.has(o)));
+}
+
+/** Whether the strategy of a group is chosen by a selector keyword rather than by a choice. */
+export const strategyBySelector = (group: KeywordGroup) => (group.strategies ?? []).some((s) => (s.when ?? []).length > 0);
+
+/** The options a strategy of the group sets or leaves: held back while none is chosen. */
+export function strategyOptions(group: KeywordGroup): Set<string> {
+  return new Set((group.strategies ?? []).flatMap((s) => [...(s.uses ?? []), ...(s.excludes ?? [])]));
+}
+
+/**
+ * The options not to offer a section: those the strategy it follows excludes, and,
+ * for a group whose strategy is still to choose, those of every strategy of it.
+ * `chosen`, the strategy picked by group id.
+ */
+export function withheldOptions(groups: KeywordGroup[], section: DesignSection, lookup: DesignLookup, chosen: Record<string, string> = {}): Set<string> {
+  const withheld = new Set<string>();
+  for (const group of groups) {
+    if ((group.strategies ?? []).length === 0) continue;
+    const active = impliedStrategy(group, section, lookup) ?? group.strategies?.find((s) => s.id === chosen[group.id]);
+    const options = active ? (active.excludes ?? []) : [...strategyOptions(group)];
+    for (const o of options) withheld.add(o);
+  }
+  return withheld;
 }
 
 export interface DesignEntry {
@@ -573,4 +715,31 @@ export function missingValues(sections: DesignSection[], keywords: DesignKeyword
     const required = new Set(requiredKeywords(keywords, section).map((k) => k.option));
     return section.entries.filter((e) => required.has(e.key) && e.value.trim() === "").map((e) => ({ section: section.name, key: e.key }));
   });
+}
+
+/** Two strategies of a group a section follows both, by the keywords of each it sets. */
+export interface StrategyConflict {
+  group: KeywordGroup;
+  strategies: { strategy: KeywordStrategy; options: string[] }[];
+}
+
+/**
+ * The groups whose exclusive strategies a section mixes, as the daemon warns of them
+ * ("conflicting strategies"): a strategy whose keywords it sets, another one it sets a
+ * keyword of that the first excludes. A strategy a selector keyword chooses is told by
+ * that keyword, not by the keywords set: not checked here.
+ */
+export function strategyConflicts(groups: KeywordGroup[], section: DesignSection): StrategyConflict[] {
+  const set = new Set(section.entries.map((e) => e.key.split("@")[0]));
+  const conflicts: StrategyConflict[] = [];
+  for (const group of groups) {
+    const strategies = group.strategies ?? [];
+    if (strategies.length < 2 || strategyBySelector(group)) continue;
+    const followed = strategies
+      .map((strategy) => ({ strategy, options: (strategy.uses ?? []).filter((o) => set.has(o)) }))
+      .filter((s) => s.options.length > 0);
+    const clashing = followed.filter((s) => followed.some((o) => o !== s && (o.strategy.excludes ?? []).some((x) => s.options.includes(x))));
+    if (clashing.length > 1) conflicts.push({ group, strategies: clashing });
+  }
+  return conflicts;
 }

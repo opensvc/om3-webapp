@@ -29,13 +29,17 @@ const CHANGED_AFTER_MS = 0;
 
 /**
  * Where a file comes from, as the node tells it: installed from a key of a datastore,
- * which the next install writes again; uploaded here, by whom; when, changed since or
+ * or fetched from a url, which the next install writes again; uploaded here, by whom; when, changed since or
  * not. Else not known to be either, which the services using the volume may have
  * written.
  */
 export function fileOrigin(file) {
     const changedSince = (at) => Date.parse(file.modified_at) - Date.parse(at) > CHANGED_AFTER_MS;
-    if (file?.installed_at) return {kind: "installed", from: file.installed_from, key: file.installed_key, at: file.installed_at, changed: changedSince(file.installed_at)};
+    if (file?.installed_at) {
+        // Fetched from a url rather than written from a key of a datastore: no key, the url its source.
+        const url = !file.installed_key && /^https?:\/\//.test(file.installed_from ?? "");
+        return {kind: "installed", from: file.installed_from, key: file.installed_key, url, at: file.installed_at, changed: changedSince(file.installed_at)};
+    }
     if (file?.uploaded_at) return {kind: "uploaded", by: file.uploaded_by, at: file.uploaded_at, changed: changedSince(file.uploaded_at)};
     return null;
 }
@@ -131,7 +135,7 @@ export function VolumeFiles({path}) {
         const there = to === node && into === dir ? files?.find((f) => f.name === file.name) : undefined;
         const installed = there && fileOrigin(there)?.kind === "installed" ? fileOrigin(there) : null;
         if (installed) {
-            setError(t("volumeFiles.installed.refused", {name: file.name, from: installed.from, key: installed.key}));
+            setError(t(installed.url ? "volumeFiles.installed.refusedUrl" : "volumeFiles.installed.refused", {name: file.name, from: installed.from, key: installed.key}));
             if (input.current) input.current.value = "";
             return;
         }
@@ -397,7 +401,7 @@ export function VolumeFiles({path}) {
             >
                 {deleteAsked && t(deleteAsked.type === "dir" ? "volumeFiles.deleteDirText"
                     : deleteAsked.type === "link" ? "volumeFiles.deleteLinkText"
-                    : deleteAsked.origin?.kind === "installed" ? "volumeFiles.installed.deleteText"
+                    : deleteAsked.origin?.kind === "installed" ? (deleteAsked.origin.url ? "volumeFiles.installed.deleteTextUrl" : "volumeFiles.installed.deleteText")
                     : deleteAsked.origin ? "volumeFiles.deleteText" : "volumeFiles.deleteForeignText", {from: deleteAsked.origin?.from, key: deleteAsked.origin?.key})}
             </Dialog>
             <Dialog

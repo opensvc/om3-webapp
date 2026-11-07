@@ -516,12 +516,16 @@
       "noTrailingLineFeed": "No trailing line feed"
     },
     "installedFrom": "from <store>{{from}}</store> key <key>{{key}}</key>",
+    "installedFromUrl": "from <url>{{from}}</url>",
     "openKey": "Show the key {{key}}",
     "installed": {
       "badge": "installed",
       "refused": "{{name}} is installed from {{from}} key {{key}}: change the key, the next install writes the file.",
       "deleteText": "It is installed from {{from}} key {{key}}: the next install writes it again.",
-      "notEdited": "change the key, the next install writes the file"
+      "notEdited": "change the key, the next install writes the file",
+      "refusedUrl": "{{name}} is installed from {{from}}: change the source url, the next install fetches the file.",
+      "deleteTextUrl": "It is installed from {{from}}: the next install fetches it again.",
+      "notEditedUrl": "change the source url, the next install fetches the file"
     }
   },
   "console": {
@@ -3366,6 +3370,13 @@
   },
   "objectDesigner": {
     "byDefault": "default: {{value}}",
+    "strategyChoose": "Choose one: its keywords are then offered.",
+    "strategyImplied": "{{strategy}}, as the keywords set say.",
+    "strategyBySelector": "{{strategy}}, as a keyword of the configuration chooses.",
+    "strategiesOf": "How to set {{group}}",
+    "strategyConflict": "{{group}}: conflicting strategies, {{strategies}}. Keep the keywords of one.",
+    "strategyBy": "{{strategy}} by {{keywords}}",
+    "strategyAnd": " and ",
     "findKeyword": "Find a keyword",
     "keywords": "Keywords to add",
     "noKeyword": "No keyword matches.",

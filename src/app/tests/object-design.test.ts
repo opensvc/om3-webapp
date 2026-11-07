@@ -30,8 +30,7 @@ import {
   withRequired,
   type DesignKeyword,
   type DesignSection,
-  clusterSectionChoices,
-} from "../object-design";
+  clusterSectionChoices, keywordItems, keywordGroupsOf, groupKeywords, designLookup, impliedStrategy, strategyBySelector, strategyOptions, withheldOptions, strategyConflicts} from "../object-design";
 
 const KEYWORDS: DesignKeyword[] = [
   { section: "DEFAULT", option: "nodes", text: "The nodes." },
@@ -404,3 +403,73 @@ describe("clusterSectionChoices", () => {
   });
 });
 
+
+describe("the groups of the keywords, and their strategies", () => {
+    const GROUPS = [
+        {id: "other", driver: "", name: "Other", order: 1000},
+        {id: "availability", driver: "", name: "Availability", order: 100},
+        {id: "addressing", driver: "ip.netns", name: "Addressing", order: 10, strategies: [
+            {id: "static", name: "Static address", uses: ["name"], excludes: ["network", "addr"], when: []},
+            {id: "ipam", name: "Address drawn from a network", uses: ["network", "addr"], excludes: ["name"], when: []},
+        ]},
+    ];
+    const kw = (option, group) => ({section: "ip", option, ...(group ? {group} : {})});
+    const IP = {name: "ip#1", group: "ip", type: "netns", entries: []};
+
+    test("an answer's groups kept beside its keywords; none from an older daemon", () => {
+        const items = keywordItems({items: [kw("name", "addressing")], groups: GROUPS});
+        expect(keywordGroupsOf(items)).toBe(GROUPS);
+        expect(keywordGroupsOf(keywordItems({items: [kw("name")]}))).toEqual([]);
+        expect(keywordItems(null)).toEqual([]);
+    });
+
+    test("keywords under their groups, in order, a keyword of no group known under other", () => {
+        const grouped = groupKeywords([kw("restart", "availability"), kw("comment"), kw("name", "addressing"), kw("netmask", "addressing")], GROUPS);
+        expect(grouped.map((g) => [g.group.id, g.keywords.map((k) => k.option)])).toEqual([
+            ["addressing", ["name", "netmask"]],
+            ["availability", ["restart"]],
+            ["other", ["comment"]],
+        ]);
+        expect(groupKeywords([kw("name")], [])).toEqual([{keywords: [kw("name")]}]);
+    });
+
+    test("the strategy a section follows: by the keywords it sets, else none yet", () => {
+        const lookup = designLookup(IP, [IP]);
+        expect(impliedStrategy(GROUPS[2], IP, lookup)).toBeUndefined();
+        const withNetwork = {...IP, entries: [{key: "network", value: "default"}]};
+        expect(impliedStrategy(GROUPS[2], withNetwork, designLookup(withNetwork, [withNetwork]))?.id).toBe("ipam");
+        const scoped = {...IP, entries: [{key: "name@n1", value: "10.0.0.1"}]};
+        expect(impliedStrategy(GROUPS[2], scoped, designLookup(scoped, [scoped]))?.id).toBe("static");
+    });
+
+    test("by a selector keyword when the strategies say which, its value of the section or of DEFAULT", () => {
+        const group = {id: "g", strategies: [
+            {id: "flex", uses: ["a"], when: ["topology=flex"]},
+            {id: "failover", uses: ["b"], when: [{Key: "DEFAULT.topology", Op: "!=", Value: "flex"}]},
+        ]};
+        const DEFAULT = {name: "DEFAULT", entries: [{key: "topology", value: "flex"}]};
+        expect(impliedStrategy(group, IP, designLookup(IP, [DEFAULT, IP]))?.id).toBe("flex");
+        const failover = {name: "DEFAULT", entries: [{key: "topology", value: "failover"}]};
+        expect(impliedStrategy(group, IP, designLookup(IP, [failover, IP]))?.id).toBe("failover");
+        expect(strategyBySelector(group)).toBe(true);
+        expect(strategyBySelector(GROUPS[2])).toBe(false);
+    });
+
+    test("the strategies a section mixes, each by the keywords of it it sets; one followed, none", () => {
+        const both = {...IP, entries: [{key: "name@n1", value: "10.0.0.1"}, {key: "network", value: "default"}, {key: "netmask", value: "24"}]};
+        const [conflict] = strategyConflicts(GROUPS, both);
+        expect(conflict.group.id).toBe("addressing");
+        expect(conflict.strategies.map((s) => [s.strategy.id, s.options])).toEqual([["static", ["name"]], ["ipam", ["network"]]]);
+        expect(strategyConflicts(GROUPS, {...IP, entries: [{key: "network", value: "default"}, {key: "addr", value: "10.0.0.2"}]})).toEqual([]);
+        expect(strategyConflicts(GROUPS, IP)).toEqual([]);
+        const bySelector = [{id: "g", strategies: [{id: "a", uses: ["x"], excludes: ["y"], when: ["topology=flex"]}, {id: "b", uses: ["y"], excludes: ["x"], when: ["topology=failover"]}]}];
+        expect(strategyConflicts(bySelector, {...IP, entries: [{key: "x", value: "1"}, {key: "y", value: "2"}]})).toEqual([]);
+    });
+
+    test("held back: every strategy's keywords until one is chosen, then those it excludes", () => {
+        const lookup = designLookup(IP, [IP]);
+        expect([...withheldOptions(GROUPS, IP, lookup)].sort()).toEqual(["addr", "name", "network"]);
+        expect([...withheldOptions(GROUPS, IP, lookup, {addressing: "ipam"})]).toEqual(["name"]);
+        expect([...strategyOptions(GROUPS[2])].sort()).toEqual(["addr", "name", "network"]);
+    });
+});

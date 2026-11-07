@@ -342,6 +342,37 @@ describe("VolumeFiles", () => {
         });
     });
 
+    describe("a file installed from a url", () => {
+        const URL_SOURCE = "https://github.com/opensvc/oc3-frontend/releases/latest/download/index.html.gz";
+        const FETCHED = {name: "index.html.gz", type: "file", size: 10, modified_at: "2026-11-02T10:00:00Z",
+            installed_from: URL_SOURCE, installed_at: "2026-11-02T10:00:00Z"};
+        beforeEach(() => {
+            listFiles.mockResolvedValue({items: [FETCHED], truncated: false});
+            uploadFile.mockImplementation(() => ({done: Promise.resolve(), abort: () => {}}));
+        });
+
+        test("its origin: installed, the url a link out, no key", async () => {
+            expect(fileOrigin(FETCHED)).toEqual({kind: "installed", from: URL_SOURCE, key: undefined, url: true, at: FETCHED.installed_at, changed: false});
+            up({n1: "up"});
+            render(<VolumeFiles path={PATH}/>);
+            const row = (await screen.findByRole("button", {name: "index.html.gz"})).closest("tr");
+            expect(within(row).getByText("installed")).toBeInTheDocument();
+            const link = within(row).getByRole("link", {name: URL_SOURCE});
+            expect(link).toHaveAttribute("href", URL_SOURCE);
+            expect(link).toHaveAttribute("target", "_blank");
+            expect(within(row).queryByRole("button", {name: /Show the key/})).toBeNull();
+        });
+
+        test("an upload of its name refused before anything is sent, the url said", async () => {
+            up({n1: "up"});
+            render(<VolumeFiles path={PATH}/>);
+            await screen.findByRole("button", {name: "index.html.gz"});
+            await userEvent.upload(screen.getByLabelText("The file to upload"), new File(["x"], "index.html.gz"));
+            expect(await screen.findByText(/index.html.gz is installed from https:\/\/github.com\/opensvc\/oc3-frontend\/releases\/latest\/download\/index.html.gz: change the source url/)).toBeInTheDocument();
+            expect(uploadFile).not.toHaveBeenCalled();
+        });
+    });
+
     describe("a file installed from a datastore", () => {
         const INSTALLED = {name: "config.yaml", type: "file", size: 10, modified_at: "2026-11-02T10:00:00Z",
             installed_from: "dev/cfg/oc3", installed_key: "config.yaml", installed_at: "2026-11-02T10:00:00Z"};
@@ -351,7 +382,7 @@ describe("VolumeFiles", () => {
         });
 
         test("its origin: installed, the datastore a way to its keys, the key shown in place", async () => {
-            expect(fileOrigin(INSTALLED)).toEqual({kind: "installed", from: "dev/cfg/oc3", key: "config.yaml", at: INSTALLED.installed_at, changed: false});
+            expect(fileOrigin(INSTALLED)).toEqual({kind: "installed", from: "dev/cfg/oc3", key: "config.yaml", url: false, at: INSTALLED.installed_at, changed: false});
             up({n1: "up"});
             render(<VolumeFiles path={PATH}/>);
             const row = (await screen.findByRole("button", {name: "config.yaml"})).closest("tr");

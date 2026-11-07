@@ -34,6 +34,15 @@ import {
     isUnmanaged,
     withUnmanaged,
     clusterSectionChoices,
+    keywordItems,
+    keywordGroupsOf,
+    groupKeywords,
+    designLookup,
+    impliedStrategy,
+    strategyBySelector,
+    strategyOptions,
+    withheldOptions,
+    strategyConflicts,
 } from "../app/object-design";
 import {Dialog} from "../ui/components/Dialog";
 import {Button, IconButton} from "../ui/components/Button";
@@ -71,7 +80,7 @@ function readJson(url) {
 export const clearDesignerCache = () => cache.clear();
 
 /** The keywords of a driver (`fs.flag`, or `DEFAULT`), from the keywords address of the object made. */
-const driverKeywords = (keywordsUrl, driver) => readJson(`${keywordsUrl}?driver=${encodeURIComponent(driver)}`).then((d) => d?.items ?? []);
+const driverKeywords = (keywordsUrl, driver) => readJson(`${keywordsUrl}?driver=${encodeURIComponent(driver)}`).then(keywordItems);
 
 /**
  * The drivers an object of `kind` can take, from the capabilities of the node of the
@@ -311,10 +320,14 @@ function KeywordHelp({keyword}) {
 }
 
 /**
- * The keywords of a section to add: filtered by words, each its first line, its doc on
- * demand; the grant each needs, unless `grantsTold` is false (every one root's).
+ * The keywords of a section to add: under their groups, in the daemon's order, filtered
+ * by words, each its first line, its doc on demand; the grant each needs, unless
+ * `grantsTold` is false (every one root's). A group of exclusive strategies asks which
+ * first, unless the keywords set or a selector keyword tell it: then offers the
+ * keywords of that strategy and the group's others, never those it excludes.
+ * `chosen`, the strategy picked by group id; `onChoose(group, strategy)`.
  */
-function KeywordPicker({keywords, onAdd, grantsTold = true}) {
+function KeywordPicker({keywords, groups = [], section, lookup, chosen = {}, onChoose, onAdd, grantsTold = true}) {
     const {t} = useTranslation();
     const ids = useId();
     const [words, setWords] = useState("");
@@ -324,7 +337,17 @@ function KeywordPicker({keywords, onAdd, grantsTold = true}) {
     const listRef = useRef(null);
     // On a phone, the keywords in sight to tap: no keyboard rising over them.
     const touch = useMediaQuery(TOUCH_QUERY);
-    const matching = keywords.filter((k) => `${k.option} ${k.text ?? ""}`.toLowerCase().includes(words.toLowerCase()));
+    const matches = (k) => `${k.option} ${k.text ?? ""}`.toLowerCase().includes(words.toLowerCase());
+    const buckets = groupKeywords(keywords, groups).map(({group, keywords: inGroup}) => {
+        const strategies = group?.strategies ?? [];
+        if (strategies.length === 0) return {group, strategies, keywords: inGroup.filter(matches)};
+        const implied = section && lookup ? impliedStrategy(group, section, lookup) : undefined;
+        const picked = implied ?? strategies.find((st) => st.id === chosen[group.id]);
+        const held = picked ? new Set(picked.excludes ?? []) : strategyOptions(group);
+        return {group, strategies, implied, picked, bySelector: strategyBySelector(group), keywords: inGroup.filter((k) => !held.has(k.option) && matches(k))};
+    });
+    const shown = buckets.filter((b) => b.keywords.length > 0 || (b.strategies.length > 0 && !b.picked && words === ""));
+    const matching = shown.flatMap((b) => b.keywords);
     const current = Math.min(active, matching.length - 1);
     useEffect(() => {
         listRef.current?.querySelector("[data-active]")?.scrollIntoView?.({block: "nearest"});
@@ -337,6 +360,42 @@ function KeywordPicker({keywords, onAdd, grantsTold = true}) {
             e.preventDefault();
             onAdd(matching[current]);
         }
+    };
+    // Headings once there is more than one group to tell apart, or a strategy to choose.
+    const titled = shown.length > 1 || shown.some((b) => b.strategies.length > 0);
+    const keywordLine = (k) => {
+        const i = matching.indexOf(k);
+        return (
+            <li key={k.option} id={`${ids}-kw-${k.option}`} data-keyword={k.option} data-active={i === current ? "" : undefined} className="space-y-1">
+                <div className="flex items-center gap-2">
+                    {/* The line a click adding it; its doc by the button at its end. */}
+                    <button
+                        type="button"
+                        onClick={() => onAdd(k)}
+                        aria-label={t("objectDesigner.addKeyword", {keyword: k.option})}
+                        className={`min-w-0 flex-1 truncate rounded-(--radius-control) px-1.5 py-0.5 text-left hover:bg-accent-soft hover:text-accent ${i === current ? "bg-accent-soft" : ""}`}
+                    >
+                        <span className="font-mono">{k.option}</span>
+                        {/* The grant it needs: for any value, or for some only (a uri of the server, of an install). */}
+                        {grantsTold && k.grant && (
+                            <span className="ml-1.5 text-data text-state-warn">
+                                {k.grantAlways === false ? t("objectDesigner.grantSome", {grant: k.grant}) : k.grant}
+                            </span>
+                        )}
+                        <span className="ml-2 text-data text-ink-muted">{firstLine(k.text)}</span>
+                    </button>
+                    <IconButton
+                        size="sm"
+                        label={t("objectDesigner.readDoc", {keyword: k.option})}
+                        aria-expanded={open === k.option}
+                        onClick={() => setOpen(open === k.option ? null : k.option)}
+                    >
+                        <InfoIcon className="h-3 w-3"/>
+                    </IconButton>
+                </div>
+                {open === k.option && <KeywordHelp keyword={k}/>}
+            </li>
+        );
     };
     return (
         <div className="space-y-2 rounded-(--radius-control) border border-line p-2">
@@ -358,38 +417,44 @@ function KeywordPicker({keywords, onAdd, grantsTold = true}) {
                     autoFocus={!touch}
                 />
             </label>
-            <ul ref={listRef} id={`${ids}-keywords`} aria-label={t("objectDesigner.keywords")} className="max-h-64 space-y-0.5 overflow-auto">
-                {matching.length === 0 && <li className="text-ink-muted">{t("objectDesigner.noKeyword")}</li>}
-                {matching.map((k, i) => (
-                    <li key={k.option} id={`${ids}-kw-${k.option}`} data-keyword={k.option} data-active={i === current ? "" : undefined} className="space-y-1">
-                        <div className="flex items-center gap-2">
-                            {/* The line a click adding it; its doc by the button at its end. */}
-                            <button
-                                type="button"
-                                onClick={() => onAdd(k)}
-                                aria-label={t("objectDesigner.addKeyword", {keyword: k.option})}
-                                className={`min-w-0 flex-1 truncate rounded-(--radius-control) px-1.5 py-0.5 text-left hover:bg-accent-soft hover:text-accent ${i === current ? "bg-accent-soft" : ""}`}
-                            >
-                                <span className="font-mono">{k.option}</span>
-                                {/* The grant it needs: for any value, or for some only (a uri of the server, of an install). */}
-                                {grantsTold && k.grant && (
-                                    <span className="ml-1.5 text-data text-state-warn">
-                                        {k.grantAlways === false ? t("objectDesigner.grantSome", {grant: k.grant}) : k.grant}
-                                    </span>
-                                )}
-                                <span className="ml-2 text-data text-ink-muted">{firstLine(k.text)}</span>
-                            </button>
-                            <IconButton
-                                size="sm"
-                                label={t("objectDesigner.readDoc", {keyword: k.option})}
-                                aria-expanded={open === k.option}
-                                onClick={() => setOpen(open === k.option ? null : k.option)}
-                            >
-                                <InfoIcon className="h-3 w-3"/>
-                            </IconButton>
-                        </div>
-                        {open === k.option && <KeywordHelp keyword={k}/>}
-                    </li>
+            <ul ref={listRef} id={`${ids}-keywords`} aria-label={t("objectDesigner.keywords")} className="max-h-80 space-y-0.5 overflow-auto">
+                {shown.length === 0 && <li className="text-ink-muted">{t("objectDesigner.noKeyword")}</li>}
+                {shown.map((b) => (
+                    <React.Fragment key={b.group?.id ?? "all"}>
+                        {titled && b.group && (
+                            <li role="presentation" data-group={b.group.id} title={b.group.text?.trim()} className="pt-1.5 text-data font-semibold text-ink-muted">
+                                {b.group.name ?? b.group.id}
+                            </li>
+                        )}
+                        {b.strategies.length > 0 && b.implied && (
+                            <li role="presentation" data-strategy={b.implied.id} className="px-1.5 text-data text-ink-muted">
+                                {t(b.bySelector ? "objectDesigner.strategyBySelector" : "objectDesigner.strategyImplied", {strategy: b.implied.name ?? b.implied.id})}
+                            </li>
+                        )}
+                        {b.strategies.length > 0 && !b.implied && !b.bySelector && (
+                            <li role="presentation" className="space-y-1 px-1.5">
+                                <div role="group" aria-label={t("objectDesigner.strategiesOf", {group: b.group.name ?? b.group.id})} className="flex flex-wrap gap-1.5">
+                                    {b.strategies.map((st) => (
+                                        <button
+                                            key={st.id}
+                                            type="button"
+                                            data-strategy={st.id}
+                                            aria-pressed={b.picked?.id === st.id}
+                                            title={st.text?.trim()}
+                                            onClick={() => onChoose?.(b.group.id, st.id)}
+                                            className="h-7 rounded-(--radius-control) border border-line px-2 text-data hover:border-line-strong aria-pressed:border-accent aria-pressed:bg-accent-soft aria-pressed:text-accent"
+                                        >
+                                            {st.name ?? st.id}
+                                        </button>
+                                    ))}
+                                </div>
+                                {b.picked
+                                    ? b.picked.text && <p className="whitespace-pre-line text-data text-ink-muted">{b.picked.text.trim()}</p>
+                                    : <p className="text-data text-ink-muted">{t("objectDesigner.strategyChoose")}</p>}
+                            </li>
+                        )}
+                        {b.keywords.map(keywordLine)}
+                    </React.Fragment>
                 ))}
             </ul>
         </div>
@@ -450,7 +515,7 @@ function AddClusterSection({keywordsUrl, sections, onAdd, onCancel}) {
             const driver = `${choice.section}.${sectionType}`;
             const items = sectionType
                 ? await driverKeywords(keywordsUrl, driver)
-                : await readJson(`${keywordsUrl}?section=${encodeURIComponent(sectionName)}`).then((d) => d?.items ?? []);
+                : await readJson(`${keywordsUrl}?section=${encodeURIComponent(sectionName)}`).then(keywordItems);
             onAdd({name: sectionName, group: choice.section, type: sectionType, entries: []}, items);
         } catch (err) {
             setError(err.message);
@@ -691,6 +756,8 @@ export function ObjectDesigner({kind, namespace = "", sections, onChange, keywor
     const [adding, setAdding] = useState(false);
     const [picking, setPicking] = useState(false);
     const [help, setHelp] = useState(null);
+    // The strategy picked, by section and group: "fs#1:addressing" -> "ipam".
+    const [strategyChoice, setStrategyChoice] = useState({});
     // Never the keywords only root may set whatever the value, to another user; to root, when it asks.
     const [ownShowRoot, setOwnShowRoot] = useState(false);
     // The resource whose provision the user is asked to take on, until confirmed.
@@ -764,7 +831,7 @@ export function ObjectDesigner({kind, namespace = "", sections, onChange, keywor
         for (const s of sections) {
             if (!s.group) continue;
             const driver = `${s.group}.${s.type}`;
-            const read = s.type ? driverKeywords(keywordsUrl, driver) : readJson(`${keywordsUrl}?section=${encodeURIComponent(s.name)}`).then((d) => d?.items ?? []);
+            const read = s.type ? driverKeywords(keywordsUrl, driver) : readJson(`${keywordsUrl}?section=${encodeURIComponent(s.name)}`).then(keywordItems);
             read.then((items) => live && setKeywords((k) => ({...k, [driver]: items})), () => {});
         }
         return () => {
@@ -797,8 +864,19 @@ export function ObjectDesigner({kind, namespace = "", sections, onChange, keywor
     const missing = missingValues(sections, allKeywords);
     const required = new Set(free ? [] : requiredKeywords(known, section).map((k) => k.option));
     const keywordOf = (key) => sectionKeywords(known, section).find((k) => k.option === key);
-    // Its required keywords set, the ones most set offered at once.
-    const popular = free || missing.some((m) => m.section === section.name) ? [] : popularKeywords(known, section, hideRoot);
+    // The groups of its keywords, the strategy chosen of each, the keywords that leaves aside.
+    const keywordGroups = keywordGroupsOf(known);
+    const lookup = designLookup(section, sections);
+    const chosen = Object.fromEntries(Object.entries(strategyChoice)
+        .filter(([at]) => at.startsWith(`${section.name}:`))
+        .map(([at, strategy]) => [at.slice(section.name.length + 1), strategy]));
+    const withheld = withheldOptions(keywordGroups, section, lookup, chosen);
+    // Keywords of exclusive strategies set together, as the daemon warns at validation.
+    const conflicts = free ? [] : strategyConflicts(keywordGroups, section);
+    // Its required keywords set, the ones most set offered at once, none a strategy holds back.
+    const popular = free || missing.some((m) => m.section === section.name)
+        ? []
+        : popularKeywords(known, section, hideRoot).filter((k) => !withheld.has(k.option));
     // Whether the daemon says which keywords need a grant: else, no choice to offer.
     const grantsTold = allKeywords.some((k) => k.grant !== undefined);
 
@@ -909,6 +987,14 @@ export function ObjectDesigner({kind, namespace = "", sections, onChange, keywor
                             />
                         )}
                         {section.entries.length === 0 && !free && <p className="text-data text-ink-muted">{t("objectDesigner.noEntry")}</p>}
+                        {conflicts.map((c) => (
+                            <p key={c.group.id} role="status" data-strategy-conflict={c.group.id} className="rounded-(--radius-control) border border-state-warn/40 bg-surface-raised px-2 py-1 text-data text-state-warn">
+                                {t("objectDesigner.strategyConflict", {
+                                    group: c.group.name ?? c.group.id,
+                                    strategies: c.strategies.map((st) => t("objectDesigner.strategyBy", {strategy: st.strategy.name ?? st.strategy.id, keywords: st.options.join(", ")})).join(t("objectDesigner.strategyAnd")),
+                                })}
+                            </p>
+                        ))}
                         <ul aria-label={t("objectDesigner.entries", {section: section.name})} className="space-y-1">
                             {section.entries.map((entry, i) => {
                                 // The provision of a resource: its box above.
@@ -966,6 +1052,11 @@ export function ObjectDesigner({kind, namespace = "", sections, onChange, keywor
                         ) : picking ? (
                             <KeywordPicker
                                 keywords={offeredKeywords(known, section, hideRoot)}
+                                groups={keywordGroups}
+                                section={section}
+                                lookup={lookup}
+                                chosen={chosen}
+                                onChoose={(group, strategy) => setStrategyChoice((c) => ({...c, [`${section.name}:${group}`]: strategy}))}
                                 // Every keyword root's, the cluster configuration's: no grant to tell them apart by.
                                 grantsTold={!rootOnlyKind(kind)}
                                 onAdd={(k) => {

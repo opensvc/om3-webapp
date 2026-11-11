@@ -19,6 +19,7 @@ import {useGrants} from "../hooks/useGrants";
 import {ForceRefusal} from "./ConfigWriteControls";
 import {ObjectDesigner} from "./ObjectDesigner";
 import {designStart, designText} from "../app/object-design";
+import {DraftValidation} from "./ConfigValidation";
 import {
     CREATABLE_KINDS,
     NSCFG_NAME,
@@ -573,6 +574,13 @@ const CreateObjectDialog = ({open, onClose, defaultKind = "svc", defaultNamespac
                         {source === "edit" && <ConfigDropZone value={config} onChange={setConfig} onFile={readFile} fileName={fileName}/>}
                         {source === "design" && (
                             <ObjectDesigner kind={kind} namespace={namespace.trim()} sections={design} onChange={setDesign} keywordsUrl={keywordsUrl} isRoot={isRoot} onToText={toText}/>
+                        )}
+                        {/* What the daemon would refuse of it, or warn of, said before it is created. */}
+                        {!datastore && source !== "empty" && (
+                            <DraftValidation
+                                url={keywordsUrl.replace(/\/config\/keywords$/, "/config/validate")}
+                                text={source === "design" ? designText(design) : source === "copy" ? (hasCopy ? copied.text : null) : config}
+                            />
                         )}
                         {canProvision && (
                             <Checkbox

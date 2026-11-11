@@ -474,12 +474,97 @@ describe('CreateObjectDialog', () => {
         };
         const keywordsShown = () => [...document.querySelectorAll('[data-keyword]')].map((e) => e.dataset.keyword);
 
+        test('the design validated as it is edited: what would be refused said before it is created', async () => {
+            answers['POST /api/object/path/ns1/svc/db/config/validate'] = {status: 200, text: JSON.stringify({kind: 'ConfigAlertList', items: [
+                {level: 'error', kind: 'denied', key: 'DEFAULT.nodes', comment: 'requires the root grant'},
+            ]})};
+            await design();
+            fireEvent.click(screen.getByRole('button', {name: 'Add nodes'}));
+            fireEvent.change(screen.getByRole('textbox', {name: 'Value of nodes'}), {target: {value: 'n1'}});
+            await waitFor(() => expect(screen.getByText('requires the root grant')).toBeInTheDocument(), {timeout: 3000});
+            const sent = requests.filter((r) => r.method === 'POST' && r.url.endsWith('/config/validate'));
+            expect(sent.at(-1).body).toMatch(/^\[DEFAULT\]\nnodes = n1/);
+            expect(screen.getByText('1 error')).toBeInTheDocument();
+            // Validated only: nothing created.
+            expect(posts().filter((r) => r.url.includes('/config/file'))).toEqual([]);
+        });
+
+        test('a strategy chosen leaves out what it excludes in other groups too, offered before the choice', async () => {
+            answers['GET /api/object/path/ns1/svc/db/config/keywords?driver=DEFAULT'] = {status: 200, text: JSON.stringify({
+                items: [
+                    {section: 'DEFAULT', option: 'vcpus', group: 'machine'},
+                    {section: 'DEFAULT', option: 'image', group: 'install'},
+                    {section: 'DEFAULT', option: 'virtinst', group: 'install'},
+                ],
+                groups: [
+                    {id: 'install', driver: 'container.kvm', name: 'Install', order: 10, strategies: [
+                        {id: 'image', name: 'From an image', uses: ['image'], excludes: ['virtinst'], when: []},
+                        {id: 'virtinst', name: 'By virt-install', uses: ['virtinst'], excludes: ['image', 'vcpus'], when: []},
+                    ]},
+                    {id: 'machine', driver: 'container.kvm', name: 'Machine', order: 20},
+                ],
+            })};
+            await design();
+            fireEvent.click(screen.getByRole('button', {name: 'More'}));
+            expect(keywordsShown()).toEqual(['vcpus']);
+            fireEvent.click(within(screen.getByRole('group', {name: 'How to set Install'})).getByRole('button', {name: 'By virt-install'}));
+            expect(keywordsShown()).toEqual(['virtinst']);
+        });
+
+        test('a keyword naming resources offers those of the design, its special values after, not the example of another design', async () => {
+            KW('container.docker', [
+                {section: 'container', option: 'type', required: true},
+                {section: 'container', option: 'netns', candidates: ['', 'none', 'host'], references: {groups: ['container'], shape: 'rid'}},
+            ]);
+            KW('ip.netns', [
+                {section: 'ip', option: 'type', required: true},
+                {section: 'ip', option: 'netns', required: true, example: 'container#0', references: {groups: ['container'], shape: 'rid'}},
+            ]);
+            await design();
+            for (const driver of ['container.docker', 'ip.netns']) {
+                fireEvent.click(screen.getByRole('button', {name: 'Add a resource'}));
+                fireEvent.change(await screen.findByLabelText('Driver, as group.type'), {target: {value: driver}});
+                fireEvent.click(within(card('[data-add-resource]')).getByRole('button', {name: 'Add a resource'}));
+                await screen.findByRole('textbox', {name: 'Value of netns'}).catch(() => null);
+            }
+            const sections = screen.getByRole('navigation', {name: 'Sections'});
+            fireEvent.click(within(sections).getByRole('button', {name: /^ip#1/}));
+            const netns = await screen.findByRole('combobox', {name: 'Value of netns'});
+            expect(screen.queryByRole('button', {name: 'Use the example container#0'})).toBeNull();
+            fireEvent.focus(netns);
+            const picks = () => [...document.querySelectorAll('[data-pick]')].map((e) => e.dataset.pick);
+            expect(picks()).toEqual(['container#1']);
+            fireEvent.mouseDown(document.querySelector('[data-pick="container#1"]'));
+            expect(netns).toHaveValue('container#1');
+            // The container's own: the others of the design and its special values, never itself.
+            fireEvent.click(within(sections).getByRole('button', {name: /^container#1/}));
+            fireEvent.click(screen.getByRole('button', {name: 'More'}));
+            fireEvent.click(screen.getByRole('button', {name: 'Add netns'}));
+            fireEvent.focus(await screen.findByRole('combobox', {name: 'Value of netns'}));
+            expect(picks()).toEqual(['none', 'host']);
+        });
+
         test('the keywords to add under their groups, in the order of the daemon, those of no group known under other', async () => {
             answers['GET /api/object/path/ns1/svc/db/config/keywords?driver=DEFAULT'] = {status: 200, text: JSON.stringify(GROUPED)};
             await design();
             fireEvent.click(screen.getByRole('button', {name: 'More'}));
             expect([...document.querySelectorAll('[data-group]')].map((e) => e.textContent)).toEqual(['Addressing', 'Availability', 'Other']);
             expect(keywordsShown()).toEqual(['netmask', 'orchestrate', 'comment', 'nodes']);
+        });
+
+        test('the strategies of a section on it, up front, the picker pointing there until one is chosen', async () => {
+            answers['GET /api/object/path/ns1/svc/db/config/keywords?driver=DEFAULT'] = {status: 200, text: JSON.stringify(GROUPED)};
+            await design();
+            const bar = screen.getByRole('group', {name: 'How to set Addressing'});
+            expect(within(bar).getAllByRole('button').map((b) => [b.textContent, b.getAttribute('aria-pressed')])).toEqual([
+                ['Static address', 'false'],
+                ['Address drawn from a network', 'false'],
+            ]);
+            fireEvent.click(screen.getByRole('button', {name: 'More'}));
+            expect(screen.getByText('Choose how to set Addressing, above: its keywords are then offered.')).toBeInTheDocument();
+            fireEvent.click(within(bar).getByRole('button', {name: 'Static address'}));
+            expect(screen.queryByText('Choose how to set Addressing, above: its keywords are then offered.')).toBeNull();
+            expect(keywordsShown()).toContain('name');
         });
 
         test('a strategy chosen first: its keywords then offered, never those it excludes; told by a keyword set', async () => {
@@ -500,10 +585,12 @@ describe('CreateObjectDialog', () => {
             expect(keywordsShown()).not.toContain('name');
             fireEvent.click(screen.getByRole('button', {name: 'Add network'}));
             expect(screen.getByRole('textbox', {name: 'Value of network'})).toBeInTheDocument();
-            // The keyword set tells the strategy: said, no choice asked again.
-            fireEvent.click(screen.getByRole('button', {name: 'More'}));
+            // The keyword set tells the strategy: said, the other left until its keywords go.
             expect(screen.getByText('Address drawn from a network, as the keywords set say.')).toBeInTheDocument();
-            expect(screen.queryByRole('group', {name: 'How to set Addressing'})).toBeNull();
+            const told = screen.getByRole('group', {name: 'How to set Addressing'});
+            expect(within(told).getByRole('button', {name: 'Address drawn from a network'})).toHaveAttribute('aria-pressed', 'true');
+            expect(within(told).getByRole('button', {name: 'Static address'})).toBeDisabled();
+            fireEvent.click(screen.getByRole('button', {name: 'More'}));
             expect(keywordsShown()).not.toContain('name');
         });
 

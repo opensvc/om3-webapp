@@ -1,4 +1,4 @@
-import React, {useCallback, useEffect, useState} from "react";
+import React, {useCallback, useEffect, useRef, useState} from "react";
 import {useTranslation} from "react-i18next";
 import {Alert} from "../ui/components/Alert";
 import {Button, IconButton} from "../ui/components/Button";
@@ -10,7 +10,8 @@ import {authHeaders, getResponseErrorMessage} from "../services/api.jsx";
 /*
  * A configuration validated by the daemon, as `om <path> config validate` does it on
  * its node, and nothing written (GET `.../config/validate`): the configuration the
- * node holds, an object's as loaded on the node, its drivers checking it there.
+ * node holds, an object's as loaded on the node, its drivers checking it there. Or a
+ * draft (POST `.../config/validate` of an object): the text of an editor, a design.
  * Every alert answered, the warnings a write lets through with the errors it refuses.
  */
 
@@ -22,17 +23,24 @@ const isRouter404 = (status, body) => status === 404 && body?.message === "Not F
 
 /**
  * Validates the configuration at `url` (the `config/validate` address of a node, or
- * of an instance of an object on a node): `validate()`. `result` null before, then
- * {loading}, {alerts}, {error} or {unsupported}; `reset` forgets it, as a
- * configuration written since makes it stale.
+ * of an instance of an object on a node): `validate()`. Or, `validate(text)`, a draft
+ * sent to the `config/validate` address of an object (POST), of one not created yet
+ * too, nothing written. `result` null before, then {loading}, {alerts}, {error} or
+ * {unsupported}; `reset` forgets it, as a configuration written since makes it stale.
  */
 export function useConfigValidation(url) {
     const [result, setResult] = useState(null);
-    const validate = useCallback(async () => {
+    const validate = useCallback(async (text) => {
         if (!url) return;
         setResult({loading: true});
         try {
-            const response = await fetch(url, {headers: authHeaders(), cache: "no-cache"});
+            const response = text === undefined
+                ? await fetch(url, {headers: authHeaders(), cache: "no-cache"})
+                : await fetch(url, {
+                    method: "POST",
+                    headers: {...authHeaders(), "Content-Type": "application/octet-stream"},
+                    body: text,
+                });
             if (!response.ok) {
                 const body = await response.clone().json().catch(() => null);
                 if (isRouter404(response.status, body)) {
@@ -133,5 +141,40 @@ export function ValidateButton({onClick, disabled}) {
         <Button size="sm" aria-label={t("configValidate.runHeld")} icon={<CheckIcon/>} onClick={onClick} disabled={disabled}>
             {t("configValidate.run")}
         </Button>
+    );
+}
+
+/** How long a draft rests unchanged before it is validated. */
+export const DRAFT_VALIDATION_DELAY_MS = 800;
+
+/**
+ * A draft validated as it is edited, `text` sent to `url` once it rested unchanged a
+ * moment, nothing written: what the daemon would refuse of it, and warn of, said
+ * before it is written. The last answer stays shown while the next is read, said
+ * checking. Nothing shown without a url, nor on a daemon older than the validation.
+ */
+export function DraftValidation({url, text}) {
+    const {t} = useTranslation();
+    const {result, validate, reset} = useConfigValidation(url);
+    const shown = useRef(null);
+    useEffect(() => {
+        if (!url || text === null || text === undefined) {
+            reset();
+            return undefined;
+        }
+        const timer = setTimeout(() => validate(text), DRAFT_VALIDATION_DELAY_MS);
+        return () => clearTimeout(timer);
+    }, [url, text, validate, reset]);
+    if (result === null || !url) {
+        shown.current = null;
+        return null;
+    }
+    if (result.unsupported) return null;
+    if (!result.loading) shown.current = result;
+    return (
+        <div data-draft-validation="" className="space-y-1">
+            {result.loading && <p className="text-data text-ink-muted">{t("configValidate.checking")}</p>}
+            {shown.current && <ConfigValidationResult result={shown.current}/>}
+        </div>
     );
 }

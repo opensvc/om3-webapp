@@ -40,9 +40,10 @@ import {
     designLookup,
     impliedStrategy,
     strategyBySelector,
-    strategyOptions,
     withheldOptions,
-    strategyConflicts,
+    referencePicks,
+    referenceWords,
+    referenceRid,
 } from "../app/object-design";
 import {Dialog} from "../ui/components/Dialog";
 import {Button, IconButton} from "../ui/components/Button";
@@ -169,7 +170,8 @@ function ValueInput({keyword, value, onChange, label, suggestions = [], picks = 
     const listId = useId();
     const [picking, setPicking] = useState(false);
     const [active, setActive] = useState(0);
-    if (keyword?.candidates?.length > 0) {
+    // A keyword naming resources takes them besides its candidates: picked, not chosen in a list.
+    if (keyword?.candidates?.length > 0 && !keyword.references) {
         return (
             <Select aria-label={label} className="h-7 w-full" value={value} onChange={(e) => onChange(e.target.value)}>
                 <option value="">{keyword.default ? t("objectDesigner.byDefault", {value: keyword.default}) : ""}</option>
@@ -200,13 +202,19 @@ function ValueInput({keyword, value, onChange, label, suggestions = [], picks = 
             />
         );
     }
-    const example = !keyword?.default && !keyword?.defaultText && value === "" ? keyword?.example ?? "" : "";
+    // The resources of the design to pick from: no example of another design offered.
+    const referencing = Boolean(keyword?.references) && picks.length > 0;
+    const example = !referencing && !keyword?.default && !keyword?.defaultText && value === "" ? keyword?.example ?? "" : "";
     // The picks matching the text; all of them while it is one of them, or empty.
     // A list takes several: a pick adds a word, the one typed, and the others are done.
-    const isList = keyword?.converter === "list";
-    const words = isList ? listWords(value) : {done: [], typed: value.trim()};
+    // Several resources named, a requirement with its states: each picked once.
+    const shape = keyword?.references?.shape;
+    const isReferences = shape === "rids" || shape === "requires";
+    const isList = keyword?.converter === "list" || isReferences;
+    const words = isReferences ? referenceWords(value) : isList ? listWords(value) : {done: [], typed: value.trim()};
+    const named = words.done.map(referenceRid);
     const typed = words.typed.toLowerCase();
-    const left = picks.filter((p) => !words.done.includes(p.value));
+    const left = picks.filter((p) => !named.includes(p.value));
     const shown = typed === "" || left.some((p) => p.value.toLowerCase() === typed)
         ? left
         : left.filter((p) => p.value.toLowerCase().includes(typed));
@@ -320,14 +328,72 @@ function KeywordHelp({keyword}) {
 }
 
 /**
+ * The ways to set the groups of exclusive strategies of a section, its addressing
+ * say, a button each, the one followed pressed: told by the keywords set or by a
+ * selector keyword (the others then left, their keywords to remove first), else the
+ * one picked by `onChoose(group, strategy)`. A strategy none of whose keywords is
+ * offered here, root's with those hidden, is left aside, said why.
+ */
+function StrategyBar({groups, section, lookup, chosen, offered, onChoose}) {
+    const {t} = useTranslation();
+    const set = new Set(section.entries.map((e) => e.key.split("@")[0]));
+    const withStrategies = groups.filter((g) => (g.strategies ?? []).length > 0);
+    if (withStrategies.length === 0) return null;
+    return (
+        <div className="space-y-1.5">
+            {withStrategies.map((group) => {
+                const implied = impliedStrategy(group, section, lookup);
+                const bySelector = strategyBySelector(group);
+                const picked = implied ?? group.strategies.find((st) => st.id === chosen[group.id]);
+                const name = group.name ?? group.id;
+                return (
+                    <div key={group.id} data-strategy-group={group.id} className="space-y-1">
+                        <div role="group" aria-label={t("objectDesigner.strategiesOf", {group: name})} className="flex flex-wrap items-center gap-1.5">
+                            <span className="text-data font-semibold text-ink-muted" title={group.text?.trim()}>{name}</span>
+                            {group.strategies.map((st) => {
+                                const usable = (st.uses ?? []).length === 0 || (st.uses ?? []).some((o) => offered.has(o) || set.has(o));
+                                const told = Boolean(implied) || bySelector;
+                                const disabled = (told && implied?.id !== st.id) || (!told && !usable);
+                                const why = told && implied?.id !== st.id
+                                    ? t(bySelector ? "objectDesigner.strategyBySelectorOther" : "objectDesigner.strategyOther", {strategy: implied?.name ?? implied?.id ?? ""})
+                                    : !usable ? t("objectDesigner.strategyUnavailable") : st.text?.trim();
+                                return (
+                                    <button
+                                        key={st.id}
+                                        type="button"
+                                        data-strategy={st.id}
+                                        aria-pressed={picked?.id === st.id}
+                                        disabled={disabled}
+                                        title={why}
+                                        onClick={() => onChoose(group.id, st.id)}
+                                        className="h-7 rounded-(--radius-control) border border-line px-2 text-data hover:border-line-strong disabled:cursor-default disabled:opacity-60 aria-pressed:border-accent aria-pressed:bg-accent-soft aria-pressed:text-accent"
+                                    >
+                                        {st.name ?? st.id}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                        <p className="text-data text-ink-muted">
+                            {implied
+                                ? t(bySelector ? "objectDesigner.strategyBySelector" : "objectDesigner.strategyImplied", {strategy: implied.name ?? implied.id})
+                                : picked ? picked.text?.trim() : t("objectDesigner.strategyChoose")}
+                        </p>
+                    </div>
+                );
+            })}
+        </div>
+    );
+}
+
+/**
  * The keywords of a section to add: under their groups, in the daemon's order, filtered
  * by words, each its first line, its doc on demand; the grant each needs, unless
- * `grantsTold` is false (every one root's). A group of exclusive strategies asks which
- * first, unless the keywords set or a selector keyword tell it: then offers the
- * keywords of that strategy and the group's others, never those it excludes.
- * `chosen`, the strategy picked by group id; `onChoose(group, strategy)`.
+ * `grantsTold` is false (every one root's). The keywords of a group of exclusive
+ * strategies wait for the choice, made on the section (StrategyBar): then those of
+ * that strategy and the group's others, never those it excludes, in any group.
+ * `chosen`, the strategy picked by group id.
  */
-function KeywordPicker({keywords, groups = [], section, lookup, chosen = {}, onChoose, onAdd, grantsTold = true}) {
+function KeywordPicker({keywords, groups = [], section, lookup, chosen = {}, onAdd, grantsTold = true}) {
     const {t} = useTranslation();
     const ids = useId();
     const [words, setWords] = useState("");
@@ -338,13 +404,15 @@ function KeywordPicker({keywords, groups = [], section, lookup, chosen = {}, onC
     // On a phone, the keywords in sight to tap: no keyboard rising over them.
     const touch = useMediaQuery(TOUCH_QUERY);
     const matches = (k) => `${k.option} ${k.text ?? ""}`.toLowerCase().includes(words.toLowerCase());
+    // What a strategy holds back reaches past its group: the hardware of a guest virt-install builds.
+    const held = section && lookup ? withheldOptions(groups, section, lookup, chosen) : new Set();
     const buckets = groupKeywords(keywords, groups).map(({group, keywords: inGroup}) => {
         const strategies = group?.strategies ?? [];
-        if (strategies.length === 0) return {group, strategies, keywords: inGroup.filter(matches)};
+        const shownHere = inGroup.filter((k) => !held.has(k.option) && matches(k));
+        if (strategies.length === 0) return {group, strategies, keywords: shownHere};
         const implied = section && lookup ? impliedStrategy(group, section, lookup) : undefined;
         const picked = implied ?? strategies.find((st) => st.id === chosen[group.id]);
-        const held = picked ? new Set(picked.excludes ?? []) : strategyOptions(group);
-        return {group, strategies, implied, picked, bySelector: strategyBySelector(group), keywords: inGroup.filter((k) => !held.has(k.option) && matches(k))};
+        return {group, strategies, implied, picked, bySelector: strategyBySelector(group), keywords: shownHere};
     });
     const shown = buckets.filter((b) => b.keywords.length > 0 || (b.strategies.length > 0 && !b.picked && words === ""));
     const matching = shown.flatMap((b) => b.keywords);
@@ -426,31 +494,9 @@ function KeywordPicker({keywords, groups = [], section, lookup, chosen = {}, onC
                                 {b.group.name ?? b.group.id}
                             </li>
                         )}
-                        {b.strategies.length > 0 && b.implied && (
-                            <li role="presentation" data-strategy={b.implied.id} className="px-1.5 text-data text-ink-muted">
-                                {t(b.bySelector ? "objectDesigner.strategyBySelector" : "objectDesigner.strategyImplied", {strategy: b.implied.name ?? b.implied.id})}
-                            </li>
-                        )}
-                        {b.strategies.length > 0 && !b.implied && !b.bySelector && (
-                            <li role="presentation" className="space-y-1 px-1.5">
-                                <div role="group" aria-label={t("objectDesigner.strategiesOf", {group: b.group.name ?? b.group.id})} className="flex flex-wrap gap-1.5">
-                                    {b.strategies.map((st) => (
-                                        <button
-                                            key={st.id}
-                                            type="button"
-                                            data-strategy={st.id}
-                                            aria-pressed={b.picked?.id === st.id}
-                                            title={st.text?.trim()}
-                                            onClick={() => onChoose?.(b.group.id, st.id)}
-                                            className="h-7 rounded-(--radius-control) border border-line px-2 text-data hover:border-line-strong aria-pressed:border-accent aria-pressed:bg-accent-soft aria-pressed:text-accent"
-                                        >
-                                            {st.name ?? st.id}
-                                        </button>
-                                    ))}
-                                </div>
-                                {b.picked
-                                    ? b.picked.text && <p className="whitespace-pre-line text-data text-ink-muted">{b.picked.text.trim()}</p>
-                                    : <p className="text-data text-ink-muted">{t("objectDesigner.strategyChoose")}</p>}
+                        {b.strategies.length > 0 && !b.picked && (
+                            <li role="presentation" className="px-1.5 text-data text-ink-muted">
+                                {t("objectDesigner.strategyAbove", {group: b.group.name ?? b.group.id})}
                             </li>
                         )}
                         {b.keywords.map(keywordLine)}
@@ -871,8 +917,6 @@ export function ObjectDesigner({kind, namespace = "", sections, onChange, keywor
         .filter(([at]) => at.startsWith(`${section.name}:`))
         .map(([at, strategy]) => [at.slice(section.name.length + 1), strategy]));
     const withheld = withheldOptions(keywordGroups, section, lookup, chosen);
-    // Keywords of exclusive strategies set together, as the daemon warns at validation.
-    const conflicts = free ? [] : strategyConflicts(keywordGroups, section);
     // Its required keywords set, the ones most set offered at once, none a strategy holds back.
     const popular = free || missing.some((m) => m.section === section.name)
         ? []
@@ -986,15 +1030,17 @@ export function ObjectDesigner({kind, namespace = "", sections, onChange, keywor
                                 onChange={(e) => (e.target.checked ? setConfirming(section.name) : update(withUnmanaged(known, section, false)))}
                             />
                         )}
+                        {!free && (
+                            <StrategyBar
+                                groups={keywordGroups}
+                                section={section}
+                                lookup={lookup}
+                                chosen={chosen}
+                                offered={new Set(offeredKeywords(known, section, hideRoot).map((k) => k.option))}
+                                onChoose={(group, strategy) => setStrategyChoice((c) => ({...c, [`${section.name}:${group}`]: strategy}))}
+                            />
+                        )}
                         {section.entries.length === 0 && !free && <p className="text-data text-ink-muted">{t("objectDesigner.noEntry")}</p>}
-                        {conflicts.map((c) => (
-                            <p key={c.group.id} role="status" data-strategy-conflict={c.group.id} className="rounded-(--radius-control) border border-state-warn/40 bg-surface-raised px-2 py-1 text-data text-state-warn">
-                                {t("objectDesigner.strategyConflict", {
-                                    group: c.group.name ?? c.group.id,
-                                    strategies: c.strategies.map((st) => t("objectDesigner.strategyBy", {strategy: st.strategy.name ?? st.strategy.id, keywords: st.options.join(", ")})).join(t("objectDesigner.strategyAnd")),
-                                })}
-                            </p>
-                        ))}
                         <ul aria-label={t("objectDesigner.entries", {section: section.name})} className="space-y-1">
                             {section.entries.map((entry, i) => {
                                 // The provision of a resource: its box above.
@@ -1033,6 +1079,7 @@ export function ObjectDesigner({kind, namespace = "", sections, onChange, keywor
                                                 entry.key === "pool" && NEEDS_GROUPS.includes(section.group) ? poolChoices
                                                     : entry.key === "network" && NETWORK_DRIVERS.includes(`${section.group}.${section.type}`) ? networkChoices
                                                     : entry.key === "disk" && `${section.group}.${section.type}` === "container.kvm" ? guestDiskChoices(sections)
+                                                    : keyword?.references ? referencePicks(keyword, sections, section, kind, t("objectDesigner.specialValue"))
                                                         : []
                                             }
                                             />
@@ -1056,7 +1103,6 @@ export function ObjectDesigner({kind, namespace = "", sections, onChange, keywor
                                 section={section}
                                 lookup={lookup}
                                 chosen={chosen}
-                                onChoose={(group, strategy) => setStrategyChoice((c) => ({...c, [`${section.name}:${group}`]: strategy}))}
                                 // Every keyword root's, the cluster configuration's: no grant to tell them apart by.
                                 grantsTold={!rootOnlyKind(kind)}
                                 onAdd={(k) => {

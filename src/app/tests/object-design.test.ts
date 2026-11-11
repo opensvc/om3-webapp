@@ -30,7 +30,7 @@ import {
   withRequired,
   type DesignKeyword,
   type DesignSection,
-  clusterSectionChoices, keywordItems, keywordGroupsOf, groupKeywords, designLookup, impliedStrategy, strategyBySelector, strategyOptions, withheldOptions, strategyConflicts} from "../object-design";
+  clusterSectionChoices, keywordItems, keywordGroupsOf, groupKeywords, designLookup, impliedStrategy, strategyBySelector, strategyOptions, withheldOptions, referencePicks, referenceWords, referenceRid} from "../object-design";
 
 const KEYWORDS: DesignKeyword[] = [
   { section: "DEFAULT", option: "nodes", text: "The nodes." },
@@ -455,15 +455,36 @@ describe("the groups of the keywords, and their strategies", () => {
         expect(strategyBySelector(GROUPS[2])).toBe(false);
     });
 
-    test("the strategies a section mixes, each by the keywords of it it sets; one followed, none", () => {
-        const both = {...IP, entries: [{key: "name@n1", value: "10.0.0.1"}, {key: "network", value: "default"}, {key: "netmask", value: "24"}]};
-        const [conflict] = strategyConflicts(GROUPS, both);
-        expect(conflict.group.id).toBe("addressing");
-        expect(conflict.strategies.map((s) => [s.strategy.id, s.options])).toEqual([["static", ["name"]], ["ipam", ["network"]]]);
-        expect(strategyConflicts(GROUPS, {...IP, entries: [{key: "network", value: "default"}, {key: "addr", value: "10.0.0.2"}]})).toEqual([]);
-        expect(strategyConflicts(GROUPS, IP)).toEqual([]);
-        const bySelector = [{id: "g", strategies: [{id: "a", uses: ["x"], excludes: ["y"], when: ["topology=flex"]}, {id: "b", uses: ["y"], excludes: ["x"], when: ["topology=failover"]}]}];
-        expect(strategyConflicts(bySelector, {...IP, entries: [{key: "x", value: "1"}, {key: "y", value: "2"}]})).toEqual([]);
+    test("the quiesce of a container: its strategy chosen by the value of quiesce, unset meaning command", () => {
+        const QUIESCE = {id: "quiesce", driver: "container.docker", strategies: [
+            {id: "pause", when: ["quiesce=pause"], excludes: ["quiesce_input", "quiesce_ready", "resume_input", "quiesce_timeout"]},
+            {id: "command", uses: ["quiesce_input"], when: ["quiesce!=pause"]},
+        ]};
+        const container = (entries) => ({name: "container#1", group: "container", type: "docker", entries});
+        const paused = container([{key: "quiesce", value: "pause"}]);
+        expect(impliedStrategy(QUIESCE, paused, designLookup(paused, [paused]))?.id).toBe("pause");
+        expect([...withheldOptions([QUIESCE], paused, designLookup(paused, [paused]))].sort()).toEqual(["quiesce_input", "quiesce_ready", "quiesce_timeout", "resume_input"]);
+        const plain = container([]);
+        expect(impliedStrategy(QUIESCE, plain, designLookup(plain, [plain]))?.id).toBe("command");
+        expect([...withheldOptions([QUIESCE], plain, designLookup(plain, [plain]))]).toEqual([]);
+        expect(strategyBySelector(QUIESCE)).toBe(true);
+    });
+
+    test("the install of a kvm guest: virtinst chosen, the keywords of the others and its hardware left out", () => {
+        const INSTALL = {id: "install", driver: "container.kvm", strategies: [
+            {id: "image", uses: ["image", "cloud_init"], excludes: ["cdrom", "virtinst"], when: []},
+            {id: "cdrom", uses: ["cdrom"], excludes: ["image", "cloud_init", "virtinst"], when: []},
+            {id: "virtinst", uses: ["virtinst"], excludes: ["vcpus", "memory", "disk", "bridge", "network", "osinfo", "image", "cdrom", "cloud_init", "virtinst_args"], when: []},
+        ]};
+        const guest = {name: "container#1", group: "container", type: "kvm", entries: []};
+        const lookup = designLookup(guest, [guest]);
+        expect(impliedStrategy(INSTALL, guest, lookup)).toBeUndefined();
+        expect(withheldOptions([INSTALL], guest, lookup).has("vcpus")).toBe(false);
+        const held = withheldOptions([INSTALL], guest, lookup, {install: "virtinst"});
+        expect(held.has("vcpus")).toBe(true);
+        expect(held.has("image")).toBe(true);
+        const imaged = {...guest, entries: [{key: "image", value: "debian"}]};
+        expect(impliedStrategy(INSTALL, imaged, designLookup(imaged, [imaged]))?.id).toBe("image");
     });
 
     test("held back: every strategy's keywords until one is chosen, then those it excludes", () => {
@@ -471,5 +492,33 @@ describe("the groups of the keywords, and their strategies", () => {
         expect([...withheldOptions(GROUPS, IP, lookup)].sort()).toEqual(["addr", "name", "network"]);
         expect([...withheldOptions(GROUPS, IP, lookup, {addressing: "ipam"})]).toEqual(["name"]);
         expect([...strategyOptions(GROUPS[2])].sort()).toEqual(["addr", "name", "network"]);
+    });
+});
+
+describe("the keywords naming resources of the object", () => {
+    const S = (name, group, type) => ({name, group, type, entries: []});
+    const sections = [S("DEFAULT"), S("container#0", "container", "oci"), S("container#db", "container", "docker"), S("fs#1", "fs", "flag"), S("subset#container:oc3", "subset")];
+
+    test("the resources of the design of its groups, the section itself left out, its special values after", () => {
+        const netns = {section: "container", option: "netns", candidates: ["", "none", "host"], references: {groups: ["container"], shape: "rid"}};
+        expect(referencePicks(netns, sections, sections[2], "svc", "special")).toEqual([
+            {value: "container#0", info: ["container.oci"]},
+            {value: "none", info: ["special"]},
+            {value: "host", info: ["special"]},
+        ]);
+    });
+
+    test("any group when it names none; no picks for a keyword naming no resource", () => {
+        const requires = {section: "fs", option: "start_requires", references: {groups: [], shape: "requires"}};
+        expect(referencePicks(requires, sections, sections[3], "svc").map((p) => p.value)).toEqual(["container#0", "container#db"]);
+        expect(referencePicks({section: "fs", option: "mnt"}, sections, sections[3], "svc")).toEqual([]);
+    });
+
+    test("the words of a requirement, its states with their spaces part of its resource", () => {
+        expect(referenceWords("container#db(up) fs#1(down,stdby down) con")).toEqual({done: ["container#db(up)", "fs#1(down,stdby down)"], typed: "con"});
+        expect(referenceWords("container#db(up) ")).toEqual({done: ["container#db(up)"], typed: ""});
+        expect(referenceWords("fs#1(down,stdby")).toEqual({done: [], typed: "fs#1(down,stdby"});
+        expect(referenceWords("")).toEqual({done: [], typed: ""});
+        expect(referenceRid("fs#1(down,stdby down)")).toBe("fs#1");
     });
 });

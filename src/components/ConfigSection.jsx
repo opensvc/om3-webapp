@@ -17,10 +17,10 @@ import {LAST_MODIFIED_HEADER, PROBLEM_TITLE_HELD, STATUS_MODIFIED, forceLifts, r
 import {useIsRoot} from "../hooks/useGrants";
 import {ForceRefusal} from "./ConfigWriteControls";
 import ConfigEvalDialog from "./ConfigEvalDialog";
-import {ConfigValidationResult, ValidateButton, useConfigValidation} from "./ConfigValidation";
+import {ConfigValidationResult, DraftValidation, ValidateButton, useConfigValidation} from "./ConfigValidation";
 import useEventStore from "../hooks/useEventStore.js";
 import {newId, withId} from "../app/object-create";
-import {designChanges, designStart, parseDesign, rootOnlyKind} from "../app/object-design";
+import {designChanges, designStart, designText, parseDesign, rootOnlyKind} from "../app/object-design";
 import {ObjectDesigner} from "./ObjectDesigner";
 import {useEditDraft} from "../app/edit-drafts";
 import {opValue} from "../app/keyop";
@@ -336,6 +336,8 @@ const DesignConfigDialog = ({
                         onShowRoot={setShowRoot}
                     />
                 )}
+                {/* What the daemon would refuse of the design, or warn of, said before it is applied. */}
+                {design && <DraftValidation url={keywordsUrl.replace(/\/config\/keywords$/, "/config/validate")} text={designText(design)}/>}
                 {/* The changes applied, as the actions tray will say them. */}
                 {lines.length > 0 && (
                     <section aria-label={t("config.design.changes")} className="rounded-(--radius-panel) border border-line bg-surface-sunken p-2">
@@ -729,6 +731,11 @@ const ConfigSection = ({
                             // On a phone, half the screen at most: a finger finds the
                             // panel around it to scroll, not the file alone.
                             className="font-mono text-data whitespace-pre max-md:max-h-[50dvh]"
+                        />
+                        {/* What the daemon would refuse of the file, or warn of, said before it is saved. */}
+                        <DraftValidation
+                            url={`${URL_OBJECT}/${keywordsPath}/config/validate`}
+                            text={absent || section === null ? edit.text : replaceSection(edit.file, section, edit.text)}
                         />
                     </div>
                 ) : (

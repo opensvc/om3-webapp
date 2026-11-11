@@ -32,6 +32,12 @@ export interface DesignKeyword {
   provisioningRequired?: boolean;
   /** The id of the group it belongs to, among the groups of the answer it came with. */
   group?: string;
+  /**
+   * The resources of the object its value names: of these driver groups (any when
+   * none), one (`rid`), several (`rids`), or with the states a requirement waits for
+   * (`requires`, `container#db(up) fs#1(down,stdby down)`).
+   */
+  references?: { groups?: string[]; shape?: "rid" | "rids" | "requires" };
 }
 
 /** A way to set a group of keywords, exclusive of the other ways of the group. */
@@ -153,9 +159,13 @@ export function impliedStrategy(group: KeywordGroup, section: DesignSection, loo
 /** Whether the strategy of a group is chosen by a selector keyword rather than by a choice. */
 export const strategyBySelector = (group: KeywordGroup) => (group.strategies ?? []).some((s) => (s.when ?? []).length > 0);
 
-/** The options a strategy of the group sets or leaves: held back while none is chosen. */
+/**
+ * The options a strategy of the group sets: held back while none is chosen. Those a
+ * strategy only excludes, the hardware of a guest virt-install builds, belong to none:
+ * offered until a choice leaves them out.
+ */
 export function strategyOptions(group: KeywordGroup): Set<string> {
-  return new Set((group.strategies ?? []).flatMap((s) => [...(s.uses ?? []), ...(s.excludes ?? [])]));
+  return new Set((group.strategies ?? []).flatMap((s) => s.uses ?? []));
 }
 
 /**
@@ -702,6 +712,45 @@ export function listWords(value: string): { done: string[]; typed: string } {
   return { done: words.filter((w) => w !== ""), typed };
 }
 
+/** A pick of a value: the value, what helps choose it, a word at its end. */
+export interface ValuePick {
+  value: string;
+  info?: string[];
+  side?: string;
+}
+
+/**
+ * The values a keyword naming resources of the object takes: the resources of the
+ * design of its groups, each told by its driver, the section itself left out; then
+ * the special values it takes besides (`none`, `host`), said so.
+ */
+export function referencePicks(keyword: DesignKeyword | undefined, sections: DesignSection[], section: DesignSection, kind: string, special = "special"): ValuePick[] {
+  const ref = keyword?.references;
+  if (!ref) return [];
+  const groups = ref.groups ?? [];
+  const resources = sections
+    .filter((s) => s.name !== section.name && isResource(kind, s) && (groups.length === 0 || groups.includes(s.group as string)))
+    .map((s) => ({ value: s.name, info: [s.type ? `${s.group}.${s.type}` : (s.group as string)] }));
+  const others = (keyword?.candidates ?? []).filter((c) => c !== "").map((c) => ({ value: c, info: [special] }));
+  return [...resources, ...others];
+}
+
+/**
+ * The words of a value naming several resources: those done, and the one being
+ * typed. A requirement's states in parentheses belong to its resource, their
+ * spaces included (`fs#1(down,stdby down)`).
+ */
+export function referenceWords(value: string): { done: string[]; typed: string } {
+  const words = value.match(/[^\s(]+(\([^)]*\)?)?/g) ?? [];
+  const open = /\([^)]*$/.test(value);
+  if (value === "" || /\s$/.test(value) && !open) return { done: words, typed: "" };
+  const typed = words.pop() ?? "";
+  return { done: words, typed };
+}
+
+/** The resource a word of a requirement names, its states left out. */
+export const referenceRid = (word: string) => word.replace(/\(.*$/, "");
+
 /** The resources of a design a guest takes as its disks, each told by its driver. */
 export function guestDiskChoices(sections: DesignSection[]): { value: string; info: string[] }[] {
   return sections
@@ -717,29 +766,3 @@ export function missingValues(sections: DesignSection[], keywords: DesignKeyword
   });
 }
 
-/** Two strategies of a group a section follows both, by the keywords of each it sets. */
-export interface StrategyConflict {
-  group: KeywordGroup;
-  strategies: { strategy: KeywordStrategy; options: string[] }[];
-}
-
-/**
- * The groups whose exclusive strategies a section mixes, as the daemon warns of them
- * ("conflicting strategies"): a strategy whose keywords it sets, another one it sets a
- * keyword of that the first excludes. A strategy a selector keyword chooses is told by
- * that keyword, not by the keywords set: not checked here.
- */
-export function strategyConflicts(groups: KeywordGroup[], section: DesignSection): StrategyConflict[] {
-  const set = new Set(section.entries.map((e) => e.key.split("@")[0]));
-  const conflicts: StrategyConflict[] = [];
-  for (const group of groups) {
-    const strategies = group.strategies ?? [];
-    if (strategies.length < 2 || strategyBySelector(group)) continue;
-    const followed = strategies
-      .map((strategy) => ({ strategy, options: (strategy.uses ?? []).filter((o) => set.has(o)) }))
-      .filter((s) => s.options.length > 0);
-    const clashing = followed.filter((s) => followed.some((o) => o !== s && (o.strategy.excludes ?? []).some((x) => s.options.includes(x))));
-    if (clashing.length > 1) conflicts.push({ group, strategies: clashing });
-  }
-  return conflicts;
-}

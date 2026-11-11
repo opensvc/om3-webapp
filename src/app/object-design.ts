@@ -51,6 +51,8 @@ export interface KeywordStrategy {
   excludes?: string[];
   /** The conditions on a selector keyword choosing it; none when the keywords set tell. */
   when?: unknown[];
+  /** The options a section following it must set too, of another group maybe (`dev` of a static address). */
+  requires?: string[];
 }
 
 /** A group of keywords, as the daemon sorts them: of a driver, or "" for every resource. */
@@ -61,6 +63,8 @@ export interface KeywordGroup {
   text?: string;
   order?: number;
   strategies?: KeywordStrategy[];
+  /** A section of the driver must follow one of its strategies (the addressing of an ip). */
+  required?: boolean;
 }
 
 /** The groups each list of keywords came with: the list read as the designer keeps it. */
@@ -114,7 +118,9 @@ export function groupKeywords(keywords: DesignKeyword[], groups: KeywordGroup[])
 export type DesignLookup = (option: string) => string | undefined;
 
 export function designLookup(section: DesignSection, sections: DesignSection[]): DesignLookup {
-  const of = (s: DesignSection | undefined, option: string) => s?.entries.find((e) => e.key.split("@")[0] === option)?.value;
+  // A value of any scope; an entry left empty, a keyword added without its value yet, sets none.
+  const of = (s: DesignSection | undefined, option: string) =>
+    s?.entries.find((e) => e.key.split("@")[0] === option && e.value.trim() !== "")?.value;
   const defaults = sections.find((s) => s.name === "DEFAULT");
   return (option) => of(section, option) ?? of(defaults, option);
 }
@@ -152,8 +158,41 @@ export function impliedStrategy(group: KeywordGroup, section: DesignSection, loo
   if (strategies.some((s) => (s.when ?? []).length > 0)) {
     return strategies.find((s) => (s.when ?? []).length > 0 && (s.when ?? []).every((c) => conditionHolds(c, lookup)));
   }
-  const set = new Set(section.entries.map((e) => e.key.split("@")[0]));
+  // A keyword left empty sets nothing, as the daemon counts it: no strategy told by it.
+  const set = new Set(section.entries.filter((e) => e.value.trim() !== "").map((e) => e.key.split("@")[0]));
   return strategies.find((s) => (s.uses ?? []).some((o) => set.has(o)));
+}
+
+/** What a strategy still needs of a section: its choice, a keyword it uses, one it requires. */
+export interface StrategyRequirement {
+  group: KeywordGroup;
+  /** Undefined while the strategy is still to choose. */
+  strategy?: KeywordStrategy;
+  /** The option to set; undefined for the choice itself. */
+  option?: string;
+}
+
+/**
+ * What the required strategy groups of a section still need, as the daemon refuses
+ * a write without it: a strategy to choose; the strategy followed (told, or picked
+ * by `chosen`), one of the keywords it uses when none is set, and each it requires.
+ * A keyword counts set with a value of the section, in any scope, or of DEFAULT.
+ */
+export function strategyRequirements(groups: KeywordGroup[], section: DesignSection, lookup: DesignLookup, chosen: Record<string, string> = {}): StrategyRequirement[] {
+  const isSet = (option: string) => (lookup(option) ?? "").trim() !== "";
+  const needs: StrategyRequirement[] = [];
+  for (const group of groups) {
+    if (!group.required || (group.strategies ?? []).length === 0) continue;
+    const strategy = impliedStrategy(group, section, lookup) ?? group.strategies?.find((s) => s.id === chosen[group.id]);
+    if (!strategy) {
+      needs.push({ group });
+      continue;
+    }
+    const uses = strategy.uses ?? [];
+    if (uses.length > 0 && !uses.some(isSet)) needs.push({ group, strategy, option: uses[0] });
+    for (const option of strategy.requires ?? []) if (!isSet(option)) needs.push({ group, strategy, option });
+  }
+  return needs;
 }
 
 /** Whether the strategy of a group is chosen by a selector keyword rather than by a choice. */

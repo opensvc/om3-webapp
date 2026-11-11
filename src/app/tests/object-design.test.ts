@@ -30,7 +30,7 @@ import {
   withRequired,
   type DesignKeyword,
   type DesignSection,
-  clusterSectionChoices, keywordItems, keywordGroupsOf, groupKeywords, designLookup, impliedStrategy, strategyBySelector, strategyOptions, withheldOptions, referencePicks, referenceWords, referenceRid} from "../object-design";
+  clusterSectionChoices, keywordItems, keywordGroupsOf, groupKeywords, designLookup, impliedStrategy, strategyBySelector, strategyOptions, withheldOptions, referencePicks, referenceWords, referenceRid, strategyRequirements} from "../object-design";
 
 const KEYWORDS: DesignKeyword[] = [
   { section: "DEFAULT", option: "nodes", text: "The nodes." },
@@ -520,5 +520,44 @@ describe("the keywords naming resources of the object", () => {
         expect(referenceWords("fs#1(down,stdby")).toEqual({done: [], typed: "fs#1(down,stdby"});
         expect(referenceWords("")).toEqual({done: [], typed: ""});
         expect(referenceRid("fs#1(down,stdby down)")).toBe("fs#1");
+    });
+});
+
+describe("the strategies a section must follow", () => {
+    const ADDRESSING = {id: "addressing", name: "Addressing", required: true, strategies: [
+        {id: "static", name: "Static address", uses: ["name"], excludes: ["network", "addr"], requires: ["dev"], when: []},
+        {id: "ipam", name: "Address drawn from a network", uses: ["network", "addr"], excludes: ["name"], requires: [], when: []},
+    ]};
+    const ip = (entries) => ({name: "ip#1", group: "ip", type: "netns", entries});
+    const needs = (section, chosen = {}, sections = [section]) =>
+        strategyRequirements([ADDRESSING], section, designLookup(section, sections), chosen).map((n) => [n.strategy?.id ?? null, n.option ?? null]);
+
+    test("a strategy to choose, while none is followed nor picked", () => {
+        expect(needs(ip([{key: "netns", value: "container#1"}]))).toEqual([[null, null]]);
+    });
+
+    test("picked: one of the keywords it uses, and each it requires", () => {
+        expect(needs(ip([]), {addressing: "static"})).toEqual([["static", "name"], ["static", "dev"]]);
+        expect(needs(ip([]), {addressing: "ipam"})).toEqual([["ipam", "network"]]);
+    });
+
+    test("an empty keyword tells no strategy, as the daemon counts it", () => {
+        const empty = ip([{key: "name", value: ""}, {key: "network", value: "default"}]);
+        expect(impliedStrategy(ADDRESSING, empty, designLookup(empty, [empty]))?.id).toBe("ipam");
+        const blank = ip([{key: "name", value: " "}]);
+        expect(impliedStrategy(ADDRESSING, blank, designLookup(blank, [blank]))).toBeUndefined();
+    });
+
+    test("followed by the keywords set: only what it requires left; set in DEFAULT counts, an empty entry does not", () => {
+        expect(needs(ip([{key: "name", value: "10.0.0.1"}]))).toEqual([["static", "dev"]]);
+        expect(needs(ip([{key: "name@n1", value: "10.0.0.1"}, {key: "dev", value: ""}]))).toEqual([["static", "dev"]]);
+        const DEFAULT = {name: "DEFAULT", entries: [{key: "dev", value: "eth0"}]};
+        const section = ip([{key: "name", value: "10.0.0.1"}]);
+        expect(needs(section, {}, [DEFAULT, section])).toEqual([]);
+        expect(needs(ip([{key: "network", value: "default"}]))).toEqual([]);
+    });
+
+    test("a group not required asks nothing", () => {
+        expect(strategyRequirements([{...ADDRESSING, required: false}], ip([]), designLookup(ip([]), [ip([])]))).toEqual([]);
     });
 });

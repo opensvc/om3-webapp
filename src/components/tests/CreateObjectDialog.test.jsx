@@ -511,6 +511,33 @@ describe('CreateObjectDialog', () => {
             expect(keywordsShown()).toEqual(['virtinst']);
         });
 
+        test('a required strategy asked for; picked, the keywords it needs added, required', async () => {
+            answers['GET /api/object/path/ns1/svc/db/config/keywords?driver=DEFAULT'] = {status: 200, text: JSON.stringify({
+                items: [
+                    {section: 'DEFAULT', option: 'name', group: 'addressing'},
+                    {section: 'DEFAULT', option: 'network', group: 'addressing'},
+                    {section: 'DEFAULT', option: 'dev', group: 'other'},
+                ],
+                groups: [
+                    {id: 'addressing', driver: 'ip.netns', name: 'Addressing', order: 10, required: true, strategies: [
+                        {id: 'static', name: 'Static address', uses: ['name'], excludes: ['network'], requires: ['dev'], when: []},
+                        {id: 'ipam', name: 'Address drawn from a network', uses: ['network'], excludes: ['name'], requires: [], when: []},
+                    ]},
+                    {id: 'other', driver: '', name: 'Other', order: 1000},
+                ],
+            })};
+            await design();
+            expect(screen.getByText('Choose how to set: DEFAULT Addressing.')).toBeInTheDocument();
+            fireEvent.click(within(screen.getByRole('group', {name: 'How to set Addressing'})).getByRole('button', {name: 'Static address'}));
+            expect(screen.queryByText(/Choose how to set:/)).toBeNull();
+            expect(screen.getByRole('textbox', {name: 'Value of name'})).toHaveValue('');
+            expect(screen.getByRole('textbox', {name: 'Value of dev'})).toHaveValue('');
+            expect(screen.getByText('Required without a value: DEFAULT.name, DEFAULT.dev.')).toBeInTheDocument();
+            fireEvent.change(screen.getByRole('textbox', {name: 'Value of name'}), {target: {value: '10.0.0.1'}});
+            fireEvent.change(screen.getByRole('textbox', {name: 'Value of dev'}), {target: {value: 'eth0'}});
+            expect(screen.queryByText(/Required without a value/)).toBeNull();
+        });
+
         test('a keyword naming resources offers those of the design, its special values after, not the example of another design', async () => {
             KW('container.docker', [
                 {section: 'container', option: 'type', required: true},
@@ -584,7 +611,8 @@ describe('CreateObjectDialog', () => {
             expect(keywordsShown()).toContain('network');
             expect(keywordsShown()).not.toContain('name');
             fireEvent.click(screen.getByRole('button', {name: 'Add network'}));
-            expect(screen.getByRole('textbox', {name: 'Value of network'})).toBeInTheDocument();
+            // Set, not only added: an empty keyword tells no strategy.
+            fireEvent.change(screen.getByRole('textbox', {name: 'Value of network'}), {target: {value: 'default'}});
             // The keyword set tells the strategy: said, the other left until its keywords go.
             expect(screen.getByText('Address drawn from a network, as the keywords set say.')).toBeInTheDocument();
             const told = screen.getByRole('group', {name: 'How to set Addressing'});

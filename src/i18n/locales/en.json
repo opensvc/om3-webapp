@@ -3379,6 +3379,7 @@
     "strategyBySelectorOther": "{{strategy}} is chosen by a keyword of the configuration.",
     "strategyUnavailable": "Its keywords are not offered here: they need the root grant.",
     "specialValue": "special value",
+    "strategyRequired": "Choose how to set: {{items}}.",
     "findKeyword": "Find a keyword",
     "keywords": "Keywords to add",
     "noKeyword": "No keyword matches.",

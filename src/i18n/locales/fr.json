@@ -3379,6 +3379,7 @@
     "strategyBySelectorOther": "{{strategy}} est choisie par un mot-clé de la configuration.",
     "strategyUnavailable": "Ses mots-clés ne sont pas proposés ici : ils demandent le droit root.",
     "specialValue": "valeur spéciale",
+    "strategyRequired": "Choisissez comment renseigner : {{items}}.",
     "findKeyword": "Chercher un mot-clé",
     "keywords": "Mots-clés à ajouter",
     "noKeyword": "Aucun mot-clé ne correspond.",

@@ -44,6 +44,7 @@ import {
     referencePicks,
     referenceWords,
     referenceRid,
+    strategyRequirements,
 } from "../app/object-design";
 import {Dialog} from "../ui/components/Dialog";
 import {Button, IconButton} from "../ui/components/Button";
@@ -349,7 +350,9 @@ function StrategyBar({groups, section, lookup, chosen, offered, onChoose}) {
                 return (
                     <div key={group.id} data-strategy-group={group.id} className="space-y-1">
                         <div role="group" aria-label={t("objectDesigner.strategiesOf", {group: name})} className="flex flex-wrap items-center gap-1.5">
-                            <span className="text-data font-semibold text-ink-muted" title={group.text?.trim()}>{name}</span>
+                            <span className="text-data font-semibold text-ink-muted" title={group.text?.trim()}>
+                                {name}{group.required && <span aria-label={t("objectDesigner.required")}> *</span>}
+                            </span>
                             {group.strategies.map((st) => {
                                 const usable = (st.uses ?? []).length === 0 || (st.uses ?? []).some((o) => offered.has(o) || set.has(o));
                                 const told = Boolean(implied) || bySelector;
@@ -917,6 +920,22 @@ export function ObjectDesigner({kind, namespace = "", sections, onChange, keywor
         .filter(([at]) => at.startsWith(`${section.name}:`))
         .map(([at, strategy]) => [at.slice(section.name.length + 1), strategy]));
     const withheld = withheldOptions(keywordGroups, section, lookup, chosen);
+    // What the required strategies of every section still need: a choice, a keyword.
+    const chosenOf = (s) => Object.fromEntries(Object.entries(strategyChoice)
+        .filter(([at]) => at.startsWith(`${s.name}:`))
+        .map(([at, strategy]) => [at.slice(s.name.length + 1), strategy]));
+    const strategyNeeds = sections.flatMap((s) => (FREE_SECTIONS.includes(s.name) ? [] : strategyRequirements(
+        keywordGroupsOf(keywords[driverOf(s)] ?? []), s, designLookup(s, sections), chosenOf(s),
+    ).map((need) => ({...need, section: s.name}))));
+    const unchosen = strategyNeeds.filter((n) => !n.option);
+    const missingAll = [...missing, ...strategyNeeds.filter((n) => n.option && !missing.some((m) => m.section === n.section && m.key === n.option)).map((n) => ({section: n.section, key: n.option}))];
+    // The keywords the strategy followed needs, required on the section as the others.
+    for (const group of keywordGroups) {
+        if (!group.required) continue;
+        const followed = impliedStrategy(group, section, lookup) ?? group.strategies?.find((st) => st.id === chosen[group.id]);
+        for (const option of followed?.requires ?? []) required.add(option);
+    }
+    for (const need of strategyNeeds) if (need.section === section.name && need.option) required.add(need.option);
     // Its required keywords set, the ones most set offered at once, none a strategy holds back.
     const popular = free || missing.some((m) => m.section === section.name)
         ? []
@@ -965,7 +984,7 @@ export function ObjectDesigner({kind, namespace = "", sections, onChange, keywor
                 <nav aria-label={t("objectDesigner.sections")} className="space-y-2">
                     <ul className="space-y-0.5">
                         {sections.map((s) => {
-                            const incomplete = missing.some((m) => m.section === s.name);
+                            const incomplete = missingAll.some((m) => m.section === s.name) || unchosen.some((n) => n.section === s.name);
                             return (
                                 <li key={s.name} className="flex items-center gap-1">
                                     <button
@@ -1037,7 +1056,14 @@ export function ObjectDesigner({kind, namespace = "", sections, onChange, keywor
                                 lookup={lookup}
                                 chosen={chosen}
                                 offered={new Set(offeredKeywords(known, section, hideRoot).map((k) => k.option))}
-                                onChoose={(group, strategy) => setStrategyChoice((c) => ({...c, [`${section.name}:${group}`]: strategy}))}
+                                onChoose={(group, strategy) => {
+                                    setStrategyChoice((c) => ({...c, [`${section.name}:${group}`]: strategy}));
+                                    // What the strategy picked needs, added to fill in.
+                                    const add = strategyRequirements(keywordGroups, section, lookup, {...chosen, [group]: strategy})
+                                        .filter((n) => n.option && n.group.id === group && !section.entries.some((e) => e.key.split("@")[0] === n.option))
+                                        .map((n) => n.option);
+                                    if (add.length > 0) update({...section, entries: [...section.entries, ...add.map((key) => ({key, value: ""}))]});
+                                }}
                             />
                         )}
                         {section.entries.length === 0 && !free && <p className="text-data text-ink-muted">{t("objectDesigner.noEntry")}</p>}
@@ -1134,8 +1160,11 @@ export function ObjectDesigner({kind, namespace = "", sections, onChange, keywor
                     </section>
                 )}
             </div>
-            {missing.length > 0 && (
-                <p className="text-data text-state-warn">{t("objectDesigner.missing", {keys: missing.map((m) => `${m.section}.${m.key}`).join(", ")})}</p>
+            {unchosen.length > 0 && (
+                <p className="text-data text-state-warn">{t("objectDesigner.strategyRequired", {items: unchosen.map((n) => `${n.section} ${n.group.name ?? n.group.id}`).join(", ")})}</p>
+            )}
+            {missingAll.length > 0 && (
+                <p className="text-data text-state-warn">{t("objectDesigner.missing", {keys: missingAll.map((m) => `${m.section}.${m.key}`).join(", ")})}</p>
             )}
             <Dialog
                 open={confirming !== null}

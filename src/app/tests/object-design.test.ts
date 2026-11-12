@@ -30,7 +30,7 @@ import {
   withRequired,
   type DesignKeyword,
   type DesignSection,
-  clusterSectionChoices, keywordItems, keywordGroupsOf, groupKeywords, designLookup, impliedStrategy, strategyBySelector, strategyOptions, withheldOptions, referencePicks, referenceWords, referenceRid, strategyRequirements} from "../object-design";
+  clusterSectionChoices, keywordItems, keywordGroupsOf, groupKeywords, designLookup, impliedStrategy, strategyBySelector, strategyOptions, withheldOptions, referencePicks, referenceWords, referenceRid, strategyRequirements, strategyReason, followedStrategies, strategiesClash, unmetDepends} from "../object-design";
 
 const KEYWORDS: DesignKeyword[] = [
   { section: "DEFAULT", option: "nodes", text: "The nodes." },
@@ -559,5 +559,93 @@ describe("the strategies a section must follow", () => {
 
     test("a group not required asks nothing", () => {
         expect(strategyRequirements([{...ADDRESSING, required: false}], ip([]), designLookup(ip([]), [ip([])]))).toEqual([]);
+    });
+});
+
+describe("strategies some of which a selector chooses, the credentials of a 3par array", () => {
+    const CREDENTIALS = {id: "credentials", driver: "array.hp3par", strategies: [
+        {id: "ssh", name: "SSH key", uses: ["key", "username"], excludes: ["pwf"], requires: [], when: []},
+        {id: "cli", name: "Command line", uses: ["pwf"], excludes: ["key", "username"], requires: [], when: ["method=cli"]},
+    ]};
+    const array = (entries) => ({name: "array#3par1", group: "array", type: "hp3par", entries});
+    const followed = (section) => {
+        const strategy = impliedStrategy(CREDENTIALS, section, designLookup(section, [section]));
+        return strategy && [strategy.id, strategyReason(strategy, section)];
+    };
+
+    test("the selector's when it holds; else the one whose keywords are set; else the one it leaves, by default", () => {
+        expect(followed(array([{key: "method", value: "cli"}]))).toEqual(["cli", "selector"]);
+        expect(followed(array([{key: "key", value: "/etc/key"}]))).toEqual(["ssh", "keywords"]);
+        expect(followed(array([]))).toEqual(["ssh", "default"]);
+        expect(followed(array([{key: "method", value: "ssh"}]))).toEqual(["ssh", "default"]);
+    });
+
+    test("the keywords of the other strategy held back, those of the one followed offered", () => {
+        const none = array([]);
+        expect([...withheldOptions([CREDENTIALS], none, designLookup(none, [none]))]).toEqual(["pwf"]);
+        const cli = array([{key: "method", value: "cli"}]);
+        expect([...withheldOptions([CREDENTIALS], cli, designLookup(cli, [cli]))].sort()).toEqual(["key", "username"]);
+    });
+});
+
+describe("strategies followed together, the certificates of an acme task", () => {
+    const CERTIFICATES = {id: "certificates", driver: "task.acme", required: true, strategies: [
+        {id: "secs", name: "From secs", uses: ["secs"], excludes: [], requires: [], when: []},
+        {id: "domains", name: "Of domains", uses: ["domains_from", "domains_to"], excludes: [], requires: ["domains_from", "domains_to"], when: []},
+    ]};
+    const task = (entries) => ({name: "task#acme", group: "task", type: "acme", entries});
+    const needs = (section, chosen = {}) =>
+        strategyRequirements([CERTIFICATES], section, designLookup(section, [section]), chosen).map((n) => [n.strategy?.id ?? null, n.option ?? null]);
+    const followed = (section, chosen) => followedStrategies(CERTIFICATES, section, designLookup(section, [section]), chosen).map((s) => s.id);
+
+    test("neither set: a strategy to choose", () => {
+        expect(needs(task([]))).toEqual([[null, null]]);
+    });
+
+    test("both followed together, neither leaving the other", () => {
+        expect(strategiesClash(CERTIFICATES.strategies[0], CERTIFICATES.strategies[1])).toBe(false);
+        const both = task([{key: "secs", value: "ns1/sec/a"}, {key: "domains_from", value: "a.example"}, {key: "domains_to", value: "ns1/sec/b"}]);
+        expect(followed(both)).toEqual(["secs", "domains"]);
+        expect(needs(both)).toEqual([]);
+        expect(followed(task([{key: "secs", value: "ns1/sec/a"}]), "domains")).toEqual(["secs", "domains"]);
+    });
+
+    test("domains with one of its two keywords: the other required", () => {
+        expect(needs(task([{key: "domains_from", value: "a.example"}]))).toEqual([["domains", "domains_to"]]);
+        expect(needs(task([]), {certificates: "domains"})).toEqual([["domains", "domains_from"], ["domains", "domains_to"]]);
+    });
+
+    test("exclusive strategies still one at a time: a pick clashing with one told is not followed", () => {
+        const ADDRESSING = {id: "addressing", required: true, strategies: [
+            {id: "static", uses: ["name"], excludes: ["network", "addr"], requires: ["dev"], when: []},
+            {id: "ipam", uses: ["network", "addr"], excludes: ["name"], requires: [], when: []},
+        ]};
+        const ip = {name: "ip#1", group: "ip", type: "netns", entries: [{key: "network", value: "default"}]};
+        expect(followedStrategies(ADDRESSING, ip, designLookup(ip, [ip]), "static").map((s) => s.id)).toEqual(["ipam"]);
+    });
+});
+
+describe("the conditions a keyword applies under", () => {
+    const values = (map) => (option, own) => map[own ? `.${option}` : option];
+
+    test("judged on the value set, inherited or by default; the condition failing said", () => {
+        const flexMin = {section: "DEFAULT", option: "flex_min", depends: ["topology=flex"]};
+        expect(unmetDepends(flexMin, values({topology: "failover"}))).toBe("topology=flex");
+        expect(unmetDepends(flexMin, values({topology: "flex"}))).toBeUndefined();
+        expect(unmetDepends(flexMin, values({topology: "FLEX"}))).toBeUndefined();
+    });
+
+    test("an option of the section itself by a leading dot; skipped when it has no value at all", () => {
+        const vlan = {section: "ip", option: "vlan_tag", depends: [".mode=ovs"]};
+        expect(unmetDepends(vlan, values({".mode": "bridge"}))).toBe("mode=ovs");
+        expect(unmetDepends(vlan, values({".mode": "ovs"}))).toBeUndefined();
+        expect(unmetDepends(vlan, values({}))).toBeUndefined();
+    });
+
+    test("a condition of inequality; a keyword of none applies anywhere", () => {
+        expect(unmetDepends({option: "x", depends: ["quiesce!=pause"]}, values({quiesce: "pause"}))).toBe("quiesce!=pause");
+        expect(unmetDepends({option: "x", depends: ["quiesce!=pause"]}, values({quiesce: "command"}))).toBeUndefined();
+        expect(unmetDepends({option: "y"}, values({}))).toBeUndefined();
+        expect(unmetDepends(undefined, values({}))).toBeUndefined();
     });
 });

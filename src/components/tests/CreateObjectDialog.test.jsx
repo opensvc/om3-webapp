@@ -511,6 +511,24 @@ describe('CreateObjectDialog', () => {
             expect(keywordsShown()).toEqual(['virtinst']);
         });
 
+        test('a keyword whose conditions fail left out of the offer, said ignored once set', async () => {
+            KW('DEFAULT', [
+                {section: 'DEFAULT', option: 'topology', default: 'failover', candidates: ['failover', 'flex']},
+                {section: 'DEFAULT', option: 'flex_min', depends: ['topology=flex']},
+                {section: 'DEFAULT', option: 'nodes'},
+            ]);
+            await design();
+            fireEvent.click(screen.getByRole('button', {name: 'More'}));
+            expect(keywordsShown()).not.toContain('flex_min');
+            fireEvent.click(screen.getByRole('button', {name: 'Add topology'}));
+            fireEvent.change(screen.getByRole('combobox', {name: 'Value of topology'}), {target: {value: 'flex'}});
+            fireEvent.click(screen.getByRole('button', {name: 'More'}));
+            fireEvent.click(screen.getByRole('button', {name: 'Add flex_min'}));
+            expect(document.querySelector('[data-ignored="flex_min"]')).toBeNull();
+            fireEvent.change(screen.getByRole('combobox', {name: 'Value of topology'}), {target: {value: 'failover'}});
+            expect(document.querySelector('[data-ignored="flex_min"]')).toHaveTextContent('Ignored: it applies only where topology=flex.');
+        });
+
         test('a required strategy asked for; picked, the keywords it needs added, required', async () => {
             answers['GET /api/object/path/ns1/svc/db/config/keywords?driver=DEFAULT'] = {status: 200, text: JSON.stringify({
                 items: [

@@ -45,6 +45,10 @@ import {
     referenceWords,
     referenceRid,
     strategyRequirements,
+    strategyReason,
+    followedStrategies,
+    strategiesClash,
+    unmetDepends,
 } from "../app/object-design";
 import {Dialog} from "../ui/components/Dialog";
 import {Button, IconButton} from "../ui/components/Button";
@@ -343,8 +347,10 @@ function StrategyBar({groups, section, lookup, chosen, offered, onChoose}) {
     return (
         <div className="space-y-1.5">
             {withStrategies.map((group) => {
+                // Every strategy followed: those told, and the one picked; one told first, for its reason.
+                const followed = followedStrategies(group, section, lookup, chosen[group.id]);
                 const implied = impliedStrategy(group, section, lookup);
-                const bySelector = strategyBySelector(group);
+                const reason = implied ? strategyReason(implied, section) : undefined;
                 const picked = implied ?? group.strategies.find((st) => st.id === chosen[group.id]);
                 const name = group.name ?? group.id;
                 return (
@@ -355,17 +361,26 @@ function StrategyBar({groups, section, lookup, chosen, offered, onChoose}) {
                             </span>
                             {group.strategies.map((st) => {
                                 const usable = (st.uses ?? []).length === 0 || (st.uses ?? []).some((o) => offered.has(o) || set.has(o));
-                                const told = Boolean(implied) || bySelector;
-                                const disabled = (told && implied?.id !== st.id) || (!told && !usable);
-                                const why = told && implied?.id !== st.id
-                                    ? t(bySelector ? "objectDesigner.strategyBySelectorOther" : "objectDesigner.strategyOther", {strategy: implied?.name ?? implied?.id ?? ""})
-                                    : !usable ? t("objectDesigner.strategyUnavailable") : st.text?.trim();
+                                // Chosen by its selector keyword: not by a click.
+                                const bySelector = (st.when ?? []).length > 0;
+                                const isFollowed = followed.some((f) => f.id === st.id);
+                                // Left by a strategy followed by its keywords or its selector, which it clashes
+                                // with: its keywords to remove first. One followed by default only: still to change.
+                                const clash = followed.find((f) => strategiesClash(f, st) && strategyReason(f, section) !== "default");
+                                const disabled = !isFollowed && (Boolean(clash) || bySelector || !usable);
+                                const why = isFollowed
+                                    ? st.text?.trim()
+                                    : bySelector
+                                        ? t("objectDesigner.strategyBySelectorOther", {strategy: st.name ?? st.id})
+                                        : clash
+                                            ? t(strategyReason(clash, section) === "selector" ? "objectDesigner.strategyBySelectorOther" : "objectDesigner.strategyOther", {strategy: clash.name ?? clash.id})
+                                            : !usable ? t("objectDesigner.strategyUnavailable") : st.text?.trim();
                                 return (
                                     <button
                                         key={st.id}
                                         type="button"
                                         data-strategy={st.id}
-                                        aria-pressed={picked?.id === st.id}
+                                        aria-pressed={isFollowed}
                                         disabled={disabled}
                                         title={why}
                                         onClick={() => onChoose(group.id, st.id)}
@@ -378,7 +393,7 @@ function StrategyBar({groups, section, lookup, chosen, offered, onChoose}) {
                         </div>
                         <p className="text-data text-ink-muted">
                             {implied
-                                ? t(bySelector ? "objectDesigner.strategyBySelector" : "objectDesigner.strategyImplied", {strategy: implied.name ?? implied.id})
+                                ? t({selector: "objectDesigner.strategyBySelector", keywords: "objectDesigner.strategyImplied", default: "objectDesigner.strategyDefault"}[reason], {strategy: implied.name ?? implied.id})
                                 : picked ? picked.text?.trim() : t("objectDesigner.strategyChoose")}
                         </p>
                     </div>
@@ -932,14 +947,28 @@ export function ObjectDesigner({kind, namespace = "", sections, onChange, keywor
     // The keywords the strategy followed needs, required on the section as the others.
     for (const group of keywordGroups) {
         if (!group.required) continue;
-        const followed = impliedStrategy(group, section, lookup) ?? group.strategies?.find((st) => st.id === chosen[group.id]);
-        for (const option of followed?.requires ?? []) required.add(option);
+        for (const followed of followedStrategies(group, section, lookup, chosen[group.id])) {
+            for (const option of followed.requires ?? []) required.add(option);
+        }
     }
     for (const need of strategyNeeds) if (need.section === section.name && need.option) required.add(need.option);
-    // Its required keywords set, the ones most set offered at once, none a strategy holds back.
+    // A value as the daemon judges a condition on it: set (the section's own for `.option`),
+    // inherited from DEFAULT, else the default of its keyword; none at all, undefined.
+    const valueOf = (option, own) => {
+        const set = own
+            ? section.entries.find((e) => e.key.split("@")[0] === option && e.value.trim() !== "")?.value
+            : lookup(option);
+        if (set !== undefined) return set;
+        const pool = own ? known : (keywords.DEFAULT ?? []);
+        const fallback = pool.find((k) => k.option === option && (k.default ?? "") !== "")?.default;
+        return fallback === undefined ? undefined : String(fallback);
+    };
+    const applies = (k) => unmetDepends(k, valueOf) === undefined;
+    // Its required keywords set, the ones most set offered at once, none a strategy holds
+    // back, none its conditions leave aside (flex_min on a failover service).
     const popular = free || missing.some((m) => m.section === section.name)
         ? []
-        : popularKeywords(known, section, hideRoot).filter((k) => !withheld.has(k.option));
+        : popularKeywords(known, section, hideRoot).filter((k) => !withheld.has(k.option) && applies(k));
     // Whether the daemon says which keywords need a grant: else, no choice to offer.
     const grantsTold = allKeywords.some((k) => k.grant !== undefined);
 
@@ -1115,6 +1144,11 @@ export function ObjectDesigner({kind, namespace = "", sections, onChange, keywor
                                                 </IconButton>
                                             )}
                                         </div>
+                                        {keyword && unmetDepends(keyword, valueOf) && (
+                                            <p data-ignored={entry.key} className="text-data text-state-warn">
+                                                {t("objectDesigner.ignoredKeyword", {condition: unmetDepends(keyword, valueOf)})}
+                                            </p>
+                                        )}
                                         {keyword && help === `${section.name}.${entry.key}` && <KeywordHelp keyword={keyword}/>}
                                     </li>
                                 );
@@ -1124,7 +1158,7 @@ export function ObjectDesigner({kind, namespace = "", sections, onChange, keywor
                             <Button size="sm" icon={<PlusIcon className="h-3.5 w-3.5"/>} onClick={() => addEntry("")}>{t("objectDesigner.addVariable")}</Button>
                         ) : picking ? (
                             <KeywordPicker
-                                keywords={offeredKeywords(known, section, hideRoot)}
+                                keywords={offeredKeywords(known, section, hideRoot).filter(applies)}
                                 groups={keywordGroups}
                                 section={section}
                                 lookup={lookup}

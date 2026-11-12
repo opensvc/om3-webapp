@@ -3380,6 +3380,8 @@
     "strategyUnavailable": "Ses mots-clés ne sont pas proposés ici : ils demandent le droit root.",
     "specialValue": "valeur spéciale",
     "strategyRequired": "Choisissez comment renseigner : {{items}}.",
+    "strategyDefault": "{{strategy}}, par défaut : aucun mot-clé n'en choisit une autre.",
+    "ignoredKeyword": "Ignoré : il ne s'applique que si {{condition}}.",
     "findKeyword": "Chercher un mot-clé",
     "keywords": "Mots-clés à ajouter",
     "noKeyword": "Aucun mot-clé ne correspond.",

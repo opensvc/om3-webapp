@@ -52,6 +52,7 @@ import {
     strategySelectorWrites,
     prominentStrategyGroup,
     parseCondition,
+    keywordSummary,
 } from "../app/object-design";
 import {Dialog} from "../ui/components/Dialog";
 import {Button, IconButton} from "../ui/components/Button";
@@ -163,8 +164,6 @@ const readPools = async (namespace, isRoot) => {
 const NETWORK_DRIVERS = ["ip.netns", "ip.cni", "container.kvm"];
 
 /** The first line of a text, for a list. */
-const firstLine = (text) => (text ?? "").trim().split("\n")[0];
-
 /**
  * A value of a keyword: a choice among its candidates, a boolean, or a text after its
  * default, `suggestions` offered under it, any other value still typed. Empty, the
@@ -485,7 +484,7 @@ function KeywordPicker({keywords, groups = [], section, lookup, chosen = {}, pro
                                 {k.grantAlways === false ? t("objectDesigner.grantSome", {grant: k.grant}) : k.grant}
                             </span>
                         )}
-                        <span className="ml-2 text-data text-ink-muted">{firstLine(k.text)}</span>
+                        <span className="ml-2 text-data text-ink-muted">{keywordSummary(k.text)}</span>
                     </button>
                     <IconButton
                         size="sm"

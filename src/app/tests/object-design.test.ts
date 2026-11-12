@@ -30,7 +30,7 @@ import {
   withRequired,
   type DesignKeyword,
   type DesignSection,
-  clusterSectionChoices, keywordItems, keywordGroupsOf, groupKeywords, designLookup, impliedStrategy, strategyBySelector, strategyOptions, withheldOptions, referencePicks, referenceWords, referenceRid, strategyRequirements, strategyReason, followedStrategies, strategiesClash, unmetDepends, strategySelectorWrites, prominentStrategyGroup} from "../object-design";
+  clusterSectionChoices, keywordItems, keywordGroupsOf, groupKeywords, designLookup, impliedStrategy, strategyBySelector, strategyOptions, withheldOptions, referencePicks, referenceWords, referenceRid, strategyRequirements, strategyReason, followedStrategies, strategiesClash, unmetDepends, strategySelectorWrites, prominentStrategyGroup, keywordSummary} from "../object-design";
 
 const KEYWORDS: DesignKeyword[] = [
   { section: "DEFAULT", option: "nodes", text: "The nodes." },
@@ -688,5 +688,27 @@ describe("a strategy group on its section, or in the keywords to add", () => {
         expect(prominentStrategyGroup(QUIESCE, container([{key: "quiesce", value: "pause"}]), known, new Set())).toBe(true);
         expect(prominentStrategyGroup(QUIESCE, container([{key: "quiesce", value: ""}]), known, new Set())).toBe(false);
         expect(prominentStrategyGroup(QUIESCE, container([]), known, new Set(["quiesce"]))).toBe(true);
+    });
+});
+
+describe("the summary of a keyword's documentation", () => {
+    test("its first paragraph, its wrapped lines joined, its markdown marks dropped", () => {
+        expect(keywordSummary("If set to `false`, the default *rollback on start action error* behaviour is\ninhibited, leaving the service in error state.\n")).toBe(
+            "If set to false, the default rollback on start action error behaviour is inhibited, leaving the service in error state.",
+        );
+    });
+
+    test("ended by an ellipsis when the documentation goes on past it, its colon dropped", () => {
+        expect(keywordSummary("Disables the object instance:\n\n* A disabled instance is not started.\n* Nor stopped.")).toBe("Disables the object instance…");
+        expect(keywordSummary("One sentence.\n\nAnother.")).toBe("One sentence…");
+    });
+
+    test("a documentation opening on a list: its items", () => {
+        expect(keywordSummary("* `failover`\n\n  The service is allowed to be up on one node at a time.\n\n* `flex`\n\n  The service can be up on `flex_target` nodes.\n")).toBe("failover, flex");
+    });
+
+    test("nothing to summarize: empty", () => {
+        expect(keywordSummary(undefined)).toBe("");
+        expect(keywordSummary("  \n ")).toBe("");
     });
 });

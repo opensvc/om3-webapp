@@ -909,6 +909,30 @@ export function prominentStrategyGroup(group: KeywordGroup, section: DesignSecti
   return [...important].some((o) => options.has(o));
 }
 
+/**
+ * The summary of a keyword's documentation, on its line in the keywords to add: its
+ * first paragraph, its lines wrapped at 80 columns joined again, its markdown marks
+ * dropped; ended by "…" when the documentation goes on past it (a list after "the
+ * object instance:"), a line too long for its row cut by its row.
+ */
+export function keywordSummary(text: string | undefined): string {
+  const doc = (text ?? "").trim();
+  if (doc === "") return "";
+  const unmark = (t: string) => t.replace(/`([^`]*)`/g, "$1").replace(/(\*\*|\*|__)(\S(?:.*?\S)?)\1/g, "$2").trim();
+  // A documentation opening on a list, the values of a keyword: those values.
+  if (/^[*-] /.test(doc)) {
+    return doc.split("\n").filter((l) => /^[*-] /.test(l)).map((l) => unmark(l.slice(2))).join(", ");
+  }
+  const [first, ...rest] = doc.split(/\n\s*\n/);
+  const plain = first
+    .replace(/\s*\n\s*/g, " ")
+    .replace(/`([^`]*)`/g, "$1")
+    .replace(/(\*\*|\*|__)(\S(?:.*?\S)?)\1/g, "$2")
+    .trim();
+  const more = rest.some((r) => r.trim() !== "");
+  return more ? `${plain.replace(/[:;,.]$/, "")}…` : plain;
+}
+
 /** A pick of a value: the value, what helps choose it, a word at its end. */
 export interface ValuePick {
   value: string;

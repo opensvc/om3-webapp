@@ -49,6 +49,9 @@ import {
     followedStrategies,
     strategiesClash,
     unmetDepends,
+    strategySelectorWrites,
+    prominentStrategyGroup,
+    parseCondition,
 } from "../app/object-design";
 import {Dialog} from "../ui/components/Dialog";
 import {Button, IconButton} from "../ui/components/Button";
@@ -339,7 +342,7 @@ function KeywordHelp({keyword}) {
  * one picked by `onChoose(group, strategy)`. A strategy none of whose keywords is
  * offered here, root's with those hidden, is left aside, said why.
  */
-function StrategyBar({groups, section, lookup, chosen, offered, onChoose}) {
+function StrategyBar({groups, section, lookup, chosen, offered, onChoose, writesOf, onWrites, valueOf}) {
     const {t} = useTranslation();
     const set = new Set(section.entries.map((e) => e.key.split("@")[0]));
     const withStrategies = groups.filter((g) => (g.strategies ?? []).length > 0);
@@ -366,12 +369,18 @@ function StrategyBar({groups, section, lookup, chosen, offered, onChoose}) {
                                 const isFollowed = followed.some((f) => f.id === st.id);
                                 // Left by a strategy followed by its keywords or its selector, which it clashes
                                 // with: its keywords to remove first. One followed by default only: still to change.
-                                const clash = followed.find((f) => strategiesClash(f, st) && strategyReason(f, section) !== "default");
-                                const disabled = !isFollowed && (Boolean(clash) || bySelector || !usable);
+                                // A selector chooses this one: switching the selector is the way, past one it chose.
+                                const clash = followed.find((f) => strategiesClash(f, st)
+                                    && (bySelector ? strategyReason(f, section) === "keywords" : strategyReason(f, section) !== "default"));
+                                // Chosen by its selector: a click writes the selector, `quiesce = pause` say, when it can.
+                                const writes = bySelector && !isFollowed ? writesOf?.(st) : undefined;
+                                const disabled = !isFollowed && (Boolean(clash) || (bySelector && writes === undefined) || (!bySelector && !usable));
                                 const why = isFollowed
                                     ? st.text?.trim()
                                     : bySelector
-                                        ? t("objectDesigner.strategyBySelectorOther", {strategy: st.name ?? st.id})
+                                        ? writes === undefined
+                                            ? t("objectDesigner.strategyBySelectorOther", {strategy: st.name ?? st.id})
+                                            : st.text?.trim()
                                         : clash
                                             ? t(strategyReason(clash, section) === "selector" ? "objectDesigner.strategyBySelectorOther" : "objectDesigner.strategyOther", {strategy: clash.name ?? clash.id})
                                             : !usable ? t("objectDesigner.strategyUnavailable") : st.text?.trim();
@@ -383,7 +392,7 @@ function StrategyBar({groups, section, lookup, chosen, offered, onChoose}) {
                                         aria-pressed={isFollowed}
                                         disabled={disabled}
                                         title={why}
-                                        onClick={() => onChoose(group.id, st.id)}
+                                        onClick={() => (isFollowed ? undefined : bySelector ? onWrites?.(writes ?? []) : onChoose(group.id, st.id))}
                                         className="h-7 rounded-(--radius-control) border border-line px-2 text-data hover:border-line-strong disabled:cursor-default disabled:opacity-60 aria-pressed:border-accent aria-pressed:bg-accent-soft aria-pressed:text-accent"
                                     >
                                         {st.name ?? st.id}
@@ -392,8 +401,14 @@ function StrategyBar({groups, section, lookup, chosen, offered, onChoose}) {
                             })}
                         </div>
                         <p className="text-data text-ink-muted">
-                            {implied
-                                ? t({selector: "objectDesigner.strategyBySelector", keywords: "objectDesigner.strategyImplied", default: "objectDesigner.strategyDefault"}[reason], {strategy: implied.name ?? implied.id})
+                            {implied && reason === "selector"
+                                ? t("objectDesigner.strategyBySelectorKeyword", {
+                                    strategy: implied.name ?? implied.id,
+                                    keywords: (implied.when ?? []).map(parseCondition).filter(Boolean)
+                                        .map((c) => `${c.option} = ${valueOf?.(c.option, c.own) ?? t("objectDesigner.unset")}`).join(", "),
+                                })
+                                : implied
+                                ? t({keywords: "objectDesigner.strategyImplied", default: "objectDesigner.strategyDefault"}[reason], {strategy: implied.name ?? implied.id})
                                 : picked ? picked.text?.trim() : t("objectDesigner.strategyChoose")}
                         </p>
                     </div>
@@ -411,7 +426,7 @@ function StrategyBar({groups, section, lookup, chosen, offered, onChoose}) {
  * that strategy and the group's others, never those it excludes, in any group.
  * `chosen`, the strategy picked by group id.
  */
-function KeywordPicker({keywords, groups = [], section, lookup, chosen = {}, onAdd, grantsTold = true}) {
+function KeywordPicker({keywords, groups = [], section, lookup, chosen = {}, prominent = new Set(), renderStrategies, onAdd, grantsTold = true}) {
     const {t} = useTranslation();
     const ids = useId();
     const [words, setWords] = useState("");
@@ -432,7 +447,9 @@ function KeywordPicker({keywords, groups = [], section, lookup, chosen = {}, onA
         const picked = implied ?? strategies.find((st) => st.id === chosen[group.id]);
         return {group, strategies, implied, picked, bySelector: strategyBySelector(group), keywords: shownHere};
     });
-    const shown = buckets.filter((b) => b.keywords.length > 0 || (b.strategies.length > 0 && !b.picked && words === ""));
+    // A group of strategies not on the section: its choice here, with its keywords.
+    const here = (b) => b.strategies.length > 0 && b.group && !prominent.has(b.group.id) && renderStrategies;
+    const shown = buckets.filter((b) => b.keywords.length > 0 || ((here(b) || (b.strategies.length > 0 && !b.picked)) && words === ""));
     const matching = shown.flatMap((b) => b.keywords);
     const current = Math.min(active, matching.length - 1);
     useEffect(() => {
@@ -512,7 +529,9 @@ function KeywordPicker({keywords, groups = [], section, lookup, chosen = {}, onA
                                 {b.group.name ?? b.group.id}
                             </li>
                         )}
-                        {b.strategies.length > 0 && !b.picked && (
+                        {here(b) ? (
+                            <li role="presentation" className="px-1.5 pb-1">{renderStrategies(b.group)}</li>
+                        ) : b.strategies.length > 0 && !b.picked && (
                             <li role="presentation" className="px-1.5 text-data text-ink-muted">
                                 {t("objectDesigner.strategyAbove", {group: b.group.name ?? b.group.id})}
                             </li>
@@ -964,6 +983,58 @@ export function ObjectDesigner({kind, namespace = "", sections, onChange, keywor
         return fallback === undefined ? undefined : String(fallback);
     };
     const applies = (k) => unmetDepends(k, valueOf) === undefined;
+    // Where a selector keyword lives: the section's own, or its DEFAULT.
+    const ownOption = (option, own) => own || known.some((k) => k.option === option);
+    const selectorKeyword = (option, own) => (ownOption(option, own) ? known : (keywords.DEFAULT ?? [])).find((k) => k.option === option);
+    const selectorSet = (option, own) => {
+        const target = ownOption(option, own) ? section : sections.find((s) => s.name === "DEFAULT");
+        return Boolean(target?.entries.some((e) => e.key.split("@")[0] === option && e.value.trim() !== ""));
+    };
+    const writesOf = (strategy) => strategySelectorWrites(strategy, valueOf, selectorSet, selectorKeyword);
+    // The selector keywords written, each where it lives: removed falls to its default.
+    const applyWrites = (writes) => {
+        let next = sections;
+        for (const {option, value} of writes) {
+            const target = known.some((k) => k.option === option) ? section.name : "DEFAULT";
+            next = next.map((s) => {
+                if (s.name !== target) return s;
+                const others = s.entries.filter((e) => e.key.split("@")[0] !== option);
+                if (value === null) return {...s, entries: others};
+                const at = s.entries.findIndex((e) => e.key === option);
+                return at >= 0
+                    ? {...s, entries: s.entries.map((e, j) => (j === at ? {...e, value} : e))}
+                    : {...s, entries: [...s.entries, {key: option, value}]};
+            });
+        }
+        onChange(next);
+    };
+    // The groups of strategies on the section, their choice first: required, set, or of the
+    // keywords it needs or most sets. The others wait in the keywords to add.
+    const important = new Set([...required, ...(free ? [] : popularKeywords(known, section, hideRoot).map((k) => k.option))]);
+    const prominent = new Set(keywordGroups
+        .filter((g) => (g.strategies ?? []).length > 0 && prominentStrategyGroup(g, section, known, important))
+        .map((g) => g.id));
+    const chooseStrategy = (group, strategy) => {
+        setStrategyChoice((c) => ({...c, [`${section.name}:${group}`]: strategy}));
+        // What the strategy picked needs, added to fill in.
+        const add = strategyRequirements(keywordGroups, section, lookup, {...chosen, [group]: strategy})
+            .filter((n) => n.option && n.group.id === group && !section.entries.some((e) => e.key.split("@")[0] === n.option))
+            .map((n) => n.option);
+        if (add.length > 0) update({...section, entries: [...section.entries, ...add.map((key) => ({key, value: ""}))]});
+    };
+    const renderStrategyBar = (groups) => (
+        <StrategyBar
+            groups={groups}
+            section={section}
+            lookup={lookup}
+            chosen={chosen}
+            offered={new Set(offeredKeywords(known, section, hideRoot).map((k) => k.option))}
+            onChoose={chooseStrategy}
+            writesOf={writesOf}
+            onWrites={applyWrites}
+            valueOf={valueOf}
+        />
+    );
     // Its required keywords set, the ones most set offered at once, none a strategy holds
     // back, none its conditions leave aside (flex_min on a failover service).
     const popular = free || missing.some((m) => m.section === section.name)
@@ -1078,23 +1149,7 @@ export function ObjectDesigner({kind, namespace = "", sections, onChange, keywor
                                 onChange={(e) => (e.target.checked ? setConfirming(section.name) : update(withUnmanaged(known, section, false)))}
                             />
                         )}
-                        {!free && (
-                            <StrategyBar
-                                groups={keywordGroups}
-                                section={section}
-                                lookup={lookup}
-                                chosen={chosen}
-                                offered={new Set(offeredKeywords(known, section, hideRoot).map((k) => k.option))}
-                                onChoose={(group, strategy) => {
-                                    setStrategyChoice((c) => ({...c, [`${section.name}:${group}`]: strategy}));
-                                    // What the strategy picked needs, added to fill in.
-                                    const add = strategyRequirements(keywordGroups, section, lookup, {...chosen, [group]: strategy})
-                                        .filter((n) => n.option && n.group.id === group && !section.entries.some((e) => e.key.split("@")[0] === n.option))
-                                        .map((n) => n.option);
-                                    if (add.length > 0) update({...section, entries: [...section.entries, ...add.map((key) => ({key, value: ""}))]});
-                                }}
-                            />
-                        )}
+                        {!free && renderStrategyBar(keywordGroups.filter((g) => prominent.has(g.id)))}
                         {section.entries.length === 0 && !free && <p className="text-data text-ink-muted">{t("objectDesigner.noEntry")}</p>}
                         <ul aria-label={t("objectDesigner.entries", {section: section.name})} className="space-y-1">
                             {section.entries.map((entry, i) => {
@@ -1163,6 +1218,8 @@ export function ObjectDesigner({kind, namespace = "", sections, onChange, keywor
                                 section={section}
                                 lookup={lookup}
                                 chosen={chosen}
+                                prominent={prominent}
+                                renderStrategies={(group) => renderStrategyBar([group])}
                                 // Every keyword root's, the cluster configuration's: no grant to tell them apart by.
                                 grantsTold={!rootOnlyKind(kind)}
                                 onAdd={(k) => {

@@ -30,7 +30,7 @@ import {
   withRequired,
   type DesignKeyword,
   type DesignSection,
-  clusterSectionChoices, keywordItems, keywordGroupsOf, groupKeywords, designLookup, impliedStrategy, strategyBySelector, strategyOptions, withheldOptions, referencePicks, referenceWords, referenceRid, strategyRequirements, strategyReason, followedStrategies, strategiesClash, unmetDepends} from "../object-design";
+  clusterSectionChoices, keywordItems, keywordGroupsOf, groupKeywords, designLookup, impliedStrategy, strategyBySelector, strategyOptions, withheldOptions, referencePicks, referenceWords, referenceRid, strategyRequirements, strategyReason, followedStrategies, strategiesClash, unmetDepends, strategySelectorWrites, prominentStrategyGroup} from "../object-design";
 
 const KEYWORDS: DesignKeyword[] = [
   { section: "DEFAULT", option: "nodes", text: "The nodes." },
@@ -647,5 +647,46 @@ describe("the conditions a keyword applies under", () => {
         expect(unmetDepends({option: "x", depends: ["quiesce!=pause"]}, values({quiesce: "command"}))).toBeUndefined();
         expect(unmetDepends({option: "y"}, values({}))).toBeUndefined();
         expect(unmetDepends(undefined, values({}))).toBeUndefined();
+    });
+});
+
+describe("a strategy chosen by writing its selector", () => {
+    const PAUSE = {id: "pause", when: ["quiesce=pause"]};
+    const COMMAND = {id: "command", when: ["quiesce!=pause"]};
+    const writes = (strategy, values, set = {}, keyword = {}) => strategySelectorWrites(
+        strategy,
+        (option) => values[option],
+        (option) => Boolean(set[option]),
+        (option) => keyword[option],
+    );
+
+    test("an equality: the value written, nothing when it holds", () => {
+        expect(writes(PAUSE, {})).toEqual([{option: "quiesce", value: "pause"}]);
+        expect(writes(PAUSE, {quiesce: "pause"})).toEqual([]);
+    });
+
+    test("an inequality: the value set removed when the default holds, else another candidate, else none", () => {
+        expect(writes(COMMAND, {quiesce: "pause"}, {quiesce: true}, {quiesce: {option: "quiesce"}})).toEqual([{option: "quiesce", value: null}]);
+        expect(writes(COMMAND, {quiesce: "pause"}, {quiesce: true}, {quiesce: {option: "quiesce", default: "pause", candidates: ["pause", "command"]}})).toEqual([{option: "quiesce", value: "command"}]);
+        expect(writes(COMMAND, {quiesce: "pause"}, {}, {quiesce: {option: "quiesce", default: "pause"}})).toBeUndefined();
+        expect(writes(COMMAND, {})).toEqual([]);
+    });
+});
+
+describe("a strategy group on its section, or in the keywords to add", () => {
+    const QUIESCE = {id: "quiesce", strategies: [{id: "pause", uses: [], excludes: ["quiesce_input"], when: ["quiesce=pause"]}, {id: "command", uses: ["quiesce_input"], when: ["quiesce!=pause"]}]};
+    const known = [{section: "container", option: "quiesce", group: "quiesce"}, {section: "container", option: "quiesce_input", group: "quiesce"}, {section: "container", option: "image", group: "image"}];
+    const container = (entries) => ({name: "container#1", group: "container", type: "docker", entries});
+
+    test("in the keywords to add while nothing of it is set nor needed", () => {
+        expect(prominentStrategyGroup(QUIESCE, container([{key: "image", value: "nginx"}]), known, new Set(["image", "command"]))).toBe(false);
+    });
+
+    test("on the section: required, a keyword of it set, its selector set, or one of it needed", () => {
+        expect(prominentStrategyGroup({...QUIESCE, required: true}, container([]), known, new Set())).toBe(true);
+        expect(prominentStrategyGroup(QUIESCE, container([{key: "quiesce_input", value: "x"}]), known, new Set())).toBe(true);
+        expect(prominentStrategyGroup(QUIESCE, container([{key: "quiesce", value: "pause"}]), known, new Set())).toBe(true);
+        expect(prominentStrategyGroup(QUIESCE, container([{key: "quiesce", value: ""}]), known, new Set())).toBe(false);
+        expect(prominentStrategyGroup(QUIESCE, container([]), known, new Set(["quiesce"]))).toBe(true);
     });
 });

@@ -811,15 +811,102 @@ export function listWords(value: string): { done: string[]; typed: string } {
  */
 export function unmetDepends(keyword: DesignKeyword | undefined, valueOf: (option: string, own: boolean) => string | undefined): string | undefined {
   for (const condition of keyword?.depends ?? []) {
-    const m = /^(\.)?([^!=]+?)(!=|=)(.*)$/.exec(condition);
-    if (m === null) continue;
-    const [, own, option, op, want] = m;
-    const have = valueOf(option.trim(), own === ".");
+    const c = parseCondition(condition);
+    if (c === undefined) continue;
+    const { own, option, op, want } = c;
+    const have = valueOf(option, own);
     if (have === undefined) continue;
     const equal = have.trim().toLowerCase() === want.trim().toLowerCase();
     if (op === "=" ? !equal : equal) return condition.replace(/^\./, "");
   }
   return undefined;
+}
+
+/** A condition as om writes it, `topology=flex`, `.mode!=ovs`: its option, of the section itself or not, and its test. */
+export function parseCondition(condition: unknown): { own: boolean; option: string; op: "=" | "!="; want: string } | undefined {
+  if (typeof condition === "string") {
+    const m = /^(\.)?([^!=]+?)(!=|=)(.*)$/.exec(condition);
+    if (m === null) return undefined;
+    return { own: m[1] === ".", option: m[2].trim(), op: m[3] as "=" | "!=", want: m[4].trim() };
+  }
+  if (condition !== null && typeof condition === "object") {
+    const c = condition as { Key?: unknown; Op?: unknown; Value?: unknown };
+    const key = c.Key;
+    const option = typeof key === "string" ? key.split(".").pop() : (key as { Option?: string; option?: string } | undefined)?.Option ?? (key as { option?: string } | undefined)?.option;
+    const op = c.Op === "!=" ? "!=" : c.Op === "=" || c.Op === undefined ? "=" : undefined;
+    if (!option || op === undefined) return undefined;
+    return { own: false, option, op, want: typeof c.Value === "string" ? c.Value : "" };
+  }
+  return undefined;
+}
+
+/** A keyword a selector strategy writes: its value, or none to remove it, falling to its default. */
+export interface SelectorWrite {
+  option: string;
+  value: string | null;
+}
+
+/**
+ * The writes that make the conditions of a strategy chosen by a selector keyword hold,
+ * `quiesce = pause` for its pause: an equality sets the value; an inequality leaves it
+ * alone when it holds, else removes the value set when the default then holds, else
+ * sets a candidate that does. Undefined when a condition cannot be made to hold so.
+ * `valueOf` gives the value as the daemon judges it; `set` whether one is written;
+ * `keywordOf` the keyword of an option, for its default and candidates.
+ */
+export function strategySelectorWrites(
+  strategy: KeywordStrategy,
+  valueOf: (option: string, own: boolean) => string | undefined,
+  set: (option: string, own: boolean) => boolean,
+  keywordOf: (option: string, own: boolean) => DesignKeyword | undefined,
+): SelectorWrite[] | undefined {
+  const writes: SelectorWrite[] = [];
+  const same = (a: string | undefined, b: string) => (a ?? "").trim().toLowerCase() === b.trim().toLowerCase();
+  for (const condition of strategy.when ?? []) {
+    const c = parseCondition(condition);
+    if (c === undefined) return undefined;
+    const have = valueOf(c.option, c.own);
+    if (c.op === "=") {
+      if (!same(have, c.want)) writes.push({ option: c.option, value: c.want });
+      continue;
+    }
+    if (!same(have, c.want)) continue;
+    const keyword = keywordOf(c.option, c.own);
+    const fallback = keyword?.default === undefined ? undefined : String(keyword.default);
+    if (set(c.option, c.own) && !same(fallback, c.want)) {
+      writes.push({ option: c.option, value: null });
+      continue;
+    }
+    const other = (keyword?.candidates ?? []).find((v) => v !== "" && !same(v, c.want));
+    if (other === undefined) return undefined;
+    writes.push({ option: c.option, value: other });
+  }
+  return writes;
+}
+
+/** The options a strategy group stands on: its keywords, and those its selectors read. */
+export function strategyGroupOptions(group: KeywordGroup, keywords: DesignKeyword[]): Set<string> {
+  const options = new Set(keywords.filter((k) => k.group === group.id).map((k) => k.option));
+  for (const strategy of group.strategies ?? []) {
+    for (const option of [...(strategy.uses ?? []), ...(strategy.excludes ?? []), ...(strategy.requires ?? [])]) options.add(option);
+    for (const condition of strategy.when ?? []) {
+      const c = parseCondition(condition);
+      if (c) options.add(c.option);
+    }
+  }
+  return options;
+}
+
+/**
+ * Whether a strategy group comes first on its section, its choice in sight: required;
+ * a keyword of it set there (its selector included); or one of it the section needs
+ * or most sets (`important`). Else the choice waits in the keywords to add.
+ */
+export function prominentStrategyGroup(group: KeywordGroup, section: DesignSection, keywords: DesignKeyword[], important: Set<string>): boolean {
+  if (group.required) return true;
+  const options = strategyGroupOptions(group, keywords);
+  if (section.entries.some((e) => e.value.trim() !== "" && options.has(e.key.split("@")[0]))) return true;
+  return [...important].some((o) => options.has(o));
 }
 
 /** A pick of a value: the value, what helps choose it, a word at its end. */

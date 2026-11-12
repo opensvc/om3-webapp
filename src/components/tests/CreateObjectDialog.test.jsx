@@ -597,19 +597,48 @@ describe('CreateObjectDialog', () => {
             expect(keywordsShown()).toEqual(['netmask', 'orchestrate', 'comment', 'nodes']);
         });
 
-        test('the strategies of a section on it, up front, the picker pointing there until one is chosen', async () => {
+        test('a secondary strategy group chosen in the keywords to add; its keyword set, on the section', async () => {
             answers['GET /api/object/path/ns1/svc/db/config/keywords?driver=DEFAULT'] = {status: 200, text: JSON.stringify(GROUPED)};
             await design();
-            const bar = screen.getByRole('group', {name: 'How to set Addressing'});
+            // Neither required nor needed: not before the keywords to fill in.
+            expect(screen.queryByRole('group', {name: 'How to set Addressing'})).toBeNull();
+            fireEvent.click(screen.getByRole('button', {name: 'More'}));
+            const offer = screen.getByRole('list', {name: 'Keywords to add'});
+            const bar = within(offer).getByRole('group', {name: 'How to set Addressing'});
             expect(within(bar).getAllByRole('button').map((b) => [b.textContent, b.getAttribute('aria-pressed')])).toEqual([
                 ['Static address', 'false'],
                 ['Address drawn from a network', 'false'],
             ]);
-            fireEvent.click(screen.getByRole('button', {name: 'More'}));
-            expect(screen.getByText('Choose how to set Addressing, above: its keywords are then offered.')).toBeInTheDocument();
             fireEvent.click(within(bar).getByRole('button', {name: 'Static address'}));
-            expect(screen.queryByText('Choose how to set Addressing, above: its keywords are then offered.')).toBeNull();
             expect(keywordsShown()).toContain('name');
+            fireEvent.click(screen.getByRole('button', {name: 'Add name'}));
+            fireEvent.change(screen.getByRole('textbox', {name: 'Value of name'}), {target: {value: '10.0.0.1'}});
+            // Set, it stands on the section.
+            expect(screen.getByRole('group', {name: 'How to set Addressing'})).toBeInTheDocument();
+            expect(screen.queryByRole('list', {name: 'Keywords to add'})).toBeNull();
+        });
+
+        test('a strategy a selector chooses picked by writing the selector, and back by removing it', async () => {
+            answers['GET /api/object/path/ns1/svc/db/config/keywords?driver=DEFAULT'] = {status: 200, text: JSON.stringify({
+                items: [
+                    {section: 'DEFAULT', option: 'quiesce', group: 'quiesce', candidates: ['pause', 'command']},
+                    {section: 'DEFAULT', option: 'quiesce_input', group: 'quiesce'},
+                ],
+                groups: [{id: 'quiesce', driver: 'container.docker', name: 'Quiesce', order: 50, strategies: [
+                    {id: 'pause', name: 'Pause the processes', uses: [], excludes: ['quiesce_input'], requires: [], when: ['quiesce=pause']},
+                    {id: 'command', name: 'Run a command', uses: ['quiesce_input'], excludes: [], requires: [], when: ['quiesce!=pause']},
+                ]}],
+            })};
+            await design();
+            fireEvent.click(screen.getByRole('button', {name: 'More'}));
+            const bar = () => screen.getByRole('group', {name: 'How to set Quiesce'});
+            expect(within(bar()).getByRole('button', {name: 'Run a command'})).toHaveAttribute('aria-pressed', 'true');
+            expect(screen.getByText('Run a command, as quiesce = unset chooses.')).toBeInTheDocument();
+            fireEvent.click(within(bar()).getByRole('button', {name: 'Pause the processes'}));
+            expect(screen.getByRole('combobox', {name: 'Value of quiesce'})).toHaveValue('pause');
+            expect(within(bar()).getByRole('button', {name: 'Pause the processes'})).toHaveAttribute('aria-pressed', 'true');
+            fireEvent.click(within(bar()).getByRole('button', {name: 'Run a command'}));
+            expect(screen.queryByRole('combobox', {name: 'Value of quiesce'})).toBeNull();
         });
 
         test('a strategy chosen first: its keywords then offered, never those it excludes; told by a keyword set', async () => {

@@ -3382,6 +3382,8 @@
     "strategyRequired": "Choose how to set: {{items}}.",
     "strategyDefault": "{{strategy}}, by default: no keyword chooses another.",
     "ignoredKeyword": "Ignored: it applies only where {{condition}}.",
+    "strategyBySelectorKeyword": "{{strategy}}, as {{keywords}} chooses.",
+    "unset": "unset",
     "findKeyword": "Find a keyword",
     "keywords": "Keywords to add",
     "noKeyword": "No keyword matches.",

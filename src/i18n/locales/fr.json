@@ -3382,6 +3382,8 @@
     "strategyRequired": "Choisissez comment renseigner : {{items}}.",
     "strategyDefault": "{{strategy}}, par défaut : aucun mot-clé n'en choisit une autre.",
     "ignoredKeyword": "Ignoré : il ne s'applique que si {{condition}}.",
+    "strategyBySelectorKeyword": "{{strategy}}, comme {{keywords}} le choisit.",
+    "unset": "non défini",
     "findKeyword": "Chercher un mot-clé",
     "keywords": "Mots-clés à ajouter",
     "noKeyword": "Aucun mot-clé ne correspond.",

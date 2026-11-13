@@ -1917,8 +1917,6 @@
       "namespace": "namespace"
     },
     "openNamespaceConfig": "Ouvrir la configuration de {{namespace}}",
-    "configureNamespace": "Configurer le namespace {{namespace}}",
-    "createInNamespace": "Créer un objet dans {{namespace}}",
     "count_one": "{{count}} objet",
     "count_other": "{{count}} objets",
     "clearSelection": "Effacer"

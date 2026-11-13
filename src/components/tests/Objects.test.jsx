@@ -1852,17 +1852,15 @@ describe('Objects Component', () => {
             expect(prod.querySelector('th .group-hover\\/band\\:underline')).toHaveTextContent('prod');
             fireEvent.click(prod);
             await waitFor(() => expect(screen.getByTestId('router-search')).toHaveTextContent('peek=namespace:prod&peektab=config'));
-            // dev has none: its line opens nothing, nothing offered without the grant.
+            // dev has none: its line opens it all the same, an empty one to start from.
             const dev = namespaceRows().find((row) => row.dataset.namespaceRow === 'dev');
+            expect(dev).toHaveClass('cursor-pointer');
+            expect(dev).toHaveAttribute('tabindex', '0');
             // Its checkbox selects, it does not open.
             fireEvent.click(within(dev).getByRole('checkbox', {name: /dev/}));
             expect(screen.getByTestId('router-search')).not.toHaveTextContent('peek=namespace:dev');
-            // None and no grant: nothing to configure; an object still created in it.
-            expect(within(dev).queryByRole('button', {name: 'Configure the namespace dev'})).toBeNull();
-            expect(within(dev).getByRole('button', {name: 'Create an object in dev'})).toBeInTheDocument();
-            // prod has one: configured from its line too.
-            fireEvent.click(within(prod).getByRole('button', {name: 'Configure the namespace prod'}));
-            expect(screen.getByTestId('router-search')).toHaveTextContent('peek=namespace:prod&peektab=config');
+            fireEvent.click(dev);
+            await waitFor(() => expect(screen.getByTestId('router-search')).toHaveTextContent('peek=namespace:dev&peektab=config'));
         });
 
         test('a configuration alone in its namespace: the line of the namespace kept, alone', async () => {
@@ -1873,56 +1871,19 @@ describe('Objects Component', () => {
             expect(objectNamesInOrder()).toEqual(['prod/svc/web']);
         });
 
-        test('a namespace without its configuration: those who may write it offered to configure it, created by its first change', async () => {
-            mockGrants.value = {squatter: null};
-            try {
-                setup({objectStatus: {'dev/svc/x': {avail: 'up'}}, objectInstanceStatus: {}}, '?list=any', {isWideScreen: true, isMobile: false});
-                await waitForLoad();
-                const dev = namespaceRows().find((row) => row.dataset.namespaceRow === 'dev');
-                const configure = within(dev).getByRole('button', {name: 'Configure the namespace dev'});
-                // Its icon alone, outlined, at the size of a table row.
-                expect(configure).toHaveTextContent(/^Configure the namespace dev$/);
-                expect(configure).toHaveClass('border', 'h-5', 'w-5');
-                expect(within(dev).getByRole('button', {name: 'Create an object in dev'})).toHaveClass('bg-accent', 'h-5', 'w-5');
-                global.fetch.mockClear();
-                fireEvent.click(configure);
-                // Its configuration tab: nothing written until a change is.
-                await waitFor(() => expect(screen.getByTestId('router-search')).toHaveTextContent('peek=namespace:dev&peektab=config'));
-                expect(global.fetch.mock.calls.filter(([, options]) => options?.method === 'POST')).toEqual([]);
-            } finally {
-                mockGrants.value = {};
-            }
-        });
-
-        test('create from the line of a namespace: the wizard in that namespace', async () => {
-            mockGrants.value = {root: null};
-            try {
-                setup({objectStatus: {'dev/svc/x': {avail: 'up'}, 'prod/svc/web': {avail: 'up'}}, objectInstanceStatus: {}}, '?list=any', {isWideScreen: true, isMobile: false});
-                await waitForLoad();
-                const dev = namespaceRows().find((row) => row.dataset.namespaceRow === 'dev');
-                fireEvent.click(within(dev).getByRole('button', {name: 'Create an object in dev'}));
-                expect(mockNavigate).toHaveBeenCalledWith('/create?kind=svc&ns=dev', {state: {from: '/objects?list=any'}});
-                // The line is not opened by it.
-                expect(screen.getByTestId('router-search')).not.toHaveTextContent('peek=namespace:dev');
-                // The top link: no namespace filtered on, root.
-                expect(screen.getByRole('link', {name: 'New object'})).toHaveAttribute('href', '/create?kind=svc&ns=root');
-            } finally {
-                mockGrants.value = {};
-            }
-        });
-
         test.each([
-            ['narrow', {isWideScreen: false, isMobile: true}],
-            ['wide', {isWideScreen: true, isMobile: false}],
-        ])('%s, the buttons of the line of a namespace their icons alone', async (_, media) => {
-            setup({objectStatus: {'prod/svc/web': {avail: 'up'}, 'prod/': {avail: 'n/a'}}, objectInstanceStatus: {}}, '', media);
-            await waitFor(() => expect(screen.getByRole('table')).toBeInTheDocument());
-            const create = within(namespaceRows()[0]).getByRole('button', {name: 'Create an object in prod'});
-            expect(create.querySelector('svg')).not.toBeNull();
-            expect(create).toHaveTextContent(/^Create an object in prod$/);
-            // It creates: the accent fill; Configure outlined.
-            expect(create).toHaveClass('bg-accent', 'h-5', 'w-5');
-            expect(within(namespaceRows()[0]).getByRole('button', {name: 'Configure the namespace prod'})).toBeInTheDocument();
+            ['narrow, no grant', {isWideScreen: false, isMobile: true}, {}],
+            ['wide, root', {isWideScreen: true, isMobile: false}, {root: null}],
+            ['wide, a squatter, the namespace without its configuration', {isWideScreen: true, isMobile: false}, {squatter: null}],
+        ])('%s: the line of a namespace a separator, no button of its own', async (_, media, grants) => {
+            mockGrants.value = grants;
+            try {
+                setup({objectStatus: {'prod/svc/web': {avail: 'up'}, 'dev/svc/x': {avail: 'up'}, 'prod/': {avail: 'n/a'}}, objectInstanceStatus: {}}, '?list=any', media);
+                await waitFor(() => expect(screen.getByRole('table')).toBeInTheDocument());
+                for (const row of namespaceRows()) expect(within(row).queryAllByRole('button')).toEqual([]);
+            } finally {
+                mockGrants.value = {};
+            }
         });
 
         test('narrow, a small badge over the name of the namespace, its line as high as the others', async () => {
@@ -1940,7 +1901,7 @@ describe('Objects Component', () => {
             expect(objectNamesInOrder()).toEqual(['a-ns/vol/v', 'b-ns/svc/x', 'cluster', 'svc/dns']);
         });
 
-        test('a line opens each namespace, its name in the column of the names; it opens nothing', async () => {
+        test('a line opens each namespace, its name in the column of the names; a click on it opens its configuration', async () => {
             setup({objectStatus: {
                 'prod/svc/web': {avail: 'up'}, 'prod/svc/api': {avail: 'up'}, 'dev/svc/x': {avail: 'up'},
             }, objectInstanceStatus: {}}, '', {isWideScreen: true, isMobile: false});
@@ -1948,12 +1909,12 @@ describe('Objects Component', () => {
             const rows = within(screen.getByRole('table', {name: 'Objects'})).getAllByRole('row').slice(1);
             expect(rows.map((row) => row.getAttribute('data-namespace-row') ?? 'object')).toEqual(['dev', 'object', 'prod', 'object', 'object']);
             const line = namespaceRows()[1];
-            // The name in the column of the names; its buttons in one cell across the columns after it.
-            expect(within(line).getByRole('rowheader', {name: 'prod'})).not.toHaveAttribute('colspan');
-            const buttons = within(line).getByRole('button', {name: 'Create an object in prod'}).closest('td');
-            expect(buttons).toHaveAttribute('colspan', String(rowCells(objectRows()[0]).length - 2));
+            // The name in the column of the names; the band one cell across the columns after it.
+            const name = within(line).getByRole('rowheader', {name: 'prod'});
+            expect(name).not.toHaveAttribute('colspan');
+            expect(name.nextElementSibling).toHaveAttribute('colspan', String(rowCells(objectRows()[0]).length - 2));
             fireEvent.click(within(line).getByRole('rowheader'));
-            expect(mockNavigate).not.toHaveBeenCalled();
+            await waitFor(() => expect(screen.getByTestId('router-search')).toHaveTextContent('peek=namespace:prod&peektab=config'));
         });
 
         test('the checkbox of a namespace line selects all its objects the filters keep; mixed when some only are', async () => {

@@ -1029,6 +1029,25 @@ describe('ConfigSection Component', () => {
             expect(within(dialog).queryByRole('button', {name: /Force/i})).toBeNull();
         });
 
+        test('its text, the same configuration: a change typed applied as one designed, the design back as left', async () => {
+            renderConfig();
+            const dialog = await openDesigner(user);
+            await act(() => user.click(within(within(dialog).getByRole('navigation', {name: 'Sections'})).getByRole('button', {name: /^fs#1/})));
+            fireEvent.click(dialog.querySelector('[data-segment=text]'));
+            const text = within(dialog).getByRole('textbox', {name: 'Configuration'});
+            expect(text.value).toMatch(/orchestrate = ha/);
+            expect(within(dialog).queryByRole('navigation', {name: 'Sections'})).toBeNull();
+            fireEvent.change(text, {target: {value: text.value.replace('orchestrate = ha', 'orchestrate = no')}});
+            expect(within(within(dialog).getByRole('region', {name: 'Changes'})).getByText('Set orchestrate = no')).toBeInTheDocument();
+            expect(within(dialog).queryByText(/the comments of the file stay as stored/)).toBeNull();
+            fireEvent.change(text, {target: {value: `# a note\n${text.value}`}});
+            expect(within(dialog).getByText(/the comments of the file stay as stored/)).toBeInTheDocument();
+            fireEvent.click(dialog.querySelector('[data-segment=design]'));
+            expect(within(within(dialog).getByRole('navigation', {name: 'Sections'})).getByRole('button', {name: /^fs#1/})).toHaveAttribute('aria-current', 'true');
+            await act(() => user.click(within(dialog).getByRole('button', {name: 'Apply 1 change'})));
+            await waitFor(() => expect(patches()).toEqual([`${URL_OBJECT}/root/cfg/cfg1/config?set=orchestrate=no&wait=30s`]));
+        });
+
         test('a keyword removed unset, a resource removed deleted, in the same request', async () => {
             renderConfig();
             const dialog = await openDesigner(user);

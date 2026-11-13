@@ -71,11 +71,11 @@ const LEVELS = {
 };
 
 /**
- * What the validation found: none, said so; else the errors first, then the
- * warnings, each its keyword or section, what is wrong, and what the daemon says of
- * it. Errors are refused by a write, said so. `onClose` hides it.
+ * What the validation found: none, said so unless `quietWhenValid`; else the errors
+ * first, then the warnings, each its keyword or section, what is wrong, and what the
+ * daemon says of it. Errors are refused by a write, said so. `onClose` hides it.
  */
-export function ConfigValidationResult({result, onClose}) {
+export function ConfigValidationResult({result, onClose, quietWhenValid = false}) {
     const {t} = useTranslation();
     if (result === null) return null;
     const close = onClose && (
@@ -87,7 +87,7 @@ export function ConfigValidationResult({result, onClose}) {
     if (result.unsupported) return <Alert tone="info" action={close}>{t("configValidate.unsupported")}</Alert>;
     if (result.error) return <Alert action={close}>{t("configValidate.failed", {message: result.error})}</Alert>;
     const {alerts} = result;
-    if (alerts.length === 0) return <Alert tone="success" action={close}>{t("configValidate.none")}</Alert>;
+    if (alerts.length === 0) return quietWhenValid ? null : <Alert tone="success" action={close}>{t("configValidate.none")}</Alert>;
     const errors = alerts.filter((a) => a.level === "error").length;
     const warnings = alerts.length - errors;
     const sorted = [...alerts].sort((a, b) => (a.level === b.level ? 0 : a.level === "error" ? -1 : 1));
@@ -151,12 +151,23 @@ export const DRAFT_VALIDATION_DELAY_MS = 800;
  * A draft validated as it is edited, `text` sent to `url` once it rested unchanged a
  * moment, nothing written: what the daemon would refuse of it, and warn of, said
  * before it is written. The last answer stays shown while the next is read, said
- * checking. Nothing shown without a url, nor on a daemon older than the validation.
+ * checking. Nothing shown without a url, nor on a daemon older than the validation,
+ * nor of a draft found valid: only what is wrong with it. `onErrors`, told the count
+ * of the errors of each answer, none once gone: a write the daemon would refuse held.
  */
-export function DraftValidation({url, text}) {
+export function DraftValidation({url, text, onErrors}) {
     const {t} = useTranslation();
     const {result, validate, reset} = useConfigValidation(url);
     const shown = useRef(null);
+    // The errors of the last answer, told the caller; none once there is none to tell.
+    const errors = result && !result.loading && Array.isArray(result.alerts) ? result.alerts.filter((a) => a.level === "error").length : 0;
+    const told = useRef(onErrors);
+    told.current = onErrors;
+    useEffect(() => {
+        if (result?.loading) return;
+        told.current?.(url ? errors : 0);
+    }, [result, errors, url]);
+    useEffect(() => () => told.current?.(0), []);
     useEffect(() => {
         if (!url || text === null || text === undefined) {
             reset();
@@ -174,7 +185,7 @@ export function DraftValidation({url, text}) {
     return (
         <div data-draft-validation="" className="space-y-1">
             {result.loading && <p className="text-data text-ink-muted">{t("configValidate.checking")}</p>}
-            {shown.current && <ConfigValidationResult result={shown.current}/>}
+            {shown.current && <ConfigValidationResult result={shown.current} quietWhenValid/>}
         </div>
     );
 }

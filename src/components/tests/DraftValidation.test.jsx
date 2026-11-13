@@ -54,21 +54,32 @@ describe("a draft validated as it is edited", () => {
         expect(screen.getByText("conflicting strategies")).toBeInTheDocument();
     });
 
-    test("clean, said so; checked again, the last answer kept on display", async () => {
+    test("clean, nothing said; with errors, said and told, kept on display while checked again; none once fixed", async () => {
         let reply;
+        const onErrors = vi.fn();
         global.fetch = vi.fn(() => answer(200, {kind: "ConfigAlertList", items: []}));
-        const {rerender} = render(<DraftValidation url={URL} text="[DEFAULT]\n"/>);
+        const {rerender} = render(<DraftValidation url={URL} text="[DEFAULT]\n" onErrors={onErrors}/>);
         await rest();
-        expect(screen.getByText("The configuration is valid: no error, no warning.")).toBeInTheDocument();
+        expect(screen.queryByText(/The configuration is valid/)).toBeNull();
+        expect(onErrors).toHaveBeenLastCalledWith(0);
+        global.fetch = vi.fn(() => answer(200, {kind: "ConfigAlertList", items: [
+            {level: "error", kind: "denied", key: "DEFAULT.nodes", comment: "requires the root grant"},
+        ]}));
+        rerender(<DraftValidation url={URL} text={"[DEFAULT]\nnodes = n1\n"} onErrors={onErrors}/>);
+        await rest();
+        expect(screen.getByText("requires the root grant")).toBeInTheDocument();
+        expect(onErrors).toHaveBeenLastCalledWith(1);
         global.fetch = vi.fn(() => new Promise((resolve) => {
             reply = resolve;
         }));
-        rerender(<DraftValidation url={URL} text={"[DEFAULT]\nnodes = *\n"}/>);
+        rerender(<DraftValidation url={URL} text={"[DEFAULT]\nnodes = *\n"} onErrors={onErrors}/>);
         await rest();
         expect(screen.getByText("Validating the configuration")).toBeInTheDocument();
-        expect(screen.getByText("The configuration is valid: no error, no warning.")).toBeInTheDocument();
+        expect(screen.getByText("requires the root grant")).toBeInTheDocument();
         await act(async () => reply({ok: true, status: 200, json: () => Promise.resolve({items: []})}));
         expect(screen.queryByText("Validating the configuration")).toBeNull();
+        expect(screen.queryByText("requires the root grant")).toBeNull();
+        expect(onErrors).toHaveBeenLastCalledWith(0);
     });
 
     test("nothing said by a daemon older than the validation, nor without a url", async () => {

@@ -1,7 +1,7 @@
 import React, {useState, useEffect, useRef, useMemo, useReducer, useCallback} from "react";
 import {Dialog} from "../ui/components/Dialog";
 import {Button} from "../ui/components/Button";
-import {Checkbox, Textarea} from "../ui/components/Field";
+import {Textarea} from "../ui/components/Field";
 import {Alert} from "../ui/components/Alert";
 import {Spinner} from "../ui/components/Spinner";
 import {CodeIcon, EyeIcon, EyeOffIcon, FileIcon, PencilIcon, SlidersIcon, UploadIcon} from "../ui/icons";
@@ -21,7 +21,8 @@ import {ConfigValidationResult, DraftValidation, ValidateButton, useConfigValida
 import useEventStore from "../hooks/useEventStore.js";
 import {newId, withId} from "../app/object-create";
 import {designChanges, designStart, designText, parseDesign, rootOnlyKind} from "../app/object-design";
-import {ObjectDesigner} from "./ObjectDesigner";
+import {DesignViewToggle, ObjectDesigner} from "./ObjectDesigner";
+import {ConfigEditor} from "./ConfigEditor";
 import {useEditDraft} from "../app/edit-drafts";
 import {opValue} from "../app/keyop";
 
@@ -248,8 +249,9 @@ const UpdateConfigDialog = ({
 /**
  * The configuration changed in the designer, seeded with the file as stored: its
  * sections on the left, the keywords of the one picked on the right, each
- * documented. Applied, the changes made, in one request; refused, the daemon's
- * words, the design kept, written anyway on demand when force lifts the refusal.
+ * documented; or its text, as the create dialog edits it, read again as it is typed.
+ * Applied, the changes made, in one request; refused, the daemon's words, the design
+ * kept, written anyway on demand when force lifts the refusal.
  */
 const DesignConfigDialog = ({
                                 open,
@@ -271,6 +273,20 @@ const DesignConfigDialog = ({
     const {t} = useTranslation();
     // Root's choice of the keywords only root may set, by the buttons.
     const [showRoot, setShowRoot] = useState(false);
+    // The design, or its text: one configuration, the text read into the design as typed.
+    const [view, setView] = useState("design");
+    const [text, setText] = useState("");
+    useEffect(() => {
+        if (open) setView("design");
+    }, [open]);
+    const showView = (next) => {
+        if (next === "text" && design) setText(designText(design));
+        setView(next);
+    };
+    const editText = (value) => {
+        setText(value);
+        onChange(parseDesign(value, designStart(["svc", "vol"].includes(kind))));
+    };
     const lines = [
         ...changes.delete.map((section) => t("actionTray.writes.deleteSection", {section})),
         ...changes.unset.map((keyword) => t("actionTray.writes.unset", {keyword})),
@@ -286,10 +302,6 @@ const DesignConfigDialog = ({
             dirty={changes.set.length + changes.unset.length + changes.delete.length > 0}
             footer={
                 <>
-                    <div className="mr-auto self-center">
-                        {/* No choice where every keyword is root's: the cluster configuration. */}
-                        {isRoot && !rootOnlyKind(kind) && <Checkbox label={t("objectDesigner.showRoot")} checked={showRoot} onChange={(e) => setShowRoot(e.target.checked)}/>}
-                    </div>
                     <Button onClick={onClose} disabled={actionLoading}>{t("common.cancel")}</Button>
                     <Button
                         onClick={() => onSubmit()}
@@ -325,16 +337,34 @@ const DesignConfigDialog = ({
                 />
                 {error && <Alert>{error}</Alert>}
                 {design && (
-                    <ObjectDesigner
-                        kind={kind}
-                        namespace={namespace}
-                        sections={design}
-                        onChange={onChange}
-                        keywordsUrl={keywordsUrl}
-                        isRoot={isRoot}
+                    // The view, and root's choice of the keywords only root may set: none where
+                    // every keyword is root's, the cluster configuration.
+                    <DesignViewToggle
+                        className="justify-end"
+                        view={view}
+                        onView={showView}
                         showRoot={showRoot}
-                        onShowRoot={setShowRoot}
+                        onShowRoot={isRoot && !rootOnlyKind(kind) ? setShowRoot : undefined}
                     />
+                )}
+                {design && view === "text" && /^\s*[#;]/m.test(text) && <Alert tone="info">{t("config.design.commentsIgnored")}</Alert>}
+                {design && view === "text" && (
+                    <ConfigEditor label={t("createObject.config")} value={text} onChange={editText}/>
+                )}
+                {/* Kept while the text is shown: back to the design, its section and choices as left. */}
+                {design && (
+                    <div hidden={view !== "design"}>
+                        <ObjectDesigner
+                            kind={kind}
+                            namespace={namespace}
+                            sections={design}
+                            onChange={onChange}
+                            keywordsUrl={keywordsUrl}
+                            isRoot={isRoot}
+                            showRoot={showRoot}
+                            onShowRoot={setShowRoot}
+                        />
+                    </div>
                 )}
                 {/* What the daemon would refuse of the design, or warn of, said before it is applied. */}
                 {design && <DraftValidation url={keywordsUrl.replace(/\/config\/keywords$/, "/config/validate")} text={designText(design)}/>}

@@ -458,7 +458,8 @@
       "loading": "Reading the configuration",
       "changes": "Changes",
       "noChange": "No change",
-      "conflict": "The configuration was changed by someone else since the design opened. Your changes are not saved: start over on the configuration as it is now."
+      "conflict": "The configuration was changed by someone else since the design opened. Your changes are not saved: start over on the configuration as it is now.",
+      "commentsIgnored": "Only the keyword changes are written: the comments of the file stay as stored, and those typed here are not kept."
     }
   },
   "volumeFiles": {
@@ -1755,15 +1756,15 @@
     "source": "Start from",
     "sources": {
       "empty": "Nothing",
-      "copy": "Copy",
-      "edit": "Write",
-      "design": "Design"
+      "copy": "A copy",
+      "file": "A file"
     },
     "copyFrom": "Object to copy",
     "noObject": "No object matches",
     "reading": "Reading the configuration",
     "config": "Configuration",
-    "provision": "Provision once created",
+    "deploy": "Deploy",
+    "deploying": "Deploying",
     "submit": "Create",
     "creating": "Creating",
     "errors": {
@@ -1817,17 +1818,23 @@
       }
     },
     "sourceHints": {
-      "empty": "An object with its id alone, configured later.",
-      "copy": "The configuration of an object, edited before it is sent.",
-      "edit": "A configuration written here, or a file dropped.",
-      "design": "Sections and keywords picked, each documented."
+      "empty": "An empty configuration, designed or written next.",
+      "copy": "The configuration of an object, edited next.",
+      "file": "A configuration file, edited next."
     },
     "dropHint": "Drop a configuration file here, or",
-    "fileRead": "{{name}} read: edited here before it is sent.",
+    "fileRead": "{{name}} read: edited next.",
     "back": "Back",
     "next": "Next",
     "free": "Free",
-    "designToText": "Edit as text"
+    "steps": {
+      "what": "Name",
+      "from": "Start from",
+      "configure": "Configure"
+    },
+    "stepsLabel": "Steps",
+    "commentsDropped": "Comments are not kept by the design: they are dropped from the configuration.",
+    "copyRead": "{{path}} read, {{count}} lines: edited next."
   },
   "objects": {
     "reason": {
@@ -3409,9 +3416,6 @@
     "removeEntry": "Remove {{keyword}}",
     "addVariable": "Add a variable",
     "missing": "Required without a value: {{keys}}.",
-    "showFile": "Show the file",
-    "hideFile": "Hide the file",
-    "emptyFile": "(empty: the object gets its id alone)",
     "use": "Use",
     "useExample": "Use the example {{value}}",
     "useExampleHint": "Take the example as the value (→)",
@@ -3449,7 +3453,12 @@
       "add": "Add [{{section}}]",
       "badName": "A word: letters, digits, dot, dash or underscore.",
       "taken": "[{{section}}] is there already."
-    }
+    },
+    "views": {
+      "design": "Design",
+      "text": "Text"
+    },
+    "viewLabel": "Edit as"
   },
   "driverSupport": {
     "lacking_one": "Not usable on {{nodes}}: its driver is not among the capabilities of the node.",

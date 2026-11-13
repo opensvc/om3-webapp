@@ -458,7 +458,8 @@
       "loading": "Lecture de la configuration",
       "changes": "Changements",
       "noChange": "Aucun changement",
-      "conflict": "La configuration a été modifiée par quelqu'un d'autre depuis l'ouverture de la conception. Vos modifications ne sont pas enregistrées : recommencez sur la configuration telle qu'elle est maintenant."
+      "conflict": "La configuration a été modifiée par quelqu'un d'autre depuis l'ouverture de la conception. Vos modifications ne sont pas enregistrées : recommencez sur la configuration telle qu'elle est maintenant.",
+      "commentsIgnored": "Seules les modifications de mots-clés sont écrites : les commentaires du fichier restent tels quels, ceux saisis ici ne sont pas conservés."
     }
   },
   "volumeFiles": {
@@ -1755,15 +1756,15 @@
     "source": "Partir de",
     "sources": {
       "empty": "Rien",
-      "copy": "Copier",
-      "edit": "Écrire",
-      "design": "Concevoir"
+      "copy": "Une copie",
+      "file": "Un fichier"
     },
     "copyFrom": "Objet à copier",
     "noObject": "Aucun objet ne correspond",
     "reading": "Lecture de la configuration",
     "config": "Configuration",
-    "provision": "Provisionner une fois créé",
+    "deploy": "Déployer",
+    "deploying": "Déploiement",
     "submit": "Créer",
     "creating": "Création",
     "errors": {
@@ -1817,17 +1818,23 @@
       }
     },
     "sourceHints": {
-      "empty": "Un objet réduit à son id, à configurer ensuite.",
-      "copy": "La configuration d'un objet, à modifier avant l'envoi.",
-      "edit": "Une configuration écrite ici, ou un fichier déposé.",
-      "design": "Sections et mots-clés à choisir, chacun documenté."
+      "empty": "Une configuration vide, conçue ou écrite ensuite.",
+      "copy": "La configuration d'un objet, modifiée ensuite.",
+      "file": "Un fichier de configuration, modifié ensuite."
     },
     "dropHint": "Déposez un fichier de configuration ici, ou",
-    "fileRead": "{{name}} lu : modifiable ici avant l'envoi.",
+    "fileRead": "{{name}} lu : modifié ensuite.",
     "back": "Retour",
     "next": "Suivant",
     "free": "Libre",
-    "designToText": "Modifier en mode texte"
+    "steps": {
+      "what": "Nom",
+      "from": "Point de départ",
+      "configure": "Configuration"
+    },
+    "stepsLabel": "Étapes",
+    "commentsDropped": "La conception ne garde pas les commentaires : ils sont retirés de la configuration.",
+    "copyRead": "{{path}} lu, {{count}} lignes : modifié ensuite."
   },
   "objects": {
     "reason": {
@@ -3409,9 +3416,6 @@
     "removeEntry": "Retirer {{keyword}}",
     "addVariable": "Ajouter une variable",
     "missing": "Requis sans valeur : {{keys}}.",
-    "showFile": "Voir le fichier",
-    "hideFile": "Masquer le fichier",
-    "emptyFile": "(vide : l'objet n'a que son identifiant)",
     "use": "Utiliser",
     "useExample": "Utiliser l'exemple {{value}}",
     "useExampleHint": "Prendre l'exemple comme valeur (→)",
@@ -3449,7 +3453,12 @@
       "add": "Ajouter [{{section}}]",
       "badName": "Un mot : lettres, chiffres, point, tiret ou souligné.",
       "taken": "[{{section}}] existe déjà."
-    }
+    },
+    "views": {
+      "design": "Conception",
+      "text": "Texte"
+    },
+    "viewLabel": "Modifier en"
   },
   "driverSupport": {
     "lacking_one": "Non utilisable sur {{nodes}} : son pilote ne figure pas parmi les capacités du nœud.",

@@ -10,7 +10,6 @@ const FREE_ADDRESSES_TOLD = 2 ** 32;
 import {parseClaims} from "../app/namespace-usage";
 import {
     FREE_SECTIONS,
-    designText,
     kindDrivers,
     takesResources,
     missingValues,
@@ -58,7 +57,8 @@ import {Dialog} from "../ui/components/Dialog";
 import {Button, IconButton} from "../ui/components/Button";
 import {Checkbox, Field, Input, Select, Textarea} from "../ui/components/Field";
 import {Spinner} from "../ui/components/Spinner";
-import {CloseIcon, InfoIcon, PlusIcon, SearchIcon} from "../ui/icons";
+import {CloseIcon, CodeIcon, InfoIcon, LockIcon, PlusIcon, SearchIcon, SlidersIcon} from "../ui/icons";
+import {SegmentedControl} from "../ui/components/SegmentedControl";
 import {KeywordFacts} from "./ConfigText";
 
 /*
@@ -819,16 +819,53 @@ function AddResource({kind, keywordsUrl, onAdd, onCancel, hideRoot = false}) {
     );
 }
 
+export const DESIGN_VIEWS = ["design", "text"];
+
+/**
+ * The views of one configuration, its design or its text, `view` the one shown:
+ * the dialogs designing a configuration switch between them by this group. With
+ * `onShowRoot`, root's choice of the keywords only root may set, offered to add in
+ * the design: a lock beside, pressed when shown. `className`, where it stands.
+ */
+export function DesignViewToggle({view, onView, showRoot = false, onShowRoot, className = ""}) {
+    const {t} = useTranslation();
+    const icons = {design: <SlidersIcon/>, text: <CodeIcon/>};
+    return (
+        <div data-view-toggle="" className={`flex items-center gap-1.5 ${className}`}>
+            {onShowRoot && view === "design" && (
+                <span className="inline-flex rounded-(--radius-control) border border-line bg-surface-sunken p-0.5">
+                    <button
+                        type="button"
+                        aria-pressed={showRoot}
+                        aria-label={t("objectDesigner.showRoot")}
+                        title={t("objectDesigner.showRoot")}
+                        data-show-root=""
+                        onClick={() => onShowRoot(!showRoot)}
+                        className="grid h-6 w-8 cursor-pointer place-items-center rounded-[calc(var(--radius-control)-2px)] text-ink-muted hover:text-ink focus-visible:outline-2 focus-visible:outline-(--focus-ring) aria-pressed:bg-surface-raised aria-pressed:text-accent aria-pressed:shadow-sm"
+                    >
+                        <LockIcon/>
+                    </button>
+                </span>
+            )}
+            <SegmentedControl
+                label={t("objectDesigner.viewLabel")}
+                value={view}
+                onChange={onView}
+                options={DESIGN_VIEWS.map((v) => ({value: v, label: t(`objectDesigner.views.${v}`), icon: icons[v]}))}
+            />
+        </div>
+    );
+}
+
 /**
  * The design of the configuration of an object of `kind`: `sections` and their
  * change; `keywordsUrl`, the keywords address of the object made. Root picks
  * whether to see the keywords only root may set, when the daemon says which. A
- * kind taking no resource, a user, has none to add. `onToText`, its file edited as a
- * text from then on. `showRoot` and `onShowRoot`, root's choice held by the caller,
+ * kind taking no resource, a user, has none to add. `showRoot` and `onShowRoot`, root's choice held by the caller,
  * its checkbox where the caller puts it. `namespace`, the one of the object, whose
  * claims say the networks offered to who is not root.
  */
-export function ObjectDesigner({kind, namespace = "", sections, onChange, keywordsUrl, isRoot = false, onToText, showRoot: shownRoot, onShowRoot}) {
+export function ObjectDesigner({kind, namespace = "", sections, onChange, keywordsUrl, isRoot = false, showRoot: shownRoot, onShowRoot}) {
     const {t, i18n} = useTranslation();
     const ids = useId();
     const [selected, setSelected] = useState(sections[0]?.name ?? "DEFAULT");
@@ -847,7 +884,6 @@ export function ObjectDesigner({kind, namespace = "", sections, onChange, keywor
     const showRoot = onShowRoot ? shownRoot : ownShowRoot;
     // An object only root writes (the cluster configuration): its keywords, root's all, never hidden.
     const hideRoot = !(isRoot && (showRoot || rootOnlyKind(kind)));
-    const [preview, setPreview] = useState(false);
     // The types of pool a volume may need, read once there is a volume.
     const [pools, setPools] = useState([]);
     const needs = sections.some((s) => NEEDS_GROUPS.includes(s.group));
@@ -1277,18 +1313,6 @@ export function ObjectDesigner({kind, namespace = "", sections, onChange, keywor
             >
                 <p>{t("objectDesigner.unmanagedText", {section: confirming ?? ""})}</p>
             </Dialog>
-            {/* The file it makes, on demand; or edited as a text from then on. */}
-            <div>
-                <span className="flex flex-wrap gap-2">
-                    <Button size="sm" aria-expanded={preview} onClick={() => setPreview((p) => !p)}>{t(preview ? "objectDesigner.hideFile" : "objectDesigner.showFile")}</Button>
-                    {onToText && <Button size="sm" onClick={onToText}>{t("createObject.designToText")}</Button>}
-                </span>
-                {preview && (
-                    <pre data-preview="" className="mt-2 max-h-64 overflow-auto rounded-(--radius-control) border border-line bg-surface-sunken p-2 font-mono text-data">
-                        {designText(sections) || t("objectDesigner.emptyFile")}
-                    </pre>
-                )}
-            </div>
         </div>
     );
 }

@@ -63,7 +63,9 @@ describe('CreateObjectDialog', () => {
     const type = (label, value) => fireEvent.change(screen.getByLabelText(label), {target: {value}});
     const next = () => fireEvent.click(screen.getByRole('button', {name: 'Next'}));
     const create = () => fireEvent.click(screen.getByRole('button', {name: 'Create'}));
-    const posts = () => requests.filter((r) => r.method === 'POST');
+    // The creations: the validations of the draft posted beside them left out.
+    const posts = () => requests.filter((r) => r.method === 'POST' && r.url.includes('/config/file'));
+    const view = (name) => fireEvent.click(document.querySelector(`[data-segment=${name}]`));
     const card = (selector) => document.querySelector(selector);
     const source = (name) => fireEvent.click(card(`[data-source=${name}]`));
 
@@ -141,11 +143,17 @@ describe('CreateObjectDialog', () => {
         expect(screen.getByLabelText('Free')).toBeInTheDocument();
     });
 
-    test('from nothing: the object posted with a new id alone', async () => {
+    test('from nothing: three steps named in a header; the object posted with a new id alone', async () => {
         open({defaultNamespace: 'ns1'});
+        const steps = () => [...document.querySelectorAll('[data-step]')].map((e) => [e.textContent, e.getAttribute('aria-current'), e.disabled]);
+        expect(steps()).toEqual([['Name', 'step', true], ['Start from', null, true], ['Configure', null, true]]);
         type('Name', 'db');
         next();
-        expect(card('[data-source=empty]')).toHaveAttribute('aria-pressed', 'true');
+        expect(card('[data-source=empty]')).toHaveAttribute('aria-checked', 'true');
+        expect(steps()).toEqual([['Name', null, false], ['Start from', 'step', true], ['Configure', null, true]]);
+        next();
+        // From nothing, designed.
+        expect(document.querySelector('[data-segment=design]')).toHaveAttribute('aria-pressed', 'true');
         create();
         await waitFor(() => expect(onCreated).toHaveBeenCalledWith('ns1/svc/db'));
         expect(useActionTracker.getState().tracked.map((e) => [e.label, e.subject, e.state])).toEqual([['Create', 'ns1/svc/db', 'succeeded']]);
@@ -154,10 +162,26 @@ describe('CreateObjectDialog', () => {
         expect(post.body).toMatch(/^\[DEFAULT\]\nid = [0-9a-f-]{36}\n$/);
     });
 
+    test('the header leads back to a step done, what was configured kept', () => {
+        open({defaultNamespace: 'ns1'});
+        type('Name', 'db');
+        next();
+        next();
+        view('text');
+        fireEvent.change(screen.getByLabelText('Configuration'), {target: {value: '[DEFAULT]\nnodes = n1\n'}});
+        fireEvent.click(document.querySelector('[data-step=what]'));
+        expect(screen.getByLabelText('Name')).toHaveValue('db');
+        next();
+        next();
+        view('text');
+        expect(screen.getByLabelText('Configuration')).toHaveValue('[DEFAULT]\nnodes = n1\n');
+    });
+
     test('a service of the root namespace is written as om writes it', async () => {
         open();
         type('Name', 'db');
         expect(screen.getByText('db')).toBeInTheDocument();
+        next();
         next();
         create();
         await waitFor(() => expect(onCreated).toHaveBeenCalledWith('db'));
@@ -182,19 +206,29 @@ describe('CreateObjectDialog', () => {
         expect(screen.getByLabelText('Name')).toBeDisabled();
         expect(screen.getByLabelText('Name of the new namespace')).toHaveValue('ns2');
         next();
+        next();
         create();
         await waitFor(() => expect(onCreated).toHaveBeenCalledWith('ns2/nscfg/namespace'));
     });
 
-    test('a copy starts from the configuration of the object, its id replaced', async () => {
+    const pickCopy = (path) => {
+        fireEvent.click(screen.getByRole('combobox', {name: 'Object to copy'}));
+        fireEvent.click(screen.getByRole('option', {name: path}));
+    };
+
+    test('a copy starts from the configuration of the object, its text edited next, its id replaced', async () => {
         answers['GET /api/object/path/ns1/svc/web/config/file?redact-secrets=false'] = {status: 200, text: SOURCE};
         open({defaultNamespace: 'ns1'});
         type('Name', 'web2');
         next();
         source('copy');
-        fireEvent.click(screen.getByRole('combobox', {name: 'Object to copy'}));
-        fireEvent.click(screen.getByRole('option', {name: 'ns1/svc/web'}));
-        await waitFor(() => expect(screen.getByLabelText('Configuration')).toHaveValue(SOURCE));
+        expect(screen.getByRole('button', {name: 'Next'})).toBeDisabled();
+        pickCopy('ns1/svc/web');
+        await waitFor(() => expect(screen.getByText(/ns1\/svc\/web read, \d+ lines: edited next\./)).toBeInTheDocument());
+        next();
+        // From a text, its text.
+        expect(document.querySelector('[data-segment=text]')).toHaveAttribute('aria-pressed', 'true');
+        expect(screen.getByLabelText('Configuration')).toHaveValue(SOURCE);
         create();
         await waitFor(() => expect(onCreated).toHaveBeenCalledWith('ns1/svc/web2'));
         const body = posts()[0].body;
@@ -202,22 +236,57 @@ describe('CreateObjectDialog', () => {
         expect(body).toMatch(/^\[DEFAULT\]\nid = [0-9a-f-]{36}\nnodes = \*\n\n\[fs#1\]\ntype = flag\n$/);
     });
 
-    test('a copy loaded, then back to make it a datastore: created empty, the text kept for a service', async () => {
+    test('the keyboard: Enter at the name, the source chosen focused, the arrows choosing, Enter going on', () => {
+        open({defaultNamespace: 'ns1'});
+        type('Name', 'db');
+        fireEvent.submit(screen.getByLabelText('Name').closest('form'));
+        const empty = card('[data-source=empty]');
+        expect(empty).toHaveFocus();
+        expect(screen.getByRole('radiogroup', {name: 'Start from'})).toBeInTheDocument();
+        // One stop for Tab: the source chosen.
+        expect(card('[data-source=copy]')).toHaveAttribute('tabindex', '-1');
+        fireEvent.keyDown(empty, {key: 'ArrowRight'});
+        expect(card('[data-source=copy]')).toHaveFocus();
+        expect(card('[data-source=copy]')).toHaveAttribute('aria-checked', 'true');
+        fireEvent.keyDown(card('[data-source=copy]'), {key: 'ArrowLeft'});
+        expect(empty).toHaveFocus();
+        fireEvent.keyDown(empty, {key: 'ArrowUp'});
+        expect(card('[data-source=file]')).toHaveAttribute('aria-checked', 'true');
+        fireEvent.keyDown(card('[data-source=file]'), {key: 'ArrowDown'});
+        fireEvent.keyDown(empty, {key: 'Enter'});
+        expect(document.querySelector('[data-segment=design]')).toHaveAttribute('aria-pressed', 'true');
+    });
+
+    test('the keyboard: Enter on a copy not picked yet goes to the object to copy, then on once it is read', async () => {
+        answers['GET /api/object/path/ns1/svc/web/config/file?redact-secrets=false'] = {status: 200, text: SOURCE};
+        open({defaultNamespace: 'ns1'});
+        type('Name', 'web2');
+        next();
+        fireEvent.keyDown(card('[data-source=empty]'), {key: 'ArrowRight'});
+        fireEvent.keyDown(card('[data-source=copy]'), {key: 'Enter'});
+        expect(screen.getByRole('combobox', {name: 'Object to copy'})).toHaveFocus();
+        pickCopy('ns1/svc/web');
+        await waitFor(() => expect(screen.getByText(/ns1\/svc\/web read/)).toBeInTheDocument());
+        fireEvent.keyDown(card('[data-source=copy]'), {key: 'Enter'});
+        expect(screen.getByLabelText('Configuration')).toHaveValue(SOURCE);
+    });
+
+    test('a copy loaded, then back to make it a datastore: created empty, the copy kept for a service', async () => {
         answers['GET /api/object/path/ns1/svc/web/config/file?redact-secrets=false'] = {status: 200, text: SOURCE};
         open({defaultNamespace: 'ns1'});
         type('Name', 'tls');
         next();
         source('copy');
-        fireEvent.click(screen.getByRole('combobox', {name: 'Object to copy'}));
-        fireEvent.click(screen.getByRole('option', {name: 'ns1/svc/web'}));
-        await waitFor(() => expect(screen.getByLabelText('Configuration')).toHaveValue(SOURCE));
+        pickCopy('ns1/svc/web');
+        await waitFor(() => expect(screen.getByRole('button', {name: 'Next'})).toBeEnabled());
         fireEvent.click(screen.getByRole('button', {name: 'Back'}));
         fireEvent.click(card('[data-kind=sec]'));
         create();
         await waitFor(() => expect(onCreated).toHaveBeenCalledWith('ns1/sec/tls'));
         expect(posts()[0].body).toMatch(/^\[DEFAULT\]\nid = [0-9a-f-]{36}\n$/);
-        // Back to a service, the text is still there, as left.
+        // Back to a service, the copy is still there, as left.
         fireEvent.click(card('[data-kind=svc]'));
+        next();
         next();
         expect(screen.getByLabelText('Configuration')).toHaveValue(SOURCE);
     });
@@ -242,65 +311,93 @@ describe('CreateObjectDialog', () => {
         fireEvent.click(screen.getByRole('option', {name: 'ns1/svc/web'}));
         fireEvent.click(screen.getByRole('combobox', {name: 'Object to copy'}));
         fireEvent.click(screen.getByRole('option', {name: 'ns1/svc/api'}));
-        await waitFor(() => expect(screen.getByLabelText('Configuration')).toHaveValue(OTHER));
+        await waitFor(() => expect(screen.getByText(/ns1\/svc\/api read/)).toBeInTheDocument());
         await act(async () => { answerFirst(); });
+        expect(screen.getByText(/ns1\/svc\/api read/)).toBeInTheDocument();
+        next();
         expect(screen.getByLabelText('Configuration')).toHaveValue(OTHER);
-        expect(screen.getByRole('button', {name: 'Create'})).toBeEnabled();
     });
 
-    test('a copy that could not be read: not the one before created, nothing to create until one is read', async () => {
+    test('a copy that could not be read: not the one before taken, nothing to go on with until one is read', async () => {
         answers['GET /api/object/path/ns1/svc/web/config/file?redact-secrets=false'] = {status: 200, text: SOURCE};
         answers['GET /api/object/path/ns1/svc/api/config/file?redact-secrets=false'] = {status: 500, text: 'boom'};
         open({defaultNamespace: 'ns1', paths: ['ns1/svc/web', 'ns1/svc/api']});
         type('Name', 'x');
         next();
         source('copy');
-        fireEvent.click(screen.getByRole('combobox', {name: 'Object to copy'}));
-        fireEvent.click(screen.getByRole('option', {name: 'ns1/svc/web'}));
-        await waitFor(() => expect(screen.getByLabelText('Configuration')).toHaveValue(SOURCE));
-        fireEvent.click(screen.getByRole('combobox', {name: 'Object to copy'}));
-        fireEvent.click(screen.getByRole('option', {name: 'ns1/svc/api'}));
+        pickCopy('ns1/svc/web');
+        await waitFor(() => expect(screen.getByRole('button', {name: 'Next'})).toBeEnabled());
+        pickCopy('ns1/svc/api');
         await waitFor(() => expect(screen.getByText(/The configuration of ns1\/svc\/api could not be read/)).toBeInTheDocument());
-        // The text of ns1/svc/web no longer under ns1/svc/api, and nothing posted.
-        expect(screen.queryByLabelText('Configuration')).toBeNull();
-        expect(screen.getByRole('button', {name: 'Create'})).toBeDisabled();
-        fireEvent.submit(screen.getByRole('button', {name: 'Create'}).form ?? document.querySelector('form'));
-        expect(posts()).toEqual([]);
+        // The text of ns1/svc/web no longer under ns1/svc/api: nothing to go on with.
+        expect(screen.getByRole('button', {name: 'Next'})).toBeDisabled();
+        fireEvent.submit(document.querySelector('form'));
+        expect(document.querySelector('[data-segment]')).toBeNull();
         // Picked again and read: created from it.
-        fireEvent.click(screen.getByRole('combobox', {name: 'Object to copy'}));
-        fireEvent.click(screen.getByRole('option', {name: 'ns1/svc/web'}));
-        await waitFor(() => expect(screen.getByRole('button', {name: 'Create'})).toBeEnabled());
+        pickCopy('ns1/svc/web');
+        await waitFor(() => expect(screen.getByRole('button', {name: 'Next'})).toBeEnabled());
+        next();
         create();
         await waitFor(() => expect(onCreated).toHaveBeenCalledWith('ns1/svc/x'));
         expect(posts()[0].body).toContain('[fs#1]');
     });
 
-    test('a text written, then a copy chosen and none picked: the text written not created as a copy', async () => {
+    test('a text written, then a copy chosen and none picked: nothing to go on with; back to nothing, the text kept', async () => {
         open({defaultNamespace: 'ns1'});
         type('Name', 'x');
         next();
-        source('edit');
+        next();
+        view('text');
         fireEvent.change(screen.getByLabelText('Configuration'), {target: {value: '[DEFAULT]\nnodes = written\n'}});
+        fireEvent.click(screen.getByRole('button', {name: 'Back'}));
         source('copy');
-        expect(screen.getByRole('button', {name: 'Create'})).toBeDisabled();
-        // Back to it, the text written is still there.
-        source('edit');
+        expect(screen.getByRole('button', {name: 'Next'})).toBeDisabled();
+        source('empty');
+        next();
+        view('text');
         expect(screen.getByLabelText('Configuration')).toHaveValue('[DEFAULT]\nnodes = written\n');
     });
 
-    test('written: a file dropped on the text read into it, sent with a new id', async () => {
+    test('from a file, dropped or picked: its text edited next, sent with a new id', async () => {
         open({defaultNamespace: 'ns1'});
         type('Name', 'db');
         next();
-        source('edit');
+        source('file');
+        expect(screen.getByRole('button', {name: 'Next'})).toBeDisabled();
         const file = new File(['[DEFAULT]\nnodes = *\n'], 'db.conf', {type: 'text/plain'});
         // jsdom's File reads no text: the browser's does.
         file.text = () => Promise.resolve('[DEFAULT]\nnodes = *\n');
         fireEvent.drop(card('[data-drop-zone]'), {dataTransfer: {files: [file]}});
-        await waitFor(() => expect(screen.getByLabelText('Configuration')).toHaveValue('[DEFAULT]\nnodes = *\n'));
-        expect(screen.getByText('db.conf read: edited here before it is sent.')).toBeInTheDocument();
+        await waitFor(() => expect(screen.getByText('db.conf read: edited next.')).toBeInTheDocument());
+        next();
+        expect(screen.getByLabelText('Configuration')).toHaveValue('[DEFAULT]\nnodes = *\n');
         create();
         await waitFor(() => expect(posts()[0].body).toMatch(/^\[DEFAULT\]\nid = [0-9a-f-]{36}\nnodes = \*\n$/));
+    });
+
+    test('one configuration, designed or written: each view shows what the other changed; comments dropped by a design change, said', async () => {
+        open({defaultNamespace: 'ns1'});
+        type('Name', 'db');
+        next();
+        source('file');
+        const file = new File(['x'], 'db.conf');
+        file.text = () => Promise.resolve('# the database\n[DEFAULT]\nnodes = n1\n');
+        fireEvent.drop(card('[data-drop-zone]'), {dataTransfer: {files: [file]}});
+        await waitFor(() => expect(screen.getByRole('button', {name: 'Next'})).toBeEnabled());
+        next();
+        view('design');
+        expect(await screen.findByRole('textbox', {name: 'Value of nodes'})).toHaveValue('n1');
+        // Only looked at: the text as it was, its comment kept.
+        view('text');
+        expect(screen.getByLabelText('Configuration')).toHaveValue('# the database\n[DEFAULT]\nnodes = n1\n');
+        view('design');
+        fireEvent.change(screen.getByRole('textbox', {name: 'Value of nodes'}), {target: {value: 'n1 n2'}});
+        expect(screen.getByText('Comments are not kept by the design: they are dropped from the configuration.')).toBeInTheDocument();
+        view('text');
+        expect(screen.getByLabelText('Configuration')).toHaveValue('[DEFAULT]\nnodes = n1 n2\n');
+        fireEvent.change(screen.getByLabelText('Configuration'), {target: {value: '[DEFAULT]\nnodes = n3\n'}});
+        view('design');
+        expect(screen.getByRole('textbox', {name: 'Value of nodes'})).toHaveValue('n3');
     });
 
     describe('designed', () => {
@@ -320,7 +417,7 @@ describe('CreateObjectDialog', () => {
             open({defaultNamespace: 'ns1'});
             type('Name', 'db');
             next();
-            source('design');
+            next();
             await screen.findByRole('navigation', {name: 'Sections'});
         };
 
@@ -343,8 +440,8 @@ describe('CreateObjectDialog', () => {
             expect(await screen.findByRole('heading', {name: /\[fs#1\]/})).toBeInTheDocument();
             expect(screen.getByText('Required without a value: fs#1.mnt.')).toBeInTheDocument();
             type('Value of mnt', '/srv');
-            fireEvent.click(screen.getByRole('button', {name: 'Show the file'}));
-            expect(card('[data-preview]')).toHaveTextContent('[DEFAULT] nodes = * [fs#1] type = flag mnt = /srv');
+            view('text');
+            expect(screen.getByLabelText('Configuration').value.replace(/\s+/g, ' ').trim()).toBe('[DEFAULT] nodes = * [fs#1] type = flag mnt = /srv');
             create();
             await waitFor(() => expect(posts()[0].body).toMatch(/^\[DEFAULT\]\nid = [0-9a-f-]{36}\nnodes = \*\n\n\[fs#1\]\ntype = flag\nmnt = \/srv\n$/));
         });
@@ -485,8 +582,17 @@ describe('CreateObjectDialog', () => {
             const sent = requests.filter((r) => r.method === 'POST' && r.url.endsWith('/config/validate'));
             expect(sent.at(-1).body).toMatch(/^\[DEFAULT\]\nnodes = n1/);
             expect(screen.getByText('1 error')).toBeInTheDocument();
+            // Refused, nor created nor deployed: the buttons held.
+            expect(screen.getByRole('button', {name: 'Create'})).toBeDisabled();
+            expect(screen.getByRole('button', {name: 'Deploy'})).toBeDisabled();
             // Validated only: nothing created.
             expect(posts().filter((r) => r.url.includes('/config/file'))).toEqual([]);
+            // Fixed: free again, nothing more said.
+            answers['POST /api/object/path/ns1/svc/db/config/validate'] = {status: 200, text: JSON.stringify({kind: 'ConfigAlertList', items: []})};
+            fireEvent.change(screen.getByRole('textbox', {name: 'Value of nodes'}), {target: {value: '*'}});
+            await waitFor(() => expect(screen.getByRole('button', {name: 'Create'})).toBeEnabled(), {timeout: 3000});
+            expect(screen.getByRole('button', {name: 'Deploy'})).toBeEnabled();
+            expect(screen.queryByText(/The configuration is valid/)).toBeNull();
         });
 
         test('a strategy chosen leaves out what it excludes in other groups too, offered before the choice', async () => {
@@ -762,7 +868,7 @@ describe('CreateObjectDialog', () => {
             fireEvent.click(card('[data-group=fs]'));
             expect(within(screen.getByRole('list', {name: 'Types'})).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['flag', 'xroot, or unmanaged provisioning']);
             // Asked for: all of them, those of root tagged.
-            fireEvent.click(screen.getByRole('checkbox', {name: 'Show the keywords only root may set'}));
+            fireEvent.click(screen.getByRole('button', {name: 'Show the keywords only root may set'}));
             expect(within(await screen.findByRole('group', {name: 'Driver groups'})).getAllByRole('button').map((b) => b.dataset.group)).toEqual(['disk', 'fs']);
             fireEvent.click(card('[data-group=fs]'));
             expect(within(screen.getByRole('list', {name: 'Types'})).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['ext4root', 'flag', 'xroot, or unmanaged provisioning']);
@@ -792,8 +898,8 @@ describe('CreateObjectDialog', () => {
             const kind = await screen.findByRole('combobox', {name: 'Value of type'});
             await waitFor(() => expect([...document.getElementById(kind.getAttribute('list')).options].map((o) => o.value)).toEqual(['loop', 'shm']));
             fireEvent.change(kind, {target: {value: 'shm'}});
-            fireEvent.click(screen.getByRole('button', {name: 'Show the file'}));
-            expect(card('[data-preview]')).toHaveTextContent('[volume#1] size = 1g type = shm');
+            view('text');
+            expect(screen.getByLabelText('Configuration').value.replace(/\s+/g, ' ').trim()).toBe('[volume#1] size = 1g type = shm');
         });
 
         test('the keywords a provision fails without required, unless the user takes the provision on, warned first; the other provisioning ones at hand', async () => {
@@ -831,8 +937,9 @@ describe('CreateObjectDialog', () => {
             expect(screen.getByRole('textbox', {name: 'Value of size'})).toHaveValue('1g');
             expect(screen.queryByRole('textbox', {name: 'Value of provision'})).toBeNull();
             expect(screen.queryByText(/Required without a value/)).toBeNull();
-            fireEvent.click(screen.getByRole('button', {name: 'Show the file'}));
-            expect(card('[data-preview]')).toHaveTextContent('[disk#1] type = lv name = data size = 1g provision = false');
+            view('text');
+            expect(screen.getByLabelText('Configuration').value.replace(/\s+/g, ' ').trim()).toBe('[disk#1] type = lv name = data size = 1g provision = false');
+            view('design');
             // Given back to om: required again; the optional one at hand once they are set.
             fireEvent.click(screen.getByRole('checkbox', {name: 'Unmanaged provisioning'}));
             await screen.findByRole('textbox', {name: 'Value of vg'});
@@ -909,13 +1016,12 @@ describe('CreateObjectDialog', () => {
             expect(await screen.findByRole('alert')).toHaveTextContent('fs.nope could not be read');
         });
 
-        test('edited as text from then on: the file of the design in the editor', async () => {
+        test('its text, the file of the design', async () => {
             await design();
             fireEvent.click(screen.getByRole('button', {name: 'More'}));
             fireEvent.click(within(screen.getByRole('list', {name: 'Keywords to add'})).getByRole('button', {name: 'Add nodes'}));
             type('Value of nodes', 'n1 n2');
-            fireEvent.click(screen.getByRole('button', {name: 'Edit as text'}));
-            expect(card('[data-source=edit]')).toHaveAttribute('aria-pressed', 'true');
+            view('text');
             expect(screen.getByLabelText('Configuration')).toHaveValue('[DEFAULT]\nnodes = n1 n2\n');
         });
 
@@ -931,15 +1037,23 @@ describe('CreateObjectDialog', () => {
             await design();
             fireEvent.click(screen.getByRole('button', {name: 'More'}));
             expect(offered()).toEqual(['monitor_action', 'nodes']);
-            fireEvent.click(screen.getByRole('checkbox', {name: 'Show the keywords only root may set'}));
+            const lock = screen.getByRole('button', {name: 'Show the keywords only root may set'});
+            // On the line of the steps, beside the view: none in the design.
+            expect(lock.closest('nav, [data-view-toggle]')).toHaveAttribute('data-view-toggle');
+            expect(document.querySelector('[data-designer] input[type=checkbox]')).toBeNull();
+            fireEvent.click(lock);
+            expect(lock).toHaveAttribute('aria-pressed', 'true');
             expect(offered()).toEqual(['monitor_action', 'nodes', 'priority']);
+            // A design shown: not of the text.
+            view('text');
+            expect(screen.queryByRole('button', {name: 'Show the keywords only root may set'})).toBeNull();
         });
 
         test('not root: no choice; never those needing root whatever the value, those needing it for some values offered', async () => {
             grants.current = {admin: ['ns1']};
             KW('DEFAULT', ROOT_KEYWORDS);
             await design();
-            expect(screen.queryByRole('checkbox', {name: 'Show the keywords only root may set'})).toBeNull();
+            expect(screen.queryByRole('button', {name: 'Show the keywords only root may set'})).toBeNull();
             fireEvent.click(screen.getByRole('button', {name: 'More'}));
             expect(offered()).toEqual(['monitor_action', 'nodes']);
             // Root for some values only: said so, not as a keyword of root.
@@ -953,17 +1067,18 @@ describe('CreateObjectDialog', () => {
         open({defaultNamespace: 'ns1'});
         type('Name', 'db');
         next();
+        next();
         create();
-        expect(await screen.findByRole('alert')).toHaveTextContent('The object could not be created: bad keyword');
+        expect(await screen.findByText(/The object could not be created: bad keyword/)).toBeInTheDocument();
         expect(onCreated).not.toHaveBeenCalled();
     });
 
-    test('provisioned once the daemon reports the new object', async () => {
+    test('deployed: provisioned once the daemon reports the new object', async () => {
         open({defaultNamespace: 'ns1'});
         type('Name', 'db');
         next();
-        fireEvent.click(screen.getByRole('checkbox', {name: 'Provision once created'}));
-        create();
+        next();
+        fireEvent.click(screen.getByRole('button', {name: 'Deploy'}));
         await waitFor(() => expect(posts()).toHaveLength(1));
         expect(onCreated).not.toHaveBeenCalled();
         act(() => {
@@ -973,14 +1088,37 @@ describe('CreateObjectDialog', () => {
             });
         });
         await waitFor(() => expect(onCreated).toHaveBeenCalledWith('ns1/svc/db'));
-        expect(posts()[1].url).toBe('/api/object/path/ns1/svc/db/action/provision');
+        expect(requests.filter((r) => r.method === 'POST' && r.url.includes('/action/')).map((r) => r.url)).toEqual(['/api/object/path/ns1/svc/db/action/provision']);
         expect(useActionTracker.getState().tracked.map((e) => [e.action, e.subject])).toEqual(expect.arrayContaining([
             ['create', 'ns1/svc/db'],
         ]));
     });
 
-    test('a configuration has nothing to provision', () => {
+    test('its path, once named, in the title rather than in the steps', () => {
+        open({defaultNamespace: 'ns1'});
+        type('Name', 'db');
+        expect(screen.getByRole('dialog', {name: 'New object'})).toBeInTheDocument();
+        next();
+        expect(screen.getByRole('dialog', {name: 'New object · ns1/svc/db'})).toBeInTheDocument();
+        expect(screen.queryByText('Path:')).toBeNull();
+        next();
+        expect(screen.getByRole('dialog', {name: 'New object · ns1/svc/db'})).toBeInTheDocument();
+        expect(screen.queryByText('Path:')).toBeNull();
+    });
+
+    test('created only: nothing provisioned', async () => {
+        open({defaultNamespace: 'ns1'});
+        type('Name', 'db');
+        next();
+        next();
+        create();
+        await waitFor(() => expect(onCreated).toHaveBeenCalledWith('ns1/svc/db'));
+        expect(requests.filter((r) => r.method === 'POST' && r.url.includes('/action/'))).toEqual([]);
+    });
+
+    test('a configuration has nothing to provision: no deploy', () => {
         open({defaultKind: 'cfg'});
-        expect(screen.queryByRole('checkbox', {name: 'Provision once created'})).not.toBeInTheDocument();
+        expect(screen.getByRole('button', {name: 'Create'})).toBeInTheDocument();
+        expect(screen.queryByRole('button', {name: 'Deploy'})).not.toBeInTheDocument();
     });
 });

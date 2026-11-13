@@ -8,7 +8,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
-import { CloseIcon } from "../icons";
+import { CloseIcon, CollapseIcon, ExpandIcon, NewTabIcon } from "../icons";
 import { usePanelSide } from "./panel-side";
 import { RAIL_VISIBLE, RESIZE_VISIBLE, RESIZED_WIDTH } from "./slide-over-layout";
 import { useShortcut } from "../lib/shortcuts";
@@ -69,6 +69,10 @@ export function SlideOver({
   rail,
   reopenable = false,
   resizeLabel,
+  expanded = false,
+  onExpandedChange,
+  expandLabels,
+  newTab,
   children,
 }: {
   open: boolean;
@@ -122,6 +126,16 @@ export function SlideOver({
    * same `size` (`slide-over-width.ts`). Without a name, no handle.
    */
   resizeLabel?: string;
+  /**
+   * Spread over the whole window, its handle gone: a record read or written at
+   * length. With `onExpandedChange`, a button of the header toggles it, named by
+   * `expandLabels` (to spread it, to give it its side back).
+   */
+  expanded?: boolean;
+  onExpandedChange?: (expanded: boolean) => void;
+  expandLabels?: { expand: string; collapse: string };
+  /** A link of the header opening what the panel shows in a new tab: `href`, named `label`. */
+  newTab?: { href: string; label: string };
   children: ReactNode;
 }) {
   const { side } = usePanelSide();
@@ -351,8 +365,8 @@ export function SlideOver({
     >
       <div
         ref={main}
-        className={`flex w-screen min-w-0 ${SIZES[size]} ${
-          width === undefined ? "" : RESIZED_WIDTH[size]
+        className={`flex w-screen min-w-0 ${
+          expanded ? "max-w-none" : `${SIZES[size]} ${width === undefined ? "" : RESIZED_WIDTH[size]}`
         } flex-col`}
       >
         <div className="flex items-center gap-2 border-b border-line px-3 py-2">
@@ -363,6 +377,34 @@ export function SlideOver({
             </>
           )}
           <div className="ml-auto flex items-center gap-2">{actions}</div>
+          {newTab !== undefined && (
+            <a
+              href={newTab.href}
+              target="_blank"
+              rel="noopener"
+              aria-label={newTab.label}
+              title={newTab.label}
+              data-panel-new-tab=""
+              className="flex h-7 w-7 items-center justify-center rounded-(--radius-control) border border-line text-ink-muted hover:text-ink"
+            >
+              <NewTabIcon />
+            </a>
+          )}
+          {onExpandedChange !== undefined && expandLabels !== undefined && (
+            <button
+              type="button"
+              aria-pressed={expanded}
+              aria-label={expanded ? expandLabels.collapse : expandLabels.expand}
+              title={expanded ? expandLabels.collapse : expandLabels.expand}
+              data-panel-expand=""
+              onClick={() => {
+                onExpandedChange(!expanded);
+              }}
+              className="flex h-7 w-7 items-center justify-center rounded-(--radius-control) border border-line text-ink-muted hover:text-ink"
+            >
+              {expanded ? <CollapseIcon /> : <ExpandIcon />}
+            </button>
+          )}
           <button
             type="button"
             onClick={onClose}
@@ -380,7 +422,7 @@ export function SlideOver({
           {rail}
         </div>
       )}
-      {open && resizeLabel !== undefined && (
+      {open && resizeLabel !== undefined && !expanded && (
         <div
           role="separator"
           aria-orientation="vertical"

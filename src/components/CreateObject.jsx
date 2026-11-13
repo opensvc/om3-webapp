@@ -1,6 +1,5 @@
 import React, {useEffect, useId, useMemo, useRef, useState} from "react";
 import {useTranslation} from "react-i18next";
-import {Dialog} from "../ui/components/Dialog";
 import {Button} from "../ui/components/Button";
 import {Field, Input, Select} from "../ui/components/Field";
 import {ObjectIcon, om3ObjectKind} from "../ui/components/ObjectIcon";
@@ -211,7 +210,10 @@ const fetchConfigFile = async (path) => {
  * a while.
  */
 const waitForObject = (path) => new Promise((resolve, reject) => {
-    const ready = (s) => s.objectStatus?.[path] !== undefined && Object.keys(s.objectInstanceStatus?.[path] ?? {}).length > 0;
+    // An action on it is taken by the monitor of one of its instances: the api answers
+    // "object not found" until one is known, its status alone not enough.
+    const ready = (s) => s.objectStatus?.[path] !== undefined
+        && Object.keys(s.instanceMonitor ?? {}).some((key) => key.slice(key.indexOf(":") + 1) === path);
     if (ready(useEventStore.getState())) {
         resolve();
         return;
@@ -246,26 +248,52 @@ const waitForObject = (path) => new Promise((resolve, reject) => {
  * `namespaces`, those known. `onCreated` receives the path created; the creation and
  * the provisioning, the actions tray says.
  */
-const CreateObjectDialog = ({open, onClose, defaultKind = "svc", defaultNamespace = "root", namespaces = [], paths = [], onCreated}) => {
+/** The draft of a creation kept under `key` in the tab (sessionStorage): none without a key, or unreadable. */
+const readDraft = (key) => {
+    if (!key) return null;
+    try {
+        return JSON.parse(sessionStorage.getItem(key) ?? "null");
+    } catch {
+        return null;
+    }
+};
+const writeDraft = (key, value) => {
+    if (!key) return;
+    try {
+        if (value === null) sessionStorage.removeItem(key);
+        else sessionStorage.setItem(key, JSON.stringify(value));
+    } catch {
+        // Storage refused (a private window full, say): the draft lives as long as the page.
+    }
+};
+
+const CreateObject = ({onClose, defaultKind = "svc", defaultNamespace = "root", namespaces = [], paths = [], onCreated, draftKey, step: stepProp, onStepChange}) => {
     const {t} = useTranslation();
     const ids = useId();
-    const [kind, setKind] = useState(defaultKind);
+    // What a reload of the page finds again: the draft of the tab, once read.
+    const [draft] = useState(() => readDraft(draftKey));
+    const [kind, setKind] = useState(draft?.kind ?? defaultKind);
     // A cfg or a sec: created empty, its keys added in its panel.
     const datastore = kind === "cfg" || kind === "sec";
-    const [namespace, setNamespace] = useState(defaultNamespace);
-    const [name, setName] = useState("");
-    const [source, setSource] = useState("empty");
-    const [copyFrom, setCopyFrom] = useState("");
-    const [fileName, setFileName] = useState("");
-    const [config, setConfig] = useState("");
+    const [namespace, setNamespace] = useState(draft?.namespace ?? defaultNamespace);
+    const [name, setName] = useState(draft?.name ?? "");
+    const [source, setSource] = useState(draft?.source ?? "empty");
+    const [copyFrom, setCopyFrom] = useState(draft?.copyFrom ?? "");
+    const [fileName, setFileName] = useState(draft?.fileName ?? "");
+    const [config, setConfig] = useState(draft?.config ?? "");
     // The configuration of the object copied, `from` it, as read then edited; none until
     // read, nor when it could not be: apart from the one written, never another's posted.
-    const [copied, setCopied] = useState(null);
-    const [design, setDesign] = useState(() => designStart());
-    // What it is, then how its configuration starts.
-    const [step, setStep] = useState("what");
-    const [view, setView] = useState("design");
-    const [fileText, setFileText] = useState(null);
+    const [copied, setCopied] = useState(draft?.copied ?? null);
+    const [design, setDesign] = useState(() => {
+        const start = designStart(RUNNING_KINDS.includes(draft?.kind ?? defaultKind));
+        return draft?.config ? parseDesign(draft.config, start) : start;
+    });
+    // What it is, then how its configuration starts: the page's, in its address, else its own.
+    const [ownStep, setOwnStep] = useState(draft?.step ?? "what");
+    const step = stepProp ?? ownStep;
+    const setStep = (next, options) => (onStepChange ? onStepChange(next, options) : setOwnStep(next));
+    const [view, setView] = useState(draft?.view ?? "design");
+    const [fileText, setFileText] = useState(draft?.fileText ?? null);
     const [commentsDropped, setCommentsDropped] = useState(false);
     const [loadingSource, setLoadingSource] = useState(false);
     // Deployed: provisioned once created, the button clicked last, kept for a retry past a refusal.
@@ -296,37 +324,16 @@ const CreateObjectDialog = ({open, onClose, defaultKind = "svc", defaultNamespac
     const nameRef = useRef(null);
     // The object whose copy is read: picked again meanwhile, an answer is not the one asked.
     const copying = useRef("");
-    // The design an opening starts from: another one, the user designed it.
-    const designAtStart = useRef(null);
+    // The design it started from: another one, the user designed it.
+    const designAtStart = useRef(design);
     // What the configuration was filled from: the same again, its edits kept.
-    const filledFrom = useRef("");
-
-    // Each opening starts over, on the kind of the list it was opened from.
+    const filledFrom = useRef(draft?.filledFrom ?? "");
+    // The name to type first, a new creation.
     useEffect(() => {
-        if (!open) return;
-        setKind(defaultKind);
-        setNamespace(defaultNamespace);
-        setName("");
-        setSource("empty");
-        setCopyFrom("");
-        setFileName("");
-        setConfig("");
-        setCopied(null);
-        const start = designStart(RUNNING_KINDS.includes(defaultKind));
-        designAtStart.current = start;
-        setDesign(start);
-        setStep("what");
-        setView("design");
-        setFileText(null);
-        setCommentsDropped(false);
-        filledFrom.current = "";
-        copying.current = "";
-        setLoadingSource(false);
-        setDeploying(false);
-        setShowRoot(false);
-        setError(null);
-        setTouched({});
-    }, [open, defaultKind, defaultNamespace]);
+        if (step === "what") nameRef.current?.focus();
+        // At the start only.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     const path = objectPath(namespace.trim(), kind, name.trim());
     const errors = pathErrors(namespace.trim(), kind, name.trim());
@@ -480,6 +487,31 @@ const CreateObjectDialog = ({open, onClose, defaultKind = "svc", defaultNamespac
     const hasCopy = copied !== null && copied.from === copyFrom;
     const sourceReady = source === "empty" || (source === "copy" && hasCopy && !loadingSource) || (source === "file" && fileText !== null);
 
+    // The draft kept in the tab as it changes: a reload, or a way back, finds it again.
+    useEffect(() => {
+        writeDraft(draftKey, {kind, namespace, name, source, copyFrom, fileName, fileText, config, copied, view, step, filledFrom: filledFrom.current});
+    }, [draftKey, kind, namespace, name, source, copyFrom, fileName, fileText, config, copied, view, step]);
+    // A step asked for by the address, back or forward, not reached yet: the one it takes
+    // before. Reached forward, the configuration filled from its start, as Next does.
+    useEffect(() => {
+        if (step === "what" || datastore) {
+            if (step !== "what") setStep("what", {replace: true});
+            return;
+        }
+        if (invalid) {
+            setStep("what", {replace: true});
+            return;
+        }
+        if (step !== "configure") return;
+        if (!sourceReady) {
+            if (!loadingSource) setStep("from", {replace: true});
+            return;
+        }
+        fill();
+        // On the step asked: what it takes is read above.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [step, invalid, sourceReady, loadingSource, datastore]);
+
     // `force`, created anyway past a refusal force lifts; `deploy`, provisioned once created.
     const submit = async (event, force = false, deploy = false) => {
         event?.preventDefault();
@@ -534,6 +566,7 @@ const CreateObjectDialog = ({open, onClose, defaultKind = "svc", defaultNamespac
                     trackRefused({action: "provision", subject: path, reason: err.message});
                 }
             }
+            writeDraft(draftKey, null);
             onCreated?.(path);
         } catch (err) {
             trackRefused({...creation, reason: err.message});
@@ -546,60 +579,38 @@ const CreateObjectDialog = ({open, onClose, defaultKind = "svc", defaultNamespac
     // A cfg or a sec has no second step: created at the first.
     const last = datastore || step === "configure";
     const at = STEPS.indexOf(step);
-    // Something typed, picked or designed: not lost to a stray Escape or click beside the dialog.
+    // Something typed, picked or designed: asked before it is lost.
     const dirty = name.trim() !== "" || config !== "" || copied !== null || copyFrom !== "" || fileName !== "" || design !== designAtStart.current;
+    const [leaving, setLeaving] = useState(false);
+    const discardRef = useRef(null);
+    useEffect(() => {
+        if (leaving) discardRef.current?.focus();
+    }, [leaving]);
+    // Left on purpose: the draft goes with it.
+    const leave = () => {
+        writeDraft(draftKey, null);
+        onClose?.();
+    };
+    // The tab closed or reloaded with something done: the browser asks first.
+    useEffect(() => {
+        if (!dirty || submitting) return undefined;
+        const ask = (event) => {
+            event.preventDefault();
+            event.returnValue = "";
+        };
+        window.addEventListener("beforeunload", ask);
+        return () => window.removeEventListener("beforeunload", ask);
+    }, [dirty, submitting]);
     return (
-        <Dialog
-            open={open}
-            onClose={submitting ? () => {} : onClose}
-            dirty={dirty}
-            // Its path, once named, in the title: the steps after the name say it there.
-            title={at > 0 ? (
-                <>
-                    {t("createObject.title")} <span className="text-ink-muted">·</span> <code className="font-mono">{path}</code>
-                </>
-            ) : t("createObject.title")}
-            size={step === "configure" && view === "design" ? "xl" : "lg"}
-            initialFocus={nameRef}
-            footer={
-                <>
-                    {/* Pressed, it keeps the focus where it is: a field left would say its error, the
-                        dialog growing, the button moved from under the pointer before it is released. */}
-                    <Button onMouseDown={(e) => e.preventDefault()} onClick={onClose} disabled={submitting}>{t("common.cancel")}</Button>
-                    {at > 0 && !datastore && (
-                        <Button onClick={() => setStep(STEPS[at - 1])} disabled={submitting}>{t("createObject.back")}</Button>
-                    )}
-                    {last ? (
-                        <>
-                            {/* Created only: provisioned later, from its actions. */}
-                            <Button
-                                variant="create"
-                                type="submit"
-                                form={`${ids}-form`}
-                                disabled={submitting || draftErrors > 0}
-                                icon={submitting && !deploying ? <Spinner label={t("createObject.creating")}/> : undefined}
-                            >
-                                {t("createObject.submit")}
-                            </Button>
-                            {/* Created, then provisioned once the daemons know it: the choice on the
-                                button clicked, not in a box left behind the configuration. */}
-                            {canProvision && (
-                                <Button
-                                    variant="create"
-                                    onClick={() => submit(undefined, false, true)}
-                                    disabled={submitting || draftErrors > 0}
-                                    icon={submitting && deploying ? <Spinner label={t("createObject.deploying")}/> : undefined}
-                                >
-                                    {t("createObject.deploy")}
-                                </Button>
-                            )}
-                        </>
-                    ) : (
-                        <Button type="submit" form={`${ids}-form`} disabled={step === "from" && !sourceReady}>{t("createObject.next")}</Button>
-                    )}
-                </>
-            }
-        >
+        <section aria-labelledby={`${ids}-title`} data-create-object="" className="mx-auto flex w-full max-w-7xl flex-col gap-3 p-3 sm:p-4">
+            {/* Its path, once named, in the title: the steps after the name say it there. */}
+            <h1 id={`${ids}-title`} className="text-title font-semibold">
+                {at > 0 ? (
+                    <>
+                        {t("createObject.title")} <span className="text-ink-muted">·</span> <code className="font-mono">{path}</code>
+                    </>
+                ) : t("createObject.title")}
+            </h1>
             <form id={`${ids}-form`} onSubmit={last ? submit : next} noValidate className="space-y-4">
                 {/* The steps, those done a way back to them. */}
                 {/* The steps; at the last, on the same line, the view of the configuration and,
@@ -740,8 +751,54 @@ const CreateObjectDialog = ({open, onClose, defaultKind = "svc", defaultNamespac
                     />
                 )}
             </form>
-        </Dialog>
+            {/* The way on, or out: at the foot of the page, where the form ends. */}
+            <div data-create-footer="" className="sticky bottom-0 flex flex-wrap items-center justify-end gap-2 border-t border-line bg-surface py-3">
+                {/* Pressed, it keeps the focus where it is: a field left would say its error, the
+                    page growing, the button moved from under the pointer before it is released.
+                    Something done, it asks before it is lost. */}
+                {leaving ? (
+                    <div role="group" aria-label={t("createObject.discardQuestion")} className="mr-auto flex flex-wrap items-center gap-2">
+                        <span>{t("createObject.discardQuestion")}</span>
+                        <Button variant="delete" onClick={leave} ref={discardRef}>{t("createObject.discard")}</Button>
+                        <Button onClick={() => setLeaving(false)}>{t("createObject.keepEditing")}</Button>
+                    </div>
+                ) : (
+                    <Button className="mr-auto" onMouseDown={(e) => e.preventDefault()} onClick={() => (dirty ? setLeaving(true) : leave())} disabled={submitting}>{t("common.cancel")}</Button>
+                )}
+                {at > 0 && !datastore && (
+                    <Button onClick={() => setStep(STEPS[at - 1])} disabled={submitting || leaving}>{t("createObject.back")}</Button>
+                )}
+                {last ? (
+                    <>
+                        {/* Created only: provisioned later, from its actions. */}
+                        <Button
+                            variant="create"
+                            type="submit"
+                            form={`${ids}-form`}
+                            disabled={submitting || draftErrors > 0}
+                            icon={submitting && !deploying ? <Spinner label={t("createObject.creating")}/> : undefined}
+                        >
+                            {t("createObject.submit")}
+                        </Button>
+                        {/* Created, then provisioned once the daemons know it: the choice on the
+                            button clicked, not in a box left behind the configuration. */}
+                        {canProvision && (
+                            <Button
+                                variant="create"
+                                onClick={() => submit(undefined, false, true)}
+                                disabled={submitting || draftErrors > 0}
+                                icon={submitting && deploying ? <Spinner label={t("createObject.deploying")}/> : undefined}
+                            >
+                                {t("createObject.deploy")}
+                            </Button>
+                        )}
+                    </>
+                ) : (
+                    <Button type="submit" form={`${ids}-form`} disabled={step === "from" && !sourceReady}>{t("createObject.next")}</Button>
+                )}
+            </div>
+        </section>
     );
 };
 
-export default CreateObjectDialog;
+export default CreateObject;

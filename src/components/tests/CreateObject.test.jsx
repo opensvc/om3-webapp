@@ -1,7 +1,7 @@
 import React from 'react';
 import {act, fireEvent, render, screen, waitFor, within} from '@testing-library/react';
 import {vi} from 'vitest';
-import CreateObjectDialog from '../CreateObjectDialog';
+import CreateObject from '../CreateObject';
 import {clearDesignerCache} from '../ObjectDesigner';
 import useEventStore from '../../hooks/useEventStore.js';
 import {useActionTracker} from '../../app/action-tracker';
@@ -14,7 +14,7 @@ vi.mock('../../hooks/useGrants', () => ({
 
 const SOURCE = '[DEFAULT]\nid = 11111111-1111-4111-8111-111111111111\nnodes = *\n\n[fs#1]\ntype = flag\n';
 
-describe('CreateObjectDialog', () => {
+describe('CreateObject', () => {
     /** The requests made, their method, address and body. */
     let requests;
     let answers;
@@ -43,7 +43,7 @@ describe('CreateObjectDialog', () => {
                 json: () => Promise.resolve(JSON.parse(answer.text || '{}')),
             });
         });
-        useEventStore.setState({objectStatus: {}, objectInstanceStatus: {}});
+        useEventStore.setState({objectStatus: {}, objectInstanceStatus: {}, instanceMonitor: {}});
     });
 
     afterEach(() => {
@@ -51,8 +51,7 @@ describe('CreateObjectDialog', () => {
     });
 
     const open = (props = {}) => render(
-        <CreateObjectDialog
-            open
+        <CreateObject
             onClose={vi.fn()}
             namespaces={['ns1', 'root']}
             paths={['ns1/svc/web', 'ns1/cfg/settings']}
@@ -69,7 +68,7 @@ describe('CreateObjectDialog', () => {
     const card = (selector) => document.querySelector(selector);
     const source = (name) => fireEvent.click(card(`[data-source=${name}]`));
 
-    test('cancel closes at the first click: pressed, it leaves the name focused, no error to grow the dialog', () => {
+    test('cancel leaves at the first click, nothing done: pressed, it leaves the name focused, no error to grow the page', () => {
         const onClose = vi.fn();
         open({defaultKind: 'sec', onClose});
         const name = screen.getByLabelText('Name');
@@ -83,21 +82,47 @@ describe('CreateObjectDialog', () => {
         expect(onClose).toHaveBeenCalledTimes(1);
     });
 
-    test('untouched, closed by Escape; something typed, kept open by a stray Escape, Cancel closing it', () => {
+    test('something typed, Cancel asks before it is lost: kept editing, then discarded', () => {
         const onClose = vi.fn();
         open({defaultKind: 'svc', onClose});
-        fireEvent.keyDown(screen.getByRole('dialog'), {key: 'Escape'});
-        expect(onClose).toHaveBeenCalledTimes(1);
         type('Name', 'web2');
-        fireEvent.keyDown(screen.getByRole('dialog'), {key: 'Escape'});
-        expect(onClose).toHaveBeenCalledTimes(1);
         fireEvent.click(screen.getByRole('button', {name: 'Cancel'}));
-        expect(onClose).toHaveBeenCalledTimes(2);
+        expect(onClose).not.toHaveBeenCalled();
+        const asked = screen.getByRole('group', {name: 'Discard this new object?'});
+        expect(within(asked).getByRole('button', {name: 'Discard'})).toHaveFocus();
+        fireEvent.click(within(asked).getByRole('button', {name: 'Keep editing'}));
+        expect(screen.getByLabelText('Name')).toHaveValue('web2');
+        fireEvent.click(screen.getByRole('button', {name: 'Cancel'}));
+        fireEvent.click(screen.getByRole('button', {name: 'Discard'}));
+        expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
+    test('its draft kept in the tab: a reload finds it at the step it was at; created, it is forgotten', async () => {
+        sessionStorage.clear();
+        const first = open({draftKey: 'draft-1', defaultNamespace: 'ns1'});
+        type('Name', 'db');
+        next();
+        source('copy');
+        first.unmount();
+        open({draftKey: 'draft-1', defaultNamespace: 'ns1'});
+        expect(screen.getByRole('radio', {name: /A copy/})).toHaveAttribute('aria-checked', 'true');
+        expect(screen.getByRole('region', {name: 'New object · ns1/svc/db'})).toBeInTheDocument();
+        source('empty');
+        next();
+        create();
+        await waitFor(() => expect(onCreated).toHaveBeenCalledWith('ns1/svc/db'));
+        expect(sessionStorage.getItem('draft-1')).toBeNull();
+    });
+
+    test('a step the address asks for that is not reached yet: the one it takes before', () => {
+        const onStepChange = vi.fn();
+        open({step: 'configure', onStepChange});
+        expect(onStepChange).toHaveBeenCalledWith('what', {replace: true});
     });
 
     test('opens on the kind and namespace it is given, a card each picked, the name focused; no wait to choose', () => {
         open({defaultKind: 'cfg', defaultNamespace: 'ns1'});
-        expect(screen.getByRole('dialog', {name: 'New object'})).toBeInTheDocument();
+        expect(screen.getByRole('region', {name: 'New object'})).toBeInTheDocument();
         expect(card('[data-kind=cfg]')).toHaveAttribute('aria-pressed', 'true');
         expect(within(screen.getByRole('group', {name: 'My namespaces'})).getByRole('button', {name: 'ns1'})).toHaveAttribute('aria-pressed', 'true');
         expect(screen.getByLabelText('Name')).toHaveFocus();
@@ -1137,7 +1162,7 @@ describe('CreateObjectDialog', () => {
         expect(onCreated).not.toHaveBeenCalled();
     });
 
-    test('deployed: provisioned once the daemon reports the new object', async () => {
+    test('deployed: provisioned once the daemon reports the monitor of an instance, its status alone not enough', async () => {
         open({defaultNamespace: 'ns1'});
         type('Name', 'db');
         next();
@@ -1145,11 +1170,19 @@ describe('CreateObjectDialog', () => {
         fireEvent.click(screen.getByRole('button', {name: 'Deploy'}));
         await waitFor(() => expect(posts()).toHaveLength(1));
         expect(onCreated).not.toHaveBeenCalled();
+        // Its status first: the api would answer the provision "object not found" yet.
         act(() => {
             useEventStore.setState({
                 objectStatus: {'ns1/svc/db': {avail: 'down'}},
                 objectInstanceStatus: {'ns1/svc/db': {node1: {avail: 'down'}}},
             });
+        });
+        await new Promise((r) => setTimeout(r, 50));
+        expect(requests.filter((r) => r.url.includes('/action/'))).toEqual([]);
+        expect(onCreated).not.toHaveBeenCalled();
+        // Its instance monitor known: provisioned.
+        act(() => {
+            useEventStore.setState({instanceMonitor: {'node1:ns1/svc/db': {state: 'idle'}}});
         });
         await waitFor(() => expect(onCreated).toHaveBeenCalledWith('ns1/svc/db'));
         expect(requests.filter((r) => r.method === 'POST' && r.url.includes('/action/')).map((r) => r.url)).toEqual(['/api/object/path/ns1/svc/db/action/provision']);
@@ -1161,12 +1194,12 @@ describe('CreateObjectDialog', () => {
     test('its path, once named, in the title rather than in the steps', () => {
         open({defaultNamespace: 'ns1'});
         type('Name', 'db');
-        expect(screen.getByRole('dialog', {name: 'New object'})).toBeInTheDocument();
+        expect(screen.getByRole('region', {name: 'New object'})).toBeInTheDocument();
         next();
-        expect(screen.getByRole('dialog', {name: 'New object · ns1/svc/db'})).toBeInTheDocument();
+        expect(screen.getByRole('region', {name: 'New object · ns1/svc/db'})).toBeInTheDocument();
         expect(screen.queryByText('Path:')).toBeNull();
         next();
-        expect(screen.getByRole('dialog', {name: 'New object · ns1/svc/db'})).toBeInTheDocument();
+        expect(screen.getByRole('region', {name: 'New object · ns1/svc/db'})).toBeInTheDocument();
         expect(screen.queryByText('Path:')).toBeNull();
     });
 

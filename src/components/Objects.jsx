@@ -1,5 +1,5 @@
 import React, {createContext, useContext, useEffect, useState, useMemo, useCallback, useRef, useDeferredValue} from "react";
-import {useLocation, useNavigate} from "react-router-dom";
+import {Link, useLocation, useNavigate} from "react-router-dom";
 import useEventStore from "../hooks/useEventStore.js";
 import {retainEventReception} from "../eventSourceManager";
 import {usePanelSearch, usePeek} from "../app/panel-search";
@@ -8,14 +8,13 @@ import {ObjectDetailPanel} from "./RecordPanels";
 import {extractNamespace} from "../utils/objectUtils";
 import {useTranslation} from "react-i18next";
 import {useObjectBulkActions} from "./useObjectBulkActions";
-import CreateObjectDialog from "./CreateObjectDialog";
 import {useObjectData} from "../hooks/useObjectData";
 import {useClusterNodeOrder} from "../hooks/useClusterNodeOrder";
 import {Table, HeaderRow, HeaderCell, SortHeaderCell, Row, Cell, EmptyRow, toggleCheckbox, LIST_PAGE, LIST_RAIL_QUERY, useListOffsets} from "../ui/components/Table";
 import {NotProvisionedMark as PMark} from "../ui/components/StateMarks";
 import {StatusMark} from "../ui/components/StatusMark";
 import {MenuButton} from "../ui/components/MenuButton";
-import {Button, IconButton} from "../ui/components/Button";
+import {Button, IconButton, buttonClass} from "../ui/components/Button";
 import {cn} from "../ui/cn";
 import {Checkbox} from "../ui/components/Field";
 import {useMediaQuery} from "../ui/lib/media";
@@ -623,13 +622,15 @@ const Objects = () => {
     const [selectedNamespaces, setSelectedNamespaces] = useState(rawNamespaces);
     const [selectedKinds, setSelectedKinds] = useState(rawKinds);
     const [selectedGlobalStates, setSelectedGlobalStates] = useState(rawGlobalStates);
-    const [createOpen, setCreateOpen] = useState(false);
-    // The namespace a new object is created in, from the line of a namespace; else that of the filter.
-    const [createIn, setCreateIn] = useState(null);
+    // A new object, on its page (/create): in the namespace of a line, else that of the
+    // filter, of the kind of the list; Cancel comes back here.
+    const createUrl = useCallback((namespace) => {
+        const search = new URLSearchParams({kind: LIST_KIND[list] ?? "svc", ns: namespace});
+        return `/create?${search.toString()}`;
+    }, [list]);
     const createInNamespace = useCallback((namespace) => {
-        setCreateIn(namespace);
-        setCreateOpen(true);
-    }, []);
+        navigate(createUrl(namespace), {state: {from: `${location.pathname}${location.search}`}});
+    }, [createUrl, navigate, location.pathname, location.search]);
     // The configuration of a namespace, none yet, offered to those who may write it.
     const mayWriteNscfg = canWriteClaims(useGrants());
     const [searchQuery, setSearchQuery] = useState(rawSearchQuery);
@@ -958,27 +959,6 @@ const Objects = () => {
         setSelectedObjects([]);
     }, [list]);
 
-    // Created, the object opens in its panel, over the tab it is listed in. Its
-    // creation and its provisioning, the actions tray says.
-    const handleCreated = useCallback((path) => {
-        setCreateOpen(false);
-        // All lists it too: kept.
-        const next = list === ALL_LIST ? ALL_LIST : listOf(path);
-        const params = new URLSearchParams(location.search);
-        if (next !== list) {
-            setSelectedObjects([]);
-            setSelectedKinds([]);
-            params.delete("kind");
-        }
-        if (next === OBJECT_LISTS[0]) params.delete("list");
-        else params.set("list", next);
-        ["tab", "peek", "peektab"].forEach((key) => params.delete(key));
-        params.set("sel", path);
-        // A datastore, created empty: on its keys, to add them.
-        const {kind} = parseObjectName(path);
-        if (kind === "cfg" || kind === "sec") params.set("tab", "keys");
-        navigate(`${location.pathname}?${params.toString()}`);
-    }, [list, location.pathname, location.search, navigate]);
 
     // An object a filter hides, or gone, leaves the selection: an action on the
     // selection acts on none the list does not show.
@@ -1064,12 +1044,15 @@ const Objects = () => {
     // A new object, and the actions on the selection: over the table, or at the head of the rail.
     const listActions = (align) => (
         <>
-            <Button size="sm" variant="create" className={selectionOnly} icon={<PlusIcon className="h-4 w-4"/>} onClick={() => {
-                setCreateIn(null);
-                setCreateOpen(true);
-            }}>
+            {/* A link: a middle-click, or Ctrl, opens it in a new tab, beside the list. */}
+            <Link
+                to={createUrl(selectedNamespaces.length === 1 ? selectedNamespaces[0] : "root")}
+                state={{from: `${location.pathname}${location.search}`}}
+                className={cn(buttonClass("create", "sm"), selectionOnly)}
+            >
+                <PlusIcon className="h-4 w-4"/>
                 {t("createObject.open")}
-            </Button>
+            </Link>
             {/* Nothing selected, nothing to act on: how to select, in the place of the actions. */}
             {selectedObjects.length > 0 ? (
                 <>
@@ -1255,15 +1238,6 @@ const Objects = () => {
                 <Dialog open={legendOpen} title={t("legend.toggle")} size="lg" onClose={() => setLegendOpen(false)}>
                     <SymbolLegend/>
                 </Dialog>
-                <CreateObjectDialog
-                    open={createOpen}
-                    onClose={() => setCreateOpen(false)}
-                    defaultKind={LIST_KIND[list]}
-                    defaultNamespace={createIn ?? (selectedNamespaces.length === 1 ? selectedNamespaces[0] : "root")}
-                    namespaces={allNamespaces}
-                    paths={allObjectNames}
-                    onCreated={handleCreated}
-                />
 
                 <ObjectDetailPanel
                     path={panel.sel}

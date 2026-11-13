@@ -1834,7 +1834,10 @@
     },
     "stepsLabel": "Étapes",
     "commentsDropped": "La conception ne garde pas les commentaires : ils sont retirés de la configuration.",
-    "copyRead": "{{path}} lu, {{count}} lignes : modifié ensuite."
+    "copyRead": "{{path}} lu, {{count}} lignes : modifié ensuite.",
+    "discardQuestion": "Abandonner ce nouvel objet ?",
+    "discard": "Abandonner",
+    "keepEditing": "Continuer"
   },
   "objects": {
     "reason": {
@@ -2115,7 +2118,10 @@
     },
     "logs": {
       "noNode": "Aucune instance pour lire les journaux."
-    }
+    },
+    "expand": "Plein écran",
+    "collapse": "Revenir sur le côté",
+    "newTab": "Ouvrir dans un nouvel onglet"
   },
   "panelHistory": {
     "clear": "Vider l'historique",

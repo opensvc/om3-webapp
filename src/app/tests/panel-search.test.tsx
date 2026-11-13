@@ -15,6 +15,14 @@ describe("applyPanelUpdate", () => {
     expect(applyPanelUpdate(params("peek=node:n1&view=dns"), { view: undefined }).get("view")).toBeNull();
   });
 
+  test("full screen kept from a record to the next, gone with the last panel closed", () => {
+    expect(applyPanelUpdate(params("peek=node:n1&full=1"), { peek: "node:n2" }).get("full")).toBe("1");
+    expect(applyPanelUpdate(params("sel=n1&full=1"), { sel: "n2" }).get("full")).toBe("1");
+    expect(applyPanelUpdate(params("peek=node:n1&full=1"), { sel: "n1" }).get("full")).toBe("1");
+    expect(applyPanelUpdate(params("peek=node:n1&full=1"), { peek: undefined }).get("full")).toBeNull();
+    expect(applyPanelUpdate(params("sel=n1&full=1&x=1"), { sel: undefined }).toString()).toBe("x=1");
+  });
+
   test("opening a row panel keeps the filters of the view and starts on its first tab", () => {
     const next = applyPanelUpdate(params("namespace=ns1&tab=logs"), { sel: "ns1/svc/web" });
     expect(next.get("namespace")).toBe("ns1");

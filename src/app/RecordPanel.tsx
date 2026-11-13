@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { SlideOver } from "../ui/components/SlideOver";
 import { TabList, type TabItem } from "../ui/components/Tabs";
@@ -99,6 +100,13 @@ export function RecordPanel({
   // The place in the title bar the content puts what concerns the whole record.
   const [titleSlot, setTitleSlot] = useState<HTMLElement | null>(null);
   const [actionsSlot, setActionsSlot] = useState<HTMLElement | null>(null);
+  // Over the whole window, in the URL (`full`): a reload, the Back button and a new tab
+  // keep it. A new tab opens the record spread, as asked for reading it apart.
+  const [params, setParams] = useSearchParams();
+  const full = params.get("full") === "1";
+  const newTabParams = new URLSearchParams(params);
+  newTabParams.set("full", "1");
+  const newTabHref = `${window.location.pathname}?${newTabParams.toString()}`;
 
   return (
     <SlideOver
@@ -111,6 +119,20 @@ export function RecordPanel({
       closeOnOutsideClick={closeOnOutsideClick}
       heading={<PanelTitle kind={kind} title={title} recordId={recordId} open={open} slotRef={setTitleSlot} />}
       reopenable
+      expanded={full}
+      onExpandedChange={(next) => {
+        setParams(
+          (previous) => {
+            const out = new URLSearchParams(previous);
+            if (next) out.set("full", "1");
+            else out.delete("full");
+            return out;
+          },
+          { preventScrollReset: true },
+        );
+      }}
+      expandLabels={{ expand: t("panel.expand"), collapse: t("panel.collapse") }}
+      newTab={{ href: newTabHref, label: t("panel.newTab") }}
       actions={
         <>
           <div ref={setActionsSlot} className="flex items-center gap-2" />

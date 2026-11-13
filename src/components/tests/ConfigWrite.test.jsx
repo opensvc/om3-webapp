@@ -3,7 +3,7 @@ import {act, fireEvent, render, screen, waitFor, within} from '@testing-library/
 import userEvent from '@testing-library/user-event';
 import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
 import ConfigSection from '../ConfigSection';
-import CreateObjectDialog from '../CreateObjectDialog';
+import CreateObject from '../CreateObject';
 import {clearKeywordsCache} from '../ConfigText';
 import {clearDesignerCache} from '../ObjectDesigner';
 import {clearGrants} from '../../hooks/useGrants';
@@ -202,7 +202,7 @@ describe('the force of a configuration write', () => {
 
 describe('the force and the wait of a creation', () => {
     const open = () => render(
-        <CreateObjectDialog open onClose={vi.fn()} namespaces={['ns1']} paths={[]} onCreated={vi.fn()} defaultNamespace="ns1"/>,
+        <CreateObject onClose={vi.fn()} namespaces={['ns1']} paths={[]} onCreated={vi.fn()} defaultNamespace="ns1"/>,
     );
     const create = (name) => {
         fireEvent.change(screen.getByLabelText('Name'), {target: {value: name}});

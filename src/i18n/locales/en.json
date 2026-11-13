@@ -1834,7 +1834,10 @@
     },
     "stepsLabel": "Steps",
     "commentsDropped": "Comments are not kept by the design: they are dropped from the configuration.",
-    "copyRead": "{{path}} read, {{count}} lines: edited next."
+    "copyRead": "{{path}} read, {{count}} lines: edited next.",
+    "discardQuestion": "Discard this new object?",
+    "discard": "Discard",
+    "keepEditing": "Keep editing"
   },
   "objects": {
     "reason": {
@@ -2115,7 +2118,10 @@
     },
     "logs": {
       "noNode": "No instance to read the logs of."
-    }
+    },
+    "expand": "Full screen",
+    "collapse": "Back to the side",
+    "newTab": "Open in a new tab"
   },
   "panelHistory": {
     "clear": "Clear the history",

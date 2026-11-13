@@ -38,6 +38,8 @@ import {authHeaders} from "../services/api.jsx";
 import {actionIcon, useActionRunner} from "./InstanceActions";
 import {useGrants} from "../hooks/useGrants";
 import {canWriteClaims} from "../app/namespace-claims";
+import {objectAttention} from "../hooks/useSidebarAlerts";
+import {untrustedT} from "../utils/untrustedText";
 import {actionLabel} from "../constants/actions";
 import {KEY_KINDS} from "../constants/actions";
 
@@ -109,6 +111,11 @@ export function ObjectDetailPanel({path, tab, onTabChange, onClose}) {
         }
     }, [known, onClose]);
 
+    // The question to the assistant: why it is down or in warn, else how it goes.
+    const objectStatus = useEventStore((s) => (path === undefined ? undefined : s.objectStatus?.[path]));
+    const attention = path === undefined ? null : objectAttention(path, objectStatus);
+    const ask = path === undefined ? undefined : untrustedT(t, "ai.askAbout.object", {path}, {context: attention ?? undefined});
+
     const tabs = keysOnly
         ? [
             {key: "keys", label: t("panel.tabs.keys")},
@@ -148,6 +155,7 @@ export function ObjectDetailPanel({path, tab, onTabChange, onClose}) {
             tab={tab}
             onTabChange={onTabChange}
             closeOnOutsideClick={false}
+            ask={ask}
         >
             {(active) => (
                 <>

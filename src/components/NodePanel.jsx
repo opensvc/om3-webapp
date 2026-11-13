@@ -4,6 +4,7 @@ import {useTranslation} from "react-i18next";
 import {RecordPanel} from "../app/RecordPanel";
 import {usePanelHeader} from "../app/panel-header";
 import useEventStore from "../hooks/useEventStore.js";
+import {untrustedT} from "../utils/untrustedText";
 import {retainEventReception} from "../eventSourceManager";
 import {URL_NODE} from "../config/apiPath.js";
 import {authHeaders, getResponseErrorMessage} from "../services/api.jsx";
@@ -1128,6 +1129,9 @@ export function NodeDetailPanel({node, tab, onTabChange, onClose}) {
     };
     const tabs = ["status", "inventory", "config", "schedules", "drivers", "daemon", "events", "logs"]
         .map((key) => ({key, label: t(`nodePanel.tabs.${key}`)}));
+    // The question to the assistant: why it is overloaded, else how it goes.
+    const overloaded = useEventStore((s) => node !== undefined && s.nodeStatus?.[node]?.is_overloaded === true);
+    const ask = node === undefined ? undefined : untrustedT(t, "ai.askAbout.node", {node}, {context: overloaded ? "overloaded" : undefined});
     return (
         <RecordPanel
             open={open}
@@ -1139,6 +1143,7 @@ export function NodeDetailPanel({node, tab, onTabChange, onClose}) {
             tab={tab}
             onTabChange={onTabChange}
             closeOnOutsideClick={false}
+            ask={ask}
         >
             {(active) => (
                 <>

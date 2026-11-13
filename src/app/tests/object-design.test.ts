@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import {
+    impliedType,
   designStart,
   designChanges,
   designText,
@@ -710,5 +711,13 @@ describe("the summary of a keyword's documentation", () => {
     test("nothing to summarize: empty", () => {
         expect(keywordSummary(undefined)).toBe("");
         expect(keywordSummary("  \n ")).toBe("");
+    });
+});
+
+describe("impliedType", () => {
+    test("the one type the keywords of a type are of; none when they tell none or several", () => {
+        expect(impliedType([{section: "ip", option: "type"}, {section: "ip", option: "name", types: ["host"]}] as never)).toBe("host");
+        expect(impliedType([{section: "ip", option: "type", types: []}] as never)).toBe("");
+        expect(impliedType([{section: "fs", option: "mnt", types: ["flag", "ext4"]}] as never)).toBe("");
     });
 });

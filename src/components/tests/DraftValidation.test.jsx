@@ -82,6 +82,25 @@ describe("a draft validated as it is edited", () => {
         expect(onErrors).toHaveBeenLastCalledWith(0);
     });
 
+    test("an answer to an older draft come after the last one: dropped, the last one kept", async () => {
+        const replies = [];
+        const onErrors = vi.fn();
+        global.fetch = vi.fn(() => new Promise((resolve) => replies.push(resolve)));
+        const {rerender} = render(<DraftValidation url={URL} text={"[DEFAULT]\nnodes = n1\n"} onErrors={onErrors}/>);
+        await rest();
+        rerender(<DraftValidation url={URL} text={"[DEFAULT]\nnodes = *\n"} onErrors={onErrors}/>);
+        await rest();
+        expect(replies).toHaveLength(2);
+        // The last draft answered first: clean.
+        await act(async () => replies[1]({ok: true, status: 200, json: () => Promise.resolve({items: []})}));
+        // The older one, with an error, after: not of the draft there.
+        await act(async () => replies[0]({ok: true, status: 200, json: () => Promise.resolve({items: [
+            {level: "error", kind: "denied", key: "DEFAULT.nodes", comment: "requires the root grant"},
+        ]})}));
+        expect(screen.queryByText("requires the root grant")).toBeNull();
+        expect(onErrors).toHaveBeenLastCalledWith(0);
+    });
+
     test("nothing said by a daemon older than the validation, nor without a url", async () => {
         global.fetch = vi.fn(() => answer(404, {message: "Not Found"}));
         const {container, rerender} = render(<DraftValidation url={URL} text="[DEFAULT]\n"/>);

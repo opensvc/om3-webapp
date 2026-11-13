@@ -3458,7 +3458,8 @@
       "design": "Conception",
       "text": "Texte"
     },
-    "viewLabel": "Modifier en"
+    "viewLabel": "Modifier en",
+    "type": "Type"
   },
   "driverSupport": {
     "lacking_one": "Non utilisable sur {{nodes}} : son pilote ne figure pas parmi les capacités du nœud.",

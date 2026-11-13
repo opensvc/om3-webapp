@@ -608,6 +608,15 @@ export const rootOnlyKind = (kind: string) => kind === "ccfg";
 export const NEEDS_GROUPS = ["volume"];
 
 /**
+ * The type a resource of no `type` gets, as its keywords tell it: the one type its
+ * keywords of a type are of (`host` for an ip), "" when they tell none or several.
+ */
+export function impliedType(keywords: DesignKeyword[]): string {
+  const types = new Set(keywords.flatMap((k) => k.types ?? []).filter((t) => t !== ""));
+  return types.size === 1 ? [...types][0] : "";
+}
+
+/**
  * The types of pool a volume may ask for, from the capabilities of a node
  * (`drivers.resource.volume.<type>`).
  */

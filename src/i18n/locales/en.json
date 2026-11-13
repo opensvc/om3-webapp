@@ -3458,7 +3458,8 @@
       "design": "Design",
       "text": "Text"
     },
-    "viewLabel": "Edit as"
+    "viewLabel": "Edit as",
+    "type": "Type"
   },
   "driverSupport": {
     "lacking_one": "Not usable on {{nodes}}: its driver is not among the capabilities of the node.",

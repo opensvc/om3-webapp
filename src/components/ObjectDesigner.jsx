@@ -22,6 +22,7 @@ import {
     isResource,
     rootOnlyKind,
     NEEDS_GROUPS,
+    impliedType,
     poolTypes,
     popularKeywords,
     listWords,
@@ -871,6 +872,8 @@ export function ObjectDesigner({kind, namespace = "", sections, onChange, keywor
     const [selected, setSelected] = useState(sections[0]?.name ?? "DEFAULT");
     // The keywords read, by driver: DEFAULT at once, a resource's when added.
     const [keywords, setKeywords] = useState({});
+    // Why the keywords of a driver could not be read, by driver: said on its sections.
+    const [readErrors, setReadErrors] = useState({});
     const [error, setError] = useState(null);
     const [adding, setAdding] = useState(false);
     const [picking, setPicking] = useState(false);
@@ -938,25 +941,50 @@ export function ObjectDesigner({kind, namespace = "", sections, onChange, keywor
         side: n.free !== undefined && n.free < FREE_ADDRESSES_TOLD ? t("objectDesigner.freeAddresses", {count: n.free, free: n.free.toLocaleString(i18n.language)}) : undefined,
     })), [networks, t, i18n.language]);
 
+    // The drivers whose keywords are read, or being read, for this keywords address.
+    const requested = useRef(new Set());
     useEffect(() => {
         let live = true;
+        requested.current = new Set();
+        setReadErrors({});
         driverKeywords(keywordsUrl, "DEFAULT").then(
             (items) => live && setKeywords((k) => ({...k, DEFAULT: items})),
             (err) => live && setError(err.message),
         );
-        // The drivers of the resources there, read again for a design brought back; a
-        // resource of the type of its group by default, by its section in the object.
-        for (const s of sections) {
-            if (!s.group) continue;
-            const driver = `${s.group}.${s.type}`;
-            const read = s.type ? driverKeywords(keywordsUrl, driver) : readJson(`${keywordsUrl}?section=${encodeURIComponent(s.name)}`).then(keywordItems);
-            read.then((items) => live && setKeywords((k) => ({...k, [driver]: items})), () => {});
-        }
         return () => {
             live = false;
         };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [keywordsUrl]);
+    // The drivers of the resources there, each read once: those of a design brought
+    // back, and those a text edited beside the design adds or retypes, the designer
+    // staying while the text is shown. A resource of the type of its group by default,
+    // by its section in the object.
+    const driversThere = sections.filter((s) => s.group).map((s) => `${s.group}.${s.type}\u0000${s.type ? "" : s.name}`).join("\n");
+    useEffect(() => {
+        const asked = requested.current;
+        for (const s of sections) {
+            if (!s.group) continue;
+            const driver = `${s.group}.${s.type}`;
+            if (asked.has(driver)) continue;
+            asked.add(driver);
+            const read = s.type ? driverKeywords(keywordsUrl, driver) : readJson(`${keywordsUrl}?section=${encodeURIComponent(s.name)}`).then(keywordItems);
+            // Read for another address since: dropped.
+            read.then(
+                (items) => {
+                    if (requested.current !== asked) return;
+                    setKeywords((k) => ({...k, [driver]: items}));
+                    setReadErrors(({[driver]: _, ...rest}) => rest);
+                },
+                // Said on the section, read again at the next change of the sections.
+                (err) => {
+                    if (requested.current !== asked) return;
+                    asked.delete(driver);
+                    setReadErrors((e) => ({...e, [driver]: err.message}));
+                },
+            );
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [keywordsUrl, driversThere]);
 
     // The keywords a section requires, there as soon as its driver's are read: a section
     // added, or brought back from a file without them.
@@ -977,6 +1005,13 @@ export function ObjectDesigner({kind, namespace = "", sections, onChange, keywor
     const section = sections.find((s) => s.name === selected) ?? sections[0];
     const driverOf = (s) => (s.group ? `${s.group}.${s.type}` : "DEFAULT");
     const known = keywords[driverOf(section)] ?? [];
+    // The types a resource may take, its group's drivers a design may offer, its own kept;
+    // none for a group whose type is a need (a volume), nor in the cluster configuration.
+    const implied = section.group && !section.type ? impliedType(known) : "";
+    const typeChoices = !section.group || NEEDS_GROUPS.includes(section.group) || rootOnlyKind(kind) || catalog === null ? [] : [...new Set([
+        ...usableDrivers(catalog, hideRoot).filter((d) => d.group === section.group).map((d) => d.type).filter(Boolean),
+        ...(section.type ? [section.type] : []),
+    ])].sort();
     const free = FREE_SECTIONS.includes(section.name);
     const allKeywords = useMemo(() => Object.values(keywords).flat(), [keywords]);
     const missing = missingValues(sections, allKeywords);
@@ -1084,6 +1119,7 @@ export function ObjectDesigner({kind, namespace = "", sections, onChange, keywor
     const addEntry = (key) => update({...section, entries: [...section.entries, {key, value: ""}]});
     const addResource = ({group, type}, items) => {
         const driver = `${group}.${type}`;
+        requested.current.add(driver);
         setKeywords((k) => ({...k, [driver]: items}));
         const name = nextSectionName(sections, group);
         onChange([...sections, withRequired(items, {name, group, type, entries: []})]);
@@ -1093,6 +1129,7 @@ export function ObjectDesigner({kind, namespace = "", sections, onChange, keywor
     };
     // A section of the cluster configuration: its keywords read with it, as a resource's.
     const addClusterSection = (section, items) => {
+        requested.current.add(`${section.group}.${section.type}`);
         setKeywords((k) => ({...k, [`${section.group}.${section.type}`]: items}));
         onChange([...sections, withRequired(items, section)]);
         setSelected(section.name);
@@ -1176,6 +1213,16 @@ export function ObjectDesigner({kind, namespace = "", sections, onChange, keywor
                             {section.type && <span>{` ${section.group}.${section.type}`}</span>}
                         </h3>
                         {free && <p className="text-data text-ink-muted">{t("objectDesigner.envHint")}</p>}
+                        {/* Its type, among those of its group: one written as a text has none to start. */}
+                        {typeChoices.length > 0 && (
+                            <label className="flex items-center gap-2 text-data">
+                                <span className="text-ink-muted">{t("objectDesigner.type")}</span>
+                                <Select aria-label={t("objectDesigner.type")} className="h-7 w-auto font-mono" value={section.type} onChange={(e) => update({...section, type: e.target.value})}>
+                                    {!section.type && <option value="">{implied ? t("objectDesigner.byDefault", {value: implied}) : ""}</option>}
+                                    {typeChoices.map((type) => <option key={type} value={type}>{type}</option>)}
+                                </Select>
+                            </label>
+                        )}
                         {/* A resource om provisions, its provisioning keywords required; or left to the user, on confirmation. */}
                         {catalog !== null && isResource(kind, section) && provisions(catalog, section) && (
                             <Checkbox
@@ -1185,6 +1232,7 @@ export function ObjectDesigner({kind, namespace = "", sections, onChange, keywor
                             />
                         )}
                         {!free && renderStrategyBar(keywordGroups.filter((g) => prominent.has(g.id)))}
+                        {readErrors[driverOf(section)] && <p role="alert" className="text-data text-state-down">{t("objectDesigner.readFailed", {message: readErrors[driverOf(section)]})}</p>}
                         {section.entries.length === 0 && !free && <p className="text-data text-ink-muted">{t("objectDesigner.noEntry")}</p>}
                         <ul aria-label={t("objectDesigner.entries", {section: section.name})} className="space-y-1">
                             {section.entries.map((entry, i) => {

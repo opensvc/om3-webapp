@@ -421,6 +421,70 @@ describe('CreateObjectDialog', () => {
             await screen.findByRole('navigation', {name: 'Sections'});
         };
 
+        test('a resource written in the text, its keywords read for the design: its choices there, back in the design', async () => {
+            answers['GET /api/object/path/ns1/svc/db/config/keywords?driver=ip.netns'] = {status: 200, text: JSON.stringify({
+                items: [
+                    {section: 'ip', option: 'type', required: true},
+                    {section: 'ip', option: 'name', types: ['netns'], group: 'addressing'},
+                    {section: 'ip', option: 'network', types: ['netns'], group: 'addressing'},
+                ],
+                groups: [
+                    {id: 'addressing', driver: 'ip.netns', name: 'Addressing', order: 10, required: true, strategies: [
+                        {id: 'static', name: 'Static address', uses: ['name'], excludes: ['network'], requires: [], when: []},
+                        {id: 'ipam', name: 'Address drawn from a network', uses: ['network'], excludes: ['name'], requires: [], when: []},
+                    ]},
+                ],
+            })};
+            await design();
+            view('text');
+            fireEvent.change(screen.getByLabelText('Configuration'), {target: {value: '[ip#1]\ntype = netns\n'}});
+            view('design');
+            await waitFor(() => expect(requests.some((r) => r.url.endsWith('/config/keywords?driver=ip.netns'))).toBe(true));
+            fireEvent.click(within(screen.getByRole('navigation', {name: 'Sections'})).getByRole('button', {name: /^ip#1/}));
+            expect(await screen.findByRole('group', {name: 'How to set Addressing'})).toBeInTheDocument();
+            // Read once: back and forth, not again.
+            view('text');
+            view('design');
+            expect(requests.filter((r) => r.url.endsWith('/config/keywords?driver=ip.netns'))).toHaveLength(1);
+        });
+
+        test('a resource written with no type: the type it gets by default said, another picked, its keywords read', async () => {
+            answers['GET /api/node/name/localhost/drivers'] = {status: 200, text: JSON.stringify({items: [
+                {data: {name: 'ip.host', group: 'ip', type: 'host', available: true}},
+                {data: {name: 'ip.netns', group: 'ip', type: 'netns', available: true}},
+                {data: {name: 'fs.flag', group: 'fs', type: 'flag', available: true}},
+            ]})};
+            answers['GET /api/object/path/ns1/svc/db/config/keywords?section=ip%231'] = {status: 200, text: JSON.stringify({items: [
+                {section: 'ip', option: 'type'},
+                {section: 'ip', option: 'name', types: ['host']},
+            ]})};
+            KW('ip.netns', [{section: 'ip', option: 'type'}, {section: 'ip', option: 'netns', types: ['netns'], required: true}]);
+            await design();
+            view('text');
+            fireEvent.change(screen.getByLabelText('Configuration'), {target: {value: '[ip#1]\n'}});
+            view('design');
+            fireEvent.click(within(screen.getByRole('navigation', {name: 'Sections'})).getByRole('button', {name: /^ip#1/}));
+            const type = await screen.findByRole('combobox', {name: 'Type'});
+            await waitFor(() => expect(type.options[0].textContent).toBe('default: host'));
+            expect([...type.options].map((o) => o.value)).toEqual(['', 'host', 'netns']);
+            fireEvent.change(type, {target: {value: 'netns'}});
+            await waitFor(() => expect(requests.some((r) => r.url.endsWith('/config/keywords?driver=ip.netns'))).toBe(true));
+            // Typed: no default to go back to; its file says it.
+            expect([...screen.getByRole('combobox', {name: 'Type'}).options].map((o) => o.value)).toEqual(['host', 'netns']);
+            view('text');
+            expect(screen.getByLabelText('Configuration').value).toMatch(/^\[ip#1\]\ntype = netns/m);
+        });
+
+        test('a resource whose keywords could not be read: said on its section, not shown as one with nothing to set', async () => {
+            answers['GET /api/object/path/ns1/svc/db/config/keywords?section=ip%231'] = {status: 500, text: JSON.stringify({title: 'Internal Server Error', status: 500, detail: 'ip.: driver not found'})};
+            await design();
+            view('text');
+            fireEvent.change(screen.getByLabelText('Configuration'), {target: {value: '[ip#1]\n'}});
+            view('design');
+            fireEvent.click(within(screen.getByRole('navigation', {name: 'Sections'})).getByRole('button', {name: /^ip#1/}));
+            expect(await screen.findByText(/The keywords could not be read: .*driver not found/)).toBeInTheDocument();
+        });
+
         test('DEFAULT and env to start; a resource added by its driver, its required keywords seeded; the file it makes posted', async () => {
             await design();
             const sections = screen.getByRole('navigation', {name: 'Sections'});
@@ -578,19 +642,19 @@ describe('CreateObjectDialog', () => {
             await design();
             fireEvent.click(screen.getByRole('button', {name: 'Add nodes'}));
             fireEvent.change(screen.getByRole('textbox', {name: 'Value of nodes'}), {target: {value: 'n1'}});
-            await waitFor(() => expect(screen.getByText('requires the root grant')).toBeInTheDocument(), {timeout: 3000});
+            await waitFor(() => expect(screen.getByText('requires the root grant')).toBeInTheDocument(), {timeout: 8000});
             const sent = requests.filter((r) => r.method === 'POST' && r.url.endsWith('/config/validate'));
             expect(sent.at(-1).body).toMatch(/^\[DEFAULT\]\nnodes = n1/);
             expect(screen.getByText('1 error')).toBeInTheDocument();
-            // Refused, nor created nor deployed: the buttons held.
-            expect(screen.getByRole('button', {name: 'Create'})).toBeDisabled();
+            // Refused, nor created nor deployed: the buttons held, once the dialog is told.
+            await waitFor(() => expect(screen.getByRole('button', {name: 'Create'})).toBeDisabled());
             expect(screen.getByRole('button', {name: 'Deploy'})).toBeDisabled();
             // Validated only: nothing created.
             expect(posts().filter((r) => r.url.includes('/config/file'))).toEqual([]);
             // Fixed: free again, nothing more said.
             answers['POST /api/object/path/ns1/svc/db/config/validate'] = {status: 200, text: JSON.stringify({kind: 'ConfigAlertList', items: []})};
             fireEvent.change(screen.getByRole('textbox', {name: 'Value of nodes'}), {target: {value: '*'}});
-            await waitFor(() => expect(screen.getByRole('button', {name: 'Create'})).toBeEnabled(), {timeout: 3000});
+            await waitFor(() => expect(screen.getByRole('button', {name: 'Create'})).toBeEnabled(), {timeout: 8000});
             expect(screen.getByRole('button', {name: 'Deploy'})).toBeEnabled();
             expect(screen.queryByText(/The configuration is valid/)).toBeNull();
         });

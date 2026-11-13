@@ -27,11 +27,18 @@ const isRouter404 = (status, body) => status === 404 && body?.message === "Not F
  * sent to the `config/validate` address of an object (POST), of one not created yet
  * too, nothing written. `result` null before, then {loading}, {alerts}, {error} or
  * {unsupported}; `reset` forgets it, as a configuration written since makes it stale.
+ * Only the answer to the last request counts: one to an older draft, come after, is
+ * dropped.
  */
 export function useConfigValidation(url) {
     const [result, setResult] = useState(null);
+    const last = useRef(0);
     const validate = useCallback(async (text) => {
         if (!url) return;
+        const asked = ++last.current;
+        const settle = (value) => {
+            if (asked === last.current) setResult(value);
+        };
         setResult({loading: true});
         try {
             const response = text === undefined
@@ -44,21 +51,26 @@ export function useConfigValidation(url) {
             if (!response.ok) {
                 const body = await response.clone().json().catch(() => null);
                 if (isRouter404(response.status, body)) {
-                    setResult({unsupported: true});
+                    settle({unsupported: true});
                     return;
                 }
-                setResult({error: (await getResponseErrorMessage(response)) || `HTTP ${response.status}`});
+                settle({error: (await getResponseErrorMessage(response)) || `HTTP ${response.status}`});
                 return;
             }
             const data = await response.json();
-            setResult({alerts: Array.isArray(data?.items) ? data.items : []});
+            settle({alerts: Array.isArray(data?.items) ? data.items : []});
         } catch (err) {
-            setResult({error: err.message});
+            settle({error: err.message});
         }
     }, [url]);
-    const reset = useCallback(() => setResult(null), []);
+    // Forgotten: an answer still awaited, dropped too.
+    const reset = useCallback(() => {
+        last.current += 1;
+        setResult(null);
+    }, []);
     // Another node, another object: what was found there is not of this one.
     useEffect(() => {
+        last.current += 1;
         setResult(null);
     }, [url]);
     return {result, validate, reset};

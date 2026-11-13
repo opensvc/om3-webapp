@@ -30,3 +30,13 @@ export const getAiAgentConfig = (value) => {
         return {url: '', enabled: false, error: error.message};
     }
 };
+
+/**
+ * The longest question a link may open the assistant with (AskAssistantLink): one
+ * the user reads whole before sending it. The questions of the panels hold under
+ * 300 characters; a link received may carry any.
+ */
+export const MAX_LINK_PROMPT = 500;
+
+/** The question of the `prompt` parameter of /ai, trimmed and bounded; '' when none. */
+export const linkPrompt = (value) => (typeof value === 'string' ? value.trim().slice(0, MAX_LINK_PROMPT) : '');

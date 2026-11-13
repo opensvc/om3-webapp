@@ -3,6 +3,7 @@ import {fireEvent, render, screen, waitFor, within} from '@testing-library/react
 import {beforeEach, describe, expect, test, vi} from 'vitest';
 import {axe} from 'vitest-axe';
 import AiChat from '../AiChat.jsx';
+import {AiChatProvider} from '../../context/AiChatProvider.jsx';
 import i18n from '../../i18n';
 import {replayRun} from '../../services/tests/agui-fixtures.js';
 import {parseConfirmation} from '../../services/ai-agent.js';
@@ -47,7 +48,7 @@ describe('the confirmation card', () => {
         };
     });
     const ask = async (prompt) => {
-        render(<AiChat/>);
+        render(<AiChat/>, {wrapper: AiChatProvider});
         await waitFor(() => expect(screen.getByRole('button', {name: 'New conversation'})).toBeEnabled());
         fireEvent.change(screen.getByRole('textbox', {name: 'Message'}), {target: {value: prompt}});
         fireEvent.click(screen.getByRole('button', {name: 'Send'}));
@@ -58,7 +59,7 @@ describe('the confirmation card', () => {
     };
     const reload = async (confirmation, region = 'Action waiting for confirmation') => {
         mocks.client.getConversationState.mockResolvedValue({conversation: existing, confirmation});
-        render(<AiChat/>);
+        render(<AiChat/>, {wrapper: AiChatProvider});
         await waitFor(() => expect(screen.getByRole('button', {name: 'Previous diagnostic'})).toBeEnabled());
         fireEvent.click(screen.getByRole('button', {name: 'Previous diagnostic'}));
         return screen.findByRole('region', {name: region});

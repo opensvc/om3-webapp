@@ -1340,6 +1340,7 @@
       "pools": "Pools",
       "resources": "Resources",
       "stores": "Stores",
+      "ai": "AI assistant",
       "glossary": "Glossary",
       "about": "About"
     },
@@ -3783,7 +3784,6 @@
       "noMatch": "No conversation matches.",
       "untitled": "Untitled conversation",
       "delete": "Delete {{title}}",
-      "deleteAll": "Delete all conversations",
       "groups": {
         "today": "Today",
         "yesterday": "Yesterday",
@@ -3902,8 +3902,6 @@
       "confirmDelete": "Confirm deletion",
       "titleLabel": "Conversation title",
       "deleteText": "Delete \"{{title}}\" and its saved context? This cannot be undone.",
-      "deleteAllTitle": "Delete all conversations",
-      "deleteAllText": "Delete all your conversations ({{count}} loaded) and their stored context? This cannot be undone.",
       "replaceTitle": "Replace the queued message",
       "replace": "Replace",
       "replaceText": "A message is already queued. Replace it with the one you typed?"
@@ -4085,6 +4083,41 @@
       "remove": "Remove",
       "resend": "Send again",
       "announce": "Message queued: {{text}}"
+    },
+    "ask": "Analyze with the assistant",
+    "askAbout": {
+      "object": "Review the object {{path}}: its state on each node, its resources and its latest orchestrations; what is wrong, if anything, and what to do about it.",
+      "object_down": "Analyze why the object {{path}} is down: its instances, the resources at fault, the likely cause and what to do about it.",
+      "object_warn": "Analyze why the object {{path}} is in warn: the resources at fault, the likely cause and what to do about it.",
+      "instance": "Review the instance of {{path}} on the node {{node}}: its state, its resources and its latest logs; what is wrong, if anything, and what to do about it.",
+      "instance_down": "Analyze why the instance of {{path}} on the node {{node}} is down: the resources at fault, its latest logs, the likely cause and what to do about it.",
+      "instance_warn": "Analyze why the instance of {{path}} on the node {{node}} is in warn: the resources at fault, its latest logs, the likely cause and what to do about it.",
+      "resource": "Review the resource {{rid}} of {{path}}: its state on each node, what it reports and its latest logs; what is wrong, if anything, and what to do about it.",
+      "resource_node": "Review the resource {{rid}} of {{path}} on the node {{node}}: its state, what it reports and its latest logs; what is wrong, if anything, and what to do about it.",
+      "node": "Review the health of the node {{node}}: its state, its load, its heartbeats and the instances it holds that are not up.",
+      "node_overloaded": "Analyze why the node {{node}} is overloaded: its free memory and swap against their minimum, what uses them, and what to do about it.",
+      "failedAction": "Explain why the action {{action}} on {{subject}} failed, and suggest a fix.",
+      "refusedAction": "Explain why the daemon refused the action {{action}} on {{subject}}: it did not run. Say what to do about it.",
+      "actionNode": "Node: {{node}}.",
+      "actionId": "{{kind}}: {{id}}.",
+      "actionError": "Error: “{{error}}”.",
+      "actionReason": "Reason given: “{{error}}”."
+    },
+    "promptDropped": "The question prepared was not taken: a turn runs, or an action waits for your decision. Open it again from the record once done.",
+    "dock": {
+      "open": "Open the assistant",
+      "expand": "Open in the assistant page",
+      "fold": "Fold",
+      "empty": "Ask a question about the cluster, or open the assistant from an object, an instance, a resource, a node or a failed action.",
+      "waitingLabel": "Action waiting for a decision",
+      "waiting": "The assistant waits for your decision on the action “{{action}}”.",
+      "destructive": "A destructive action.",
+      "detail": "See the details to decide"
+    },
+    "activity": {
+      "answering": "The assistant is answering",
+      "ended": "The assistant has finished",
+      "waiting": "An action of the assistant waits for your decision"
     }
   }
 }

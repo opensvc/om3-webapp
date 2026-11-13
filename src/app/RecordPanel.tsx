@@ -11,6 +11,7 @@ import { rememberLastRecord, useRecordHistory } from "./record-history";
 import { PanelHeaderContext } from "./panel-header";
 import { ActionTray } from "./ActionTray";
 import { TableCardsContext } from "../ui/components/table-cards";
+import AskAssistantLink from "../components/AskAssistantLink";
 
 /**
  * Title of a record panel: the icon of its kind and its name.
@@ -63,6 +64,8 @@ export function PanelTitle({
  * proposed again by the search palette (`GlobalSearch`). The open tab is held by the view, in the URL (`tab`
  * or `peektab`), so that a link, a reload or the Back button reopen it; an unknown
  * tab falls back to the first one. The caller renders the content of the active tab.
+ * `ask`, a question about the record: the title bar opens the assistant with it,
+ * whatever the tab, to a user who can use the assistant.
  */
 export function RecordPanel({
   open,
@@ -75,6 +78,7 @@ export function RecordPanel({
   onTabChange,
   size = "wider",
   closeOnOutsideClick,
+  ask,
   children,
 }: {
   open: boolean;
@@ -88,6 +92,8 @@ export function RecordPanel({
   onTabChange?: (tab: string | undefined) => void;
   size?: SlideOverSize;
   closeOnOutsideClick?: boolean;
+  /** A question about the record to open the assistant with; none, no link. */
+  ask?: string;
   /** The content of the active tab, given its key. */
   children: (active: string) => ReactNode;
 }) {
@@ -113,6 +119,7 @@ export function RecordPanel({
       reopenable
       actions={
         <>
+          {open && ask !== undefined && <AskAssistantLink prompt={ask} />}
           <div ref={setActionsSlot} className="flex items-center gap-2" />
           {/* The actions asked, as in the header the panel covers: the open panel's only,
               the closed ones staying mounted. */}

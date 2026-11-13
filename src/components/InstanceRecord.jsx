@@ -2,6 +2,7 @@ import React, {useCallback, useEffect, useId, useMemo, useRef, useState} from "r
 import {createPortal} from "react-dom";
 import {useTranslation} from "react-i18next";
 import useEventStore from "../hooks/useEventStore.js";
+import {untrustedT} from "../utils/untrustedText";
 import {parseInstanceId, parseResourceId} from "../app/peek";
 import {objectUsage} from "../app/pg-usage";
 import {objectUsageTree} from "../app/pg-tree";
@@ -455,6 +456,12 @@ export function InstanceDetailPanel({id, tab, onTabChange, onClose}) {
     const parsed = id === undefined ? null : parseInstanceId(id);
     const known = useEventStore((s) => parsed !== null && s.objectInstanceStatus?.[parsed.path]?.[parsed.node] !== undefined);
     useCloseWhenGone(id, known, onClose);
+    // The question to the assistant: why it is down or in warn, else how it goes.
+    const attention = useEventStore((s) => {
+        const instance = parsed === null ? undefined : s.objectInstanceStatus?.[parsed.path]?.[parsed.node];
+        return instance?.avail === "down" ? "down" : instance?.overall === "warn" ? "warn" : undefined;
+    });
+    const ask = parsed === null ? undefined : untrustedT(t, "ai.askAbout.instance", {path: parsed.path, node: parsed.node}, {context: attention});
     const tabs = [
         {key: "status", label: t("panel.tabs.status")},
         {key: "resources", label: t("panel.tabs.resources")},
@@ -472,6 +479,7 @@ export function InstanceDetailPanel({id, tab, onTabChange, onClose}) {
             tab={tab}
             onTabChange={onTabChange}
             closeOnOutsideClick={false}
+            ask={ask}
         >
             {(active) => (parsed === null ? null : active === "logs"
                 ? <ObjectLogs key={id} path={parsed.path} nodes={[parsed.node]}/>
@@ -548,6 +556,8 @@ export function ResourceDetailPanel({id, tab, onTabChange, onClose}) {
             tab={tab}
             onTabChange={onTabChange}
             closeOnOutsideClick={false}
+            ask={parsed === null ? undefined
+                : untrustedT(t, "ai.askAbout.resource", {path: parsed.path, rid: parsed.rid, node: onNode ?? ""}, {context: onNode === undefined ? undefined : "node"})}
         >
             {(active) => (parsed === null ? null : (
                 <>

@@ -83,10 +83,10 @@ describe('ConfigText', () => {
         const Where = () => <div data-testid="url">{useLocation().search}</div>;
         const TEXT = `[volume#0]
 install = /a/b from ./cfg/oc3 key conf.yaml mode 0755
-  /c from cfg/shared key {name}
+  /c from cfg/shared key {nodename}
   /d from ./sec/haproxy-* key cert
   /e from ./sec/oc3 key dir/*
-  /f from sec/ca key {name}.pem
+  /f from sec/ca key {nodename}.pem
 comment = copied from ./cfg/oc3 key conf.yaml
 
 [env]
@@ -119,11 +119,19 @@ a = from ./cfg/oc3 key conf.yaml`;
         test('what the node alone resolves stays as written, the text kept', () => {
             show({path: 'dev/svc/oc3'});
             // The name a reference, the datastore a pattern, the name a pattern.
-            expect(within(document.querySelector('[data-line="2"]')).queryByRole('button', {name: '{name}'})).toBeNull();
+            expect(within(document.querySelector('[data-line="2"]')).queryByRole('button', {name: '{nodename}'})).toBeNull();
             expect(within(document.querySelector('[data-line="3"]')).queryAllByRole('button')).toEqual([]);
             expect(within(document.querySelector('[data-line="4"]')).getAllByRole('button').map((b) => b.textContent)).toEqual(['./sec/oc3']);
             expect(within(document.querySelector('[data-line="5"]')).getAllByRole('button').map((b) => b.textContent)).toEqual(['sec/ca']);
             expect([...document.querySelectorAll('[data-line]')].map((e) => e.textContent).join('\n')).toBe(TEXT);
+        });
+
+        test('the references to the object itself resolved, as om does: a way there', () => {
+            render(<MemoryRouter><ConfigText text={'[volume#1]\ninstall = /x from ./cfg/{name} key {name}.conf'} label="file" path="ns1/svc/oc3"/><Where/></MemoryRouter>);
+            const line = document.querySelector('[data-line="1"]');
+            expect(within(line).getAllByRole('button').map((b) => b.textContent)).toEqual(['./cfg/{name}', '{name}.conf']);
+            fireEvent.click(within(line).getByRole('button', {name: './cfg/{name}'}));
+            expect(urlOf()).toContain('ns1/cfg/oc3');
         });
 
         test('no way out of a comment nor of a free key', () => {

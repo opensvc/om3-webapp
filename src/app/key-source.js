@@ -4,6 +4,27 @@ import {parseObjectPath} from "../utils/objectUtils.jsx";
 const DATASTORE_KINDS = ["cfg", "sec", "usr"];
 /** What only the node resolves: a pattern, a reference. */
 const UNRESOLVED = /[*?[{]/;
+/** The references om resolves from the object alone, as the path of self says them. */
+const SELF_REFERENCES = /\{(name|svcname|namespace|kind|path|svcpath)\}/g;
+
+/**
+ * A word of the configuration of `self`, its references to self resolved as om
+ * does (`{name}`, `{namespace}`, `{kind}`, `{path}`, their `svc` aliases): what is
+ * left of a reference or a pattern, only the node resolves.
+ */
+export function resolveSelf(word, self) {
+    if (self === undefined || !word.includes("{")) return word;
+    const own = parseObjectPath(self);
+    const values = {
+        name: own.name,
+        svcname: own.name,
+        namespace: own.namespace,
+        kind: own.kind,
+        path: self,
+        svcpath: self,
+    };
+    return word.replace(SELF_REFERENCES, (_, ref) => values[ref]);
+}
 /** Where `from <datastore> key <name>` stands in a value. */
 export const KEY_SOURCE = /(^|\s)(from)(\s+)(\S+)(\s+)(key)(\s+)(\S+)/;
 
@@ -15,6 +36,7 @@ export const KEY_SOURCE = /(^|\s)(from)(\s+)(\S+)(\s+)(key)(\s+)(\S+)/;
  * Undefined when it names no datastore known here.
  */
 export function datastorePath(word, self) {
+    word = resolveSelf(word, self);
     if (UNRESOLVED.test(word)) return undefined;
     const own = parseObjectPath(self);
     if (word === ".") return DATASTORE_KINDS.includes(own.kind) ? self : undefined;
@@ -26,5 +48,5 @@ export function datastorePath(word, self) {
     return resolved === "root" ? `${kind}/${name}` : `${resolved}/${kind}/${name}`;
 }
 
-/** A key of a datastore, by its name: not a pattern of names, nor a reference. */
-export const isKeyName = (word) => !UNRESOLVED.test(word);
+/** A key of a datastore, by its name, its references to self resolved: not a pattern of names, nor another reference. */
+export const isKeyName = (word, self) => !UNRESOLVED.test(resolveSelf(word, self));

@@ -1,5 +1,5 @@
 import React, {createContext, useContext, useEffect, useState, useMemo, useCallback, useRef, useDeferredValue} from "react";
-import {useLocation, useNavigate} from "react-router-dom";
+import {Link, useLocation, useNavigate} from "react-router-dom";
 import useEventStore from "../hooks/useEventStore.js";
 import {retainEventReception} from "../eventSourceManager";
 import {usePanelSearch, usePeek} from "../app/panel-search";
@@ -8,26 +8,23 @@ import {ObjectDetailPanel} from "./RecordPanels";
 import {extractNamespace} from "../utils/objectUtils";
 import {useTranslation} from "react-i18next";
 import {useObjectBulkActions} from "./useObjectBulkActions";
-import CreateObjectDialog from "./CreateObjectDialog";
 import {useObjectData} from "../hooks/useObjectData";
 import {useClusterNodeOrder} from "../hooks/useClusterNodeOrder";
 import {Table, HeaderRow, HeaderCell, SortHeaderCell, Row, Cell, EmptyRow, toggleCheckbox, LIST_PAGE, LIST_RAIL_QUERY, useListOffsets} from "../ui/components/Table";
 import {NotProvisionedMark as PMark} from "../ui/components/StateMarks";
 import {StatusMark} from "../ui/components/StatusMark";
 import {MenuButton} from "../ui/components/MenuButton";
-import {Button, IconButton} from "../ui/components/Button";
+import {Button, buttonClass} from "../ui/components/Button";
 import {cn} from "../ui/cn";
 import {Checkbox} from "../ui/components/Field";
 import {useMediaQuery} from "../ui/lib/media";
 import {objectFacets} from "../app/object-facets";
 import {FilterRail, FilterToolbar} from "./FilterRail";
 import {BADGE, KeyCells, NotProvisionedMark, OrchestrateBadge, PropertyCells, SideText, StatusMarks, volumeUsage} from "./ObjectCells";
-import {useGrants} from "../hooks/useGrants";
-import {canWriteClaims} from "../app/namespace-claims";
 import {MoreRows, useRowsOnDemand} from "../ui/components/RowsOnDemand";
 import {VolumeSizesContext, useVolumeSizes} from "../hooks/useVolumeSizes";
 import {ALL_LIST, OBJECT_LISTS, OBJECTS_TABS, listOfKind} from "../utils/objectLists";
-import {AlertTriangleIcon, BoltIcon, CheckIcon, GearIcon, InfoIcon, PlusIcon} from "../ui/icons";
+import {AlertTriangleIcon, BoltIcon, CheckIcon, InfoIcon, PlusIcon} from "../ui/icons";
 import {cachedReason, needsReason} from "../app/object-reason";
 import {instanceState, instanceStateContext} from "../app/statusboard";
 import {menuColumns, menuFilter} from "../app/action-menu";
@@ -240,25 +237,11 @@ const isNscfg = (objectName) => parseObjectName(objectName).kind === "nscfg";
  * The line opening the objects of a namespace in the list: its name across the
  * row, and a checkbox selecting all its objects the filters keep, on every page;
  * mixed when some of them only are selected. It stands for the configuration of the
- * namespace, which has no line of its own: a click opens it. Configure opens it too,
- * offered with none yet to those who may write it (root, a squatter), created by
- * its first change; Create, the wizard of a new object, in the namespace. Narrow, a
- * small badge over the name, for the line to be as high as the others, the buttons
- * their icons alone.
+ * namespace, which has no line of its own: a click opens it, an empty one to start
+ * from when there is none yet, created by its first change. No button of its own:
+ * a separator, not drawing the eye from the objects. Narrow, a small badge over the
+ * name, for the line to be as high as the others.
  */
-/**
- * A button of the line of a namespace, its icon alone at the size of a table row,
- * outlined, or of the accent fill when it creates (`create`): the line a separator,
- * its buttons not drawing the eye from the objects. Not a click of the line.
- */
-const RowButton = ({icon, label, onClick, create = false}) => {
-    const click = (event) => {
-        event.stopPropagation();
-        onClick();
-    };
-    return <IconButton size="sm" label={label} tone={create ? "create" : undefined} onClick={click} onKeyDown={stopPropagation}>{icon}</IconButton>;
-};
-
 /*
  * The instances of the objects, a column a node, set apart as a table of their own
  * after the status they detail: a gap before them the ground of the table, its row
@@ -273,10 +256,9 @@ const nodeEdge = (i, count) => cn(
     i === count - 1 && "before:rounded-r-(--radius-control)",
 );
 
-const NamespaceRow = ({namespace, colSpan, nodeCount = 0, selectedCount, total, onToggle, onOpen, mayConfigure, onCreate, narrow}) => {
+const NamespaceRow = ({namespace, colSpan, nodeCount = 0, selectedCount, total, onToggle, onOpen, narrow}) => {
     const {t} = useTranslation();
     const box = useRef(null);
-    const exists = useEventStore((s) => s.objectStatus?.[nscfgPath(namespace)] !== undefined);
     const all = total > 0 && selectedCount === total;
     const some = selectedCount > 0 && !all;
     useEffect(() => {
@@ -288,19 +270,21 @@ const NamespaceRow = ({namespace, colSpan, nodeCount = 0, selectedCount, total, 
             data-namespace-row={namespace}
             // Held at the top of the table while its objects pass (index.css).
             data-group-row=""
-            tabIndex={exists ? 0 : undefined}
-            onClick={exists ? open : undefined}
-            onKeyDown={exists ? (event) => {
+            // Its configuration opened, one or none yet: the panel starts from an empty
+            // file then, the first change written creating it.
+            tabIndex={0}
+            onClick={open}
+            onKeyDown={(event) => {
                 if (event.target !== event.currentTarget || (event.key !== "Enter" && event.key !== " ")) return;
                 event.preventDefault();
                 // Space selects its objects, as the checkbox; Enter opens the configuration.
                 if (event.key === " ") toggleCheckbox(event.currentTarget);
                 else open();
-            } : undefined}
+            }}
             className={cn(
                 "h-[1.875rem] border-b border-line bg-surface-sunken",
                 // Hovered, a deeper grey of the band, its name underlined as what opens: still a band, not a row.
-                exists && "group/band cursor-pointer hover:bg-band-hover focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-(--focus-ring)",
+                "group/band cursor-pointer hover:bg-band-hover focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-(--focus-ring)",
             )}
         >
             <td className="w-8 px-2 py-1">
@@ -312,8 +296,8 @@ const NamespaceRow = ({namespace, colSpan, nodeCount = 0, selectedCount, total, 
                     aria-label={t("objects.selectNamespace", {namespace})}
                 />
             </td>
-            {/* The name alone names the line, in the column of the names; its buttons in one cell across the
-                columns after it, at its end: no column of the objects widened by them. */}
+            {/* The name alone names the line, in the column of the names; the band goes on across the
+                columns after it, no column of the objects widened by it. */}
             <th scope="rowgroup" className="px-2 py-1 text-left font-semibold text-ink">
                 {narrow ? (
                     <span className="flex flex-col items-start gap-0.5">
@@ -322,23 +306,7 @@ const NamespaceRow = ({namespace, colSpan, nodeCount = 0, selectedCount, total, 
                     </span>
                 ) : <span className="group-hover/band:underline">{namespace}</span>}
             </th>
-            <td colSpan={colSpan - 1 - (nodeCount > 0 ? nodeCount + 1 : 0)} className="px-2 py-1">
-                <span className="flex items-center justify-end gap-1 whitespace-nowrap">
-                    {(exists || mayConfigure) && (
-                        <RowButton
-                            icon={<GearIcon/>}
-                            label={t("objects.configureNamespace", {namespace})}
-                            onClick={open}
-                        />
-                    )}
-                    <RowButton
-                        create
-                        icon={<PlusIcon/>}
-                        label={t("objects.createInNamespace", {namespace})}
-                        onClick={() => onCreate(namespace)}
-                    />
-                </span>
-            </td>
+            <td colSpan={colSpan - 1 - (nodeCount > 0 ? nodeCount + 1 : 0)} className="px-2 py-1"/>
             {nodeCount > 0 && (
                 <>
                     <td aria-hidden="true" className={NODE_GAP}/>
@@ -623,15 +591,12 @@ const Objects = () => {
     const [selectedNamespaces, setSelectedNamespaces] = useState(rawNamespaces);
     const [selectedKinds, setSelectedKinds] = useState(rawKinds);
     const [selectedGlobalStates, setSelectedGlobalStates] = useState(rawGlobalStates);
-    const [createOpen, setCreateOpen] = useState(false);
-    // The namespace a new object is created in, from the line of a namespace; else that of the filter.
-    const [createIn, setCreateIn] = useState(null);
-    const createInNamespace = useCallback((namespace) => {
-        setCreateIn(namespace);
-        setCreateOpen(true);
-    }, []);
-    // The configuration of a namespace, none yet, offered to those who may write it.
-    const mayWriteNscfg = canWriteClaims(useGrants());
+    // A new object, on its page (/create): in the namespace filtered on, of the kind of
+    // the list; Cancel comes back here.
+    const createUrl = useCallback((namespace) => {
+        const search = new URLSearchParams({kind: LIST_KIND[list] ?? "svc", ns: namespace});
+        return `/create?${search.toString()}`;
+    }, [list]);
     const [searchQuery, setSearchQuery] = useState(rawSearchQuery);
     const isWideScreen = useMediaQuery(WIDE_QUERY);
     const isMobile = useMediaQuery(MOBILE_QUERY);
@@ -958,27 +923,6 @@ const Objects = () => {
         setSelectedObjects([]);
     }, [list]);
 
-    // Created, the object opens in its panel, over the tab it is listed in. Its
-    // creation and its provisioning, the actions tray says.
-    const handleCreated = useCallback((path) => {
-        setCreateOpen(false);
-        // All lists it too: kept.
-        const next = list === ALL_LIST ? ALL_LIST : listOf(path);
-        const params = new URLSearchParams(location.search);
-        if (next !== list) {
-            setSelectedObjects([]);
-            setSelectedKinds([]);
-            params.delete("kind");
-        }
-        if (next === OBJECT_LISTS[0]) params.delete("list");
-        else params.set("list", next);
-        ["tab", "peek", "peektab"].forEach((key) => params.delete(key));
-        params.set("sel", path);
-        // A datastore, created empty: on its keys, to add them.
-        const {kind} = parseObjectName(path);
-        if (kind === "cfg" || kind === "sec") params.set("tab", "keys");
-        navigate(`${location.pathname}?${params.toString()}`);
-    }, [list, location.pathname, location.search, navigate]);
 
     // An object a filter hides, or gone, leaves the selection: an action on the
     // selection acts on none the list does not show.
@@ -1064,12 +1008,15 @@ const Objects = () => {
     // A new object, and the actions on the selection: over the table, or at the head of the rail.
     const listActions = (align) => (
         <>
-            <Button size="sm" variant="create" className={selectionOnly} icon={<PlusIcon className="h-4 w-4"/>} onClick={() => {
-                setCreateIn(null);
-                setCreateOpen(true);
-            }}>
+            {/* A link: a middle-click, or Ctrl, opens it in a new tab, beside the list. */}
+            <Link
+                to={createUrl(selectedNamespaces.length === 1 ? selectedNamespaces[0] : "root")}
+                state={{from: `${location.pathname}${location.search}`}}
+                className={cn(buttonClass("create", "sm"), selectionOnly)}
+            >
+                <PlusIcon className="h-4 w-4"/>
                 {t("createObject.open")}
-            </Button>
+            </Link>
             {/* Nothing selected, nothing to act on: how to select, in the place of the actions. */}
             {selectedObjects.length > 0 ? (
                 <>
@@ -1204,8 +1151,6 @@ const Objects = () => {
                                                 selectedCount={members.filter((name) => selectedObjects.includes(name)).length}
                                                 onToggle={handleSelectNamespace}
                                                 onOpen={handleObjectClick}
-                                                mayConfigure={mayWriteNscfg}
-                                                onCreate={createInNamespace}
                                                 narrow={isMobile}
                                             />
                                         )}
@@ -1255,15 +1200,6 @@ const Objects = () => {
                 <Dialog open={legendOpen} title={t("legend.toggle")} size="lg" onClose={() => setLegendOpen(false)}>
                     <SymbolLegend/>
                 </Dialog>
-                <CreateObjectDialog
-                    open={createOpen}
-                    onClose={() => setCreateOpen(false)}
-                    defaultKind={LIST_KIND[list]}
-                    defaultNamespace={createIn ?? (selectedNamespaces.length === 1 ? selectedNamespaces[0] : "root")}
-                    namespaces={allNamespaces}
-                    paths={allObjectNames}
-                    onCreated={handleCreated}
-                />
 
                 <ObjectDetailPanel
                     path={panel.sel}

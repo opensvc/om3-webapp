@@ -180,7 +180,9 @@ const useEventStore = create(
                     );
                     const goneMonitors = Object.keys(state.instanceMonitor)
                         .filter((key) => names.has(key.slice(key.indexOf(':') + 1)));
-                    if (gone.length === 0 && goneMonitors.length === 0) return state;
+                    // Their config updates too: kept per object and node, never read again.
+                    const updates = state.configUpdates.filter((u) => !names.has(u.fullName));
+                    if (gone.length === 0 && goneMonitors.length === 0 && updates.length === state.configUpdates.length) return state;
                     const without = (map, keys) => {
                         const next = {...map};
                         for (const key of keys) delete next[key];
@@ -191,6 +193,7 @@ const useEventStore = create(
                         objectInstanceStatus: without(state.objectInstanceStatus, gone),
                         instanceConfig: without(state.instanceConfig, gone),
                         instanceMonitor: without(state.instanceMonitor, goneMonitors),
+                        ...(updates.length === state.configUpdates.length ? {} : {configUpdates: updates}),
                     };
                 }),
 
@@ -328,9 +331,11 @@ const useEventStore = create(
                     // Its instances too: the daemon dropped them with the node, and
                     // their columns show a "?" until it rejoins.
                     const instances = instancesWithout(state, (gone) => gone === node);
+                    const updates = state.configUpdates.filter((u) => u.node !== node);
+                    const updatesGone = updates.length !== state.configUpdates.length;
                     if (nodeStatus === state.nodeStatus && nodeMonitor === state.nodeMonitor && nodeStats === state.nodeStats
-                        && instances === null) return state;
-                    return {nodeStatus, nodeMonitor, nodeStats, ...instances};
+                        && instances === null && !updatesGone) return state;
+                    return {nodeStatus, nodeMonitor, nodeStats, ...instances, ...(updatesGone ? {configUpdates: updates} : {})};
                 }),
 
             // The nodes of the cluster configuration, once read: the status the daemon

@@ -3,7 +3,7 @@ import {act, fireEvent, render, screen, waitFor, within} from '@testing-library/
 import userEvent from '@testing-library/user-event';
 import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
 import ConfigSection from '../ConfigSection';
-import CreateObjectDialog from '../CreateObjectDialog';
+import CreateObject from '../CreateObject';
 import {clearKeywordsCache} from '../ConfigText';
 import {clearDesignerCache} from '../ObjectDesigner';
 import {clearGrants} from '../../hooks/useGrants';
@@ -168,7 +168,7 @@ describe('the force of a configuration write', () => {
         const dialog = screen.getAllByRole('dialog').find((d) => within(d).queryByRole('heading', {name: 'Configuration design'}));
         // No wait to choose there: root's choice of its keywords by the buttons, once.
         expect(within(dialog).queryByRole('checkbox', {name: /--wait/})).toBeNull();
-        expect(within(dialog).getAllByRole('checkbox', {name: 'Show the keywords only root may set'})).toHaveLength(1);
+        expect(within(dialog).getAllByRole('button', {name: 'Show the keywords only root may set'})).toHaveLength(1);
         fireEvent.change(within(dialog).getByRole('textbox', {name: 'Value of nodes'}), {target: {value: 'n1 n2'}});
         await act(() => user.click(within(dialog).getByRole('button', {name: /^Apply \d+ changes?$/})));
 
@@ -202,10 +202,11 @@ describe('the force of a configuration write', () => {
 
 describe('the force and the wait of a creation', () => {
     const open = () => render(
-        <CreateObjectDialog open onClose={vi.fn()} namespaces={['ns1']} paths={[]} onCreated={vi.fn()} defaultNamespace="ns1"/>,
+        <CreateObject onClose={vi.fn()} namespaces={['ns1']} paths={[]} onCreated={vi.fn()} defaultNamespace="ns1"/>,
     );
     const create = (name) => {
         fireEvent.change(screen.getByLabelText('Name'), {target: {value: name}});
+        fireEvent.click(screen.getByRole('button', {name: 'Next'}));
         fireEvent.click(screen.getByRole('button', {name: 'Next'}));
         fireEvent.click(screen.getByRole('button', {name: 'Create'}));
     };

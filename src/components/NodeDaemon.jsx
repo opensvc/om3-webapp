@@ -84,6 +84,14 @@ function componentDetail(id, component) {
 /** The events that keep the heartbeats current, as on the Heartbeats view. */
 const HEARTBEAT_EVENTS = ["DaemonHeartbeatUpdated"];
 
+/** The records of a dns dump: a list of them, `{kind, items}`, or the bare array an older node answers. */
+const NO_RECORDS = [];
+export function dnsRecordsOf(dump) {
+    if (Array.isArray(dump)) return dump;
+    if (Array.isArray(dump?.items)) return dump.items;
+    return NO_RECORDS;
+}
+
 const byStartDesc = (a, b) => String(b.started_at ?? "").localeCompare(String(a.started_at ?? ""));
 
 export function NodeDaemon({node}) {
@@ -92,6 +100,7 @@ export function NodeDaemon({node}) {
     const orchestrations = useApiResource(nodeUrl(node, "daemon/orchestration"));
     const execs = useApiResource(nodeUrl(node, "daemon/exec"));
     const dns = useApiResource(nodeUrl(node, "daemon/dns/dump"));
+    const dnsRecords = dnsRecordsOf(dns.data);
 
     // The action asked for, waiting for its confirmation: its question and its request.
     const [pending, setPending] = useState(null);
@@ -195,10 +204,10 @@ export function NodeDaemon({node}) {
     );
     // By name, then type: the records of a name together, under the line of the name.
     const dnsRows = useMemo(
-        () => (Array.isArray(dns.data) ? dns.data : [])
+        () => dnsRecords
             .filter((r) => matches(dnsFilter, r.qname, r.qtype, r.content))
             .sort((a, b) => String(a.qname).localeCompare(String(b.qname)) || String(a.qtype).localeCompare(String(b.qtype))),
-        [dns.data, dnsFilter]
+        [dnsRecords, dnsFilter]
     );
     // In progress first, then the latest first.
     const orchestrationRows = useMemo(
@@ -282,7 +291,7 @@ export function NodeDaemon({node}) {
             : componentsUp < components.length || beating < streams.length ? "warn" : "up";
     const execRunning = itemsOf(execs).filter((e) => e.state === "running").length;
     const orchestrationRunning = orchestrationRows.filter((o) => !isSet(o.ended_at)).length;
-    const dnsNames = new Set((Array.isArray(dns.data) ? dns.data : []).map((r) => r.qname)).size;
+    const dnsNames = new Set(dnsRecords.map((r) => r.qname)).size;
     const running = (count) => (count > 0
         ? <span className="text-data text-state-up">{t("nodeDaemon.summary.running", {count})}</span>
         : null);
@@ -311,8 +320,8 @@ export function NodeDaemon({node}) {
         {
             key: "dns",
             label: t("nodeDaemon.views.dns"),
-            mark: dns.data ? <CategoryCount count={Array.isArray(dns.data) ? dns.data.length : 0}/> : null,
-            description: t("nodeDaemon.summary.dns", {count: Array.isArray(dns.data) ? dns.data.length : 0, names: dnsNames}),
+            mark: dns.data ? <CategoryCount count={dnsRecords.length}/> : null,
+            description: t("nodeDaemon.summary.dns", {count: dnsRecords.length, names: dnsNames}),
             tone: dns.error ? "error" : "muted",
         },
     ];

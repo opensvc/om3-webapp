@@ -926,55 +926,20 @@ describe('Objects Component', () => {
         afterEach(() => {
             mockGrants.value = {};
         });
-        // The kind of the dialog a card pressed; its namespace, in a window as narrow as these, a select.
-        const kindCard = (dialog, kind) => dialog.querySelector(`[data-kind=${kind}]`);
-        const create = (dialog, kind, ns, name) => {
-            fireEvent.click(kindCard(dialog, kind));
-            fireEvent.change(within(dialog).getByLabelText('Namespace'), {target: {value: ns}});
-            fireEvent.change(within(dialog).getByLabelText('Name'), {target: {value: name}});
-            // A datastore, of no configuration to choose, created from there.
-            const next = within(dialog).queryByRole('button', {name: 'Next'});
-            if (next) fireEvent.click(next);
-            fireEvent.click(within(dialog).getByRole('button', {name: 'Create'}));
-        };
 
-        test('opens on the kind of the tab, the namespace filtered on', async () => {
+        test('a link to the page of a new object: the kind of the tab, the namespace filtered on, the way back', async () => {
             setup({}, '?list=configs&namespace=test-ns');
             await waitForLoad();
-            fireEvent.click(screen.getByRole('button', {name: 'New object'}));
-            const dialog = screen.getByRole('dialog', {name: 'New object'});
-            expect(kindCard(dialog, 'cfg')).toHaveAttribute('aria-pressed', 'true');
-            expect(within(dialog).getByLabelText('Namespace')).toHaveValue('test-ns');
-            // An object listed is refused as a new one.
-            fireEvent.click(kindCard(dialog, 'svc'));
-            fireEvent.change(within(dialog).getByLabelText('Name'), {target: {value: 'test1'}});
-            expect(within(dialog).getByText('test-ns/svc/test1 already exists.')).toBeInTheDocument();
+            const link = screen.getByRole('link', {name: 'New object'});
+            expect(link).toHaveAttribute('href', '/create?kind=cfg&ns=test-ns');
+            // A plain link: a middle-click, or Ctrl, opens it in a new tab.
+            expect(link.tagName).toBe('A');
         });
 
-        test('created, the object opens in its panel over the tab it is listed in', async () => {
-            setup({}, '?kind=svc&name=t');
-            await waitForLoad();
-            fireEvent.click(screen.getByRole('button', {name: 'New object'}));
-            const dialog = screen.getByRole('dialog', {name: 'New object'});
-            create(dialog, 'sec', 'test-ns', 'tls');
-            // A datastore, created empty: on its keys.
-            await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/objects?name=t&list=secrets&sel=test-ns%2Fsec%2Ftls&tab=keys'));
-            // Created waiting for the nodes, as by default (--wait).
-            expect(global.fetch).toHaveBeenCalledWith('/api/object/path/test-ns/sec/tls/config/file?wait=30s', expect.objectContaining({method: 'POST'}));
-            expect(screen.queryByRole('dialog', {name: 'New object'})).not.toBeInTheDocument();
-            // Its creation, the actions tray says: no message of the list's own.
-            expect(tray()).toContainEqual(['create', 'test-ns/sec/tls', 'succeeded', null]);
-            expect(screen.queryByText('test-ns/sec/tls created.')).not.toBeInTheDocument();
-        });
-
-        test('created from All, the object opens over All, which lists it too', async () => {
+        test('from All, a service in root', async () => {
             setup({}, '?list=any');
             await waitForLoad();
-            fireEvent.click(screen.getByRole('button', {name: 'New object'}));
-            const dialog = screen.getByRole('dialog', {name: 'New object'});
-            expect(kindCard(dialog, 'svc')).toHaveAttribute('aria-pressed', 'true');
-            create(dialog, 'sec', 'test-ns', 'tls');
-            await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/objects?list=any&sel=test-ns%2Fsec%2Ftls&tab=keys'));
+            expect(screen.getByRole('link', {name: 'New object'})).toHaveAttribute('href', '/create?kind=svc&ns=root');
         });
     });
 
@@ -1252,11 +1217,11 @@ describe('Objects Component', () => {
             setup({}, '', WIDE);
             await waitForLoad();
             const head = rail().querySelector('[data-rail-head]');
-            expect(within(head).getByRole('button', {name: 'New object'})).toBeInTheDocument();
+            expect(within(head).getByRole('link', {name: 'New object'})).toBeInTheDocument();
             expect(head).toHaveTextContent('Select objects to act on them');
             expect(head).toHaveTextContent('6 objects');
             expect(screen.getAllByText('6 objects')).toHaveLength(1);
-            expect(screen.getAllByRole('button', {name: 'New object'})).toHaveLength(1);
+            expect(screen.getAllByRole('link', {name: 'New object'})).toHaveLength(1);
             // A selection: its actions there too.
             fireEvent.click(screen.getByRole('checkbox', {name: /test-ns\/svc\/test1/}));
             await waitFor(() => expect(head).toHaveTextContent('1 selected'));
@@ -1887,17 +1852,15 @@ describe('Objects Component', () => {
             expect(prod.querySelector('th .group-hover\\/band\\:underline')).toHaveTextContent('prod');
             fireEvent.click(prod);
             await waitFor(() => expect(screen.getByTestId('router-search')).toHaveTextContent('peek=namespace:prod&peektab=config'));
-            // dev has none: its line opens nothing, nothing offered without the grant.
+            // dev has none: its line opens it all the same, an empty one to start from.
             const dev = namespaceRows().find((row) => row.dataset.namespaceRow === 'dev');
+            expect(dev).toHaveClass('cursor-pointer');
+            expect(dev).toHaveAttribute('tabindex', '0');
             // Its checkbox selects, it does not open.
             fireEvent.click(within(dev).getByRole('checkbox', {name: /dev/}));
             expect(screen.getByTestId('router-search')).not.toHaveTextContent('peek=namespace:dev');
-            // None and no grant: nothing to configure; an object still created in it.
-            expect(within(dev).queryByRole('button', {name: 'Configure the namespace dev'})).toBeNull();
-            expect(within(dev).getByRole('button', {name: 'Create an object in dev'})).toBeInTheDocument();
-            // prod has one: configured from its line too.
-            fireEvent.click(within(prod).getByRole('button', {name: 'Configure the namespace prod'}));
-            expect(screen.getByTestId('router-search')).toHaveTextContent('peek=namespace:prod&peektab=config');
+            fireEvent.click(dev);
+            await waitFor(() => expect(screen.getByTestId('router-search')).toHaveTextContent('peek=namespace:dev&peektab=config'));
         });
 
         test('a configuration alone in its namespace: the line of the namespace kept, alone', async () => {
@@ -1908,60 +1871,19 @@ describe('Objects Component', () => {
             expect(objectNamesInOrder()).toEqual(['prod/svc/web']);
         });
 
-        test('a namespace without its configuration: those who may write it offered to configure it, created by its first change', async () => {
-            mockGrants.value = {squatter: null};
-            try {
-                setup({objectStatus: {'dev/svc/x': {avail: 'up'}}, objectInstanceStatus: {}}, '?list=any', {isWideScreen: true, isMobile: false});
-                await waitForLoad();
-                const dev = namespaceRows().find((row) => row.dataset.namespaceRow === 'dev');
-                const configure = within(dev).getByRole('button', {name: 'Configure the namespace dev'});
-                // Its icon alone, outlined, at the size of a table row.
-                expect(configure).toHaveTextContent(/^Configure the namespace dev$/);
-                expect(configure).toHaveClass('border', 'h-5', 'w-5');
-                expect(within(dev).getByRole('button', {name: 'Create an object in dev'})).toHaveClass('bg-accent', 'h-5', 'w-5');
-                global.fetch.mockClear();
-                fireEvent.click(configure);
-                // Its configuration tab: nothing written until a change is.
-                await waitFor(() => expect(screen.getByTestId('router-search')).toHaveTextContent('peek=namespace:dev&peektab=config'));
-                expect(global.fetch.mock.calls.filter(([, options]) => options?.method === 'POST')).toEqual([]);
-            } finally {
-                mockGrants.value = {};
-            }
-        });
-
-        test('create from the line of a namespace: the wizard in that namespace', async () => {
-            mockGrants.value = {root: null};
-            try {
-                setup({objectStatus: {'dev/svc/x': {avail: 'up'}, 'prod/svc/web': {avail: 'up'}}, objectInstanceStatus: {}}, '?list=any', {isWideScreen: true, isMobile: false});
-                await waitForLoad();
-                const dev = namespaceRows().find((row) => row.dataset.namespaceRow === 'dev');
-                fireEvent.click(within(dev).getByRole('button', {name: 'Create an object in dev'}));
-                const dialog = screen.getByRole('dialog', {name: 'New object'});
-                const pressed = (d) => within(within(d).getByRole('group', {name: 'My namespaces'})).getByRole('button', {pressed: true});
-                expect(pressed(dialog)).toHaveTextContent('dev');
-                // The line is not opened by it.
-                expect(screen.getByTestId('router-search')).not.toHaveTextContent('peek=namespace:dev');
-                fireEvent.click(within(dialog).getByRole('button', {name: 'Cancel'}));
-                // The top button: no namespace filtered on, root again.
-                fireEvent.click(screen.getByRole('button', {name: 'New object'}));
-                expect(pressed(screen.getByRole('dialog', {name: 'New object'}))).toHaveTextContent('root');
-            } finally {
-                mockGrants.value = {};
-            }
-        });
-
         test.each([
-            ['narrow', {isWideScreen: false, isMobile: true}],
-            ['wide', {isWideScreen: true, isMobile: false}],
-        ])('%s, the buttons of the line of a namespace their icons alone', async (_, media) => {
-            setup({objectStatus: {'prod/svc/web': {avail: 'up'}, 'prod/': {avail: 'n/a'}}, objectInstanceStatus: {}}, '', media);
-            await waitFor(() => expect(screen.getByRole('table')).toBeInTheDocument());
-            const create = within(namespaceRows()[0]).getByRole('button', {name: 'Create an object in prod'});
-            expect(create.querySelector('svg')).not.toBeNull();
-            expect(create).toHaveTextContent(/^Create an object in prod$/);
-            // It creates: the accent fill; Configure outlined.
-            expect(create).toHaveClass('bg-accent', 'h-5', 'w-5');
-            expect(within(namespaceRows()[0]).getByRole('button', {name: 'Configure the namespace prod'})).toBeInTheDocument();
+            ['narrow, no grant', {isWideScreen: false, isMobile: true}, {}],
+            ['wide, root', {isWideScreen: true, isMobile: false}, {root: null}],
+            ['wide, a squatter, the namespace without its configuration', {isWideScreen: true, isMobile: false}, {squatter: null}],
+        ])('%s: the line of a namespace a separator, no button of its own', async (_, media, grants) => {
+            mockGrants.value = grants;
+            try {
+                setup({objectStatus: {'prod/svc/web': {avail: 'up'}, 'dev/svc/x': {avail: 'up'}, 'prod/': {avail: 'n/a'}}, objectInstanceStatus: {}}, '?list=any', media);
+                await waitFor(() => expect(screen.getByRole('table')).toBeInTheDocument());
+                for (const row of namespaceRows()) expect(within(row).queryAllByRole('button')).toEqual([]);
+            } finally {
+                mockGrants.value = {};
+            }
         });
 
         test('narrow, a small badge over the name of the namespace, its line as high as the others', async () => {
@@ -1979,7 +1901,7 @@ describe('Objects Component', () => {
             expect(objectNamesInOrder()).toEqual(['a-ns/vol/v', 'b-ns/svc/x', 'cluster', 'svc/dns']);
         });
 
-        test('a line opens each namespace, its name in the column of the names; it opens nothing', async () => {
+        test('a line opens each namespace, its name in the column of the names; a click on it opens its configuration', async () => {
             setup({objectStatus: {
                 'prod/svc/web': {avail: 'up'}, 'prod/svc/api': {avail: 'up'}, 'dev/svc/x': {avail: 'up'},
             }, objectInstanceStatus: {}}, '', {isWideScreen: true, isMobile: false});
@@ -1987,12 +1909,12 @@ describe('Objects Component', () => {
             const rows = within(screen.getByRole('table', {name: 'Objects'})).getAllByRole('row').slice(1);
             expect(rows.map((row) => row.getAttribute('data-namespace-row') ?? 'object')).toEqual(['dev', 'object', 'prod', 'object', 'object']);
             const line = namespaceRows()[1];
-            // The name in the column of the names; its buttons in one cell across the columns after it.
-            expect(within(line).getByRole('rowheader', {name: 'prod'})).not.toHaveAttribute('colspan');
-            const buttons = within(line).getByRole('button', {name: 'Create an object in prod'}).closest('td');
-            expect(buttons).toHaveAttribute('colspan', String(rowCells(objectRows()[0]).length - 2));
+            // The name in the column of the names; the band one cell across the columns after it.
+            const name = within(line).getByRole('rowheader', {name: 'prod'});
+            expect(name).not.toHaveAttribute('colspan');
+            expect(name.nextElementSibling).toHaveAttribute('colspan', String(rowCells(objectRows()[0]).length - 2));
             fireEvent.click(within(line).getByRole('rowheader'));
-            expect(mockNavigate).not.toHaveBeenCalled();
+            await waitFor(() => expect(screen.getByTestId('router-search')).toHaveTextContent('peek=namespace:prod&peektab=config'));
         });
 
         test('the checkbox of a namespace line selects all its objects the filters keep; mixed when some only are', async () => {

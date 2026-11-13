@@ -650,6 +650,33 @@ export function LinkIcon(props: IconProps) {
   );
 }
 
+/** A panel spread over the whole window: corners pointing out. */
+export function ExpandIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
+/** A panel back to its side: corners pointing in. */
+export function CollapseIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M9 4v5H4M20 9h-5V4M15 20v-5h5M4 15h5v5" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
+/** Opened in a new tab: a box, an arrow leaving it. */
+export function NewTabIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
 /** Back to the parent (`parentfolder`, fa-arrow-left). */
 export function ArrowLeftIcon(props: IconProps) {
   return (

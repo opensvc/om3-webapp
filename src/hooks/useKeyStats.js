@@ -9,9 +9,14 @@ const KEYED_KINDS = ["cfg", "sec", "usr"];
 /**
  * The key count and size of each object read so far, by path: kept across the rows
  * and the pages of a list, read again when the configuration of the object changes
- * (`stamp`, from its InstanceConfigUpdated events).
+ * (`stamp`, from its InstanceConfigUpdated events). One entry an object, its last
+ * configuration's: one of before replaced, not kept beside it for a tab open days.
  */
 const cache = new Map();
+const cached = (path, stamp) => {
+    const entry = cache.get(path);
+    return entry && entry.stamp === stamp ? entry : null;
+};
 const pending = new Map();
 
 /** Forgets what was read: at the end of a session (app/session), and for the tests. */
@@ -46,15 +51,16 @@ export function useKeyStats(path) {
     const keyed = KEYED_KINDS.includes(kind);
     const stamp = useEventStore((s) => (keyed ? stampOf(s.instanceConfig?.[path]) : ""));
     const key = `${path}#${stamp}`;
-    const [stats, setStats] = useState(() => (keyed ? cache.get(key) ?? null : undefined));
+    const [stats, setStats] = useState(() => (keyed ? cached(path, stamp)?.value ?? null : undefined));
 
     useEffect(() => {
         if (!keyed) {
             setStats(undefined);
             return undefined;
         }
-        if (cache.has(key)) {
-            setStats(cache.get(key));
+        const hit = cached(path, stamp);
+        if (hit) {
+            setStats(hit.value);
             return undefined;
         }
         let cancelled = false;
@@ -65,7 +71,7 @@ export function useKeyStats(path) {
             const reading = readKeys(path).catch(() => undefined).then((value) => {
                 // Forgotten meanwhile, the session ended: kept for no one.
                 if (pending.get(key) === reading) {
-                    cache.set(key, value);
+                    cache.set(path, {stamp, value});
                     pending.delete(key);
                 }
                 return value;
@@ -79,7 +85,7 @@ export function useKeyStats(path) {
         return () => {
             cancelled = true;
         };
-    }, [key, keyed, path]);
+    }, [key, keyed, path, stamp]);
 
     return stats;
 }

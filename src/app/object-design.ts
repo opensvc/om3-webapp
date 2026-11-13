@@ -30,6 +30,249 @@ export interface DesignKeyword {
   provisioning?: boolean;
   /** Needed by the provision, which fails without it (a size to create a volume of). */
   provisioningRequired?: boolean;
+  /** The id of the group it belongs to, among the groups of the answer it came with. */
+  group?: string;
+  /**
+   * The resources of the object its value names: of these driver groups (any when
+   * none), one (`rid`), several (`rids`), or with the states a requirement waits for
+   * (`requires`, `container#db(up) fs#1(down,stdby down)`).
+   */
+  references?: { groups?: string[]; shape?: "rid" | "rids" | "requires" };
+  /** The conditions it applies under: `topology=flex`, `.mode=ovs` (of its own section). */
+  depends?: string[];
+}
+
+/** A way to set a group of keywords, exclusive of the other ways of the group. */
+export interface KeywordStrategy {
+  id: string;
+  name?: string;
+  text?: string;
+  /** The options of the keywords it sets. */
+  uses?: string[];
+  /** The options of the keywords it leaves unset, another strategy's. */
+  excludes?: string[];
+  /** The conditions on a selector keyword choosing it; none when the keywords set tell. */
+  when?: unknown[];
+  /** The options a section following it must set too, of another group maybe (`dev` of a static address). */
+  requires?: string[];
+}
+
+/** A group of keywords, as the daemon sorts them: of a driver, or "" for every resource. */
+export interface KeywordGroup {
+  id: string;
+  driver?: string;
+  name?: string;
+  text?: string;
+  order?: number;
+  strategies?: KeywordStrategy[];
+  /** A section of the driver must follow one of its strategies (the addressing of an ip). */
+  required?: boolean;
+}
+
+/** The groups each list of keywords came with: the list read as the designer keeps it. */
+const KEYWORD_GROUPS = new WeakMap<object, KeywordGroup[]>();
+
+/**
+ * The keywords of an answer of GET .../config/keywords, its groups kept beside them:
+ * `keywordGroupsOf` the list gives them back. An older daemon tells none.
+ */
+export function keywordItems(answer: { items?: DesignKeyword[]; groups?: KeywordGroup[] } | null | undefined): DesignKeyword[] {
+  const items = answer?.items ?? [];
+  if (Array.isArray(answer?.groups)) KEYWORD_GROUPS.set(items, answer.groups);
+  return items;
+}
+
+export const keywordGroupsOf = (items: DesignKeyword[]): KeywordGroup[] => KEYWORD_GROUPS.get(items) ?? [];
+
+/** The keywords of a group, under it. A group of none, a list from an older daemon: one, untitled. */
+export interface GroupedKeywords {
+  group?: KeywordGroup;
+  keywords: DesignKeyword[];
+}
+
+const OTHER_GROUP: KeywordGroup = { id: "other", name: "Other", order: 1000 };
+
+/**
+ * Keywords under their groups, in the order the daemon gives the groups, a driver's
+ * before the ones every resource has at the same order; a keyword of no group known
+ * under "other". The groups with none of the keywords left out.
+ */
+export function groupKeywords(keywords: DesignKeyword[], groups: KeywordGroup[]): GroupedKeywords[] {
+  if (groups.length === 0) return keywords.length === 0 ? [] : [{ keywords }];
+  const sorted = [...groups].sort((a, b) => (a.order ?? 1000) - (b.order ?? 1000) || Number(Boolean(b.driver)) - Number(Boolean(a.driver)));
+  const buckets = new Map<string, GroupedKeywords>();
+  for (const group of sorted) if (!buckets.has(group.id)) buckets.set(group.id, { group, keywords: [] });
+  for (const keyword of keywords) {
+    let bucket = keyword.group === undefined ? undefined : buckets.get(keyword.group);
+    if (bucket === undefined) {
+      bucket = buckets.get(OTHER_GROUP.id);
+      if (bucket === undefined) {
+        bucket = { group: OTHER_GROUP, keywords: [] };
+        buckets.set(OTHER_GROUP.id, bucket);
+      }
+    }
+    bucket.keywords.push(keyword);
+  }
+  return [...buckets.values()].filter((b) => b.keywords.length > 0);
+}
+
+/** The value a design sets for an option: the section's, else its DEFAULT's. */
+export type DesignLookup = (option: string) => string | undefined;
+
+export function designLookup(section: DesignSection, sections: DesignSection[]): DesignLookup {
+  // A value of any scope; an entry left empty, a keyword added without its value yet, sets none.
+  const of = (s: DesignSection | undefined, option: string) =>
+    s?.entries.find((e) => e.key.split("@")[0] === option && e.value.trim() !== "")?.value;
+  const defaults = sections.find((s) => s.name === "DEFAULT");
+  return (option) => of(section, option) ?? of(defaults, option);
+}
+
+/** Whether a condition of `when` holds: "option=value" or "option!=value", or the {Key, Op, Value} of om. */
+function conditionHolds(condition: unknown, lookup: DesignLookup): boolean {
+  let option: string | undefined;
+  let op = "=";
+  let value = "";
+  if (typeof condition === "string") {
+    const m = /^([^!=]+?)(!=|=)(.*)$/.exec(condition);
+    if (m === null) return false;
+    [, option, op, value] = m;
+  } else if (condition !== null && typeof condition === "object") {
+    const c = condition as { Key?: unknown; Op?: unknown; Value?: unknown };
+    const key = c.Key;
+    option = typeof key === "string" ? key.split(".").pop() : (key as { Option?: string; option?: string } | undefined)?.Option ?? (key as { option?: string } | undefined)?.option;
+    op = typeof c.Op === "string" ? c.Op : "=";
+    value = typeof c.Value === "string" ? c.Value : "";
+  }
+  if (!option) return false;
+  const set = lookup(option.trim()) ?? "";
+  if (op === "!=") return set !== value;
+  if (op === "=") return set === value;
+  return false;
+}
+
+/**
+ * The strategy of a group a section follows, as the daemon tells it: the one its
+ * selector keyword chooses (`when`), else the one whose keywords it sets. Undefined
+ * while none is told, the choice still to make.
+ */
+export function impliedStrategy(group: KeywordGroup, section: DesignSection, lookup: DesignLookup): KeywordStrategy | undefined {
+  const strategies = group.strategies ?? [];
+  const selected = strategies.filter((s) => (s.when ?? []).length > 0);
+  // The one its selector keyword chooses, `method = cli` say.
+  const chosen = selected.find((s) => (s.when ?? []).every((c) => conditionHolds(c, lookup)));
+  if (chosen) return chosen;
+  // Else the one whose keywords are set, among those no selector chooses. A keyword
+  // left empty sets nothing, as the daemon counts it: no strategy told by it.
+  const plain = strategies.filter((s) => (s.when ?? []).length === 0);
+  const set = new Set(section.entries.filter((e) => e.value.trim() !== "").map((e) => e.key.split("@")[0]));
+  const told = plain.find((s) => (s.uses ?? []).some((o) => set.has(o)));
+  if (told) return told;
+  // The selector choosing none of the others: the one it leaves, by default.
+  return selected.length > 0 && plain.length === 1 ? plain[0] : undefined;
+}
+
+/**
+ * Every strategy of a group a section follows: those its selector keywords choose,
+ * those whose keywords are set, and the one picked by `chosen`, as strategies that
+ * exclude nothing of each other may be followed together (the certificates of an
+ * acme task: from secs, and of domains); else the one a selector leaves, by default.
+ */
+export function followedStrategies(group: KeywordGroup, section: DesignSection, lookup: DesignLookup, chosen?: string): KeywordStrategy[] {
+  const strategies = group.strategies ?? [];
+  const set = new Set(section.entries.filter((e) => e.value.trim() !== "").map((e) => e.key.split("@")[0]));
+  const followed = strategies.filter((s) =>
+    (s.when ?? []).length > 0
+      ? (s.when ?? []).every((c) => conditionHolds(c, lookup))
+      : (s.uses ?? []).some((o) => set.has(o)));
+  const picked = strategies.find((s) => s.id === chosen);
+  if (picked && !followed.includes(picked) && !followed.some((f) => strategiesClash(f, picked))) followed.push(picked);
+  if (followed.length > 0) return followed;
+  const implied = impliedStrategy(group, section, lookup);
+  return implied ? [implied] : [];
+}
+
+/** Whether two strategies exclude each other: one leaves a keyword the other sets. */
+export function strategiesClash(a: KeywordStrategy, b: KeywordStrategy): boolean {
+  if (a.id === b.id) return false;
+  const leaves = (x: KeywordStrategy, y: KeywordStrategy) => (x.excludes ?? []).some((o) => (y.uses ?? []).includes(o));
+  return leaves(a, b) || leaves(b, a);
+}
+
+/** How the strategy a section follows is told: by a selector keyword, by the keywords set, or by default. */
+export function strategyReason(strategy: KeywordStrategy, section: DesignSection): "selector" | "keywords" | "default" {
+  if ((strategy.when ?? []).length > 0) return "selector";
+  const set = new Set(section.entries.filter((e) => e.value.trim() !== "").map((e) => e.key.split("@")[0]));
+  return (strategy.uses ?? []).some((o) => set.has(o)) ? "keywords" : "default";
+}
+
+/** What a strategy still needs of a section: its choice, a keyword it uses, one it requires. */
+export interface StrategyRequirement {
+  group: KeywordGroup;
+  /** Undefined while the strategy is still to choose. */
+  strategy?: KeywordStrategy;
+  /** The option to set; undefined for the choice itself. */
+  option?: string;
+}
+
+/**
+ * What the required strategy groups of a section still need, as the daemon refuses
+ * a write without it: a strategy to choose; the strategy followed (told, or picked
+ * by `chosen`), one of the keywords it uses when none is set, and each it requires.
+ * A keyword counts set with a value of the section, in any scope, or of DEFAULT.
+ */
+export function strategyRequirements(groups: KeywordGroup[], section: DesignSection, lookup: DesignLookup, chosen: Record<string, string> = {}): StrategyRequirement[] {
+  const isSet = (option: string) => (lookup(option) ?? "").trim() !== "";
+  const needs: StrategyRequirement[] = [];
+  for (const group of groups) {
+    if (!group.required || (group.strategies ?? []).length === 0) continue;
+    const followed = followedStrategies(group, section, lookup, chosen[group.id]);
+    if (followed.length === 0) {
+      needs.push({ group });
+      continue;
+    }
+    const needed = new Set<string>();
+    for (const strategy of followed) {
+      const uses = strategy.uses ?? [];
+      if (uses.length > 0 && !uses.some(isSet) && !needed.has(uses[0])) {
+        needed.add(uses[0]);
+        needs.push({ group, strategy, option: uses[0] });
+      }
+      for (const option of strategy.requires ?? []) {
+        if (isSet(option) || needed.has(option)) continue;
+        needed.add(option);
+        needs.push({ group, strategy, option });
+      }
+    }
+  }
+  return needs;
+}
+
+/** Whether the strategy of a group is chosen by a selector keyword rather than by a choice. */
+export const strategyBySelector = (group: KeywordGroup) => (group.strategies ?? []).some((s) => (s.when ?? []).length > 0);
+
+/**
+ * The options a strategy of the group sets: held back while none is chosen. Those a
+ * strategy only excludes, the hardware of a guest virt-install builds, belong to none:
+ * offered until a choice leaves them out.
+ */
+export function strategyOptions(group: KeywordGroup): Set<string> {
+  return new Set((group.strategies ?? []).flatMap((s) => s.uses ?? []));
+}
+
+/**
+ * The options not to offer a section: those the strategy it follows excludes, and,
+ * for a group whose strategy is still to choose, those of every strategy of it.
+ * `chosen`, the strategy picked by group id.
+ */
+export function withheldOptions(groups: KeywordGroup[], section: DesignSection, lookup: DesignLookup, chosen: Record<string, string> = {}): Set<string> {
+  const withheld = new Set<string>();
+  for (const group of groups) {
+    if ((group.strategies ?? []).length === 0) continue;
+    const followed = followedStrategies(group, section, lookup, chosen[group.id]);
+    const options = followed.length > 0 ? followed.flatMap((s) => s.excludes ?? []) : [...strategyOptions(group)];
+    for (const o of options) withheld.add(o);
+  }
+  return withheld;
 }
 
 export interface DesignEntry {
@@ -365,6 +608,15 @@ export const rootOnlyKind = (kind: string) => kind === "ccfg";
 export const NEEDS_GROUPS = ["volume"];
 
 /**
+ * The type a resource of no `type` gets, as its keywords tell it: the one type its
+ * keywords of a type are of (`host` for an ip), "" when they tell none or several.
+ */
+export function impliedType(keywords: DesignKeyword[]): string {
+  const types = new Set(keywords.flatMap((k) => k.types ?? []).filter((t) => t !== ""));
+  return types.size === 1 ? [...types][0] : "";
+}
+
+/**
  * The types of pool a volume may ask for, from the capabilities of a node
  * (`drivers.resource.volume.<type>`).
  */
@@ -560,6 +812,175 @@ export function listWords(value: string): { done: string[]; typed: string } {
   return { done: words.filter((w) => w !== ""), typed };
 }
 
+/**
+ * The first condition of a keyword's `depends` that does not hold, undefined when
+ * all do: the keyword applies only where it holds, ignored elsewhere. `valueOf` gives
+ * a value as the daemon judges it, set or inherited, else its default; a condition on
+ * an option of no value at all is skipped, as the daemon does.
+ */
+export function unmetDepends(keyword: DesignKeyword | undefined, valueOf: (option: string, own: boolean) => string | undefined): string | undefined {
+  for (const condition of keyword?.depends ?? []) {
+    const c = parseCondition(condition);
+    if (c === undefined) continue;
+    const { own, option, op, want } = c;
+    const have = valueOf(option, own);
+    if (have === undefined) continue;
+    const equal = have.trim().toLowerCase() === want.trim().toLowerCase();
+    if (op === "=" ? !equal : equal) return condition.replace(/^\./, "");
+  }
+  return undefined;
+}
+
+/** A condition as om writes it, `topology=flex`, `.mode!=ovs`: its option, of the section itself or not, and its test. */
+export function parseCondition(condition: unknown): { own: boolean; option: string; op: "=" | "!="; want: string } | undefined {
+  if (typeof condition === "string") {
+    const m = /^(\.)?([^!=]+?)(!=|=)(.*)$/.exec(condition);
+    if (m === null) return undefined;
+    return { own: m[1] === ".", option: m[2].trim(), op: m[3] as "=" | "!=", want: m[4].trim() };
+  }
+  if (condition !== null && typeof condition === "object") {
+    const c = condition as { Key?: unknown; Op?: unknown; Value?: unknown };
+    const key = c.Key;
+    const option = typeof key === "string" ? key.split(".").pop() : (key as { Option?: string; option?: string } | undefined)?.Option ?? (key as { option?: string } | undefined)?.option;
+    const op = c.Op === "!=" ? "!=" : c.Op === "=" || c.Op === undefined ? "=" : undefined;
+    if (!option || op === undefined) return undefined;
+    return { own: false, option, op, want: typeof c.Value === "string" ? c.Value : "" };
+  }
+  return undefined;
+}
+
+/** A keyword a selector strategy writes: its value, or none to remove it, falling to its default. */
+export interface SelectorWrite {
+  option: string;
+  value: string | null;
+}
+
+/**
+ * The writes that make the conditions of a strategy chosen by a selector keyword hold,
+ * `quiesce = pause` for its pause: an equality sets the value; an inequality leaves it
+ * alone when it holds, else removes the value set when the default then holds, else
+ * sets a candidate that does. Undefined when a condition cannot be made to hold so.
+ * `valueOf` gives the value as the daemon judges it; `set` whether one is written;
+ * `keywordOf` the keyword of an option, for its default and candidates.
+ */
+export function strategySelectorWrites(
+  strategy: KeywordStrategy,
+  valueOf: (option: string, own: boolean) => string | undefined,
+  set: (option: string, own: boolean) => boolean,
+  keywordOf: (option: string, own: boolean) => DesignKeyword | undefined,
+): SelectorWrite[] | undefined {
+  const writes: SelectorWrite[] = [];
+  const same = (a: string | undefined, b: string) => (a ?? "").trim().toLowerCase() === b.trim().toLowerCase();
+  for (const condition of strategy.when ?? []) {
+    const c = parseCondition(condition);
+    if (c === undefined) return undefined;
+    const have = valueOf(c.option, c.own);
+    if (c.op === "=") {
+      if (!same(have, c.want)) writes.push({ option: c.option, value: c.want });
+      continue;
+    }
+    if (!same(have, c.want)) continue;
+    const keyword = keywordOf(c.option, c.own);
+    const fallback = keyword?.default === undefined ? undefined : String(keyword.default);
+    if (set(c.option, c.own) && !same(fallback, c.want)) {
+      writes.push({ option: c.option, value: null });
+      continue;
+    }
+    const other = (keyword?.candidates ?? []).find((v) => v !== "" && !same(v, c.want));
+    if (other === undefined) return undefined;
+    writes.push({ option: c.option, value: other });
+  }
+  return writes;
+}
+
+/** The options a strategy group stands on: its keywords, and those its selectors read. */
+export function strategyGroupOptions(group: KeywordGroup, keywords: DesignKeyword[]): Set<string> {
+  const options = new Set(keywords.filter((k) => k.group === group.id).map((k) => k.option));
+  for (const strategy of group.strategies ?? []) {
+    for (const option of [...(strategy.uses ?? []), ...(strategy.excludes ?? []), ...(strategy.requires ?? [])]) options.add(option);
+    for (const condition of strategy.when ?? []) {
+      const c = parseCondition(condition);
+      if (c) options.add(c.option);
+    }
+  }
+  return options;
+}
+
+/**
+ * Whether a strategy group comes first on its section, its choice in sight: required;
+ * a keyword of it set there (its selector included); or one of it the section needs
+ * or most sets (`important`). Else the choice waits in the keywords to add.
+ */
+export function prominentStrategyGroup(group: KeywordGroup, section: DesignSection, keywords: DesignKeyword[], important: Set<string>): boolean {
+  if (group.required) return true;
+  const options = strategyGroupOptions(group, keywords);
+  if (section.entries.some((e) => e.value.trim() !== "" && options.has(e.key.split("@")[0]))) return true;
+  return [...important].some((o) => options.has(o));
+}
+
+/**
+ * The summary of a keyword's documentation, on its line in the keywords to add: its
+ * first paragraph, its lines wrapped at 80 columns joined again, its markdown marks
+ * dropped; ended by "…" when the documentation goes on past it (a list after "the
+ * object instance:"), a line too long for its row cut by its row.
+ */
+export function keywordSummary(text: string | undefined): string {
+  const doc = (text ?? "").trim();
+  if (doc === "") return "";
+  const unmark = (t: string) => t.replace(/`([^`]*)`/g, "$1").replace(/(\*\*|\*|__)(\S(?:.*?\S)?)\1/g, "$2").trim();
+  // A documentation opening on a list, the values of a keyword: those values.
+  if (/^[*-] /.test(doc)) {
+    return doc.split("\n").filter((l) => /^[*-] /.test(l)).map((l) => unmark(l.slice(2))).join(", ");
+  }
+  const [first, ...rest] = doc.split(/\n\s*\n/);
+  const plain = first
+    .replace(/\s*\n\s*/g, " ")
+    .replace(/`([^`]*)`/g, "$1")
+    .replace(/(\*\*|\*|__)(\S(?:.*?\S)?)\1/g, "$2")
+    .trim();
+  const more = rest.some((r) => r.trim() !== "");
+  return more ? `${plain.replace(/[:;,.]$/, "")}…` : plain;
+}
+
+/** A pick of a value: the value, what helps choose it, a word at its end. */
+export interface ValuePick {
+  value: string;
+  info?: string[];
+  side?: string;
+}
+
+/**
+ * The values a keyword naming resources of the object takes: the resources of the
+ * design of its groups, each told by its driver, the section itself left out; then
+ * the special values it takes besides (`none`, `host`), said so.
+ */
+export function referencePicks(keyword: DesignKeyword | undefined, sections: DesignSection[], section: DesignSection, kind: string, special = "special"): ValuePick[] {
+  const ref = keyword?.references;
+  if (!ref) return [];
+  const groups = ref.groups ?? [];
+  const resources = sections
+    .filter((s) => s.name !== section.name && isResource(kind, s) && (groups.length === 0 || groups.includes(s.group as string)))
+    .map((s) => ({ value: s.name, info: [s.type ? `${s.group}.${s.type}` : (s.group as string)] }));
+  const others = (keyword?.candidates ?? []).filter((c) => c !== "").map((c) => ({ value: c, info: [special] }));
+  return [...resources, ...others];
+}
+
+/**
+ * The words of a value naming several resources: those done, and the one being
+ * typed. A requirement's states in parentheses belong to its resource, their
+ * spaces included (`fs#1(down,stdby down)`).
+ */
+export function referenceWords(value: string): { done: string[]; typed: string } {
+  const words = value.match(/[^\s(]+(\([^)]*\)?)?/g) ?? [];
+  const open = /\([^)]*$/.test(value);
+  if (value === "" || /\s$/.test(value) && !open) return { done: words, typed: "" };
+  const typed = words.pop() ?? "";
+  return { done: words, typed };
+}
+
+/** The resource a word of a requirement names, its states left out. */
+export const referenceRid = (word: string) => word.replace(/\(.*$/, "");
+
 /** The resources of a design a guest takes as its disks, each told by its driver. */
 export function guestDiskChoices(sections: DesignSection[]): { value: string; info: string[] }[] {
   return sections
@@ -574,3 +995,4 @@ export function missingValues(sections: DesignSection[], keywords: DesignKeyword
     return section.entries.filter((e) => required.has(e.key) && e.value.trim() === "").map((e) => ({ section: section.name, key: e.key }));
   });
 }
+

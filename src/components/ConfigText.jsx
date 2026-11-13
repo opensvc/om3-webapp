@@ -4,7 +4,7 @@ import {getResponseErrorMessage} from "../services/api.jsx";
 import {Dialog} from "../ui/components/Dialog";
 import {Spinner} from "../ui/components/Spinner";
 import {CrossLink} from "../app/CrossLink";
-import {KEY_SOURCE, datastorePath, isKeyName} from "../app/key-source";
+import {KEY_SOURCE, datastorePath, isKeyName, resolveSelf} from "../app/key-source";
 import {sectionHeaders} from "../app/ini";
 import KeysSection from "./KeysSection";
 
@@ -94,6 +94,23 @@ const keyName = (text) => painted(text, SCOPE, (scope) => <span data-config-toke
 const references = (text) => painted(text, REFERENCE, (ref) => <span data-config-token="reference" className="text-state-up">{ref}</span>);
 
 /**
+ * A line of `parseConfig` painted as ConfigText paints it, without its links: the
+ * text under the editor of a configuration (ConfigEditor).
+ */
+export function paintLine(l) {
+    if (l.heading) return <span data-config-token="section" className="text-code-keyword">{l.line}</span>;
+    if (l.comment) return <span data-config-token="comment" className="text-ink-muted italic">{l.line}</span>;
+    if (l.start === undefined) return references(l.line);
+    return (
+        <>
+            {l.line.slice(0, l.start)}
+            <span data-config-token="key" className="text-ink-muted">{keyName(l.line.slice(l.start, l.end))}</span>
+            {references(l.line.slice(l.end))}
+        </>
+    );
+}
+
+/**
  * A value, its references said apart; with `self`, the object the file configures,
  * its `from <datastore> key <name>` a way there: the datastore its keys, the name the
  * content of the key, by `onKey`, the file staying on display. What is not resolved
@@ -111,10 +128,10 @@ function value(text, self, onKey) {
             {lead}{from}{gap1}
             {path ? <CrossLink kind="object" id={path} tab="keys">{store}</CrossLink> : references(store)}
             {gap2}{key}{gap3}
-            {path && isKeyName(name) ? (
+            {path && isKeyName(name, self) ? (
                 <button
                     type="button"
-                    onClick={() => onKey({path, name})}
+                    onClick={() => onKey({path, name: resolveSelf(name, self)})}
                     data-key-link=""
                     className="cursor-pointer rounded-sm text-accent underline decoration-dotted underline-offset-2 focus-visible:outline-2 focus-visible:outline-(--focus-ring)"
                 >

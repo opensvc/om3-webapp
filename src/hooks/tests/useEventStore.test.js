@@ -567,6 +567,26 @@ describe('useEventStore', () => {
         });
     });
 
+    describe('config updates pruned with what they are of', () => {
+        test('an object removed, a node removed: their config updates go too', () => {
+            act(() => {
+                useEventStore.getState().setConfigUpdated([
+                    {name: 'svc1', node: 'n1'},
+                    {name: 'svc2', node: 'n1'},
+                    {name: 'svc2', node: 'n2'},
+                ]);
+            });
+            act(() => {
+                useEventStore.getState().removeObjects(['root/svc/svc1']);
+            });
+            expect(useEventStore.getState().configUpdates.map((u) => `${u.fullName}:${u.node}`)).toEqual(['root/svc/svc2:n1', 'root/svc/svc2:n2']);
+            act(() => {
+                useEventStore.getState().removeNode('n1');
+            });
+            expect(useEventStore.getState().configUpdates.map((u) => `${u.fullName}:${u.node}`)).toEqual(['root/svc/svc2:n2']);
+        });
+    });
+
     describe('clearConfigUpdate', () => {
         test('removes by name', () => {
             act(() => {

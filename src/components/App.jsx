@@ -38,6 +38,7 @@ import {rememberReturn} from "../app/after-login";
 // Lazy load components for code splitting
 const NodesTable = lazy(() => import("./NodesTable"));
 const Objects = lazy(() => import("./Objects"));
+const CreateObjectPage = lazy(() => import("./CreateObjectPage"));
 const Namespaces = lazy(() => import("./Namespaces"));
 const Heartbeats = lazy(() => import("./Heartbeats"));
 const Pools = lazy(() => import("./Pools"));
@@ -512,6 +513,7 @@ const App = () => {
                                         <Route path="/network" element={<ProtectedRoute><Network/></ProtectedRoute>}/>
                                         <Route path="/network/:networkName" element={<NetworkRedirect/>}/>
                                         <Route path="/objects" element={<ProtectedRoute><ObjectsRoute/></ProtectedRoute>}/>
+                                        <Route path="/create" element={<ProtectedRoute><CreateObjectPage/></ProtectedRoute>}/>
                                         <Route path="/objects/:objectName" element={<ObjectRedirect/>}/>
                                         <Route path="/nodes/:node/objects/:objectName" element={<InstanceRedirect/>}/>
                                         <Route path="/whoami" element={<ProtectedRoute><WhoAmI/></ProtectedRoute>}/>

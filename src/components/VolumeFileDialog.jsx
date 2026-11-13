@@ -18,9 +18,21 @@ import {CrossLink} from "../app/CrossLink";
 const SHOWN = 1024 * 1024;
 const HEX_SHOWN = 64 * 1024;
 
-/** Where an installed file comes from: its datastore a way to its keys, its key shown in place by `onKey`. */
+/**
+ * Where an installed file comes from: its datastore a way to its keys, its key shown in
+ * place by `onKey`; or the url it was fetched from, a link out.
+ */
 export function InstalledFrom({origin, onKey}) {
     const {t} = useTranslation();
+    if (origin.url) {
+        return (
+            <Trans
+                i18nKey="volumeFiles.installedFromUrl"
+                values={{from: origin.from}}
+                components={{url: <a href={origin.from} target="_blank" rel="noopener noreferrer" className="break-all text-accent underline decoration-dotted underline-offset-2"/>}}
+            />
+        );
+    }
     return (
         <Trans
             i18nKey="volumeFiles.installedFrom"
@@ -177,7 +189,7 @@ export function VolumeFileDialog({path, node, dir, name, origin = null, onKey, o
                     {installed && (
                         <p className="text-data text-ink-muted" data-installed="">
                             <InstalledFrom origin={origin} onKey={onKey}/>
-                            {" · "}{t("volumeFiles.installed.notEdited")}
+                            {" · "}{t(origin.url ? "volumeFiles.installed.notEditedUrl" : "volumeFiles.installed.notEdited")}
                         </p>
                     )}
                     {isCertificate && showCertificate && editing === null ? (

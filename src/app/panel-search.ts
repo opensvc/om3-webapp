@@ -52,6 +52,9 @@ export function applyPanelUpdate(previous: URLSearchParams, next: PanelUpdate): 
     if (value === undefined || value === "") out.delete(key);
     else out.set(key, value);
   }
+  // Spread over the window (`full`, RecordPanel): kept from a record to the next, gone
+  // with the last panel closed.
+  if (!out.has("sel") && !out.has("peek")) out.delete("full");
   return out;
 }
 

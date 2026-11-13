@@ -176,7 +176,7 @@ describe("record panels", () => {
     const names = within(bar)
       .getAllByRole("button")
       .map((button) => button.getAttribute("title") ?? button.textContent);
-    expect(names).toEqual(["Actions", "Close"]);
+    expect(names).toEqual(["Actions", "Full screen", "Close"]);
   });
 
   test("the panels open on the right, no control to move them, whatever an earlier choice", () => {
@@ -189,5 +189,23 @@ describe("record panels", () => {
     const panel = screen.getByRole("dialog", { name: "lo" });
     expect(panel).toHaveClass("right-0");
     expect(within(panel).queryByRole("button", { name: /Move the panels/ })).not.toBeInTheDocument();
+  });
+});
+
+describe("RecordPanel, full screen and a new tab", () => {
+  test("spread over the window by its button, in the URL; a new tab opens the record spread", () => {
+    renderView("/objects?kind=svc&peek=network:lo&peektab=logs");
+    const panel = openDialogs()[0];
+    const link = within(panel).getByRole("link", { name: "Open in a new tab" });
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(new URL(link.getAttribute("href") ?? "", "http://x").searchParams.get("full")).toBe("1");
+    expect(new URL(link.getAttribute("href") ?? "", "http://x").searchParams.get("peek")).toBe("network:lo");
+    fireEvent.click(within(panel).getByRole("button", { name: "Full screen" }));
+    expect(screen.getByTestId("search")).toHaveTextContent("full=1");
+    expect(within(openDialogs()[0]).getByRole("button", { name: "Back to the side" })).toHaveAttribute("aria-pressed", "true");
+    // No handle to resize it while it fills the window.
+    expect(within(openDialogs()[0]).queryByRole("separator")).toBeNull();
+    fireEvent.click(within(openDialogs()[0]).getByRole("button", { name: "Back to the side" }));
+    expect(screen.getByTestId("search")).not.toHaveTextContent("full=1");
   });
 });

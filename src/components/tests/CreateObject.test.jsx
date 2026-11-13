@@ -1,7 +1,7 @@
 import React from 'react';
 import {act, fireEvent, render, screen, waitFor, within} from '@testing-library/react';
 import {vi} from 'vitest';
-import CreateObjectDialog from '../CreateObjectDialog';
+import CreateObject from '../CreateObject';
 import {clearDesignerCache} from '../ObjectDesigner';
 import useEventStore from '../../hooks/useEventStore.js';
 import {useActionTracker} from '../../app/action-tracker';
@@ -14,7 +14,7 @@ vi.mock('../../hooks/useGrants', () => ({
 
 const SOURCE = '[DEFAULT]\nid = 11111111-1111-4111-8111-111111111111\nnodes = *\n\n[fs#1]\ntype = flag\n';
 
-describe('CreateObjectDialog', () => {
+describe('CreateObject', () => {
     /** The requests made, their method, address and body. */
     let requests;
     let answers;
@@ -43,7 +43,7 @@ describe('CreateObjectDialog', () => {
                 json: () => Promise.resolve(JSON.parse(answer.text || '{}')),
             });
         });
-        useEventStore.setState({objectStatus: {}, objectInstanceStatus: {}});
+        useEventStore.setState({objectStatus: {}, objectInstanceStatus: {}, instanceMonitor: {}});
     });
 
     afterEach(() => {
@@ -51,8 +51,7 @@ describe('CreateObjectDialog', () => {
     });
 
     const open = (props = {}) => render(
-        <CreateObjectDialog
-            open
+        <CreateObject
             onClose={vi.fn()}
             namespaces={['ns1', 'root']}
             paths={['ns1/svc/web', 'ns1/cfg/settings']}
@@ -63,11 +62,13 @@ describe('CreateObjectDialog', () => {
     const type = (label, value) => fireEvent.change(screen.getByLabelText(label), {target: {value}});
     const next = () => fireEvent.click(screen.getByRole('button', {name: 'Next'}));
     const create = () => fireEvent.click(screen.getByRole('button', {name: 'Create'}));
-    const posts = () => requests.filter((r) => r.method === 'POST');
+    // The creations: the validations of the draft posted beside them left out.
+    const posts = () => requests.filter((r) => r.method === 'POST' && r.url.includes('/config/file'));
+    const view = (name) => fireEvent.click(document.querySelector(`[data-segment=${name}]`));
     const card = (selector) => document.querySelector(selector);
     const source = (name) => fireEvent.click(card(`[data-source=${name}]`));
 
-    test('cancel closes at the first click: pressed, it leaves the name focused, no error to grow the dialog', () => {
+    test('cancel leaves at the first click, nothing done: pressed, it leaves the name focused, no error to grow the page', () => {
         const onClose = vi.fn();
         open({defaultKind: 'sec', onClose});
         const name = screen.getByLabelText('Name');
@@ -81,21 +82,47 @@ describe('CreateObjectDialog', () => {
         expect(onClose).toHaveBeenCalledTimes(1);
     });
 
-    test('untouched, closed by Escape; something typed, kept open by a stray Escape, Cancel closing it', () => {
+    test('something typed, Cancel asks before it is lost: kept editing, then discarded', () => {
         const onClose = vi.fn();
         open({defaultKind: 'svc', onClose});
-        fireEvent.keyDown(screen.getByRole('dialog'), {key: 'Escape'});
-        expect(onClose).toHaveBeenCalledTimes(1);
         type('Name', 'web2');
-        fireEvent.keyDown(screen.getByRole('dialog'), {key: 'Escape'});
-        expect(onClose).toHaveBeenCalledTimes(1);
         fireEvent.click(screen.getByRole('button', {name: 'Cancel'}));
-        expect(onClose).toHaveBeenCalledTimes(2);
+        expect(onClose).not.toHaveBeenCalled();
+        const asked = screen.getByRole('group', {name: 'Discard this new object?'});
+        expect(within(asked).getByRole('button', {name: 'Discard'})).toHaveFocus();
+        fireEvent.click(within(asked).getByRole('button', {name: 'Keep editing'}));
+        expect(screen.getByLabelText('Name')).toHaveValue('web2');
+        fireEvent.click(screen.getByRole('button', {name: 'Cancel'}));
+        fireEvent.click(screen.getByRole('button', {name: 'Discard'}));
+        expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
+    test('its draft kept in the tab: a reload finds it at the step it was at; created, it is forgotten', async () => {
+        sessionStorage.clear();
+        const first = open({draftKey: 'draft-1', defaultNamespace: 'ns1'});
+        type('Name', 'db');
+        next();
+        source('copy');
+        first.unmount();
+        open({draftKey: 'draft-1', defaultNamespace: 'ns1'});
+        expect(screen.getByRole('radio', {name: /A copy/})).toHaveAttribute('aria-checked', 'true');
+        expect(screen.getByRole('region', {name: 'New object · ns1/svc/db'})).toBeInTheDocument();
+        source('empty');
+        next();
+        create();
+        await waitFor(() => expect(onCreated).toHaveBeenCalledWith('ns1/svc/db'));
+        expect(sessionStorage.getItem('draft-1')).toBeNull();
+    });
+
+    test('a step the address asks for that is not reached yet: the one it takes before', () => {
+        const onStepChange = vi.fn();
+        open({step: 'configure', onStepChange});
+        expect(onStepChange).toHaveBeenCalledWith('what', {replace: true});
     });
 
     test('opens on the kind and namespace it is given, a card each picked, the name focused; no wait to choose', () => {
         open({defaultKind: 'cfg', defaultNamespace: 'ns1'});
-        expect(screen.getByRole('dialog', {name: 'New object'})).toBeInTheDocument();
+        expect(screen.getByRole('region', {name: 'New object'})).toBeInTheDocument();
         expect(card('[data-kind=cfg]')).toHaveAttribute('aria-pressed', 'true');
         expect(within(screen.getByRole('group', {name: 'My namespaces'})).getByRole('button', {name: 'ns1'})).toHaveAttribute('aria-pressed', 'true');
         expect(screen.getByLabelText('Name')).toHaveFocus();
@@ -141,11 +168,17 @@ describe('CreateObjectDialog', () => {
         expect(screen.getByLabelText('Free')).toBeInTheDocument();
     });
 
-    test('from nothing: the object posted with a new id alone', async () => {
+    test('from nothing: three steps named in a header; the object posted with a new id alone', async () => {
         open({defaultNamespace: 'ns1'});
+        const steps = () => [...document.querySelectorAll('[data-step]')].map((e) => [e.textContent, e.getAttribute('aria-current'), e.disabled]);
+        expect(steps()).toEqual([['Name', 'step', true], ['Start from', null, true], ['Configure', null, true]]);
         type('Name', 'db');
         next();
-        expect(card('[data-source=empty]')).toHaveAttribute('aria-pressed', 'true');
+        expect(card('[data-source=empty]')).toHaveAttribute('aria-checked', 'true');
+        expect(steps()).toEqual([['Name', null, false], ['Start from', 'step', true], ['Configure', null, true]]);
+        next();
+        // From nothing, designed.
+        expect(document.querySelector('[data-segment=design]')).toHaveAttribute('aria-pressed', 'true');
         create();
         await waitFor(() => expect(onCreated).toHaveBeenCalledWith('ns1/svc/db'));
         expect(useActionTracker.getState().tracked.map((e) => [e.label, e.subject, e.state])).toEqual([['Create', 'ns1/svc/db', 'succeeded']]);
@@ -154,10 +187,26 @@ describe('CreateObjectDialog', () => {
         expect(post.body).toMatch(/^\[DEFAULT\]\nid = [0-9a-f-]{36}\n$/);
     });
 
+    test('the header leads back to a step done, what was configured kept', () => {
+        open({defaultNamespace: 'ns1'});
+        type('Name', 'db');
+        next();
+        next();
+        view('text');
+        fireEvent.change(screen.getByLabelText('Configuration'), {target: {value: '[DEFAULT]\nnodes = n1\n'}});
+        fireEvent.click(document.querySelector('[data-step=what]'));
+        expect(screen.getByLabelText('Name')).toHaveValue('db');
+        next();
+        next();
+        view('text');
+        expect(screen.getByLabelText('Configuration')).toHaveValue('[DEFAULT]\nnodes = n1\n');
+    });
+
     test('a service of the root namespace is written as om writes it', async () => {
         open();
         type('Name', 'db');
         expect(screen.getByText('db')).toBeInTheDocument();
+        next();
         next();
         create();
         await waitFor(() => expect(onCreated).toHaveBeenCalledWith('db'));
@@ -182,19 +231,29 @@ describe('CreateObjectDialog', () => {
         expect(screen.getByLabelText('Name')).toBeDisabled();
         expect(screen.getByLabelText('Name of the new namespace')).toHaveValue('ns2');
         next();
+        next();
         create();
         await waitFor(() => expect(onCreated).toHaveBeenCalledWith('ns2/nscfg/namespace'));
     });
 
-    test('a copy starts from the configuration of the object, its id replaced', async () => {
+    const pickCopy = (path) => {
+        fireEvent.click(screen.getByRole('combobox', {name: 'Object to copy'}));
+        fireEvent.click(screen.getByRole('option', {name: path}));
+    };
+
+    test('a copy starts from the configuration of the object, its text edited next, its id replaced', async () => {
         answers['GET /api/object/path/ns1/svc/web/config/file?redact-secrets=false'] = {status: 200, text: SOURCE};
         open({defaultNamespace: 'ns1'});
         type('Name', 'web2');
         next();
         source('copy');
-        fireEvent.click(screen.getByRole('combobox', {name: 'Object to copy'}));
-        fireEvent.click(screen.getByRole('option', {name: 'ns1/svc/web'}));
-        await waitFor(() => expect(screen.getByLabelText('Configuration')).toHaveValue(SOURCE));
+        expect(screen.getByRole('button', {name: 'Next'})).toBeDisabled();
+        pickCopy('ns1/svc/web');
+        await waitFor(() => expect(screen.getByText(/ns1\/svc\/web read, \d+ lines: edited next\./)).toBeInTheDocument());
+        next();
+        // From a text, its text.
+        expect(document.querySelector('[data-segment=text]')).toHaveAttribute('aria-pressed', 'true');
+        expect(screen.getByLabelText('Configuration')).toHaveValue(SOURCE);
         create();
         await waitFor(() => expect(onCreated).toHaveBeenCalledWith('ns1/svc/web2'));
         const body = posts()[0].body;
@@ -202,22 +261,57 @@ describe('CreateObjectDialog', () => {
         expect(body).toMatch(/^\[DEFAULT\]\nid = [0-9a-f-]{36}\nnodes = \*\n\n\[fs#1\]\ntype = flag\n$/);
     });
 
-    test('a copy loaded, then back to make it a datastore: created empty, the text kept for a service', async () => {
+    test('the keyboard: Enter at the name, the source chosen focused, the arrows choosing, Enter going on', () => {
+        open({defaultNamespace: 'ns1'});
+        type('Name', 'db');
+        fireEvent.submit(screen.getByLabelText('Name').closest('form'));
+        const empty = card('[data-source=empty]');
+        expect(empty).toHaveFocus();
+        expect(screen.getByRole('radiogroup', {name: 'Start from'})).toBeInTheDocument();
+        // One stop for Tab: the source chosen.
+        expect(card('[data-source=copy]')).toHaveAttribute('tabindex', '-1');
+        fireEvent.keyDown(empty, {key: 'ArrowRight'});
+        expect(card('[data-source=copy]')).toHaveFocus();
+        expect(card('[data-source=copy]')).toHaveAttribute('aria-checked', 'true');
+        fireEvent.keyDown(card('[data-source=copy]'), {key: 'ArrowLeft'});
+        expect(empty).toHaveFocus();
+        fireEvent.keyDown(empty, {key: 'ArrowUp'});
+        expect(card('[data-source=file]')).toHaveAttribute('aria-checked', 'true');
+        fireEvent.keyDown(card('[data-source=file]'), {key: 'ArrowDown'});
+        fireEvent.keyDown(empty, {key: 'Enter'});
+        expect(document.querySelector('[data-segment=design]')).toHaveAttribute('aria-pressed', 'true');
+    });
+
+    test('the keyboard: Enter on a copy not picked yet goes to the object to copy, then on once it is read', async () => {
+        answers['GET /api/object/path/ns1/svc/web/config/file?redact-secrets=false'] = {status: 200, text: SOURCE};
+        open({defaultNamespace: 'ns1'});
+        type('Name', 'web2');
+        next();
+        fireEvent.keyDown(card('[data-source=empty]'), {key: 'ArrowRight'});
+        fireEvent.keyDown(card('[data-source=copy]'), {key: 'Enter'});
+        expect(screen.getByRole('combobox', {name: 'Object to copy'})).toHaveFocus();
+        pickCopy('ns1/svc/web');
+        await waitFor(() => expect(screen.getByText(/ns1\/svc\/web read/)).toBeInTheDocument());
+        fireEvent.keyDown(card('[data-source=copy]'), {key: 'Enter'});
+        expect(screen.getByLabelText('Configuration')).toHaveValue(SOURCE);
+    });
+
+    test('a copy loaded, then back to make it a datastore: created empty, the copy kept for a service', async () => {
         answers['GET /api/object/path/ns1/svc/web/config/file?redact-secrets=false'] = {status: 200, text: SOURCE};
         open({defaultNamespace: 'ns1'});
         type('Name', 'tls');
         next();
         source('copy');
-        fireEvent.click(screen.getByRole('combobox', {name: 'Object to copy'}));
-        fireEvent.click(screen.getByRole('option', {name: 'ns1/svc/web'}));
-        await waitFor(() => expect(screen.getByLabelText('Configuration')).toHaveValue(SOURCE));
+        pickCopy('ns1/svc/web');
+        await waitFor(() => expect(screen.getByRole('button', {name: 'Next'})).toBeEnabled());
         fireEvent.click(screen.getByRole('button', {name: 'Back'}));
         fireEvent.click(card('[data-kind=sec]'));
         create();
         await waitFor(() => expect(onCreated).toHaveBeenCalledWith('ns1/sec/tls'));
         expect(posts()[0].body).toMatch(/^\[DEFAULT\]\nid = [0-9a-f-]{36}\n$/);
-        // Back to a service, the text is still there, as left.
+        // Back to a service, the copy is still there, as left.
         fireEvent.click(card('[data-kind=svc]'));
+        next();
         next();
         expect(screen.getByLabelText('Configuration')).toHaveValue(SOURCE);
     });
@@ -242,65 +336,93 @@ describe('CreateObjectDialog', () => {
         fireEvent.click(screen.getByRole('option', {name: 'ns1/svc/web'}));
         fireEvent.click(screen.getByRole('combobox', {name: 'Object to copy'}));
         fireEvent.click(screen.getByRole('option', {name: 'ns1/svc/api'}));
-        await waitFor(() => expect(screen.getByLabelText('Configuration')).toHaveValue(OTHER));
+        await waitFor(() => expect(screen.getByText(/ns1\/svc\/api read/)).toBeInTheDocument());
         await act(async () => { answerFirst(); });
+        expect(screen.getByText(/ns1\/svc\/api read/)).toBeInTheDocument();
+        next();
         expect(screen.getByLabelText('Configuration')).toHaveValue(OTHER);
-        expect(screen.getByRole('button', {name: 'Create'})).toBeEnabled();
     });
 
-    test('a copy that could not be read: not the one before created, nothing to create until one is read', async () => {
+    test('a copy that could not be read: not the one before taken, nothing to go on with until one is read', async () => {
         answers['GET /api/object/path/ns1/svc/web/config/file?redact-secrets=false'] = {status: 200, text: SOURCE};
         answers['GET /api/object/path/ns1/svc/api/config/file?redact-secrets=false'] = {status: 500, text: 'boom'};
         open({defaultNamespace: 'ns1', paths: ['ns1/svc/web', 'ns1/svc/api']});
         type('Name', 'x');
         next();
         source('copy');
-        fireEvent.click(screen.getByRole('combobox', {name: 'Object to copy'}));
-        fireEvent.click(screen.getByRole('option', {name: 'ns1/svc/web'}));
-        await waitFor(() => expect(screen.getByLabelText('Configuration')).toHaveValue(SOURCE));
-        fireEvent.click(screen.getByRole('combobox', {name: 'Object to copy'}));
-        fireEvent.click(screen.getByRole('option', {name: 'ns1/svc/api'}));
+        pickCopy('ns1/svc/web');
+        await waitFor(() => expect(screen.getByRole('button', {name: 'Next'})).toBeEnabled());
+        pickCopy('ns1/svc/api');
         await waitFor(() => expect(screen.getByText(/The configuration of ns1\/svc\/api could not be read/)).toBeInTheDocument());
-        // The text of ns1/svc/web no longer under ns1/svc/api, and nothing posted.
-        expect(screen.queryByLabelText('Configuration')).toBeNull();
-        expect(screen.getByRole('button', {name: 'Create'})).toBeDisabled();
-        fireEvent.submit(screen.getByRole('button', {name: 'Create'}).form ?? document.querySelector('form'));
-        expect(posts()).toEqual([]);
+        // The text of ns1/svc/web no longer under ns1/svc/api: nothing to go on with.
+        expect(screen.getByRole('button', {name: 'Next'})).toBeDisabled();
+        fireEvent.submit(document.querySelector('form'));
+        expect(document.querySelector('[data-segment]')).toBeNull();
         // Picked again and read: created from it.
-        fireEvent.click(screen.getByRole('combobox', {name: 'Object to copy'}));
-        fireEvent.click(screen.getByRole('option', {name: 'ns1/svc/web'}));
-        await waitFor(() => expect(screen.getByRole('button', {name: 'Create'})).toBeEnabled());
+        pickCopy('ns1/svc/web');
+        await waitFor(() => expect(screen.getByRole('button', {name: 'Next'})).toBeEnabled());
+        next();
         create();
         await waitFor(() => expect(onCreated).toHaveBeenCalledWith('ns1/svc/x'));
         expect(posts()[0].body).toContain('[fs#1]');
     });
 
-    test('a text written, then a copy chosen and none picked: the text written not created as a copy', async () => {
+    test('a text written, then a copy chosen and none picked: nothing to go on with; back to nothing, the text kept', async () => {
         open({defaultNamespace: 'ns1'});
         type('Name', 'x');
         next();
-        source('edit');
+        next();
+        view('text');
         fireEvent.change(screen.getByLabelText('Configuration'), {target: {value: '[DEFAULT]\nnodes = written\n'}});
+        fireEvent.click(screen.getByRole('button', {name: 'Back'}));
         source('copy');
-        expect(screen.getByRole('button', {name: 'Create'})).toBeDisabled();
-        // Back to it, the text written is still there.
-        source('edit');
+        expect(screen.getByRole('button', {name: 'Next'})).toBeDisabled();
+        source('empty');
+        next();
+        view('text');
         expect(screen.getByLabelText('Configuration')).toHaveValue('[DEFAULT]\nnodes = written\n');
     });
 
-    test('written: a file dropped on the text read into it, sent with a new id', async () => {
+    test('from a file, dropped or picked: its text edited next, sent with a new id', async () => {
         open({defaultNamespace: 'ns1'});
         type('Name', 'db');
         next();
-        source('edit');
+        source('file');
+        expect(screen.getByRole('button', {name: 'Next'})).toBeDisabled();
         const file = new File(['[DEFAULT]\nnodes = *\n'], 'db.conf', {type: 'text/plain'});
         // jsdom's File reads no text: the browser's does.
         file.text = () => Promise.resolve('[DEFAULT]\nnodes = *\n');
         fireEvent.drop(card('[data-drop-zone]'), {dataTransfer: {files: [file]}});
-        await waitFor(() => expect(screen.getByLabelText('Configuration')).toHaveValue('[DEFAULT]\nnodes = *\n'));
-        expect(screen.getByText('db.conf read: edited here before it is sent.')).toBeInTheDocument();
+        await waitFor(() => expect(screen.getByText('db.conf read: edited next.')).toBeInTheDocument());
+        next();
+        expect(screen.getByLabelText('Configuration')).toHaveValue('[DEFAULT]\nnodes = *\n');
         create();
         await waitFor(() => expect(posts()[0].body).toMatch(/^\[DEFAULT\]\nid = [0-9a-f-]{36}\nnodes = \*\n$/));
+    });
+
+    test('one configuration, designed or written: each view shows what the other changed; comments dropped by a design change, said', async () => {
+        open({defaultNamespace: 'ns1'});
+        type('Name', 'db');
+        next();
+        source('file');
+        const file = new File(['x'], 'db.conf');
+        file.text = () => Promise.resolve('# the database\n[DEFAULT]\nnodes = n1\n');
+        fireEvent.drop(card('[data-drop-zone]'), {dataTransfer: {files: [file]}});
+        await waitFor(() => expect(screen.getByRole('button', {name: 'Next'})).toBeEnabled());
+        next();
+        view('design');
+        expect(await screen.findByRole('textbox', {name: 'Value of nodes'})).toHaveValue('n1');
+        // Only looked at: the text as it was, its comment kept.
+        view('text');
+        expect(screen.getByLabelText('Configuration')).toHaveValue('# the database\n[DEFAULT]\nnodes = n1\n');
+        view('design');
+        fireEvent.change(screen.getByRole('textbox', {name: 'Value of nodes'}), {target: {value: 'n1 n2'}});
+        expect(screen.getByText('Comments are not kept by the design: they are dropped from the configuration.')).toBeInTheDocument();
+        view('text');
+        expect(screen.getByLabelText('Configuration')).toHaveValue('[DEFAULT]\nnodes = n1 n2\n');
+        fireEvent.change(screen.getByLabelText('Configuration'), {target: {value: '[DEFAULT]\nnodes = n3\n'}});
+        view('design');
+        expect(screen.getByRole('textbox', {name: 'Value of nodes'})).toHaveValue('n3');
     });
 
     describe('designed', () => {
@@ -320,9 +442,73 @@ describe('CreateObjectDialog', () => {
             open({defaultNamespace: 'ns1'});
             type('Name', 'db');
             next();
-            source('design');
+            next();
             await screen.findByRole('navigation', {name: 'Sections'});
         };
+
+        test('a resource written in the text, its keywords read for the design: its choices there, back in the design', async () => {
+            answers['GET /api/object/path/ns1/svc/db/config/keywords?driver=ip.netns'] = {status: 200, text: JSON.stringify({
+                items: [
+                    {section: 'ip', option: 'type', required: true},
+                    {section: 'ip', option: 'name', types: ['netns'], group: 'addressing'},
+                    {section: 'ip', option: 'network', types: ['netns'], group: 'addressing'},
+                ],
+                groups: [
+                    {id: 'addressing', driver: 'ip.netns', name: 'Addressing', order: 10, required: true, strategies: [
+                        {id: 'static', name: 'Static address', uses: ['name'], excludes: ['network'], requires: [], when: []},
+                        {id: 'ipam', name: 'Address drawn from a network', uses: ['network'], excludes: ['name'], requires: [], when: []},
+                    ]},
+                ],
+            })};
+            await design();
+            view('text');
+            fireEvent.change(screen.getByLabelText('Configuration'), {target: {value: '[ip#1]\ntype = netns\n'}});
+            view('design');
+            await waitFor(() => expect(requests.some((r) => r.url.endsWith('/config/keywords?driver=ip.netns'))).toBe(true));
+            fireEvent.click(within(screen.getByRole('navigation', {name: 'Sections'})).getByRole('button', {name: /^ip#1/}));
+            expect(await screen.findByRole('group', {name: 'How to set Addressing'})).toBeInTheDocument();
+            // Read once: back and forth, not again.
+            view('text');
+            view('design');
+            expect(requests.filter((r) => r.url.endsWith('/config/keywords?driver=ip.netns'))).toHaveLength(1);
+        });
+
+        test('a resource written with no type: the type it gets by default said, another picked, its keywords read', async () => {
+            answers['GET /api/node/name/localhost/drivers'] = {status: 200, text: JSON.stringify({items: [
+                {data: {name: 'ip.host', group: 'ip', type: 'host', available: true}},
+                {data: {name: 'ip.netns', group: 'ip', type: 'netns', available: true}},
+                {data: {name: 'fs.flag', group: 'fs', type: 'flag', available: true}},
+            ]})};
+            answers['GET /api/object/path/ns1/svc/db/config/keywords?section=ip%231'] = {status: 200, text: JSON.stringify({items: [
+                {section: 'ip', option: 'type'},
+                {section: 'ip', option: 'name', types: ['host']},
+            ]})};
+            KW('ip.netns', [{section: 'ip', option: 'type'}, {section: 'ip', option: 'netns', types: ['netns'], required: true}]);
+            await design();
+            view('text');
+            fireEvent.change(screen.getByLabelText('Configuration'), {target: {value: '[ip#1]\n'}});
+            view('design');
+            fireEvent.click(within(screen.getByRole('navigation', {name: 'Sections'})).getByRole('button', {name: /^ip#1/}));
+            const type = await screen.findByRole('combobox', {name: 'Type'});
+            await waitFor(() => expect(type.options[0].textContent).toBe('default: host'));
+            expect([...type.options].map((o) => o.value)).toEqual(['', 'host', 'netns']);
+            fireEvent.change(type, {target: {value: 'netns'}});
+            await waitFor(() => expect(requests.some((r) => r.url.endsWith('/config/keywords?driver=ip.netns'))).toBe(true));
+            // Typed: no default to go back to; its file says it.
+            expect([...screen.getByRole('combobox', {name: 'Type'}).options].map((o) => o.value)).toEqual(['host', 'netns']);
+            view('text');
+            expect(screen.getByLabelText('Configuration').value).toMatch(/^\[ip#1\]\ntype = netns/m);
+        });
+
+        test('a resource whose keywords could not be read: said on its section, not shown as one with nothing to set', async () => {
+            answers['GET /api/object/path/ns1/svc/db/config/keywords?section=ip%231'] = {status: 500, text: JSON.stringify({title: 'Internal Server Error', status: 500, detail: 'ip.: driver not found'})};
+            await design();
+            view('text');
+            fireEvent.change(screen.getByLabelText('Configuration'), {target: {value: '[ip#1]\n'}});
+            view('design');
+            fireEvent.click(within(screen.getByRole('navigation', {name: 'Sections'})).getByRole('button', {name: /^ip#1/}));
+            expect(await screen.findByText(/The keywords could not be read: .*driver not found/)).toBeInTheDocument();
+        });
 
         test('DEFAULT and env to start; a resource added by its driver, its required keywords seeded; the file it makes posted', async () => {
             await design();
@@ -343,8 +529,8 @@ describe('CreateObjectDialog', () => {
             expect(await screen.findByRole('heading', {name: /\[fs#1\]/})).toBeInTheDocument();
             expect(screen.getByText('Required without a value: fs#1.mnt.')).toBeInTheDocument();
             type('Value of mnt', '/srv');
-            fireEvent.click(screen.getByRole('button', {name: 'Show the file'}));
-            expect(card('[data-preview]')).toHaveTextContent('[DEFAULT] nodes = * [fs#1] type = flag mnt = /srv');
+            view('text');
+            expect(screen.getByLabelText('Configuration').value.replace(/\s+/g, ' ').trim()).toBe('[DEFAULT] nodes = * [fs#1] type = flag mnt = /srv');
             create();
             await waitFor(() => expect(posts()[0].body).toMatch(/^\[DEFAULT\]\nid = [0-9a-f-]{36}\nnodes = \*\n\n\[fs#1\]\ntype = flag\nmnt = \/srv\n$/));
         });
@@ -454,6 +640,230 @@ describe('CreateObjectDialog', () => {
             expect(screen.getByRole('textbox', {name: 'Value of topology'})).toHaveValue('flex');
         });
 
+        const GROUPED = {
+            items: [
+                {section: 'DEFAULT', option: 'nodes', group: 'placement'},
+                {section: 'DEFAULT', option: 'orchestrate', group: 'availability'},
+                {section: 'DEFAULT', option: 'comment'},
+                {section: 'DEFAULT', option: 'name', group: 'addressing'},
+                {section: 'DEFAULT', option: 'network', group: 'addressing'},
+                {section: 'DEFAULT', option: 'netmask', group: 'addressing'},
+            ],
+            groups: [
+                {id: 'other', driver: '', name: 'Other', order: 1000},
+                {id: 'availability', driver: '', name: 'Availability', order: 100},
+                {id: 'addressing', driver: 'ip.netns', name: 'Addressing', order: 10, strategies: [
+                    {id: 'static', name: 'Static address', text: 'The address name holds.', uses: ['name'], excludes: ['network'], when: []},
+                    {id: 'ipam', name: 'Address drawn from a network', text: 'Drawn from an om network.', uses: ['network'], excludes: ['name'], when: []},
+                ]},
+            ],
+        };
+        const keywordsShown = () => [...document.querySelectorAll('[data-keyword]')].map((e) => e.dataset.keyword);
+
+        test('the design validated as it is edited: what would be refused said before it is created', async () => {
+            answers['POST /api/object/path/ns1/svc/db/config/validate'] = {status: 200, text: JSON.stringify({kind: 'ConfigAlertList', items: [
+                {level: 'error', kind: 'denied', key: 'DEFAULT.nodes', comment: 'requires the root grant'},
+            ]})};
+            await design();
+            fireEvent.click(screen.getByRole('button', {name: 'Add nodes'}));
+            fireEvent.change(screen.getByRole('textbox', {name: 'Value of nodes'}), {target: {value: 'n1'}});
+            await waitFor(() => expect(screen.getByText('requires the root grant')).toBeInTheDocument(), {timeout: 8000});
+            const sent = requests.filter((r) => r.method === 'POST' && r.url.endsWith('/config/validate'));
+            expect(sent.at(-1).body).toMatch(/^\[DEFAULT\]\nnodes = n1/);
+            expect(screen.getByText('1 error')).toBeInTheDocument();
+            // Refused, nor created nor deployed: the buttons held, once the dialog is told.
+            await waitFor(() => expect(screen.getByRole('button', {name: 'Create'})).toBeDisabled());
+            expect(screen.getByRole('button', {name: 'Deploy'})).toBeDisabled();
+            // Validated only: nothing created.
+            expect(posts().filter((r) => r.url.includes('/config/file'))).toEqual([]);
+            // Fixed: free again, nothing more said.
+            answers['POST /api/object/path/ns1/svc/db/config/validate'] = {status: 200, text: JSON.stringify({kind: 'ConfigAlertList', items: []})};
+            fireEvent.change(screen.getByRole('textbox', {name: 'Value of nodes'}), {target: {value: '*'}});
+            await waitFor(() => expect(screen.getByRole('button', {name: 'Create'})).toBeEnabled(), {timeout: 8000});
+            expect(screen.getByRole('button', {name: 'Deploy'})).toBeEnabled();
+            expect(screen.queryByText(/The configuration is valid/)).toBeNull();
+        });
+
+        test('a strategy chosen leaves out what it excludes in other groups too, offered before the choice', async () => {
+            answers['GET /api/object/path/ns1/svc/db/config/keywords?driver=DEFAULT'] = {status: 200, text: JSON.stringify({
+                items: [
+                    {section: 'DEFAULT', option: 'vcpus', group: 'machine'},
+                    {section: 'DEFAULT', option: 'image', group: 'install'},
+                    {section: 'DEFAULT', option: 'virtinst', group: 'install'},
+                ],
+                groups: [
+                    {id: 'install', driver: 'container.kvm', name: 'Install', order: 10, strategies: [
+                        {id: 'image', name: 'From an image', uses: ['image'], excludes: ['virtinst'], when: []},
+                        {id: 'virtinst', name: 'By virt-install', uses: ['virtinst'], excludes: ['image', 'vcpus'], when: []},
+                    ]},
+                    {id: 'machine', driver: 'container.kvm', name: 'Machine', order: 20},
+                ],
+            })};
+            await design();
+            fireEvent.click(screen.getByRole('button', {name: 'More'}));
+            expect(keywordsShown()).toEqual(['vcpus']);
+            fireEvent.click(within(screen.getByRole('group', {name: 'How to set Install'})).getByRole('button', {name: 'By virt-install'}));
+            expect(keywordsShown()).toEqual(['virtinst']);
+        });
+
+        test('a keyword whose conditions fail left out of the offer, said ignored once set', async () => {
+            KW('DEFAULT', [
+                {section: 'DEFAULT', option: 'topology', default: 'failover', candidates: ['failover', 'flex']},
+                {section: 'DEFAULT', option: 'flex_min', depends: ['topology=flex']},
+                {section: 'DEFAULT', option: 'nodes'},
+            ]);
+            await design();
+            fireEvent.click(screen.getByRole('button', {name: 'More'}));
+            expect(keywordsShown()).not.toContain('flex_min');
+            fireEvent.click(screen.getByRole('button', {name: 'Add topology'}));
+            fireEvent.change(screen.getByRole('combobox', {name: 'Value of topology'}), {target: {value: 'flex'}});
+            fireEvent.click(screen.getByRole('button', {name: 'More'}));
+            fireEvent.click(screen.getByRole('button', {name: 'Add flex_min'}));
+            expect(document.querySelector('[data-ignored="flex_min"]')).toBeNull();
+            fireEvent.change(screen.getByRole('combobox', {name: 'Value of topology'}), {target: {value: 'failover'}});
+            expect(document.querySelector('[data-ignored="flex_min"]')).toHaveTextContent('Ignored: it applies only where topology=flex.');
+        });
+
+        test('a required strategy asked for; picked, the keywords it needs added, required', async () => {
+            answers['GET /api/object/path/ns1/svc/db/config/keywords?driver=DEFAULT'] = {status: 200, text: JSON.stringify({
+                items: [
+                    {section: 'DEFAULT', option: 'name', group: 'addressing'},
+                    {section: 'DEFAULT', option: 'network', group: 'addressing'},
+                    {section: 'DEFAULT', option: 'dev', group: 'other'},
+                ],
+                groups: [
+                    {id: 'addressing', driver: 'ip.netns', name: 'Addressing', order: 10, required: true, strategies: [
+                        {id: 'static', name: 'Static address', uses: ['name'], excludes: ['network'], requires: ['dev'], when: []},
+                        {id: 'ipam', name: 'Address drawn from a network', uses: ['network'], excludes: ['name'], requires: [], when: []},
+                    ]},
+                    {id: 'other', driver: '', name: 'Other', order: 1000},
+                ],
+            })};
+            await design();
+            expect(screen.getByText('Choose how to set: DEFAULT Addressing.')).toBeInTheDocument();
+            fireEvent.click(within(screen.getByRole('group', {name: 'How to set Addressing'})).getByRole('button', {name: 'Static address'}));
+            expect(screen.queryByText(/Choose how to set:/)).toBeNull();
+            expect(screen.getByRole('textbox', {name: 'Value of name'})).toHaveValue('');
+            expect(screen.getByRole('textbox', {name: 'Value of dev'})).toHaveValue('');
+            expect(screen.getByText('Required without a value: DEFAULT.name, DEFAULT.dev.')).toBeInTheDocument();
+            fireEvent.change(screen.getByRole('textbox', {name: 'Value of name'}), {target: {value: '10.0.0.1'}});
+            fireEvent.change(screen.getByRole('textbox', {name: 'Value of dev'}), {target: {value: 'eth0'}});
+            expect(screen.queryByText(/Required without a value/)).toBeNull();
+        });
+
+        test('a keyword naming resources offers those of the design, its special values after, not the example of another design', async () => {
+            KW('container.docker', [
+                {section: 'container', option: 'type', required: true},
+                {section: 'container', option: 'netns', candidates: ['', 'none', 'host'], references: {groups: ['container'], shape: 'rid'}},
+            ]);
+            KW('ip.netns', [
+                {section: 'ip', option: 'type', required: true},
+                {section: 'ip', option: 'netns', required: true, example: 'container#0', references: {groups: ['container'], shape: 'rid'}},
+            ]);
+            await design();
+            for (const driver of ['container.docker', 'ip.netns']) {
+                fireEvent.click(screen.getByRole('button', {name: 'Add a resource'}));
+                fireEvent.change(await screen.findByLabelText('Driver, as group.type'), {target: {value: driver}});
+                fireEvent.click(within(card('[data-add-resource]')).getByRole('button', {name: 'Add a resource'}));
+                await screen.findByRole('textbox', {name: 'Value of netns'}).catch(() => null);
+            }
+            const sections = screen.getByRole('navigation', {name: 'Sections'});
+            fireEvent.click(within(sections).getByRole('button', {name: /^ip#1/}));
+            const netns = await screen.findByRole('combobox', {name: 'Value of netns'});
+            expect(screen.queryByRole('button', {name: 'Use the example container#0'})).toBeNull();
+            fireEvent.focus(netns);
+            const picks = () => [...document.querySelectorAll('[data-pick]')].map((e) => e.dataset.pick);
+            expect(picks()).toEqual(['container#1']);
+            fireEvent.mouseDown(document.querySelector('[data-pick="container#1"]'));
+            expect(netns).toHaveValue('container#1');
+            // The container's own: the others of the design and its special values, never itself.
+            fireEvent.click(within(sections).getByRole('button', {name: /^container#1/}));
+            fireEvent.click(screen.getByRole('button', {name: 'More'}));
+            fireEvent.click(screen.getByRole('button', {name: 'Add netns'}));
+            fireEvent.focus(await screen.findByRole('combobox', {name: 'Value of netns'}));
+            expect(picks()).toEqual(['none', 'host']);
+        });
+
+        test('the keywords to add under their groups, in the order of the daemon, those of no group known under other', async () => {
+            answers['GET /api/object/path/ns1/svc/db/config/keywords?driver=DEFAULT'] = {status: 200, text: JSON.stringify(GROUPED)};
+            await design();
+            fireEvent.click(screen.getByRole('button', {name: 'More'}));
+            expect([...document.querySelectorAll('[data-group]')].map((e) => e.textContent)).toEqual(['Addressing', 'Availability', 'Other']);
+            expect(keywordsShown()).toEqual(['netmask', 'orchestrate', 'comment', 'nodes']);
+        });
+
+        test('a secondary strategy group chosen in the keywords to add; its keyword set, on the section', async () => {
+            answers['GET /api/object/path/ns1/svc/db/config/keywords?driver=DEFAULT'] = {status: 200, text: JSON.stringify(GROUPED)};
+            await design();
+            // Neither required nor needed: not before the keywords to fill in.
+            expect(screen.queryByRole('group', {name: 'How to set Addressing'})).toBeNull();
+            fireEvent.click(screen.getByRole('button', {name: 'More'}));
+            const offer = screen.getByRole('list', {name: 'Keywords to add'});
+            const bar = within(offer).getByRole('group', {name: 'How to set Addressing'});
+            expect(within(bar).getAllByRole('button').map((b) => [b.textContent, b.getAttribute('aria-pressed')])).toEqual([
+                ['Static address', 'false'],
+                ['Address drawn from a network', 'false'],
+            ]);
+            fireEvent.click(within(bar).getByRole('button', {name: 'Static address'}));
+            expect(keywordsShown()).toContain('name');
+            fireEvent.click(screen.getByRole('button', {name: 'Add name'}));
+            fireEvent.change(screen.getByRole('textbox', {name: 'Value of name'}), {target: {value: '10.0.0.1'}});
+            // Set, it stands on the section.
+            expect(screen.getByRole('group', {name: 'How to set Addressing'})).toBeInTheDocument();
+            expect(screen.queryByRole('list', {name: 'Keywords to add'})).toBeNull();
+        });
+
+        test('a strategy a selector chooses picked by writing the selector, and back by removing it', async () => {
+            answers['GET /api/object/path/ns1/svc/db/config/keywords?driver=DEFAULT'] = {status: 200, text: JSON.stringify({
+                items: [
+                    {section: 'DEFAULT', option: 'quiesce', group: 'quiesce', candidates: ['pause', 'command']},
+                    {section: 'DEFAULT', option: 'quiesce_input', group: 'quiesce'},
+                ],
+                groups: [{id: 'quiesce', driver: 'container.docker', name: 'Quiesce', order: 50, strategies: [
+                    {id: 'pause', name: 'Pause the processes', uses: [], excludes: ['quiesce_input'], requires: [], when: ['quiesce=pause']},
+                    {id: 'command', name: 'Run a command', uses: ['quiesce_input'], excludes: [], requires: [], when: ['quiesce!=pause']},
+                ]}],
+            })};
+            await design();
+            fireEvent.click(screen.getByRole('button', {name: 'More'}));
+            const bar = () => screen.getByRole('group', {name: 'How to set Quiesce'});
+            expect(within(bar()).getByRole('button', {name: 'Run a command'})).toHaveAttribute('aria-pressed', 'true');
+            expect(screen.getByText('Run a command, as quiesce = unset chooses.')).toBeInTheDocument();
+            fireEvent.click(within(bar()).getByRole('button', {name: 'Pause the processes'}));
+            expect(screen.getByRole('combobox', {name: 'Value of quiesce'})).toHaveValue('pause');
+            expect(within(bar()).getByRole('button', {name: 'Pause the processes'})).toHaveAttribute('aria-pressed', 'true');
+            fireEvent.click(within(bar()).getByRole('button', {name: 'Run a command'}));
+            expect(screen.queryByRole('combobox', {name: 'Value of quiesce'})).toBeNull();
+        });
+
+        test('a strategy chosen first: its keywords then offered, never those it excludes; told by a keyword set', async () => {
+            answers['GET /api/object/path/ns1/svc/db/config/keywords?driver=DEFAULT'] = {status: 200, text: JSON.stringify(GROUPED)};
+            await design();
+            // No keyword of a strategy offered at once, before the choice.
+            expect(screen.queryByRole('button', {name: 'Add name'})).toBeNull();
+            expect(screen.queryByRole('button', {name: 'Add network'})).toBeNull();
+            fireEvent.click(screen.getByRole('button', {name: 'More'}));
+            const choice = screen.getByRole('group', {name: 'How to set Addressing'});
+            expect(screen.getByText('Choose one: its keywords are then offered.')).toBeInTheDocument();
+            expect(keywordsShown()).not.toContain('name');
+            expect(keywordsShown()).not.toContain('network');
+            fireEvent.click(within(choice).getByRole('button', {name: 'Address drawn from a network'}));
+            expect(within(choice).getByRole('button', {name: 'Address drawn from a network'})).toHaveAttribute('aria-pressed', 'true');
+            expect(screen.getByText('Drawn from an om network.')).toBeInTheDocument();
+            expect(keywordsShown()).toContain('network');
+            expect(keywordsShown()).not.toContain('name');
+            fireEvent.click(screen.getByRole('button', {name: 'Add network'}));
+            // Set, not only added: an empty keyword tells no strategy.
+            fireEvent.change(screen.getByRole('textbox', {name: 'Value of network'}), {target: {value: 'default'}});
+            // The keyword set tells the strategy: said, the other left until its keywords go.
+            expect(screen.getByText('Address drawn from a network, as the keywords set say.')).toBeInTheDocument();
+            const told = screen.getByRole('group', {name: 'How to set Addressing'});
+            expect(within(told).getByRole('button', {name: 'Address drawn from a network'})).toHaveAttribute('aria-pressed', 'true');
+            expect(within(told).getByRole('button', {name: 'Static address'})).toBeDisabled();
+            fireEvent.click(screen.getByRole('button', {name: 'More'}));
+            expect(keywordsShown()).not.toContain('name');
+        });
+
         test('the keywords to add: the arrows move over those matching, Enter adds the one picked', async () => {
             KW('DEFAULT', [{section: 'DEFAULT', option: 'nodes'}, {section: 'DEFAULT', option: 'orchestrate'}, {section: 'DEFAULT', option: 'topology'}]);
             await design();
@@ -547,7 +957,7 @@ describe('CreateObjectDialog', () => {
             fireEvent.click(card('[data-group=fs]'));
             expect(within(screen.getByRole('list', {name: 'Types'})).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['flag', 'xroot, or unmanaged provisioning']);
             // Asked for: all of them, those of root tagged.
-            fireEvent.click(screen.getByRole('checkbox', {name: 'Show the keywords only root may set'}));
+            fireEvent.click(screen.getByRole('button', {name: 'Show the keywords only root may set'}));
             expect(within(await screen.findByRole('group', {name: 'Driver groups'})).getAllByRole('button').map((b) => b.dataset.group)).toEqual(['disk', 'fs']);
             fireEvent.click(card('[data-group=fs]'));
             expect(within(screen.getByRole('list', {name: 'Types'})).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['ext4root', 'flag', 'xroot, or unmanaged provisioning']);
@@ -577,8 +987,8 @@ describe('CreateObjectDialog', () => {
             const kind = await screen.findByRole('combobox', {name: 'Value of type'});
             await waitFor(() => expect([...document.getElementById(kind.getAttribute('list')).options].map((o) => o.value)).toEqual(['loop', 'shm']));
             fireEvent.change(kind, {target: {value: 'shm'}});
-            fireEvent.click(screen.getByRole('button', {name: 'Show the file'}));
-            expect(card('[data-preview]')).toHaveTextContent('[volume#1] size = 1g type = shm');
+            view('text');
+            expect(screen.getByLabelText('Configuration').value.replace(/\s+/g, ' ').trim()).toBe('[volume#1] size = 1g type = shm');
         });
 
         test('the keywords a provision fails without required, unless the user takes the provision on, warned first; the other provisioning ones at hand', async () => {
@@ -616,8 +1026,9 @@ describe('CreateObjectDialog', () => {
             expect(screen.getByRole('textbox', {name: 'Value of size'})).toHaveValue('1g');
             expect(screen.queryByRole('textbox', {name: 'Value of provision'})).toBeNull();
             expect(screen.queryByText(/Required without a value/)).toBeNull();
-            fireEvent.click(screen.getByRole('button', {name: 'Show the file'}));
-            expect(card('[data-preview]')).toHaveTextContent('[disk#1] type = lv name = data size = 1g provision = false');
+            view('text');
+            expect(screen.getByLabelText('Configuration').value.replace(/\s+/g, ' ').trim()).toBe('[disk#1] type = lv name = data size = 1g provision = false');
+            view('design');
             // Given back to om: required again; the optional one at hand once they are set.
             fireEvent.click(screen.getByRole('checkbox', {name: 'Unmanaged provisioning'}));
             await screen.findByRole('textbox', {name: 'Value of vg'});
@@ -694,13 +1105,12 @@ describe('CreateObjectDialog', () => {
             expect(await screen.findByRole('alert')).toHaveTextContent('fs.nope could not be read');
         });
 
-        test('edited as text from then on: the file of the design in the editor', async () => {
+        test('its text, the file of the design', async () => {
             await design();
             fireEvent.click(screen.getByRole('button', {name: 'More'}));
             fireEvent.click(within(screen.getByRole('list', {name: 'Keywords to add'})).getByRole('button', {name: 'Add nodes'}));
             type('Value of nodes', 'n1 n2');
-            fireEvent.click(screen.getByRole('button', {name: 'Edit as text'}));
-            expect(card('[data-source=edit]')).toHaveAttribute('aria-pressed', 'true');
+            view('text');
             expect(screen.getByLabelText('Configuration')).toHaveValue('[DEFAULT]\nnodes = n1 n2\n');
         });
 
@@ -716,15 +1126,23 @@ describe('CreateObjectDialog', () => {
             await design();
             fireEvent.click(screen.getByRole('button', {name: 'More'}));
             expect(offered()).toEqual(['monitor_action', 'nodes']);
-            fireEvent.click(screen.getByRole('checkbox', {name: 'Show the keywords only root may set'}));
+            const lock = screen.getByRole('button', {name: 'Show the keywords only root may set'});
+            // On the line of the steps, beside the view: none in the design.
+            expect(lock.closest('nav, [data-view-toggle]')).toHaveAttribute('data-view-toggle');
+            expect(document.querySelector('[data-designer] input[type=checkbox]')).toBeNull();
+            fireEvent.click(lock);
+            expect(lock).toHaveAttribute('aria-pressed', 'true');
             expect(offered()).toEqual(['monitor_action', 'nodes', 'priority']);
+            // A design shown: not of the text.
+            view('text');
+            expect(screen.queryByRole('button', {name: 'Show the keywords only root may set'})).toBeNull();
         });
 
         test('not root: no choice; never those needing root whatever the value, those needing it for some values offered', async () => {
             grants.current = {admin: ['ns1']};
             KW('DEFAULT', ROOT_KEYWORDS);
             await design();
-            expect(screen.queryByRole('checkbox', {name: 'Show the keywords only root may set'})).toBeNull();
+            expect(screen.queryByRole('button', {name: 'Show the keywords only root may set'})).toBeNull();
             fireEvent.click(screen.getByRole('button', {name: 'More'}));
             expect(offered()).toEqual(['monitor_action', 'nodes']);
             // Root for some values only: said so, not as a keyword of root.
@@ -738,34 +1156,66 @@ describe('CreateObjectDialog', () => {
         open({defaultNamespace: 'ns1'});
         type('Name', 'db');
         next();
+        next();
         create();
-        expect(await screen.findByRole('alert')).toHaveTextContent('The object could not be created: bad keyword');
+        expect(await screen.findByText(/The object could not be created: bad keyword/)).toBeInTheDocument();
         expect(onCreated).not.toHaveBeenCalled();
     });
 
-    test('provisioned once the daemon reports the new object', async () => {
+    test('deployed: provisioned once the daemon reports the monitor of an instance, its status alone not enough', async () => {
         open({defaultNamespace: 'ns1'});
         type('Name', 'db');
         next();
-        fireEvent.click(screen.getByRole('checkbox', {name: 'Provision once created'}));
-        create();
+        next();
+        fireEvent.click(screen.getByRole('button', {name: 'Deploy'}));
         await waitFor(() => expect(posts()).toHaveLength(1));
         expect(onCreated).not.toHaveBeenCalled();
+        // Its status first: the api would answer the provision "object not found" yet.
         act(() => {
             useEventStore.setState({
                 objectStatus: {'ns1/svc/db': {avail: 'down'}},
                 objectInstanceStatus: {'ns1/svc/db': {node1: {avail: 'down'}}},
             });
         });
+        await new Promise((r) => setTimeout(r, 50));
+        expect(requests.filter((r) => r.url.includes('/action/'))).toEqual([]);
+        expect(onCreated).not.toHaveBeenCalled();
+        // Its instance monitor known: provisioned.
+        act(() => {
+            useEventStore.setState({instanceMonitor: {'node1:ns1/svc/db': {state: 'idle'}}});
+        });
         await waitFor(() => expect(onCreated).toHaveBeenCalledWith('ns1/svc/db'));
-        expect(posts()[1].url).toBe('/api/object/path/ns1/svc/db/action/provision');
+        expect(requests.filter((r) => r.method === 'POST' && r.url.includes('/action/')).map((r) => r.url)).toEqual(['/api/object/path/ns1/svc/db/action/provision']);
         expect(useActionTracker.getState().tracked.map((e) => [e.action, e.subject])).toEqual(expect.arrayContaining([
             ['create', 'ns1/svc/db'],
         ]));
     });
 
-    test('a configuration has nothing to provision', () => {
+    test('its path, once named, in the title rather than in the steps', () => {
+        open({defaultNamespace: 'ns1'});
+        type('Name', 'db');
+        expect(screen.getByRole('region', {name: 'New object'})).toBeInTheDocument();
+        next();
+        expect(screen.getByRole('region', {name: 'New object · ns1/svc/db'})).toBeInTheDocument();
+        expect(screen.queryByText('Path:')).toBeNull();
+        next();
+        expect(screen.getByRole('region', {name: 'New object · ns1/svc/db'})).toBeInTheDocument();
+        expect(screen.queryByText('Path:')).toBeNull();
+    });
+
+    test('created only: nothing provisioned', async () => {
+        open({defaultNamespace: 'ns1'});
+        type('Name', 'db');
+        next();
+        next();
+        create();
+        await waitFor(() => expect(onCreated).toHaveBeenCalledWith('ns1/svc/db'));
+        expect(requests.filter((r) => r.method === 'POST' && r.url.includes('/action/'))).toEqual([]);
+    });
+
+    test('a configuration has nothing to provision: no deploy', () => {
         open({defaultKind: 'cfg'});
-        expect(screen.queryByRole('checkbox', {name: 'Provision once created'})).not.toBeInTheDocument();
+        expect(screen.getByRole('button', {name: 'Create'})).toBeInTheDocument();
+        expect(screen.queryByRole('button', {name: 'Deploy'})).not.toBeInTheDocument();
     });
 });
